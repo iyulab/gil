@@ -1,0 +1,40 @@
+name: "간단한 이미지 생성"
+description: "OpenAI DALL-E로 이미지를 생성하는 기본 워크플로우"
+
+# 환경 변수 설정
+environment:
+  OPENAI_API_KEY: "${OPENAI_API_KEY}"
+
+# 노드 정의
+nodes:
+  # OpenAI 커넥터
+  openai_connector:
+    type: "GilConnectorOpenAI"
+    config:
+      api_key: "${OPENAI_API_KEY}"
+      organization: null
+  
+  # 이미지 생성기
+  image_generator:
+    type: "GilGenImage"
+    config:
+      connector: "@openai_connector"
+    inputs:
+      prompt: "A beautiful sunset over mountains, digital art style"
+      size: "1024x1024"
+      quality: "standard"
+      style: "vivid"
+
+# 실행 순서 정의
+flow:
+  - openai_connector
+  - image_generator
+
+# 출력 설정
+outputs:
+  generated_images:
+    source: "@image_generator.images"
+  generation_info:
+    prompt: "@image_generator.prompt"
+    size: "@image_generator.size"
+    created_at: "${timestamp}"

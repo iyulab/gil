@@ -1,0 +1,194 @@
+gil_flow_version: "1.0"
+name: "스마트 콘텐츠 생성기 with Context"
+description: "컨텍스트 시스템을 활용한 다단계 콘텐츠 생성 워크플로우"
+
+# Flow Context 초기 설정
+context:
+  variables:
+    topic: "인공지능의 미래"
+    target_audience: "일반 대중"
+    content_type: "블로그 포스트"
+    max_content_length: 1000
+    writing_style: "친근하고 이해하기 쉬운"
+  
+  metadata:
+    workflow_type: "content_generation"
+    created_by: "Gil-Flow"
+    version: "1.0"
+
+nodes:
+  # 1. OpenAI 커넥터
+  openai_connector:
+    type: "GilConnectorOpenAI"
+    config:
+      api_key: "${secrets.openai_api_key}"
+      organization: "${secrets.openai_org}"
+    timeout: 10000
+
+  # 2. 아웃라인 생성
+  outline_generator:
+    type: "GilGenImage"  # 실제로는 AITextGeneration 노드
+    inputs:
+      connector: "@openai_connector"
+      prompt: |
+        주제: ${flow.variables.topic}
+        대상 독자: ${flow.variables.target_audience}
+        콘텐츠 유형: ${flow.variables.content_type}
+        
+        위 주제로 ${flow.variables.content_type}의 상세한 목차를 작성해주세요.
+        ${flow.variables.writing_style} 스타일로 작성하되, 독자의 관심을 끌 수 있는 구성으로 해주세요.
+      max_tokens: 300
+      temperature: 0.7
+    timeout: 30000
+
+  # 3. 메인 콘텐츠 생성
+  content_generator:
+    type: "GilGenImage"  # 실제로는 AITextGeneration 노드
+    inputs:
+      connector: "@openai_connector"
+      prompt: |
+        다음 목차를 바탕으로 ${flow.variables.content_type}를 작성해주세요:
+        
+        목차:
+        @outline_generator.generated_text
+        
+        요구사항:
+        - 주제: ${flow.variables.topic}
+        - 대상 독자: ${flow.variables.target_audience}
+        - 글 스타일: ${flow.variables.writing_style}
+        - 최대 길이: ${flow.variables.max_content_length}자 이내
+        - 구체적인 예시와 설명 포함
+        - 독자의 이해를 돕는 친근한 톤 유지
+      max_tokens: 1500
+      temperature: 0.8
+    timeout: 60000
+
+  # 4. 콘텐츠 검토 및 개선사항 제안
+  content_reviewer:
+    type: "GilGenImage"  # 실제로는 AITextGeneration 노드
+    inputs:
+      connector: "@openai_connector"
+      prompt: |
+        다음 콘텐츠를 검토하고 개선사항을 제안해주세요:
+        
+        원본 콘텐츠:
+        @content_generator.generated_text
+        
+        검토 기준:
+        - 주제 적합성 (주제: ${flow.variables.topic})
+        - 대상 독자 적합성 (대상: ${flow.variables.target_audience})
+        - 글 스타일 일관성 (스타일: ${flow.variables.writing_style})
+        - 구조적 완성도
+        - 독자 이해도
+        
+        개선사항과 점수(1-10점)를 제시해주세요.
+      max_tokens: 500
+      temperature: 0.5
+    timeout: 30000
+
+  # 5. 최종 콘텐츠 개선
+  final_content:
+    type: "GilGenImage"  # 실제로는 AITextGeneration 노드
+    inputs:
+      connector: "@openai_connector"
+      prompt: |
+        다음 콘텐츠를 개선사항을 반영하여 최종 완성해주세요:
+        
+        원본 콘텐츠:
+        @content_generator.generated_text
+        
+        검토 의견:
+        @content_reviewer.generated_text
+        
+        최종 요구사항:
+        - 검토 의견의 개선사항 반영
+        - ${flow.variables.writing_style} 스타일 유지
+        - 대상 독자(${flow.variables.target_audience})에게 최적화
+        - 명확하고 매력적인 최종 버전 작성
+      max_tokens: 1500
+      temperature: 0.7
+    timeout: 60000
+
+  # 6. 메타데이터 및 통계 수집
+  content_analytics:
+    type: "TransformData"
+    inputs:
+      data:
+        # Flow Context에서 가져온 정보
+        topic: "${flow.variables.topic}"
+        target_audience: "${flow.variables.target_audience}"
+        content_type: "${flow.variables.content_type}"
+        total_tokens_used: "${flow.shared_data.total_tokens_used}"
+        workflow_start_time: "${flow.metadata.start_time}"
+        completed_nodes: "${flow.metadata.completed_nodes}"
+        error_count: "${flow.errors.length}"
+        
+        # 생성된 콘텐츠 정보
+        outline_length: "@outline_generator.generated_text.length"
+        content_length: "@content_generator.generated_text.length"
+        final_content_length: "@final_content.generated_text.length"
+        
+        # 실제 콘텐츠
+        final_content: "@final_content.generated_text"
+        content_review: "@content_reviewer.generated_text"
+        
+      operations:
+        - type: "map"
+          field: "generation_efficiency"
+          source: "final_content_length / total_tokens_used"
+        - type: "map"
+          field: "content_improvement_ratio"
+          source: "final_content_length / content_length"
+        - type: "select"
+          fields: [
+            "topic", "target_audience", "content_type",
+            "total_tokens_used", "generation_efficiency",
+            "content_improvement_ratio", "error_count",
+            "final_content", "content_review"
+          ]
+    timeout: 10000
+
+# 실행 순서
+flow:
+  - openai_connector
+  - outline_generator
+  - content_generator
+  - content_reviewer
+  - final_content
+  - content_analytics
+
+# 에러 처리 및 복구
+error_handling:
+  on_node_error:
+    action: "retry"
+    max_retries: 2
+    retry_delay: 5000
+    
+  on_retry_failed:
+    action: "continue"
+    default_value: "콘텐츠 생성 실패"
+
+# 조건부 실행 (예: 토큰 사용량 제한)
+conditions:
+  - name: "token_limit_check"
+    condition: "${flow.shared_data.total_tokens_used} < 5000"
+    action: "continue"
+    else_action: "stop"
+    else_message: "토큰 사용량 한도 초과"
+
+# 최종 출력
+outputs:
+  content_result:
+    final_content: "@final_content.generated_text"
+    content_review: "@content_reviewer.generated_text"
+    analytics: "@content_analytics.transformed_data"
+  
+  execution_summary:
+    total_tokens_used: "${flow.shared_data.total_tokens_used}"
+    execution_time: "${flow.metadata.execution_time}"
+    nodes_completed: "${flow.metadata.completed_nodes}"
+    errors_encountered: "${flow.errors.length}"
+    
+  context_info:
+    flow_variables: "${flow.variables}"
+    workflow_metadata: "${flow.metadata}"

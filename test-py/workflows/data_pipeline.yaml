@@ -1,0 +1,62 @@
+name: "데이터 처리 파이프라인"
+description: "CSV 파일을 읽어서 데이터를 처리하는 워크플로우 (AI 없음)"
+
+# 노드 정의
+nodes:
+  # 1. 테스트 데이터 생성 (실제로는 CSV 파일을 읽어야 함)
+  data_generator:
+    type: "GilUtilTransform"
+    inputs:
+      operation: "generate_test_data"
+      data_type: "csv_like"
+      rows: 10
+      columns:
+        - name: "id"
+          type: "integer"
+        - name: "name"
+          type: "string"
+        - name: "price"
+          type: "float"
+        - name: "category"
+          type: "string"
+  
+  # 2. 데이터 필터링
+  data_filter:
+    type: "GilUtilTransform"
+    inputs:
+      data: "@data_generator.generated_data"
+      operation: "filter"
+      condition: "price > 50"
+  
+  # 3. 데이터 집계
+  data_aggregator:
+    type: "GilUtilTransform"
+    inputs:
+      data: "@data_filter.filtered_data"
+      operation: "aggregate"
+      group_by: "category"
+      metrics: ["count", "sum_price", "avg_price"]
+  
+  # 4. 결과 저장 (시뮬레이션)
+  data_saver:
+    type: "GilUtilTransform"
+    inputs:
+      data: "@data_aggregator.aggregated_data"
+      operation: "save_simulation"
+      output_format: "json"
+
+# 실행 순서 정의
+flow:
+  - data_generator
+  - data_filter
+  - data_aggregator
+  - data_saver
+
+# 출력 설정
+outputs:
+  processing_result:
+    original_count: "@data_generator.row_count"
+    filtered_count: "@data_filter.row_count"
+    categories: "@data_aggregator.categories"
+    aggregated_data: "@data_aggregator.aggregated_data"
+    saved_to: "@data_saver.output_path"

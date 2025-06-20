@@ -20,14 +20,13 @@ async def main():
     
     # 이미지 생성 노드 생성
     image_gen = GilGenImage(connector=openai_connector)
-    
-    # 이미지 생성
+      # 이미지 생성
     result = await image_gen.generate(
         prompt="A beautiful sunset over mountains",
         size="1024x1024"
     )
     
-    print(f"Generated image URL: {result['url']}")
+    print(f"Generated image URL: {result['images'][0]['url']}")
 
 if __name__ == "__main__":
     asyncio.run(main())

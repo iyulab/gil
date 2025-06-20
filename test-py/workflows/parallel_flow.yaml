@@ -1,0 +1,76 @@
+name: "병렬 처리 테스트"
+description: "여러 작업을 병렬로 실행하는 워크플로우"
+
+# 환경 변수
+environment:
+  OPENAI_API_KEY: "${OPENAI_API_KEY}"
+
+# 노드 정의
+nodes:
+  # 1. 입력 데이터 준비
+  data_preparer:
+    type: "GilUtilTransform"
+    inputs:
+      operation: "prepare_parallel_data"
+      base_prompt: "${input.theme}"
+      variations: 3
+  
+  # 2A. 첫 번째 병렬 작업 (이미지 생성)
+  image_task:
+    type: "GilGenImage"
+    config:
+      connector: "@openai_connector"
+    inputs:
+      prompt: "@data_preparer.image_prompt"
+      size: "512x512"
+      quality: "standard"
+  
+  # 2B. 두 번째 병렬 작업 (텍스트 생성)
+  text_task:
+    type: "GilGenText"
+    config:
+      connector: "@openai_connector"
+    inputs:
+      prompt: "@data_preparer.text_prompt"
+      model: "gpt-3.5-turbo"
+      max_tokens: 100
+  
+  # 2C. 세 번째 병렬 작업 (데이터 변환)
+  transform_task:
+    type: "GilUtilTransform"
+    inputs:
+      operation: "complex_calculation"
+      data: "@data_preparer.calculation_data"
+      iterations: 5
+  
+  # OpenAI 커넥터
+  openai_connector:
+    type: "GilConnectorOpenAI"
+    config:
+      api_key: "${OPENAI_API_KEY}"
+  
+  # 3. 결과 합성기
+  result_synthesizer:
+    type: "GilUtilTransform"
+    inputs:
+      operation: "synthesize_results"
+      image_result: "@image_task.images"
+      text_result: "@text_task.text"
+      transform_result: "@transform_task.result"
+      start_time: "@data_preparer.start_time"
+
+# 실행 순서 정의
+flow:
+  - data_preparer
+  - openai_connector
+  - [image_task, text_task, transform_task]  # 병렬 실행
+  - result_synthesizer
+
+# 출력 설정
+outputs:
+  parallel_results:
+    image_url: "@image_task.images[0].url"
+    generated_text: "@text_task.text"
+    calculation_result: "@transform_task.result"
+    total_processing_time: "@result_synthesizer.total_time"
+    parallel_efficiency: "@result_synthesizer.efficiency_score"

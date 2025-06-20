@@ -1,0 +1,69 @@
+Metadata-Version: 2.4
+Name: gil-py
+Version: 0.1.0
+Summary: Gil-Py: A Python workflow library for AI-powered node-based processing
+Author-email: Gil-Py Team <gil-py@example.com>
+License: MIT
+Project-URL: Homepage, https://github.com/gil-team/gil-py
+Project-URL: Repository, https://github.com/gil-team/gil-py
+Project-URL: Documentation, https://github.com/gil-team/gil-py#readme
+Project-URL: Issues, https://github.com/gil-team/gil-py/issues
+Keywords: ai,workflow,openai,image-generation,automation
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: openai>=1.0.0
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: python-dotenv>=1.0.0
+Requires-Dist: aiohttp>=3.8.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.21.0; extra == "dev"
+Requires-Dist: black>=23.0.0; extra == "dev"
+Requires-Dist: flake8>=6.0.0; extra == "dev"
+Requires-Dist: mypy>=1.0.0; extra == "dev"
+
+# Gil-Py
+
+플로우차트 기반 워크플로우 노드 시스템
+
+## 설치
+
+```bash
+pip install gil-py
+```
+
+## 빠른 시작
+
+```python
+from gil_py import GilGenImage, GilConnectorOpenAI
+import asyncio
+
+async def main():
+    # OpenAI 커넥터 생성
+    openai_connector = GilConnectorOpenAI(api_key="your-api-key")
+    
+    # 이미지 생성 노드 생성
+    image_gen = GilGenImage(connector=openai_connector)
+      # 이미지 생성
+    result = await image_gen.generate(
+        prompt="A beautiful sunset over mountains",
+        size="1024x1024"
+    )
+    
+    print(f"Generated image URL: {result['images'][0]['url']}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## 라이센스
+
+MIT License

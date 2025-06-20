@@ -1,72 +1,400 @@
-# Gil 라이브러리 설계서
+# gil-py 개발 가이드
 
-## 프로젝트 개요
-**Gil**은 플로우차트 기반의 워크플로우 노드 시스템을 제공하는 라이브러리입니다. 다양한 작업을 노드로 모듈화하고, 이들을 연결하여 복잡한 워크플로우를 구성할 수 있습니다.
+**gil-py**는 [Gil-Flow 표준](YAML_SPEC.md)의 Python 구현체입니다. 이 문서는 gil-py의 내부 구조, 확장 방법, 개발 절차를 다룹니다.
 
-## 언어별 라이브러리
+> **참고**: Gil 전체 프로젝트 개요는 [README.md](../README.md)를, Gil-Flow 표준은 [YAML_SPEC.md](YAML_SPEC.md)를 참조하세요.
 
-### GilPy (Python)
-- **패키지명**: `gil-py`
-- **설치**: `pip install gil-py`
-- **타겟**: Python 3.8+
-- **특징**: 비동기 처리, 타입 힌트, 데코레이터 지원
+### 🏗 아키텍처 개요
 
-### GilNode (Node.js)
-- **패키지명**: `gil-node`
-- **설치**: `npm install gil-node`
-- **타겟**: Node.js 16+
-- **특징**: Promise/async-await, TypeScript 지원, 스트림 처리
+```
+gil-py/
+├── gil_py/
+│   ├── core/                   # 핵심 시스템
+│   │   ├── node.py            # 노드 기본 클래스
+│   │   ├── port.py            # 포트 시스템
+│   │   ├── connection.py      # 노드 간 연결
+│   │   └── data_types.py      # 데이터 타입 정의
+│   ├── workflow/              # 워크플로우 엔진
+│   │   ├── workflow.py        # 메인 워크플로우 클래스
+│   │   ├── yaml_parser.py     # YAML 파서
+│   │   ├── executor.py        # 실행 엔진
+│   │   └── node_factory.py    # 노드 팩토리
+│   ├── nodes/                 # 표준 노드 구현
+│   │   ├── data/              # 데이터 노드 (DataFile, DataCSV 등)
+│   │   ├── transform/         # 변환 노드 (TransformData 등)
+│   │   ├── ai/                # AI 노드 (AITextGen, AIImageGen 등)
+│   │   ├── comm/              # 통신 노드 (CommAPI, CommEmail 등)
+│   │   └── control/           # 제어 노드 (ControlCondition 등)
+│   └── cli/                   # CLI 도구
+│       ├── main.py            # CLI 메인
+│       └── commands/          # CLI 명령어들
+└── tests/                     # 테스트 코드
+```
+## 🧩 Gil-Py 핵심 컴포넌트
 
-### GilSharp (C#)
-- **패키지명**: `Gil.Sharp`
-- **설치**: `dotnet add package Gil.Sharp`
-- **타겟**: .NET 6.0+
-- **특징**: LINQ 지원, 강타입 시스템, Task 기반 비동기
+### 1. 노드 시스템 (core/)
 
-## 노드 종류
+#### GilNode (node.py)
+모든 노드의 기본 클래스입니다:
 
-### 1. AI 생성 노드 (GilGen 시리즈)
-- **GilGenText**: 텍스트 생성/처리
-- **GilGenImage**: 이미지 생성
-- **GilGenAudio**: 음성/오디오 생성
-- **GilGenCode**: 코드 생성
-- **GilGenTranslate**: 번역 생성
-- **GilGenSummary**: 요약 생성
-- **GilGenChat**: 대화형 응답 생성
-- **GilGenEmbedding**: 텍스트 임베딩 생성
+```python
+from abc import ABC, abstractmethod
+from typing import Dict, Any, List
+import asyncio
 
-### 2. AI 분석 노드 (GilAnalyze 시리즈)
-- **GilAnalyzeVision**: 이미지 분석
-- **GilAnalyzeSentiment**: 감정 분석
-- **GilAnalyzeIntent**: 의도 분석
-- **GilAnalyzeData**: 데이터 분석
-- **GilAnalyzeText**: 텍스트 분석 (키워드, 분류 등)
-- **GilAnalyzeSimilarity**: 유사도 분석
+class GilNode(ABC):
+    """Gil 노드 기본 클래스"""
+    
+    def __init__(self, config: Dict[str, Any] = None, name: str = ""):
+        self.config = config or {}
+        self.name = name
+        self.input_ports: List[GilPort] = []
+        self.output_ports: List[GilPort] = []
+        self._setup_ports()
+    
+    @abstractmethod
+    async def run(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """노드 실행 메서드 - 반드시 구현해야 함"""
+        pass
+    
+    @abstractmethod
+    def _setup_ports(self) -> None:
+        """입출력 포트 설정 - 반드시 구현해야 함"""
+        pass
+    
+    def validate_inputs(self, inputs: Dict[str, Any]) -> bool:
+        """입력 데이터 검증"""
+        for port in self.input_ports:
+            if port.required and port.name not in inputs:
+                raise ValueError(f"Required input '{port.name}' is missing")
+        return True
+    
+    def get_schema(self) -> Dict[str, Any]:
+        """노드 스키마 반환"""
+        return {
+            "type": self.__class__.__name__,
+            "input_ports": [port.to_dict() for port in self.input_ports],
+            "output_ports": [port.to_dict() for port in self.output_ports],
+            "config": self.config
+        }
+```
 
-### 3. AI 커넥터 노드
-- **GilConnectorOpenAI**: OpenAI API 연결
-- **GilConnectorAnthropic**: Anthropic Claude API 연결
-- **GilConnectorLocal**: 로컬 모델 연결
-- **GilConnectorHuggingFace**: HuggingFace 모델 연결
-- **GilConnectorOllama**: Ollama 로컬 모델 연결
+#### GilPort (port.py)
+노드의 입출력 포트를 정의합니다:
 
-### 4. 통신 노드 (GilComm 시리즈)
-- **GilCommEmail**: 이메일 발송
-- **GilCommSMS**: SMS 발송
-- **GilCommWebhook**: 웹훅 호출
-- **GilCommAPI**: REST API 호출
-- **GilCommSlack**: 슬랙 메시지 발송
-- **GilCommDiscord**: 디스코드 메시지 발송
-- **GilCommTelegram**: 텔레그램 메시지 발송
-- **GilCommKakao**: 카카오톡 메시지 발송
+```python
+from enum import Enum
+from typing import Any, Optional
+from pydantic import BaseModel
 
-### 5. 데이터 처리 노드 (GilData 시리즈)
-- **GilDataDB**: 데이터베이스 처리
-- **GilDataFile**: 파일 읽기/쓰기
-- **GilDataCSV**: CSV 처리
-- **GilDataJSON**: JSON 처리
-- **GilDataXML**: XML 처리
-- **GilDataExcel**: Excel 처리
+class GilDataType(Enum):
+    """Gil 데이터 타입"""
+    TEXT = "text"
+    NUMBER = "number"
+    BOOLEAN = "boolean"
+    ARRAY = "array"
+    OBJECT = "object"
+    FILE = "file"
+    IMAGE = "image"
+    ANY = "any"
+
+class GilPort(BaseModel):
+    """Gil 포트 정의"""
+    name: str
+    data_type: GilDataType
+    required: bool = False
+    description: str = ""
+    default_value: Optional[Any] = None
+    
+    def validate_data(self, data: Any) -> bool:
+        """데이터 타입 검증"""
+        if self.data_type == GilDataType.TEXT:
+            return isinstance(data, str)
+        elif self.data_type == GilDataType.NUMBER:
+            return isinstance(data, (int, float))
+        elif self.data_type == GilDataType.BOOLEAN:
+            return isinstance(data, bool)
+        elif self.data_type == GilDataType.ARRAY:
+            return isinstance(data, list)
+        elif self.data_type == GilDataType.OBJECT:
+            return isinstance(data, dict)
+        elif self.data_type == GilDataType.ANY:
+            return True
+        return False
+```
+
+### 2. 워크플로우 엔진 (workflow/)
+
+#### GilWorkflow (workflow.py)
+메인 워크플로우 클래스입니다:
+
+```python
+import asyncio
+from typing import Dict, Any, List, Optional
+from pathlib import Path
+from .yaml_parser import YamlWorkflowParser
+from .executor import WorkflowExecutor
+from .node_factory import NodeFactory
+
+class GilWorkflow:
+    """Gil 워크플로우 메인 클래스"""
+    
+    def __init__(self, name: str = "Gil Workflow"):
+        self.name = name
+        self.nodes: Dict[str, GilNode] = {}
+        self.connections: List[Dict[str, str]] = []
+        self.config: Optional[Any] = None
+        self.executor = WorkflowExecutor()
+    
+    @classmethod
+    def from_yaml(cls, yaml_path: str | Path) -> 'GilWorkflow':
+        """YAML 파일에서 워크플로우 생성"""
+        # .env 파일 로드
+        from dotenv import load_dotenv
+        load_dotenv()
+        
+        parser = YamlWorkflowParser()
+        config = parser.parse_file(yaml_path)
+        
+        workflow = cls(name=config.name)
+        workflow.config = config
+        workflow._build_from_config(config)
+        
+        return workflow
+    
+    async def run(self, inputs: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """워크플로우 실행"""
+        if not self.nodes:
+            raise ValueError("워크플로우에 노드가 없습니다")
+        
+        inputs = inputs or {}
+        
+        # YAML 설정 기반 입력 처리
+        if self.config:
+            inputs = self._resolve_yaml_inputs(inputs)
+        
+        # 워크플로우 실행
+        return await self.executor.execute(self.nodes, self.connections, inputs)
+    
+    def validate(self) -> Dict[str, Any]:
+        """워크플로우 유효성 검증"""
+        validation_result = {
+            "valid": True,
+            "errors": [],
+            "warnings": []
+        }
+        
+        # 노드 검증
+        for node_name, node in self.nodes.items():
+            try:
+                node.get_schema()  # 스키마 검증
+            except Exception as e:
+                validation_result["errors"].append(f"노드 '{node_name}': {e}")
+                validation_result["valid"] = False
+        
+        # 연결 검증
+        for connection in self.connections:
+            source = connection.get("source_node")
+            target = connection.get("target_node")
+            
+            if source not in self.nodes:
+                validation_result["errors"].append(f"소스 노드 '{source}'를 찾을 수 없습니다")
+                validation_result["valid"] = False
+                
+            if target not in self.nodes:
+                validation_result["errors"].append(f"타겟 노드 '{target}'를 찾을 수 없습니다")
+                validation_result["valid"] = False
+        
+        return validation_result
+```
+
+### 3. YAML 파서 (yaml_parser.py)
+
+Gil-Flow YAML 표준을 파싱합니다:
+
+```python
+import yaml
+import os
+from typing import Dict, Any, List, Optional
+from pathlib import Path
+from pydantic import BaseModel, Field
+
+class NodeConfig(BaseModel):
+    """노드 설정"""
+    type: str = Field(description="노드 타입")
+    config: Dict[str, Any] = Field(default_factory=dict)
+    inputs: Dict[str, Any] = Field(default_factory=dict)
+    conditions: List[str] = Field(default_factory=list)
+
+class WorkflowConfig(BaseModel):
+    """워크플로우 설정"""
+    gil_flow_version: str = Field(default="1.0")
+    name: str = Field(description="워크플로우 이름")
+    description: Optional[str] = None
+    environment: Dict[str, Any] = Field(default_factory=dict)
+    nodes: Dict[str, NodeConfig] = Field(description="노드 정의")
+    flow: List[Any] = Field(description="실행 순서")
+    outputs: Dict[str, Any] = Field(default_factory=dict)
+
+class YamlWorkflowParser:
+    """YAML 워크플로우 파서"""
+    
+    def parse_file(self, yaml_path: str | Path) -> WorkflowConfig:
+        """YAML 파일 파싱"""
+        yaml_path = Path(yaml_path)
+        
+        if not yaml_path.exists():
+            raise FileNotFoundError(f"YAML 파일을 찾을 수 없습니다: {yaml_path}")
+        
+        with open(yaml_path, 'r', encoding='utf-8') as f:
+            yaml_data = yaml.safe_load(f)
+        
+        return self.parse_dict(yaml_data)
+    
+    def parse_dict(self, yaml_data: Dict[str, Any]) -> WorkflowConfig:
+        """딕셔너리 파싱"""
+        # 노드 설정 파싱
+        nodes = {}
+        for node_name, node_data in yaml_data.get("nodes", {}).items():
+            nodes[node_name] = NodeConfig(**node_data)
+        
+        # 워크플로우 설정 생성
+        config_data = {
+            "gil_flow_version": yaml_data.get("gil_flow_version", "1.0"),
+            "name": yaml_data.get("name", "Unnamed Workflow"),
+            "description": yaml_data.get("description"),
+            "environment": yaml_data.get("environment", {}),
+            "nodes": nodes,
+            "flow": yaml_data.get("flow", []),
+            "outputs": yaml_data.get("outputs", {})
+        }
+        
+        return WorkflowConfig(**config_data)
+    
+    def resolve_references(self, value: Any, context: Dict[str, Any]) -> Any:
+        """참조 해결 (@node.output, ${env.VAR} 등)"""
+        if isinstance(value, str):
+            if value.startswith("@"):
+                # @node_name.output 형태 참조 해결
+                return self._resolve_node_reference(value, context)
+            elif value.startswith("${") and value.endswith("}"):
+                # ${environment.VAR} 형태 환경변수 해결
+                return self._resolve_env_reference(value, context)
+        
+        return value
+    
+    def _resolve_env_reference(self, env_var: str, context: Dict[str, Any]) -> str:
+        """환경변수 및 입력 변수 해결"""
+        # ${} 제거
+        var_expr = env_var[2:-1]
+        
+        # 기본값 처리 (| 구분자)
+        default_value = None
+        if "|" in var_expr:
+            var_expr, default_value = var_expr.split("|", 1)
+            var_expr = var_expr.strip()
+            default_value = default_value.strip()
+        
+        # input.* 형태 처리
+        if var_expr.startswith("input."):
+            input_key = var_expr[6:]  # "input." 제거
+            input_data = context.get("input", {})
+            if input_key in input_data:
+                return str(input_data[input_key])
+            elif default_value is not None:
+                return default_value
+        
+        # environment.* 형태 처리
+        if var_expr.startswith("environment."):
+            env_key = var_expr[12:]  # "environment." 제거
+            env_data = context.get("environment", {})
+            if env_key in env_data:
+                return str(env_data[env_key])
+        
+        # 시스템 환경변수에서 직접 찾기
+        value = os.getenv(var_expr)
+        if value is not None:
+            return value
+        
+        # 기본값 반환 또는 원래 문자열
+        return default_value if default_value is not None else env_var
+```
+
+### 4. 노드 팩토리 (node_factory.py)
+
+동적 노드 생성을 담당합니다:
+
+```python
+from typing import Dict, Any, Type, List
+from ..core import GilNode
+
+class NodeFactory:
+    """노드 팩토리 - 동적 노드 생성"""
+    
+    def __init__(self):
+        self._node_registry: Dict[str, Type[GilNode]] = {}
+        self._register_builtin_nodes()
+    
+    def _register_builtin_nodes(self) -> None:
+        """내장 노드 타입 등록"""
+        # AI 노드들
+        from ..nodes.ai.text_generation import AITextGeneration
+        from ..nodes.ai.image_generation import AIImageGeneration
+        
+        # 데이터 노드들  
+        from ..nodes.data.file import DataFile
+        from ..nodes.data.csv import DataCSV
+        
+        # 변환 노드들
+        from ..nodes.transform.data import TransformData
+        
+        # 통신 노드들
+        from ..nodes.comm.api import CommAPI
+        from ..nodes.comm.email import CommEmail
+        
+        # 노드 등록
+        self.register("AITextGeneration", AITextGeneration)
+        self.register("AIImageGeneration", AIImageGeneration)
+        self.register("DataFile", DataFile)
+        self.register("DataCSV", DataCSV)
+        self.register("TransformData", TransformData)
+        self.register("CommAPI", CommAPI)
+        self.register("CommEmail", CommEmail)
+    
+    def register(self, node_type: str, node_class: Type[GilNode]) -> None:
+        """노드 타입 등록"""
+        self._node_registry[node_type] = node_class
+    
+    def create_node(self, node_type: str, config: Dict[str, Any] = None, 
+                   name: str = "") -> GilNode:
+        """노드 인스턴스 생성"""
+        if node_type not in self._node_registry:
+            raise ValueError(f"알 수 없는 노드 타입: {node_type}")
+        
+        node_class = self._node_registry[node_type]
+        return node_class(config=config or {}, name=name)
+    
+    def get_available_nodes(self) -> List[str]:
+        """사용 가능한 노드 타입 목록"""
+        return list(self._node_registry.keys())
+    
+    def get_node_info(self, node_type: str) -> Dict[str, Any]:
+        """노드 타입 정보 조회"""
+        if node_type not in self._node_registry:
+            return {"error": f"알 수 없는 노드 타입: {node_type}"}
+        
+        node_class = self._node_registry[node_type]
+        # 임시 인스턴스 생성해서 스키마 조회
+        temp_node = node_class()
+        schema = temp_node.get_schema()
+        
+        return {
+            "type": node_type,
+            "description": getattr(node_class, "__doc__", "설명 없음"),
+            "input_ports": schema.get("input_ports", []),
+            "output_ports": schema.get("output_ports", [])
+        }
+```
 - **GilDataPDF**: PDF 처리
 - **GilDataImage**: 이미지 파일 처리
 - **GilDataAudio**: 오디오 파일 처리

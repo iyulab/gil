@@ -1,0 +1,32 @@
+gil_flow_version: "1.0"
+name: "이미지 생성 테스트"
+description: "OpenAI DALL-E를 통한 간단한 이미지 생성"
+
+environment:
+  OPENAI_API_KEY: "${OPENAI_API_KEY}"
+
+nodes:
+  openai_connector:
+    type: "GilConnectorOpenAI"
+    config:
+      api_key: "${OPENAI_API_KEY}"
+  
+  image_generator:
+    type: "GilGenImage"
+    config:
+      connector: "@openai_connector"
+    inputs:
+      prompt: "A beautiful sunset over a mountain lake, digital art style"
+      size: "1024x1024"
+      quality: "standard"
+      style: "vivid"
+
+flow:
+  - openai_connector
+  - image_generator
+
+outputs:
+  result:
+    images: "@image_generator.images"
+    prompt: "@image_generator.prompt"
+    created_at: "${timestamp}"

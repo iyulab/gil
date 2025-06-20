@@ -1,0 +1,75 @@
+name: "조건부 실행 테스트"
+description: "조건에 따라 다른 경로로 실행되는 워크플로우"
+
+# 환경 변수
+environment:
+  OPENAI_API_KEY: "${OPENAI_API_KEY}"
+
+# 노드 정의
+nodes:
+  # 1. 입력 검증기
+  input_validator:
+    type: "GilUtilTransform"
+    inputs:
+      operation: "validate_input"
+      input_text: "${input.user_message}"
+      min_length: 5
+      max_length: 100
+  
+  # 2A. 유효한 입력 처리 (AI 사용)
+  ai_processor:
+    type: "GilGenText"
+    condition: "@input_validator.is_valid == true"
+    config:
+      connector: "@openai_connector"
+    inputs:
+      prompt: "Respond to this message professionally: @input_validator.cleaned_text"
+      model: "gpt-3.5-turbo"
+      max_tokens: 150
+  
+  # 2B. 무효한 입력 처리 (기본 응답)
+  default_processor:
+    type: "GilUtilTransform"
+    condition: "@input_validator.is_valid == false"
+    inputs:
+      operation: "generate_default_response"
+      error_type: "@input_validator.error_type"
+  
+  # OpenAI 커넥터 (조건부)
+  openai_connector:
+    type: "GilConnectorOpenAI"
+    condition: "@input_validator.is_valid == true"
+    config:
+      api_key: "${OPENAI_API_KEY}"
+  
+  # 3. 결과 수집기
+  result_collector:
+    type: "GilUtilTransform"
+    inputs:
+      operation: "collect_results"
+      ai_response: "@ai_processor.text"
+      default_response: "@default_processor.response"
+      validation_result: "@input_validator.validation_summary"
+
+# 실행 순서 정의
+flow:
+  - input_validator
+  - [openai_connector, ai_processor, default_processor]  # 조건부 병렬
+  - result_collector
+
+# 출력 설정
+outputs:
+  processing_summary:
+    input_valid: "@input_validator.is_valid"
+    response: |
+      {% if ai_processor.success %}
+      @ai_processor.text
+      {% else %}  
+      @default_processor.response
+      {% endif %}
+    processing_path: |
+      {% if input_validator.is_valid %}
+      ai_processing
+      {% else %}
+      default_processing
+      {% endif %}

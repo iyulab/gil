@@ -1,0 +1,80 @@
+gil_flow_version: "1.0"
+name: "컨텍스트 시스템 테스트"
+description: "Flow Context와 Node Context 사용 예제"
+
+# Flow Context 초기 변수 설정
+context:
+  variables:
+    user_name: "테스터"
+    max_tokens: 500
+    temperature: 0.7
+  metadata:
+    workflow_type: "context_test"
+    environment: "development"
+
+nodes:
+  # OpenAI 커넥터 설정
+  openai_connector:
+    type: "GilConnectorOpenAI"
+    config:
+      api_key: "${secrets.openai_api_key}"
+    
+  # 첫 번째 텍스트 생성 - 사용자 정보를 컨텍스트에서 가져옴
+  greeting_generator:
+    type: "GilGenImage"  # 실제로는 텍스트 생성 노드여야 하지만 예제용
+    inputs:
+      connector: "@openai_connector"
+      prompt: "안녕하세요 ${flow.variables.user_name}님! 오늘 하루는 어떠세요?"
+      max_tokens: "${flow.variables.max_tokens}"
+      temperature: "${flow.variables.temperature}"
+    timeout: 30000
+
+  # 두 번째 텍스트 생성 - 이전 노드 결과와 컨텍스트 활용
+  followup_generator:
+    type: "GilGenImage"  # 실제로는 텍스트 생성 노드여야 하지만 예제용
+    inputs:
+      connector: "@openai_connector"
+      prompt: "이전 메시지: @greeting_generator.generated_text\n\n더 자세히 대화를 이어가세요."
+      max_tokens: "${flow.variables.max_tokens}"
+      temperature: 0.8
+    timeout: 30000
+
+  # 결과 요약 및 컨텍스트 정보 수집
+  context_summary:
+    type: "TransformData"
+    inputs:
+      data:
+        user_name: "${flow.variables.user_name}"
+        total_tokens_used: "${flow.shared_data.total_tokens_used}"
+        error_count: "${flow.errors.length}"
+        completed_nodes: "${flow.metadata.completed_nodes}"
+        greeting_result: "@greeting_generator.generated_text"
+        followup_result: "@followup_generator.generated_text"
+      operations:
+        - type: "select"
+          fields: ["user_name", "total_tokens_used", "error_count", "completed_nodes"]
+    timeout: 5000
+
+# 실행 흐름
+flow:
+  - openai_connector
+  - greeting_generator  
+  - followup_generator
+  - context_summary
+
+# 에러 처리 설정
+error_handling:
+  on_node_error:
+    action: "continue"  # 개별 노드 실패 시 계속 진행
+    log_level: "error"
+  
+  on_flow_error:
+    action: "stop"      # 전체 흐름 에러 시 중단
+    cleanup: true
+
+# 출력 설정
+outputs:
+  summary: "@context_summary.transformed_data"
+  total_tokens: "${flow.shared_data.total_tokens_used}"
+  execution_time: "${flow.metadata.execution_time}"
+  errors: "${flow.errors}"
