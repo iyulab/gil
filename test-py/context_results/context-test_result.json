@@ -1,0 +1,57 @@
+{
+  "workflow_name": "컨텍스트 시스템 테스트",
+  "execution_time": "2025-06-20T16:07:18.853871",
+  "flow_context": {
+    "variables": {
+      "user_name": "테스터",
+      "max_tokens": 500,
+      "temperature": 0.7
+    },
+    "errors": [],
+    "metadata": {
+      "workflow_id": "컨텍스트 시스템 테스트",
+      "execution_id": "exec_1750403238",
+      "start_time": "2025-06-20T16:07:18.458840",
+      "total_nodes": 0,
+      "completed_nodes": 4,
+      "workflow_type": "context_test",
+      "environment": "development"
+    },
+    "shared_data": {
+      "total_tokens_used": 300
+    }
+  },
+  "node_results": {
+    "openai_connector": {
+      "response": {
+        "status": "connected",
+        "client": "available"
+      },
+      "error": null
+    },
+    "greeting_generator": {
+      "success": true,
+      "generated_text": "[시뮬레이션] greeting_generator에서 생성된 콘텐츠",
+      "metadata": {
+        "tokens_used": 150,
+        "execution_time": 2.5
+      }
+    },
+    "followup_generator": {
+      "success": true,
+      "generated_text": "[시뮬레이션] followup_generator에서 생성된 콘텐츠",
+      "metadata": {
+        "tokens_used": 150,
+        "execution_time": 2.5
+      }
+    },
+    "context_summary": {
+      "success": true,
+      "transformed_data": {
+        "processed": true,
+        "operations_count": 1,
+        "result": "변환 완료"
+      }
+    }
+  }
+}

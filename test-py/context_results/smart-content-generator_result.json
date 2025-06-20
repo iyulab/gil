@@ -1,0 +1,76 @@
+{
+  "workflow_name": "스마트 콘텐츠 생성기 with Context",
+  "execution_time": "2025-06-20T16:08:00.510859",
+  "flow_context": {
+    "variables": {
+      "topic": "인공지능의 미래",
+      "target_audience": "일반 대중",
+      "content_type": "블로그 포스트",
+      "max_content_length": 1000,
+      "writing_style": "친근하고 이해하기 쉬운"
+    },
+    "errors": [],
+    "metadata": {
+      "workflow_id": "스마트 콘텐츠 생성기 with Context",
+      "execution_id": "exec_1750403280",
+      "start_time": "2025-06-20T16:08:00.175329",
+      "total_nodes": 0,
+      "completed_nodes": 6,
+      "workflow_type": "content_generation",
+      "created_by": "Gil-Flow",
+      "version": "1.0"
+    },
+    "shared_data": {
+      "total_tokens_used": 600
+    }
+  },
+  "node_results": {
+    "openai_connector": {
+      "response": {
+        "status": "connected",
+        "client": "available"
+      },
+      "error": null
+    },
+    "outline_generator": {
+      "success": true,
+      "generated_text": "[시뮬레이션] outline_generator에서 생성된 콘텐츠",
+      "metadata": {
+        "tokens_used": 150,
+        "execution_time": 2.5
+      }
+    },
+    "content_generator": {
+      "success": true,
+      "generated_text": "[시뮬레이션] content_generator에서 생성된 콘텐츠",
+      "metadata": {
+        "tokens_used": 150,
+        "execution_time": 2.5
+      }
+    },
+    "content_reviewer": {
+      "success": true,
+      "generated_text": "[시뮬레이션] content_reviewer에서 생성된 콘텐츠",
+      "metadata": {
+        "tokens_used": 150,
+        "execution_time": 2.5
+      }
+    },
+    "final_content": {
+      "success": true,
+      "generated_text": "[시뮬레이션] final_content에서 생성된 콘텐츠",
+      "metadata": {
+        "tokens_used": 150,
+        "execution_time": 2.5
+      }
+    },
+    "content_analytics": {
+      "success": true,
+      "transformed_data": {
+        "processed": true,
+        "operations_count": 3,
+        "result": "변환 완료"
+      }
+    }
+  }
+}

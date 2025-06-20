@@ -1,5 +1,5 @@
 """
-Gil 노드 기본 클래스 (간단한 버전)
+Gil 노드 기본 클래스
 """
 
 from abc import ABC, abstractmethod
@@ -24,16 +24,14 @@ class GilNode(BaseModel, ABC):
     # 포트 정의
     input_ports: List[GilPort] = Field(default_factory=list, description="입력 포트들")
     output_ports: List[GilPort] = Field(default_factory=list, description="출력 포트들")
-    
-    # 연결 관리
+      # 연결 관리
     input_connections: List[GilConnection] = Field(default_factory=list, description="입력 연결들")
     output_connections: List[GilConnection] = Field(default_factory=list, description="출력 연결들")
     
     # 실행 상태
     is_running: bool = Field(default=False, description="실행 중 여부")
     last_execution_time: Optional[float] = Field(default=None, description="마지막 실행 시간")
-    
-    # 컨텍스트 (런타임에 설정)
+      # 컨텍스트 (런타임에 설정)
     node_context: Optional[NodeContext] = Field(default=None, exclude=True, description="노드 컨텍스트")
     flow_context: Optional[FlowContext] = Field(default=None, exclude=True, description="플로우 컨텍스트")
     
@@ -61,8 +59,7 @@ class GilNode(BaseModel, ABC):
             if port.name == port_name:
                 return port
         return None
-    
-    def get_output_port(self, port_name: str) -> Optional[GilPort]:
+      def get_output_port(self, port_name: str) -> Optional[GilPort]:
         """출력 포트 조회"""
         for port in self.output_ports:
             if port.name == port_name:
@@ -102,15 +99,19 @@ class GilNode(BaseModel, ABC):
         self.flow_context = flow_context
     
     def get_context_variable(self, path: str, default: Any = None) -> Any:
-        """컨텍스트 변수 조회"""
+        """컨텍스트 변수 조회
+        
+        Args:
+            path: 변수 경로 (예: "flow.variables.user_id", "node.internal_state.cache")
+            default: 기본값
+        """
         if not path:
             return default
             
         parts = path.split(".", 2)
         if len(parts) < 3:
             return default
-        
-        context_type, section, key = parts[0], parts[1], parts[2]
+          context_type, section, key = parts[0], parts[1], parts[2]
         
         if context_type == "flow" and self.flow_context:
             if section == "variables":
@@ -138,8 +139,7 @@ class GilNode(BaseModel, ABC):
         parts = path.split(".", 2)
         if len(parts) < 3:
             return
-        
-        context_type, section, key = parts[0], parts[1], parts[2]
+          context_type, section, key = parts[0], parts[1], parts[2]
         
         if context_type == "flow" and self.flow_context:
             if section == "variables":
@@ -156,15 +156,13 @@ class GilNode(BaseModel, ABC):
                 self.node_context.set_internal_state(key, value)
             elif section == "metadata":
                 self.node_context.update_metadata(key, value)
-    
-    def log_error(self, message: str, error_type: str = "general", details: Dict[str, Any] = None) -> None:
+      def log_error(self, message: str, error_type: str = "general", details: Dict[str, Any] = None) -> None:
         """에러 로깅"""
         if self.node_context:
             self.node_context.add_error(message, error_type, details)
     
     async def execute_with_context(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """컨텍스트와 함께 노드 실행"""
-        try:
+        """컨텍스트와 함께 노드 실행"""        try:
             # 노드 컨텍스트 초기화
             if self.node_context:
                 self.node_context.update_metadata("start_time", asyncio.get_event_loop().time())

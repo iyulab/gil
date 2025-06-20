@@ -48,26 +48,26 @@ class GilConnectorOpenAI(GilNode):
                 name="response",
                 data_type=GilDataType.JSON,
                 description="API 응답 데이터"
-            ),
-            GilPort(
+            ),            GilPort(
                 name="error",
-                data_type=GilDataType.TEXT,                description="에러 메시지"
+                data_type=GilDataType.TEXT,
+                description="에러 메시지"
             )
         ]
-      async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    
+    async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """OpenAI API 요청 실행"""
         request_data = inputs.get("request_data")
         
         # 컨텍스트에 API 호출 정보 기록
-        if self._node_context:
-            self._node_context.set_variable("api_provider", "openai")
-            self._node_context.set_variable("base_url", self.base_url or "https://api.openai.com/v1")
-        
-        # request_data가 없으면 연결 정보만 반환
+        if self.node_context:
+            self.node_context.set_variable("api_provider", "openai")
+            self.node_context.set_variable("base_url", self.base_url or "https://api.openai.com/v1")
+          # request_data가 없으면 연결 정보만 반환
         if not request_data:
             connection_info = {"status": "connected", "client": "available"}
-            if self._node_context:
-                self._node_context.set_variable("connection_test", True)
+            if self.node_context:
+                self.node_context.set_variable("connection_test", True)
             return {
                 "response": connection_info,
                 "error": None
@@ -77,11 +77,10 @@ class GilConnectorOpenAI(GilNode):
             # API 엔드포인트별 분기
             endpoint = request_data.get("endpoint", "chat.completions.create")
             client = self.__dict__['client']
-            
-            # 컨텍스트에 요청 정보 기록
-            if self._node_context:
-                self._node_context.set_variable("endpoint", endpoint)
-                self._node_context.set_variable("request_params", request_data.get("params", {}))
+              # 컨텍스트에 요청 정보 기록
+            if self.node_context:
+                self.node_context.set_variable("endpoint", endpoint)
+                self.node_context.set_variable("request_params", request_data.get("params", {}))
             
             if endpoint == "chat.completions.create":
                 response = await client.chat.completions.create(**request_data.get("params", {}))
@@ -91,20 +90,19 @@ class GilConnectorOpenAI(GilNode):
                 error_msg = f"Unsupported endpoint: {endpoint}"
                 self.log_error(error_msg, "unsupported_endpoint", {"endpoint": endpoint})
                 raise ValueError(error_msg)
-            
-            # 성공 시 컨텍스트에 응답 정보 기록
+              # 성공 시 컨텍스트에 응답 정보 기록
             response_dict = response.model_dump() if hasattr(response, 'model_dump') else dict(response)
-            if self._node_context:
-                self._node_context.set_variable("response_received", True)
+            if self.node_context:
+                self.node_context.set_variable("response_received", True)
                 if hasattr(response, 'usage') and response.usage:
                     usage_info = response.usage.model_dump() if hasattr(response.usage, 'model_dump') else dict(response.usage)
-                    self._node_context.set_variable("token_usage", usage_info)
+                    self.node_context.set_variable("token_usage", usage_info)
                     
                     # Flow 컨텍스트에 토큰 사용량 누적
-                    if self._flow_context:
-                        total_tokens = self._flow_context.get_shared_data("total_tokens_used", 0)
+                    if self.flow_context:
+                        total_tokens = self.flow_context.get_shared_data("total_tokens_used", 0)
                         total_tokens += usage_info.get("total_tokens", 0)
-                        self._flow_context.set_shared_data("total_tokens_used", total_tokens)
+                        self.flow_context.set_shared_data("total_tokens_used", total_tokens)
             
             return {
                 "response": response_dict,
