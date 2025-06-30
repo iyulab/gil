@@ -3,31 +3,36 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "gil-py"
+name = "gil-flow"
 version = "0.1.0"
-description = "Gil-Py: A Python workflow library for AI-powered node-based processing"
+description = "Gil-Flow: Language-neutral YAML-based workflow system with AI integration"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 authors = [
-    {name = "Gil-Py Team", email = "gil-py@example.com"}
+    {name = "Gil-Flow Team", email = "contact@gil-flow.org"}
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Distributed Computing",
 ]
-keywords = ["ai", "workflow", "openai", "image-generation", "automation"]
+keywords = ["workflow", "yaml", "ai", "automation", "openai", "node-based", "pipeline"]
 requires-python = ">=3.8"
 dependencies = [
     "openai>=1.0.0",
     "pydantic>=2.0.0",
     "python-dotenv>=1.0.0",
     "aiohttp>=3.8.0",
+    "click>=8.0.0",
+    "pyyaml>=6.0.0",
 ]
 
 [project.optional-dependencies]
@@ -39,11 +44,14 @@ dev = [
     "mypy>=1.0.0",
 ]
 
+[project.scripts]
+gil-flow = "gil_py.cli.main:main"
+
 [project.urls]
-Homepage = "https://github.com/gil-team/gil-py"
-Repository = "https://github.com/gil-team/gil-py"
-Documentation = "https://github.com/gil-team/gil-py#readme"
-Issues = "https://github.com/gil-team/gil-py/issues"
+Homepage = "https://github.com/iyulab/gil"
+Repository = "https://github.com/iyulab/gil"
+Documentation = "https://github.com/iyulab/gil#readme"
+Issues = "https://github.com/iyulab/gil/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
