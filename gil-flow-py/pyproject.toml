@@ -1,0 +1,11 @@
+[project]
+name = "gil-flow-py"
+version = "0.1.0"
+description = "A RESTful API server for executing and managing gil-py workflows."
+authors = [{ name = "Your Name", email = "you@example.com" }]
+
+[project.urls]
+"Homepage" = ""
+
+[tool.setuptools]
+packages = ["gil_flow_py"]

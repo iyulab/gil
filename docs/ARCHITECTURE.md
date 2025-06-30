@@ -7,7 +7,12 @@
 ## 아키텍처 개요
 
 ```
+```
 Gil-Flow YAML (언어 중립적 표준)
+         ↓
+┌ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐
+  gil-flow-py (API) 🚧
+└ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘
          ↓
 ├── gil-py (Python) ✅
 ├── gil-sharp (C#) 🚧  

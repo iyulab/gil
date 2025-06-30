@@ -5,10 +5,12 @@ OpenAI API 커넥터
 from typing import Dict, Any, Optional
 from pydantic import Field
 import openai
-from ..core import GilNode, GilPort, GilDataType
+from ..core.node import Node
+from ..core.port import InputPort, OutputPort
+from ..core.data_types import DataType
 
 
-class GilConnectorOpenAI(GilNode):
+class OpenAIConnector(Node):
     """OpenAI API 연결을 위한 커넥터 노드"""
     
     api_key: str = Field(description="OpenAI API 키")
@@ -17,14 +19,16 @@ class GilConnectorOpenAI(GilNode):
     
     model_config = {"arbitrary_types_allowed": True}
     
-    def __init__(self, **data):
-        # 기본값 설정
-        if "name" not in data:
-            data["name"] = "OpenAI Connector"
-        if "node_type" not in data:
-            data["node_type"] = "GilConnectorOpenAI"
-        super().__init__(**data)
-        
+    def __init__(self, node_id: str, config: dict = None):
+        super().__init__(node_id, config)
+        self.api_key = self.config.get("api_key")
+        self.organization = self.config.get("organization")
+        self.base_url = self.config.get("base_url")
+
+        self.add_input_port(InputPort("request_data", DataType.JSON, description="API 요청 데이터 (선택사항)", required=False))
+        self.add_output_port(OutputPort("response", DataType.JSON, description="API 응답 데이터"))
+        self.add_output_port(OutputPort("error", DataType.TEXT, description="에러 메시지"))
+
         # OpenAI 클라이언트 초기화
         self.__dict__['client'] = openai.AsyncOpenAI(
             api_key=self.api_key,
@@ -32,32 +36,9 @@ class GilConnectorOpenAI(GilNode):
             base_url=self.base_url
         )
 
-    def _setup_ports(self) -> None:
-        """포트 설정"""
-        self.input_ports = [
-            GilPort(
-                name="request_data",
-                data_type=GilDataType.JSON,
-                description="API 요청 데이터 (선택사항)",
-                required=False
-            )
-        ]
-        
-        self.output_ports = [
-            GilPort(
-                name="response",
-                data_type=GilDataType.JSON,
-                description="API 응답 데이터"
-            ),            GilPort(
-                name="error",
-                data_type=GilDataType.TEXT,
-                description="에러 메시지"
-            )
-        ]
-    
-    async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(self):
         """OpenAI API 요청 실행"""
-        request_data = inputs.get("request_data")
+        request_data = self.get_input_port("request_data").get_data()
         
         # 컨텍스트에 API 호출 정보 기록
         if self.node_context:
@@ -68,10 +49,9 @@ class GilConnectorOpenAI(GilNode):
             connection_info = {"status": "connected", "client": "available"}
             if self.node_context:
                 self.node_context.set_variable("connection_test", True)
-            return {
-                "response": connection_info,
-                "error": None
-            }
+            self.get_output_port("response").set_data(connection_info)
+            self.get_output_port("error").set_data(None)
+            return
         
         try:
             # API 엔드포인트별 분기
@@ -104,10 +84,9 @@ class GilConnectorOpenAI(GilNode):
                         total_tokens += usage_info.get("total_tokens", 0)
                         self.flow_context.set_shared_data("total_tokens_used", total_tokens)
             
-            return {
-                "response": response_dict,
-                "error": None
-            }
+            self.get_output_port("response").set_data(response_dict)
+            self.get_output_port("error").set_data(None)
+            return
             
         except Exception as e:
             error_msg = str(e)
@@ -120,10 +99,9 @@ class GilConnectorOpenAI(GilNode):
             # 컨텍스트에 에러 정보 기록
             self.log_error(error_msg, "api_error", error_details)
             
-            return {
-                "response": None,
-                "error": error_msg
-            }
+            self.get_output_port("response").set_data(None)
+            self.get_output_port("error").set_data(error_msg)
+            return
     
     async def test_connection(self) -> bool:
         """연결 테스트"""

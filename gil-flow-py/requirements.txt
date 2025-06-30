@@ -1,0 +1,3 @@
+fastapi
+uvicorn
+gil-flow @ file:///D:/data/gil/gil-py

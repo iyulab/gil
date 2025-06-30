@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 import uuid
 
 
-class GilConnection(BaseModel):
+class Connection(BaseModel):
     """노드 간 연결을 나타내는 클래스"""
     
     connection_id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="연결 고유 ID")

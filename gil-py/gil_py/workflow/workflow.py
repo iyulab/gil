@@ -1,3 +1,4 @@
+
 """
 Gil 워크플로우 클래스
 """
@@ -5,7 +6,7 @@ Gil 워크플로우 클래스
 import asyncio
 from typing import Dict, Any, List, Optional, Union
 from pathlib import Path
-from ..core import GilNode
+from ..core.node import Node
 from .yaml_parser import YamlWorkflowParser, WorkflowConfig
 from .executor import WorkflowExecutor
 
@@ -15,7 +16,7 @@ class GilWorkflow:
     
     def __init__(self, name: str = "Gil Workflow"):
         self.name = name
-        self.nodes: Dict[str, GilNode] = {}
+        self.nodes: Dict[str, Node] = {}
         self.connections: List[Dict[str, str]] = []
         self.config: Optional[WorkflowConfig] = None
         self.executor = WorkflowExecutor()
@@ -44,7 +45,7 @@ class GilWorkflow:
         
         return workflow
     
-    def add_node(self, name: str, node: GilNode) -> None:
+    def add_node(self, name: str, node: Node) -> None:
         """노드 추가"""
         self.nodes[name] = node
     
@@ -260,3 +261,4 @@ class GilWorkflow:
                 f.write(diagram)
         
         return diagram
+

@@ -4,7 +4,7 @@
 
 import asyncio
 from typing import Dict, Any, List, Set
-from ..core import GilNode
+from ..core.node import Node
 from collections import defaultdict, deque
 
 
@@ -14,7 +14,7 @@ class WorkflowExecutor:
     def __init__(self):
         self.execution_results: Dict[str, Any] = {}
     
-    async def execute(self, nodes: Dict[str, GilNode], 
+    async def execute(self, nodes: Dict[str, Node], 
                      connections: List[Dict[str, str]], 
                      inputs: Dict[str, Any]) -> Dict[str, Any]:
         """워크플로우 실행"""
@@ -40,7 +40,7 @@ class WorkflowExecutor:
             
             try:
                 # 노드 실행
-                result = await node.run(node_inputs)
+                result = await node.run()
                 self.execution_results[node_name] = result
                 print(f"✅ 노드 '{node_name}' 완료")
                 
@@ -52,7 +52,7 @@ class WorkflowExecutor:
         print("🎉 워크플로우 실행 완료!")
         return self.execution_results
     
-    def _calculate_execution_order(self, nodes: Dict[str, GilNode], 
+    def _calculate_execution_order(self, nodes: Dict[str, Node], 
                                   connections: List[Dict[str, str]]) -> List[str]:
         """위상 정렬로 실행 순서 계산"""
         # 인접 리스트와 진입 차수 계산

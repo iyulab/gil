@@ -7,13 +7,13 @@ from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, Field
 import uuid
 import asyncio
-from .port import GilPort
-from .connection import GilConnection
-from .data_types import GilDataType
+from .port import Port, InputPort, OutputPort
+from .connection import Connection
+from .data_types import DataType
 from .context import NodeContext, FlowContext
 
 
-class GilNode(BaseModel, ABC):
+class Node(BaseModel, ABC):
     """Gil 노드의 기본 클래스"""
     
     node_id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="노드 고유 ID")
@@ -22,12 +22,12 @@ class GilNode(BaseModel, ABC):
     version: str = Field(default="1.0.0", description="노드 버전")
     
     # 포트 정의
-    input_ports: List[GilPort] = Field(default_factory=list, description="입력 포트들")
-    output_ports: List[GilPort] = Field(default_factory=list, description="출력 포트들")
+    input_ports: List[InputPort] = Field(default_factory=list, description="입력 포트들")
+    output_ports: List[OutputPort] = Field(default_factory=list, description="출력 포트들")
     
     # 연결 관리
-    input_connections: List[GilConnection] = Field(default_factory=list, description="입력 연결들")
-    output_connections: List[GilConnection] = Field(default_factory=list, description="출력 연결들")
+    input_connections: List[Connection] = Field(default_factory=list, description="입력 연결들")
+    output_connections: List[Connection] = Field(default_factory=list, description="출력 연결들")
     
     # 실행 상태
     is_running: bool = Field(default=False, description="실행 중 여부")
@@ -41,55 +41,51 @@ class GilNode(BaseModel, ABC):
         arbitrary_types_allowed = True
         use_enum_values = True
     
-    def __init__(self, **data):
-        super().__init__(**data)
-        self._setup_ports()
+    def __init__(self, node_id: str, node_config: dict = None):
+        super().__init__(node_id=node_id, name=node_id, node_type=self.__class__.__name__, node_config=node_config if node_config is not None else {})
     
     @abstractmethod
-    def _setup_ports(self) -> None:
-        """포트 설정을 정의하는 추상 메서드"""
-        pass
-    
-    @abstractmethod
-    async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(self) -> None:
         """노드 실행 로직을 정의하는 추상 메서드"""
         pass
     
-    def get_input_port(self, port_name: str) -> Optional[GilPort]:
+    def add_input_port(self, port: InputPort):
+        self.input_ports.append(port)
+
+    def add_output_port(self, port: OutputPort):
+        self.output_ports.append(port)
+    
+    def get_input_port(self, port_name: str) -> Optional[InputPort]:
         """입력 포트 조회"""
         for port in self.input_ports:
             if port.name == port_name:
                 return port
         return None
     
-    def get_output_port(self, port_name: str) -> Optional[GilPort]:
+    def get_output_port(self, port_name: str) -> Optional[OutputPort]:
         """출력 포트 조회"""
         for port in self.output_ports:
             if port.name == port_name:
                 return port
         return None
     
-    def validate_inputs(self, inputs: Dict[str, Any]) -> bool:
+    def validate_inputs(self) -> bool:
         """입력 데이터 유효성 검증"""
         for port in self.input_ports:
-            if port.required and port.name not in inputs:
+            if port.required and port.get_data() is None:
                 if port.default_value is None:
                     return False
-                inputs[port.name] = port.default_value
-            
-            if port.name in inputs:
-                if not port.validate_data(inputs[port.name]):
-                    return False
+                port.set_data(port.default_value)
         return True
     
-    async def run(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    async def run(self) -> None:
         """노드 실행 래퍼"""
-        if not self.validate_inputs(inputs):
+        if not self.validate_inputs():
             raise ValueError(f"Invalid inputs for node {self.name}")
         
         self.is_running = True
         try:
-            result = await self.execute(inputs)
+            result = await self.execute()
             import time
             self.last_execution_time = time.time()
             return result
@@ -162,7 +158,7 @@ class GilNode(BaseModel, ABC):
         if self.node_context:
             self.node_context.add_error(message, error_type, details)
     
-    async def execute_with_context(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute_with_context(self) -> None:
         """컨텍스트와 함께 노드 실행"""
         try:
             # 노드 컨텍스트 초기화
@@ -170,7 +166,7 @@ class GilNode(BaseModel, ABC):
                 self.node_context.update_metadata("start_time", asyncio.get_event_loop().time())
             
             # 기본 실행 메서드 호출
-            result = await self.execute(inputs)
+            result = await self.execute()
             
             # 실행 완료 처리
             if self.node_context:

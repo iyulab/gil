@@ -271,8 +271,8 @@ async def handle_generate(args):
         sys.exit(1)
     
     import os
-    from ..connectors.openai_connector import GilConnectorOpenAI
-    from ..generators.image_generator import GilGenImage
+    from ..connectors.openai_connector import OpenAIConnector
+    from ..generators.image_generator import ImageGenerator
     
     api_key = args.api_key or os.getenv("OPENAI_API_KEY")
     if not api_key:
@@ -283,8 +283,8 @@ async def handle_generate(args):
     try:
         print(f"🎨 이미지 생성 중: '{args.image}'")
         
-        connector = GilConnectorOpenAI(api_key=api_key)
-        generator = GilGenImage(connector=connector)
+        connector = OpenAIConnector(node_id="openai_connector", config={"api_key": api_key})
+        generator = ImageGenerator(node_id="image_generator", node_config={"connector": connector})
         
         result = await generator.generate(
             prompt=args.image,

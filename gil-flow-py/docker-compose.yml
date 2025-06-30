@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  gil-flow-py:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      GIL_FLOW_API_KEY: your_super_secret_api_key
+    volumes:
+      - ./gil_flow_py:/app/gil_flow_py
+      - ../gil-py:/app/gil-py

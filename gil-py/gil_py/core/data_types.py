@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Any, Dict, List, Union
 
 
-class GilDataType(Enum):
+class DataType(Enum):
     """Gil 시스템에서 사용하는 데이터 타입"""
     TEXT = "text"
     NUMBER = "number"
@@ -22,16 +22,16 @@ class GilDataType(Enum):
 
 
 # 타입 매핑
-GilDataTypeMap = {
-    GilDataType.TEXT: str,
-    GilDataType.NUMBER: Union[int, float],
-    GilDataType.BOOLEAN: bool,
-    GilDataType.JSON: Dict[str, Any],
-    GilDataType.ARRAY: List[Any],
-    GilDataType.BINARY: bytes,
-    GilDataType.IMAGE: bytes,
-    GilDataType.AUDIO: bytes,
-    GilDataType.VIDEO: bytes,
-    GilDataType.FILE: bytes,
-    GilDataType.ANY: Any,
+DataTypeMap = {
+    DataType.TEXT: str,
+    DataType.NUMBER: Union[int, float],
+    DataType.BOOLEAN: bool,
+    DataType.JSON: Dict[str, Any],
+    DataType.ARRAY: List[Any],
+    DataType.BINARY: bytes,
+    DataType.IMAGE: bytes,
+    DataType.AUDIO: bytes,
+    DataType.VIDEO: bytes,
+    DataType.FILE: bytes,
+    DataType.ANY: Any,
 }

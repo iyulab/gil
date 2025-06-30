@@ -1,136 +1,67 @@
-"""
-YAML 워크플로우 파서
-"""
-
-import yaml
-from typing import Dict, Any, List, Optional
-from pathlib import Path
+from typing import Dict, Any, List, Optional, Union
 from pydantic import BaseModel, Field
-
+import yaml
+from pathlib import Path
+import os
+import re
 
 class NodeConfig(BaseModel):
-    """노드 설정"""
-    type: str = Field(description="노드 타입")
-    config: Dict[str, Any] = Field(default_factory=dict, description="노드 설정")
-    inputs: Dict[str, Any] = Field(default_factory=dict, description="입력 값")
-    condition: Optional[str] = Field(default=None, description="실행 조건")
-
+    type: str
+    config: Dict[str, Any] = Field(default_factory=dict)
+    inputs: Optional[Dict[str, Any]] = None
 
 class WorkflowConfig(BaseModel):
-    """워크플로우 설정"""
-    name: str = Field(description="워크플로우 이름")
-    description: Optional[str] = Field(default=None, description="워크플로우 설명")
-    environment: Dict[str, str] = Field(default_factory=dict, description="환경 변수")
-    nodes: Dict[str, NodeConfig] = Field(description="노드 정의")
-    flow: List[Any] = Field(description="실행 순서")
-    outputs: Dict[str, Any] = Field(default_factory=dict, description="출력 설정")
-
+    name: str
+    description: Optional[str] = None
+    environment: Dict[str, str] = Field(default_factory=dict)
+    nodes: Dict[str, NodeConfig]
+    flow: List[Any]
 
 class YamlWorkflowParser:
-    """YAML 워크플로우 파서"""
-    
-    def __init__(self):
-        self.config: Optional[WorkflowConfig] = None
-    
-    def parse_file(self, yaml_path: str | Path) -> WorkflowConfig:
-        """YAML 파일에서 워크플로우 설정을 파싱"""
+    def parse_file(self, yaml_path: Union[str, Path]) -> WorkflowConfig:
         yaml_path = Path(yaml_path)
-        
         if not yaml_path.exists():
-            raise FileNotFoundError(f"YAML 파일을 찾을 수 없습니다: {yaml_path}")
+            raise FileNotFoundError(f"Workflow YAML file not found: {yaml_path}")
         
         with open(yaml_path, 'r', encoding='utf-8') as f:
-            yaml_data = yaml.safe_load(f)
+            yaml_content = f.read()
         
-        return self.parse_dict(yaml_data)
-    
-    def parse_dict(self, yaml_data: Dict[str, Any]) -> WorkflowConfig:
-        """딕셔너리에서 워크플로우 설정을 파싱"""
-        # 노드 설정 파싱
-        nodes = {}
-        for node_name, node_data in yaml_data.get("nodes", {}).items():
-            nodes[node_name] = NodeConfig(**node_data)
+        return self.parse_content(yaml_content)
+
+    def parse_dict(self, config_dict: Dict[str, Any]) -> WorkflowConfig:
+        return WorkflowConfig(**config_dict)
+
+    def parse_content(self, yaml_content: str) -> WorkflowConfig:
+        # 환경 변수 치환
+        processed_content = self._substitute_env_vars(yaml_content)
         
-        # 워크플로우 설정 생성
-        config_data = {
-            "name": yaml_data.get("name", "Unnamed Workflow"),
-            "description": yaml_data.get("description"),
-            "environment": yaml_data.get("environment", {}),
-            "nodes": nodes,
-            "flow": yaml_data.get("flow", []),
-            "outputs": yaml_data.get("outputs", {})
-        }
-        
-        self.config = WorkflowConfig(**config_data)
-        return self.config
-    
+        config_dict = yaml.safe_load(processed_content)
+        return WorkflowConfig(**config_dict)
+
+    def _substitute_env_vars(self, content: str) -> str:
+        def replace_env(match):
+            var_name = match.group(1)
+            return os.getenv(var_name, match.group(0)) # 환경변수가 없으면 원본 문자열 반환
+        return re.sub(r'\$\{([A-Z_]+)\}', replace_env, content)
+
     def resolve_references(self, value: Any, context: Dict[str, Any]) -> Any:
-        """참조 문자열 해결 (@node_name.output 형태)"""
         if isinstance(value, str):
-            if value.startswith("@"):
-                # @node_name.output 형태의 참조 해결
-                ref_path = value[1:]  # @ 제거
-                return self._resolve_path(ref_path, context)
-            elif value.startswith("${") and value.endswith("}"):
-                # ${env_var} 형태의 환경변수 해결
-                env_var = value[2:-1]
-                return self._resolve_env_var(env_var, context)
-        
+            # ${VAR} 형식의 환경 변수 참조 해결
+            value = self._substitute_env_vars(value)
+
+            # @node.output 형식의 노드 출력 참조 해결
+            match = re.match(r'^@([a-zA-Z0-9_]+)\.([a-zA-Z0-9_]+)$', value)
+            if match:
+                node_id = match.group(1)
+                port_name = match.group(2)
+                
+                # 여기서는 실제 노드 실행 결과가 아닌, 컨텍스트에서 참조를 해결해야 함
+                # 이 부분은 워크플로우 실행 시점에 Executor에서 처리되어야 함
+                # 현재는 더미 값 반환 또는 에러 처리
+                # TODO: Executor에서 실제 노드 결과 참조 로직 구현
+                return f"RESOLVE_ME:{node_id}.{port_name}"
+        elif isinstance(value, dict):
+            return {k: self.resolve_references(v, context) for k, v in value.items()}
+        elif isinstance(value, list):
+            return [self.resolve_references(item, context) for item in value]
         return value
-    
-    def _resolve_path(self, path: str, context: Dict[str, Any]) -> Any:
-        """경로 기반 참조 해결"""
-        parts = path.split(".")
-        current = context        
-        for part in parts:
-            if isinstance(current, dict):
-                current = current.get(part)
-            elif isinstance(current, list) and part.isdigit():
-                idx = int(part)
-                current = current[idx] if idx < len(current) else None
-            else:
-                return None
-        
-        return current
-    
-    def _resolve_env_var(self, env_var: str, context: Dict[str, Any]) -> str:
-        """환경변수 및 입력 변수 해결"""
-        import os
-        
-        # 기본값 처리 (| 구분자 사용)
-        default_value = None
-        if "|" in env_var:
-            env_var, default_value = env_var.split("|", 1)
-            env_var = env_var.strip()
-            default_value = default_value.strip()
-        
-        # input.* 형태의 입력 변수 처리
-        if env_var.startswith("input."):
-            input_key = env_var[6:]  # "input." 제거
-            input_data = context.get("input", {})
-            if input_key in input_data:
-                return str(input_data[input_key])
-            elif default_value is not None:
-                return default_value
-            else:
-                return f"${{{env_var}}}"
-        
-        # timestamp 처리
-        if env_var == "timestamp":
-            from datetime import datetime
-            return datetime.now().isoformat()
-        
-        # 환경변수 또는 입력 컨텍스트에서 값 찾기
-        if env_var in context.get("environment", {}):
-            return context["environment"][env_var]
-        
-        # 시스템 환경변수에서 찾기
-        value = os.getenv(env_var)
-        if value is not None:
-            return value
-        
-        # 기본값이 있으면 사용
-        if default_value is not None:
-            return default_value
-        
-        return f"${{{env_var}}}"  # 기본값은 원래 문자열
