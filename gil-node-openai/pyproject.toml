@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gil-node-openai"
+version = "0.1.0"
+authors = [
+    { name = "Your Name", email = "your.email@example.com" },
+]
+description = "OpenAI nodes for the Gil-Flow project"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "gil-py",  # Depends on the core SDK
+    "openai",
+]
+
+[project.entry-points."gil.nodes"]
+OpenAIConnector = "gil_node_openai.connector:OpenAIConnector"
+ImageGenerator = "gil_node_openai.image_generator:ImageGenerator"

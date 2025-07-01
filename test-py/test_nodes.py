@@ -8,7 +8,7 @@ from gil_py.core.context import Context
 
 @pytest.mark.asyncio
 async def test_text_generation_node_basic():
-    node = TextGenerationNode(node_id="test_text_gen_node", config={})
+    node = TextGenerationNode(node_id="test_text_gen_node", node_config={})
     node.get_input_port("input_text").set_data("world")
 
     context = Context({})
@@ -20,7 +20,7 @@ async def test_text_generation_node_basic():
 
 @pytest.mark.asyncio
 async def test_text_generation_node_with_prefix_suffix():
-    node = TextGenerationNode(node_id="test_text_gen_node_prefix_suffix", config={"prefix": "Hello, ", "suffix": "!"})
+    node = TextGenerationNode(node_id="test_text_gen_node_prefix_suffix", node_config={"prefix": "Hello, ", "suffix": "!"})
     node.get_input_port("input_text").set_data("Gil-Flow")
 
     context = Context({})

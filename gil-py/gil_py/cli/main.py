@@ -283,7 +283,7 @@ async def handle_generate(args):
     try:
         print(f"🎨 이미지 생성 중: '{args.image}'")
         
-        connector = OpenAIConnector(node_id="openai_connector", config={"api_key": api_key})
+        connector = OpenAIConnector(node_id="openai_connector", node_config={"api_key": api_key})
         generator = ImageGenerator(node_id="image_generator", node_config={"connector": connector})
         
         result = await generator.generate(

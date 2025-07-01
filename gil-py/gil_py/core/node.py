@@ -4,7 +4,7 @@ Gil 노드 기본 클래스 (간단한 버전)
 
 from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 import uuid
 import asyncio
 from .port import Port, InputPort, OutputPort
@@ -20,6 +20,7 @@ class Node(BaseModel, ABC):
     name: str = Field(description="노드 이름")
     node_type: str = Field(description="노드 타입")
     version: str = Field(default="1.0.0", description="노드 버전")
+    node_config: Dict[str, Any] = Field(default_factory=dict, description="노드 설정")
     
     # 포트 정의
     input_ports: List[InputPort] = Field(default_factory=list, description="입력 포트들")
@@ -37,12 +38,10 @@ class Node(BaseModel, ABC):
     node_context: Optional[NodeContext] = Field(default=None, exclude=True, description="노드 컨텍스트")
     flow_context: Optional[FlowContext] = Field(default=None, exclude=True, description="플로우 컨텍스트")
     
-    class Config:
-        arbitrary_types_allowed = True
-        use_enum_values = True
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra='allow', use_enum_values=True)
     
-    def __init__(self, node_id: str, node_config: dict = None):
-        super().__init__(node_id=node_id, name=node_id, node_type=self.__class__.__name__, node_config=node_config if node_config is not None else {})
+    def __init__(self, node_id: str, name: str = None, node_type: str = None, version: str = "1.0.0", node_config: dict = None, **data):
+        super().__init__(node_id=node_id, name=name or node_id, node_type=node_type or self.__class__.__name__, version=version, node_config=node_config if node_config is not None else {}, **data)
     
     @abstractmethod
     async def execute(self) -> None:
