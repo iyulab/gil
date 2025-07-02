@@ -14,31 +14,29 @@ Gil 프로젝트는 모듈성과 확장성을 극대화하기 위해 다음과 �
 
 > **목표**: `gil-py`를 특정 노드 구현에서 분리된 순수 핵심 SDK로 재정의합니다.
 
-- [ ] **`gil-py` 구조 재설계**
-    - [ ] `nodes`, `connectors`, `generators` 등 특정 구현 관련 코드를 `gil-py`에서 완전히 제거
-    - [ ] `core` 모듈(Node, Port, Connection, Context, Executor 등)을 중심으로 재편
-- [ ] **노드 동적 로딩 시스템 구현**
-    - [ ] `setuptools`의 `entry_points`를 사용하여 설치된 `gil-node-*` 패키지를 자동으로 발견하는 메커니즘 설계
-    - [ ] `NodeFactory`가 동적으로 발견된 노드를 생성하도록 수정
-- [ ] **`pyproject.toml` 업데이트**
-    - [ ] 의존성을 최소화하고, 새로운 진입점(entry point) 설정
-- [ ] **테스트 환경 분리**
-    - [ ] `test-py`가 `gil-py`와 필요한 노드 패키지를 `pip`으로 설치하여 테스트하도록 구성 변경
+- [x] **`gil-py` 구조 재설계**: `nodes`, `connectors`, `generators` 디렉토리 제거
+- [x] **노드 동적 로딩 시스템 구현**: `entry_points` 기반 `NodeFactory` 수정
+- [x] **코어 노드 설계 및 구현 (`Control-`, `Util-`)**
+    - [x] `gil_py/core/control` 및 `gil_py/core/util` 디렉토리 구조 생성
+    - [x] `Util-LogMessage`, `Util-SetVariable`, `Control-Branch` 노드 구현 및 등록
+- [x] **`pyproject.toml` 업데이트**
+    - [x] 의존성을 최소화하고, 코어 노드를 위한 `entry_points` 설정
+- [x] **테스트 환경 분리**
+    - [x] `test-py`가 `gil-py`와 필요한 노드 패키지를 `pip`으로 설치하여 테스트하도록 구성 변경
 
 ### Phase 2: `gil-node-*` 패키지 생태계 구축
 
 > **목표**: 기존 기능을 독립적인 `gil-node-*` 패키지로 분리하고 PyPI 배포를 준비합니다.
 
-- [ ] **`gil-node-openai` 패키지 생성**
-    - [ ] 기존 `openai_connector` 및 `DALL-E` 관련 노드 코드를 이전
-    - [ ] `pyproject.toml` 설정 (`gil-py` 의존성 명시)
-    - [ ] 독립적인 테스트 및 `README.md` 작성
-- [ ] **`gil-node-text` 패키지 생성**
-    - [ ] `AITextGeneration` 등 범용 텍스트 처리 노드 이전
-    - [ ] `pyproject.toml` 설정 및 문서화
-- [ ] **`gil-node-data` 패키지 생성**
-    - [ ] `DataFile`, `TransformData` 등 데이터 입출력 및 변환 노드 이전
-    - [ ] `pyproject.toml` 설정 및 문서화
+- [x] **`gil-node-openai` 패키지 리팩토링 및 이름 변경**
+    - [x] `OpenAIConnector` -> `OpenAI-Connector` 이름 변경
+    - [x] `ImageGenerator` -> `OpenAI-GenerateImage` 이름 변경
+    - [x] `pyproject.toml`의 `entry_points` 수정
+    - [x] 파일 이름 및 클래스 이름 변경 (`connector.py` -> `openai_connector.py` 등)
+- [x] **`gil-node-text` 패키지 생성**
+    - [x] `AITextGeneration` 등 범용 텍스트 처리 노드 이전 (`OpenAI-GenerateText` 등)
+- [x] **`gil-node-data` 패키지 생성**
+    - [x] `DataFile`, `TransformData` 등 데이터 입출력 및 변환 노드 이전 (`Data-ReadFile`, `Data-Transform` 등)
 - [ ] **PyPI 배포 파이프라인 구축**
     - [ ] `gil-py` 및 각 `gil-node-*` 패키지를 위한 CI/CD 설정 (GitHub Actions)
 
@@ -46,21 +44,24 @@ Gil 프로젝트는 모듈성과 확장성을 극대화하기 위해 다음과 �
 
 > **목표**: YAML 워크플로우를 실행하고 관리하는 고성능 API 서버를 구축합니다.
 
-- [ ] **FastAPI 기반 서버 구축**
-    - [ ] `gil-flow-py` 프로젝트 초기 설정 (기존 계획 활용)
-    - [ ] `pyproject.toml`에 `fastapi`, `uvicorn`, `gil-py` 및 필요한 `gil-node-*` 패키지 의존성 추가
-- [ ] **API 엔드포인트 구현**
-    - [ ] `POST /workflows/run`: YAML 워크플로우를 받아 실행하고 결과를 반환
-    - [ ] `GET /nodes`: 현재 설치된 모든 사용 가능한 노드 목록 반환
-    - [ ] `GET /health`: 서비스 상태 확인
-- [ ] **인증 및 보안**
-    - [ ] API Key 기반 인증 미들웨어 구현
-- [ ] **Docker 컨테이너화**
-    - [ ] `gil-flow-py` 실행을 위한 `Dockerfile` 및 `docker-compose.yml` 작성
-    - [ ] 프로덕션 환경을 위한 최적화된 이미지 빌드
+- [x] **FastAPI 기반 서버 구축**
+    - [x] `gil-flow-py` 프로젝트 초기 설정 (기존 활용)
+    - [x] `pyproject.toml`에 `fastapi`, `uvicorn`, `gil-py` 및 필요한 `gil-node-*` 패키지 의존성 추가
+- [x] **API 엔드포인트 구현**
+    - [x] `POST /workflows/run`: YAML 워크플로우를 받아 실행하고 결과를 반환
+    - [x] `GET /nodes`: 현재 설치된 모든 사용 가능한 노드 목록 반환
+    - [x] `GET /health`: 서비스 상태 확인
+- [x] **인증 및 보안**
+    - [x] API Key를 발급하고 검증하는 미들웨어 또는 의존성 주입 구현
+    - [x] 환경 변수를 통해 API Key를 설정하는 기능
+- [x] **Docker 컨테이너화**
+    - [x] `Dockerfile` 작성
+    - [x] 멀티-스테이지 빌드를 사용하여 이미지 최적화
+    - [x] `docker-compose.yml`을 통한 로컬 테스트 환경 구성
 - [ ] **문서화 및 테스트**
-    - [ ] API 사용법 및 배포 가이드 `README.md` 작성
-    - [ ] `pytest`를 사용한 API 엔드포인트 통합 테스트
+    - [ ] `README.md` 작성 (API 사용법, 배포 방법 명시)
+    - [ ] API 엔드포인트에 대한 단위/통합 테스트 작성 (pytest)
+        - **현재 상태**: `ModuleNotFoundError: No module named 'gil_py.workflow.yaml_parser'` 오류 및 API 키 관련 테스트 실패 지속. `gil_py` 패키지 구조 및 임포트 문제 해결 중.
 
 ## 장기 비전
 

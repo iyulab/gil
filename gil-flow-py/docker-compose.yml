@@ -1,14 +1,16 @@
 version: '3.8'
 
 services:
-  gil-flow-py:
+  gil-flow-api:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
     environment:
-      GIL_FLOW_API_KEY: your_super_secret_api_key
+      # Set your API key here or load from .env file
+      - GIL_FLOW_API_KEY=your_super_secret_api_key
     volumes:
+      # Mount the local code for development purposes (optional)
       - ./gil_flow_py:/app/gil_flow_py
-      - ../gil-py:/app/gil-py
+    # command: uvicorn gil_flow_py.main:app --host 0.0.0.0 --port 8000

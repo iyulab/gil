@@ -1,12 +1,44 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "gil-flow-py"
 version = "0.1.0"
-description = "A RESTful API server for executing and managing gil-py workflows."
-authors = [{ name = "Your Name", email = "you@example.com" }]
+authors = [
+    { name = "iyulab", email = "caveman@iyulab.com" },
+]
+description = "A RESTful API server for executing and managing Gil-Flow workflows."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "gil-py",
+    "gil-node-openai",
+    "gil-node-text",
+    "gil-node-data",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
+]
 
 [project.urls]
-"Homepage" = "https://example.com"
+"Homepage" = "https://github.com/iyulab/gil"
+"Repository" = "https://github.com/iyulab/gil"
 
-[tool.setuptools]
-packages = ["gil_flow_py"]
+[project.scripts]
+gil-flow-api = "gil_flow_py.main:main"
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["gil_flow_py*"]

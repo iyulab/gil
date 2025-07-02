@@ -7,7 +7,7 @@ import asyncio
 from typing import Dict, Any, List, Optional, Union
 from pathlib import Path
 from ..core.node import Node
-from .yaml_parser import YamlWorkflowParser, WorkflowConfig
+from ..yaml_parser import YamlWorkflowParser, WorkflowConfig
 from .executor import WorkflowExecutor
 
 

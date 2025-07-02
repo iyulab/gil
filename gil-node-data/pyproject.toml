@@ -3,12 +3,12 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "gil-node-openai"
+name = "gil-node-data"
 version = "0.1.0"
 authors = [
     { name = "iyulab", email = "caveman@iyulab.com" },
 ]
-description = "OpenAI nodes for the Gil-Flow project"
+description = "Data processing and I/O nodes for the Gil-Flow project"
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
@@ -18,9 +18,9 @@ classifiers = [
 ]
 dependencies = [
     "gil-py",
-    "openai",
+    "pandas", # For Data-Transform, Data-Filter etc.
 ]
 
 [project.entry-points."gil.nodes"]
-OpenAI-Connector = "gil_node_openai.openai_connector:OpenAIConnectorNode"
-OpenAI-GenerateImage = "gil_node_openai.openai_image_generator:OpenAIGenerateImageNode"
+Data-ReadFile = "gil_node_data.read_file:DataReadFileNode"
+Data-Transform = "gil_node_data.transform:DataTransformNode"
