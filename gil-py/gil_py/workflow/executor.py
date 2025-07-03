@@ -5,123 +5,65 @@
 import asyncio
 from typing import Dict, Any, List, Set
 from ..core.node import Node
+from ..core.context import Context
+from ..yaml_parser import WorkflowConfig
+from ..workflow.node_factory import NodeFactory
 from collections import defaultdict, deque
 
 
 class WorkflowExecutor:
     """워크플로우 실행 엔진"""
     
-    def __init__(self):
+    def __init__(self, node_factory: NodeFactory):
+        self.node_factory = node_factory
         self.execution_results: Dict[str, Any] = {}
     
-    async def execute(self, nodes: Dict[str, Node], 
-                     connections: List[Dict[str, str]], 
-                     inputs: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(self, workflow: WorkflowConfig, context: Context) -> Dict[str, Any]:
         """워크플로우 실행"""
         self.execution_results = {}
         
-        # 실행 순서 계산
-        execution_order = self._calculate_execution_order(nodes, connections)
+        # 노드 인스턴스 생성
+        instantiated_nodes: Dict[str, Node] = {}
+        for node_id, node_config in workflow.nodes.items():
+            instantiated_nodes[node_id] = self.node_factory.create_node(
+                node_config.type, node_config.config, node_id
+            )
         
-        print(f"🚀 워크플로우 실행 시작 (노드 {len(nodes)}개)")
-        print(f"📋 실행 순서: {' -> '.join(execution_order)}")
+        print(f"🚀 워크플로우 실행 시작 (노드 {len(instantiated_nodes)}개)")
+        print(f"📋 실행 순서: {' -> '.join(workflow.flow)}")
         
         # 순차적으로 노드 실행
-        for node_name in execution_order:
-            if node_name not in nodes:
-                print(f"⚠️ 노드 '{node_name}'를 찾을 수 없습니다")
+        for node_id in workflow.flow:
+            if node_id not in instantiated_nodes:
+                print(f"⚠️ 노드 '{node_id}'를 찾을 수 없습니다")
                 continue
             
-            node = nodes[node_name]
-            node_inputs = self._prepare_node_inputs(node_name, inputs, connections)
+            node = instantiated_nodes[node_id]
+            node_config = workflow.nodes[node_id]
             
-            print(f"⚡ 노드 '{node_name}' 실행 중...")
+            # 입력 데이터 준비
+            node_inputs = {}
+            for input_name, input_value in node_config.inputs.items():
+                # 컨텍스트 참조 해결
+                resolved_value = context.resolve_reference(input_value)
+                node_inputs[input_name] = resolved_value
+            
+            print(f"⚡ 노드 '{node_id}' 실행 중...")
             print(f"   📥 입력 데이터: {node_inputs}")
             
             try:
                 # 노드 실행
-                result = await node.run()
-                self.execution_results[node_name] = result
-                print(f"✅ 노드 '{node_name}' 완료")
+                result = await node.execute(node_inputs, context)
+                self.execution_results[node_id] = result
+                print(f"✅ 노드 '{node_id}' 완료")
                 
             except Exception as e:
-                error_msg = f"❌ 노드 '{node_name}' 실행 실패: {e}"
+                error_msg = f"❌ 노드 '{node_id}' 실행 실패: {e}"
                 print(error_msg)
-                self.execution_results[node_name] = {"error": str(e)}
+                self.execution_results[node_id] = {"error": str(e)}
         
         print("🎉 워크플로우 실행 완료!")
-        return self.execution_results
-    
-    def _calculate_execution_order(self, nodes: Dict[str, Node], 
-                                  connections: List[Dict[str, str]]) -> List[str]:
-        """위상 정렬로 실행 순서 계산"""
-        # 인접 리스트와 진입 차수 계산
-        graph = defaultdict(list)
-        in_degree = defaultdict(int)
-        
-        # 모든 노드 초기화
-        for node_name in nodes:
-            in_degree[node_name] = 0
-        
-        # 연결 정보로 그래프 구성
-        for connection in connections:
-            source = connection["source_node"]
-            target = connection["target_node"]
-            if source in nodes and target in nodes:
-                graph[source].append(target)
-                in_degree[target] += 1
-        
-        # 위상 정렬
-        queue = deque([node for node in nodes if in_degree[node] == 0])
-        result = []
-        
-        while queue:
-            node = queue.popleft()
-            result.append(node)
-            
-            for neighbor in graph[node]:
-                in_degree[neighbor] -= 1
-                if in_degree[neighbor] == 0:
-                    queue.append(neighbor)
-        
-        # 연결이 없는 고립된 노드들도 추가
-        isolated_nodes = [node for node in nodes if node not in result]
-        result.extend(isolated_nodes)
-        
-        return result
-    
-    def _prepare_node_inputs(self, node_name: str, 
-                           workflow_inputs: Dict[str, Any],
-                           connections: List[Dict[str, str]]) -> Dict[str, Any]:
-        """노드 입력 데이터 준비"""
-        node_inputs = {}
-        
-        # 워크플로우 입력에서 이 노드에 해당하는 입력 가져오기
-        # 노드별로 명시적으로 설정된 입력만 사용
-        if node_name in workflow_inputs:
-            node_specific_inputs = workflow_inputs[node_name]
-            if isinstance(node_specific_inputs, dict):
-                node_inputs.update(node_specific_inputs)
-        
-        # 연결된 노드들의 출력 데이터 가져오기
-        for connection in connections:
-            if connection["target_node"] == node_name:
-                source_node = connection["source_node"]
-                source_port = connection.get("source_port", "output")
-                target_port = connection.get("target_port", "input")
-                
-                # 소스 노드의 실행 결과 가져오기
-                if source_node in self.execution_results:
-                    source_result = self.execution_results[source_node]
-                    
-                    # 포트별 데이터 추출
-                    if isinstance(source_result, dict) and source_port in source_result:
-                        node_inputs[target_port] = source_result[source_port]
-                    else:
-                        # 전체 결과를 입력으로 사용
-                        node_inputs[target_port] = source_result
-        
-        return node_inputs
+        return {"node_outputs": self.execution_results, "context": context.to_dict()}
     
     def get_node_result(self, node_name: str) -> Any:
         """특정 노드의 실행 결과 조회"""

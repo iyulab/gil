@@ -1,4 +1,7 @@
 fastapi
 uvicorn
-gil-py
+-e ../gil-py
+-e ../gil-node-data
+-e ../gil-node-text
 pytest
+pytest-asyncio

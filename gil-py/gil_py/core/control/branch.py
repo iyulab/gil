@@ -1,5 +1,7 @@
 from gil_py.core.node import Node
-from gil_py.core.port import Port, PortType
+from gil_py.core.port import Port
+from gil_py.core.data_types import DataType
+from gil_py.core.context import Context
 
 class ControlBranchNode(Node):
     """
@@ -13,29 +15,29 @@ class ControlBranchNode(Node):
 
         self.add_input_port(Port(
             name="condition",
-            port_type=PortType.BOOLEAN,
+            data_type=DataType.BOOLEAN,
             description="The boolean value to determine the branch.",
-            is_required=True
+            required=True
         ))
         self.add_input_port(Port(
             name="input",
-            port_type=PortType.ANY,
+            data_type=DataType.ANY,
             description="The data to pass through to the selected branch.",
-            is_required=True
+            required=True
         ))
         
         self.add_output_port(Port(
             name="true_output",
-            port_type=PortType.ANY,
+            data_type=DataType.ANY,
             description="Output for when the condition is true."
         ))
         self.add_output_port(Port(
             name="false_output",
-            port_type=PortType.ANY,
+            data_type=DataType.ANY,
             description="Output for when the condition is false."
         ))
 
-    def execute(self, data: dict) -> dict:
+    async def execute(self, data: dict, context: Context) -> dict:
         """
         Evaluates the condition and routes the input data to the appropriate output port.
         """

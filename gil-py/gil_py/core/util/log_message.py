@@ -1,5 +1,7 @@
 from gil_py.core.node import Node
-from gil_py.core.port import Port, PortType
+from gil_py.core.port import Port
+from gil_py.core.data_types import DataType
+from gil_py.core.context import Context
 
 class UtilLogMessageNode(Node):
     """
@@ -12,17 +14,17 @@ class UtilLogMessageNode(Node):
 
         self.add_input_port(Port(
             name="input",
-            port_type=PortType.ANY,
+            data_type=DataType.ANY,
             description="The data to be logged.",
-            is_required=True
+            required=True
         ))
         self.add_output_port(Port(
             name="output",
-            port_type=PortType.ANY,
+            data_type=DataType.ANY,
             description="The same data that was logged."
         ))
 
-    def execute(self, data: dict) -> dict:
+    async def execute(self, data: dict, context: Context) -> dict:
         """
         Prints the input data to the console and returns it.
         """

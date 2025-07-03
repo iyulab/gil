@@ -1,5 +1,6 @@
 from gil_py.core.node import Node
-from gil_py.core.port import Port, PortType
+from gil_py.core.port import Port
+from gil_py.core.data_types import DataType
 
 class DataReadFileNode(Node):
     """
@@ -12,13 +13,13 @@ class DataReadFileNode(Node):
 
         self.add_input_port(Port(
             name="file_path",
-            port_type=PortType.STRING,
+            data_type=DataType.TEXT,
             description="The absolute path to the file to read.",
-            is_required=True
+            required=True
         ))
         self.add_output_port(Port(
             name="content",
-            port_type=PortType.STRING,
+            data_type=DataType.TEXT,
             description="The content read from the file."
         ))
 

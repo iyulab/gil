@@ -10,7 +10,7 @@ This document outlines the guiding principles for contributing to the Gil-Flow p
 *   **/docs/NODE_SPEC.md**: Specifications for standard node types and their interfaces, common to all implementations.
 *   **/docs/ARCHITECTURE.md**: The language-neutral architecture guide, ensuring compatibility and extensibility across different implementations.
 *   **/docs/DEV.md**: A guide for developing the `gil-py` implementation, detailing its Python-specific internal structure.
-*   **/TASKS.md**: Tracks the status and plans for development tasks. Keep this updated when you start or complete a task.
+*   **/TASKS.md**: Tracks the status and plans for development tasks. Mark tasks as `[working]` when you begin and `[x]` upon completion.
 
 **Principles:**
 *   **Clarity and Focus**: Each document must have a single, clear purpose with minimal content overlap.

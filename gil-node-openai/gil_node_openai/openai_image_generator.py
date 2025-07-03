@@ -1,6 +1,7 @@
 
 from gil_py.core.node import Node
-from gil_py.core.port import Port, PortType
+from gil_py.core.port import Port
+from gil_py.core.data_types import DataType
 
 class OpenAIGenerateImageNode(Node):
     """
@@ -14,19 +15,19 @@ class OpenAIGenerateImageNode(Node):
         # Define ports
         self.add_input_port(Port(
             name="client",
-            port_type=PortType.OBJECT,
+            data_type=DataType.OBJECT,
             description="The OpenAI client instance from an OpenAIConnector.",
-            is_required=True
+            required=True
         ))
         self.add_input_port(Port(
             name="prompt",
-            port_type=PortType.STRING,
+            data_type=DataType.TEXT,
             description="The text prompt to generate the image from.",
-            is_required=True
+            required=True
         ))
         self.add_output_port(Port(
             name="image_url",
-            port_type=PortType.STRING,
+            data_type=DataType.TEXT,
             description="The URL of the generated image."
         ))
 

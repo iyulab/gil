@@ -71,3 +71,9 @@ class Context:
 
     def set(self, key: str, value: Any):
         self._data[key] = value
+
+    def resolve_reference(self, value: Any) -> Any:
+        if isinstance(value, str) and value.startswith("$"):
+            key = value[1:]
+            return self.get(key, value)  # Return original value if not found
+        return value

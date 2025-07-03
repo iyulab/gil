@@ -2,7 +2,8 @@
 import os
 from openai import OpenAI
 from gil_py.core.node import Node
-from gil_py.core.port import Port, PortType
+from gil_py.core.port import Port
+from gil_py.core.data_types import DataType
 
 class OpenAIConnectorNode(Node):
     """
@@ -17,7 +18,7 @@ class OpenAIConnectorNode(Node):
         # Define ports
         self.add_output_port(Port(
             name="client",
-            port_type=PortType.OBJECT,
+            data_type=DataType.OBJECT,
             description="The initialized OpenAI client instance."
         ))
 

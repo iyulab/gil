@@ -1,0 +1,15 @@
+apiVersion: v2
+name: gil-flow-py
+description: A Helm chart for deploying the Gil-Flow Python API server.
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - gil-flow
+  - fastapi
+  - workflow
+home: https://github.com/iyulab/gil
+sources:
+  - https://github.com/iyulab/gil
+maintainers:
+  - name: iyulab
+    email: caveman@iyulab.com
