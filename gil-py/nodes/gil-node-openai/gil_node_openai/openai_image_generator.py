@@ -1,7 +1,8 @@
 
 from gil_py.core.node import Node
-from gil_py.core.port import Port
+from gil_py.core.port import InputPort, OutputPort
 from gil_py.core.data_types import DataType
+from gil_py.core.context import Context
 
 class OpenAIGenerateImageNode(Node):
     """
@@ -10,28 +11,28 @@ class OpenAIGenerateImageNode(Node):
     """
 
     def __init__(self, node_id: str, node_config: dict):
-        super().__init__(node_id, node_config)
+        super().__init__(node_id=node_id, node_config=node_config)
         
         # Define ports
-        self.add_input_port(Port(
+        self.add_input_port(InputPort(
             name="client",
-            data_type=DataType.OBJECT,
+            data_type=DataType.ANY,
             description="The OpenAI client instance from an OpenAIConnector.",
             required=True
         ))
-        self.add_input_port(Port(
+        self.add_input_port(InputPort(
             name="prompt",
             data_type=DataType.TEXT,
             description="The text prompt to generate the image from.",
             required=True
         ))
-        self.add_output_port(Port(
+        self.add_output_port(OutputPort(
             name="image_url",
             data_type=DataType.TEXT,
             description="The URL of the generated image."
         ))
 
-    def execute(self, data: dict) -> dict:
+    async def execute(self, data: dict, context: Context) -> dict:
         """
         Receives a client and a prompt, then calls the DALL-E API to generate an image.
         """
@@ -53,6 +54,7 @@ class OpenAIGenerateImageNode(Node):
             )
             
             image_url = response.data[0].url
+            self.get_output_port("image_url").set_data(image_url)
             return {"image_url": image_url}
         
         except Exception as e:

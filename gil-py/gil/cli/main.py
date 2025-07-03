@@ -7,7 +7,6 @@ import asyncio
 import sys
 import json
 from pathlib import Path
-from typing import Dict, Any
 
 # 환경 변수 로드
 from dotenv import load_dotenv
@@ -54,7 +53,7 @@ def main():
     visualize_parser.add_argument("--output", default="workflow_diagram.md", help="출력 파일")
     
     # list-nodes 명령어
-    list_parser = subparsers.add_parser("list-nodes", help="사용 가능한 노드 타입 목록")
+    subparsers.add_parser("list-nodes", help="사용 가능한 노드 타입 목록")
     
     # describe 명령어
     describe_parser = subparsers.add_parser("describe", help="노드 타입 상세 정보")
@@ -106,7 +105,7 @@ async def handle_run(args):
                     inputs[key.strip()] = value.strip()
         
         if args.debug:
-            print(f"🔍 디버그 모드 활성화")
+            print("🔍 디버그 모드 활성화")
             print(f"📥 입력 파라미터: {inputs}")
             print(f"🧩 노드 수: {len(workflow.nodes)}")
             
@@ -119,11 +118,11 @@ async def handle_run(args):
                 return
         
         # 워크플로우 실행
-        print(f"🚀 워크플로우 실행 시작...")
+        print("🚀 워크플로우 실행 시작...")
         result = await workflow.run(inputs)
         
         # 결과 출력
-        print(f"✅ 워크플로우 실행 완료!")
+        print("✅ 워크플로우 실행 완료!")
         
         if args.output:
             # JSON 파일로 저장
@@ -132,7 +131,7 @@ async def handle_run(args):
             print(f"💾 결과 저장됨: {args.output}")
         else:
             # 콘솔에 출력
-            print(f"📊 실행 결과:")
+            print("📊 실행 결과:")
             for node_name, node_result in result.items():
                 print(f"   🔹 {node_name}:")
                 if isinstance(node_result, dict):
@@ -201,7 +200,7 @@ def handle_visualize(args):
         diagram = workflow.visualize(args.output)
         
         print(f"📊 워크플로우 다이어그램 생성됨: {args.output}")
-        print(f"🔗 Mermaid 다이어그램:")
+        print("🔗 Mermaid 다이어그램:")
         print(diagram)
         
     except Exception as e:
@@ -297,7 +296,7 @@ async def handle_generate(args):
         
         images = result.get("images", [])
         if images:
-            print(f"✅ 이미지 생성 완료!")
+            print("✅ 이미지 생성 완료!")
             for i, img in enumerate(images):
                 print(f"   이미지 {i+1}: {img['url']}")
                 if img.get('revised_prompt'):

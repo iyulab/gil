@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "gil-py"
+name = "gil-flow"
 version = "0.1.0"
 description = "Gil-Flow: A language-neutral, YAML-based workflow system core SDK"
 readme = "README.md"
@@ -57,9 +57,7 @@ Repository = "https://github.com/iyulab/gil"
 Documentation = "https://github.com/iyulab/gil#readme"
 Issues = "https://github.com/iyulab/gil/issues"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["gil_py*"]
+[tool.setuptools]
+packages = ["gil_py"]
+package-dir = {"gil_py" = "gil"}
 
-[tool.setuptools.package-data]
-gil_py = ["*.py"]

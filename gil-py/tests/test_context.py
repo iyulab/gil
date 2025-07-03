@@ -16,7 +16,7 @@ import json
 import yaml
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 # gil-py 모듈 경로 추가
 sys.path.insert(0, str(Path(__file__).parent.parent / "gil-py"))
@@ -122,7 +122,7 @@ async def run_workflow_with_context(yaml_file: Path) -> bool:
                     # 연결 테스트만 수행
                     result = await connector.execute({})
                     node_results[node_name] = result
-                    print(f"   ✅ OpenAI 커넥터 연결 확인 완료")
+                    print("   ✅ OpenAI 커넥터 연결 확인 완료")
                 
                 elif node_type in ["GilGenImage", "AITextGeneration"]:
                     # AI 생성 노드 시뮬레이션
@@ -142,7 +142,7 @@ async def run_workflow_with_context(yaml_file: Path) -> bool:
                         }
                     }
                     node_results[node_name] = result
-                    print(f"   ✅ AI 생성 완료 (시뮬레이션)")
+                    print("   ✅ AI 생성 완료 (시뮬레이션)")
                 
                 elif node_type == "TransformData":
                     # 데이터 변환 노드 시뮬레이션
@@ -195,19 +195,19 @@ async def run_workflow_with_context(yaml_file: Path) -> bool:
         
         # Flow 변수 출력
         if flow_dict['variables']:
-            print(f"📝 Flow 변수:")
+            print("📝 Flow 변수:")
             for key, value in flow_dict['variables'].items():
                 print(f"   - {key}: {value}")
         
         # 공유 데이터 출력
         if flow_dict['shared_data']:
-            print(f"📊 공유 데이터:")
+            print("📊 공유 데이터:")
             for key, value in flow_dict['shared_data'].items():
                 print(f"   - {key}: {value}")
         
         # 에러 정보 출력
         if flow_dict['errors']:
-            print(f"⚠️ 발생한 에러들:")
+            print("⚠️ 발생한 에러들:")
             for error in flow_dict['errors']:
                 print(f"   - [{error['node']}] {error['message']}")
         

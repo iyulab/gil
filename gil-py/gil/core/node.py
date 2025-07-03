@@ -6,10 +6,8 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, Field, ConfigDict
 import uuid
-import asyncio
-from .port import Port, InputPort, OutputPort
+from .port import InputPort, OutputPort
 from .connection import Connection
-from .data_types import DataType
 from .context import NodeContext, FlowContext, Context
 
 

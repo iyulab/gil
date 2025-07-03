@@ -2,7 +2,6 @@
 Gil 연결 시스템
 """
 
-from typing import Optional
 from pydantic import BaseModel, Field
 import uuid
 
