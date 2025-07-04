@@ -28,36 +28,32 @@ jobs:
 
       - name: Build and publish gil-py
         run: |
-          cd gil-py
-          python -m build
-          twine upload dist/* --verbose
+          python -m build gil-py/
+          twine upload gil-py/dist/* --verbose
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
 
       - name: Build and publish gil-node-openai
         run: |
-          cd gil-py/nodes/gil-node-openai
-          python -m build
-          twine upload dist/* --verbose
+          python -m build gil-py/nodes/gil-node-openai/
+          twine upload gil-py/nodes/gil-node-openai/dist/* --verbose
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
 
       - name: Build and publish gil-node-text
         run: |
-          cd gil-py/nodes/gil-node-text
-          python -m build
-          twine upload dist/* --verbose
+          python -m build gil-py/nodes/gil-node-text/
+          twine upload gil-py/nodes/gil-node-text/dist/* --verbose
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
 
       - name: Build and publish gil-node-data
         run: |
-          cd gil-py/nodes/gil-node-data
-          python -m build
-          twine upload dist/* --verbose
+          python -m build gil-py/nodes/gil-node-data/
+          twine upload gil-py/nodes/gil-node-data/dist/* --verbose
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}

@@ -18,7 +18,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install build
       - name: Build package
-        run: python -m build gil-py/gil
+        run: python -m build gil-py/
       - name: Publish package
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
