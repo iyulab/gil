@@ -60,7 +60,7 @@ class FlowContext(BaseModel):
         self.completed_nodes += 1
 
 class Context:
-    def __init__(self, initial_data: Dict[str, Any] = None):
+    def __init__(self, initial_data: Optional[Dict[str, Any]] = None):
         self._data = initial_data if initial_data is not None else {}
 
     def to_dict(self) -> Dict[str, Any]:

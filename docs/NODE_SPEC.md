@@ -32,18 +32,16 @@ node_name:
 
 ### 데이터 노드
 
-#### DataFile
-파일 읽기/쓰기
+#### DataReadFile
+파일 읽기
 ```yaml
 file_reader:
-  type: "DataFile"
+  type: "DataReadFile"
   inputs:
-    path: "data.csv"
-    format: "csv"     # csv, json, yaml, txt
-    encoding: "utf-8"
+    file_path: "data.txt"
 ```
 
-**출력**: `content` (파일 내용), `metadata` (파일 정보)
+**출력**: `content` (파일 내용)
 
 #### DataDatabase
 데이터베이스 연동
@@ -60,18 +58,18 @@ db_query:
 
 ### 변환 노드
 
-#### TransformData
+#### DataTransform
 데이터 변환
 ```yaml
 transformer:
-  type: "TransformData"
+  type: "DataTransform"
+  config:
+    transform_expression: "data * 2" # Python 표현식
   inputs:
-    data: "@source.content"
-    operation: "filter"    # filter, map, aggregate, sort
-    params: { "age": "> 18" }
+    input_data: "@source.result"
 ```
 
-**출력**: `result` (변환된 데이터), `count` (처리된 항목 수)
+**출력**: `output_data` (변환된 데이터)
 
 #### TransformTemplate
 템플릿 처리
@@ -88,114 +86,80 @@ template:
 
 ### AI 노드
 
-#### AITextGen
+#### OpenAIGenerateText
 텍스트 생성
 ```yaml
 text_gen:
-  type: "AITextGen"
+  type: "OpenAIGenerateText"
   config:
-    connector: "@openai"
-    model: "gpt-4"
+    # 이 노드에는 특정 설정이 없습니다.
   inputs:
+    client: "@openai_connector.client"
     prompt: "요약해주세요: {{content}}"
-    max_tokens: 500
+    model: "gpt-3.5-turbo"
 ```
 
-**출력**: `text` (생성된 텍스트), `usage` (토큰 사용량)
+**출력**: `generated_text` (생성된 텍스트)
 
-#### AIImageGen
+#### OpenAIGenerateImage
 이미지 생성
 ```yaml
 image_gen:
-  type: "AIImageGen"
+  type: "OpenAIGenerateImage"
   config:
-    connector: "@openai"
-  inputs:
-    prompt: "아름다운 풍경"
+    model: "dall-e-3"
     size: "1024x1024"
-    quality: "hd"
-```
-
-**출력**: `image_url` (이미지 URL), `revised_prompt` (수정된 프롬프트)
-
-### 통신 노드
-
-#### CommAPI
-HTTP API 호출
-```yaml
-api_call:
-  type: "CommAPI"
-  config:
-    base_url: "https://api.example.com"
+    quality: "standard"
   inputs:
-    method: "POST"
-    endpoint: "/data"
-    headers: { "Authorization": "Bearer ${TOKEN}" }
-    body: { "data": "@source.result" }
+    client: "@openai_connector.client"
+    prompt: "아름다운 풍경"
 ```
 
-**출력**: `response` (응답 데이터), `status` (HTTP 상태), `headers` (응답 헤더)
+**출력**: `image_url` (이미지 URL)
 
-#### CommEmail
-이메일 발송
+### 유틸리티 노드
+
+#### UtilSetVariable
+워크플로우 컨텍스트에 변수 설정
 ```yaml
-email:
-  type: "CommEmail"
+set_my_var:
+  type: "UtilSetVariable"
   config:
-    smtp_server: "smtp.gmail.com"
-    username: "${EMAIL_USER}"
-    password: "${EMAIL_PASS}"
+    variable_name: "my_variable"
   inputs:
-    to: "user@example.com"
-    subject: "처리 완료"
-    body: "@template.result"
+    value: "Hello from variable!"
 ```
 
-**출력**: `sent` (발송 성공 여부), `message_id` (메시지 ID)
+**출력**: 없음 (컨텍스트를 수정함)
 
 ### 제어 노드
 
-#### ControlCondition
+#### ControlBranch
 조건부 실행
 ```yaml
-condition:
-  type: "ControlCondition"
+branch_node:
+  type: "ControlBranch"
   inputs:
-    condition: "@validator.is_valid == true"
-    if_true: "continue"
-    if_false: "stop"
+    condition: "@validator.is_valid"
+    input: "@data_source.output"
 ```
 
-**출력**: `result` (조건 결과), `action` (실행할 액션)
-
-#### ControlLoop
-반복 실행
-```yaml
-loop:
-  type: "ControlLoop"
-  inputs:
-    items: "@source.list"
-    max_iterations: 100
-  nodes:
-    - process_item
-```
-
-**출력**: `results` (각 반복 결과), `iterations` (실행 횟수)
+**출력**: `true_output` (조건이 참일 때 데이터), `false_output` (조건이 거짓일 때 데이터)
 
 ## 커넥터 노드
 
 ### GilConnectorOpenAI
 OpenAI API 연결
 ```yaml
-openai:
+openai_connector:
   type: "GilConnectorOpenAI"
   config:
     api_key: "${OPENAI_API_KEY}"
     organization: "${OPENAI_ORG}"
-    timeout: 60000
+    base_url: "https://api.openai.com/v1"
 ```
 
-**출력**: `connected` (연결 상태), `model_list` (사용 가능 모델)
+**출력**: `client` (초기화된 OpenAI 클라이언트 인스턴스)
 
 ### GilConnectorDatabase
 데이터베이스 연결

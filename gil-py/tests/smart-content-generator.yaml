@@ -1,4 +1,4 @@
-gil_flow_version: "1.0"
+version: "1.0"
 name: "스마트 콘텐츠 생성기 with Context"
 description: "컨텍스트 시스템을 활용한 다단계 콘텐츠 생성 워크플로우"
 

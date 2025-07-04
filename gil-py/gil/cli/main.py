@@ -12,7 +12,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv()
 
-from ..workflow import GilWorkflow
+from ..workflow.workflow import GilWorkflow
 from ..workflow.node_factory import NodeFactory
 
 

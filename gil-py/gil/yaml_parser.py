@@ -9,6 +9,7 @@ class NodeConfig(BaseModel):
     inputs: Dict[str, Any] = Field(default_factory=dict)
 
 class WorkflowConfig(BaseModel):
+    version: str
     name: str
     nodes: Dict[str, NodeConfig]
     flow: List[Any]

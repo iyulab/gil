@@ -1,25 +1,25 @@
-
 ### **6. Gil-Flow Introduction Website (`gil-flow-website`)**
 
-- **목표**: Gil-Flow를 소개하고, 문서화하며, 라이브 데모를 제공하는 Next.js 기반 웹사이트를 구축합니다.
-- **태스크**:
-    - [x] **프로젝트 스캐폴딩**:
-        - [x] 새 Next.js 프로젝트 초기화.
-        - [x] Tailwind CSS 통합.
-    - [x] **홈 페이지 (`/`) 개발**:
-        - [x] 프로젝트 개요 및 주요 기능을 포함한 랜딩 페이지 디자인 및 구현.
-        - [x] 문서 및 데모 섹션으로의 탐색 링크 추가.
-        - [x] 설치 단계를 포함한 "시작하기" 섹션 포함.
-    - [x] **문서 페이지 (`/docs`) 개발**:
-        - [x] `.md` 파일에 대한 Markdown 렌더링 설정.
-        - [x] 기존 `docs/` 콘텐츠의 동적 로딩 및 표시 구현.
-        - [x] 문서 섹션에 대한 탐색 기능 생성.
-    - [x] **데모 페이지 (`/demo`) 개발**:
-        - [x] YAML 워크플로우 입력을 위한 UI 디자인.
-        - [x] `gil-flow-py` API와 상호 작용하기 위한 클라이언트 측 로직 구현.
-        - [x] 워크플로우 실행 결과 표시.
-    - [x] **스타일링 및 반응형 디자인**:
-        - [x] 웹사이트 전체에 일관된 스타일링 적용.
-        - [x] 다양한 장치에 대한 반응형 디자인 보장.
-    - [x] **배포 준비**:
-        - [x] `build` 및 `start` 스크립트 추가.
+- **Objective**: Build a Next.js-based website to introduce Gil-Flow, provide documentation, and offer a live demo.
+- **Tasks**:
+    - [x] **Project Scaffolding**:
+        - [x] Initialize a new Next.js project.
+        - [x] Integrate Tailwind CSS.
+    - [x] **Home Page (`/`) Development**:
+        - [x] Design and implement a landing page with a project overview and key features.
+        - [x] Add navigation links to the documentation and demo sections.
+        - [x] Include a "Getting Started" section with installation steps.
+    - [x] **Docs Page (`/docs`) Development**:
+        - [x] Set up Markdown rendering for `.md` files.
+        - [x] Implement dynamic loading and display of existing `docs/` content.
+        - [x] Create navigation for the documentation section.
+        - [x] Create a comprehensive `OVERVIEW.md` for the documentation.
+        - [x] Improve the styling of the markdown content.
+        - [x] Fix the sidebar state issue.
+    - [x] **Styling and Responsive Design**:
+        - [x] Apply consistent styling across the website.
+        - [x] Ensure responsive design for various devices.
+    - [x] **Deployment Preparation**:
+        - [x] Add `build` and `start` scripts.
+    - [x] **Remove Demo Page**:
+        - [x] Remove the demo page and all references to it.

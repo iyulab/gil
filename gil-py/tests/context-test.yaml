@@ -1,4 +1,4 @@
-gil_flow_version: "1.0"
+version: "1.0"
 name: "컨텍스트 시스템 테스트"
 description: "Flow Context와 Node Context 사용 예제"
 

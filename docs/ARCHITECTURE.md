@@ -6,24 +6,25 @@
 
 ## 아키텍처 개요
 
-```
-```
-Gil-Flow YAML (언어 중립적 표준)
-         ↓
-┌ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐
-  gil-flow-py (API) 🚧
-└ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘
-         ↓
-├── gil-py (Python) ✅
-├── gil-sharp (C#) 🚧  
-└── gil-node (Node.js) 🚧
-
-표준 노드 인터페이스
-├── 데이터 노드 (DataFile, DataDatabase)
-├── 변환 노드 (TransformData, TransformTemplate)
-├── AI 노드 (AITextGen, AIImageGen)
-├── 통신 노드 (CommAPI, CommEmail)
-└── 제어 노드 (ControlCondition, ControlLoop)
+```mermaid
+graph TD
+    A[Gil-Flow YAML] --> B[YAML Parser]
+    B --> C[Node Factory]
+    C --> D[Workflow Engine]
+    D --> E[Node Execution]
+    E --> F[Context Management]
+    F --> G[Result Output]
+    
+    H[Core Nodes] --> C
+    I[Extension Nodes] --> C
+    
+    J[Environment Variables] --> B
+    K[Node References] --> B
+    
+    style A fill:#e1f5fe
+    style G fill:#c8e6c9
+    style H fill:#fff3e0
+    style I fill:#fce4ec
 ```
 
 ## 노드 아키텍처: 코어 vs 확장

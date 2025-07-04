@@ -61,3 +61,10 @@ Issues = "https://github.com/iyulab/gil/issues"
 packages = ["gil_py"]
 package-dir = {"gil_py" = "gil"}
 
+[tool.ruff]
+ignore = ["E402"]
+
+[tool.mypy]
+mypy_path = ["gil"]
+ignore_missing_imports = true
+

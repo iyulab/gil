@@ -38,7 +38,7 @@ class Node(BaseModel, ABC):
     
     model_config = ConfigDict(arbitrary_types_allowed=True, extra='allow', use_enum_values=True)
     
-    def __init__(self, node_id: str, name: str = None, node_type: str = None, version: str = "1.0.0", node_config: dict = None, **data):
+    def __init__(self, node_id: str, name: Optional[str] = None, node_type: Optional[str] = None, version: str = "1.0.0", node_config: Optional[Dict[str, Any]] = None, **data):
         super().__init__(node_id=node_id, name=name or node_id, node_type=node_type or self.__class__.__name__, version=version, node_config=node_config if node_config is not None else {}, **data)
     
     @abstractmethod

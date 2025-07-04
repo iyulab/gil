@@ -15,9 +15,6 @@ export default function Home() {
           <Link href="/docs" className="px-6 py-3 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 transition-colors text-lg font-medium">
             Read the Docs
           </Link>
-          <Link href="/demo" className="px-6 py-3 bg-green-600 text-white rounded-lg shadow-md hover:bg-green-700 transition-colors text-lg font-medium">
-            Try the Demo
-          </Link>
         </div>
 
         <section className="mt-12 w-full text-left">
@@ -35,7 +32,7 @@ export default function Home() {
       </main>
 
       <footer className="mt-12 text-gray-600 dark:text-gray-400 text-sm">
-        © {new Date().getFullYear()} Gil-Flow. All rights reserved.
+        © {new Date().getFullYear()} iyulab. All rights reserved.
       </footer>
     </div>
   );

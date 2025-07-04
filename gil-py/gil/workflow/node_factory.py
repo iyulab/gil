@@ -2,7 +2,7 @@
 노드 팩토리 - 설치된 노드 패키지에서 동적으로 노드 인스턴스 생성
 """
 import importlib.metadata
-from typing import Dict, Any, Type, List
+from typing import Dict, Any, Type, List, Optional
 
 from ..core.node import Node
 
@@ -20,12 +20,7 @@ class NodeFactory:
         """
         `gil.nodes` entry point를 스캔하여 사용 가능한 모든 노드를 동적으로 등록합니다.
         """
-        try:
-            # For Python 3.10+
-            entry_points = importlib.metadata.entry_points(group='gil.nodes')
-        except TypeError:
-            # Fallback for Python < 3.10
-            entry_points = importlib.metadata.entry_points().get('gil.nodes', [])
+        entry_points = importlib.metadata.entry_points(group='gil.nodes')
 
         for entry_point in entry_points:
             try:
@@ -51,7 +46,7 @@ class NodeFactory:
             
         self._node_registry[node_type] = node_class
     
-    def create_node(self, node_type: str, config: Dict[str, Any], name: str = None) -> Node:
+    def create_node(self, node_type: str, config: Dict[str, Any], name: Optional[str] = None) -> Node:
         """
         레지스트리에서 노드 클래스를 찾아 인스턴스를 생성합니다.
         노드 생성에 필요한 모든 복잡한 로직(API 키 처리 등)은
@@ -80,7 +75,7 @@ class NodeFactory:
         
         node_class = self._node_registry[node_type]
         
-        info = {
+        info: Dict[str, Any] = {
             "type": node_type,
             "class": node_class.__name__,
             "description": node_class.__doc__ or "No description provided.",

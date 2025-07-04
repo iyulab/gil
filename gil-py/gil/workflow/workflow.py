@@ -6,8 +6,10 @@ Gil 워크플로우 클래스
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 from ..core.node import Node
+from ..core.context import Context
 from ..yaml_parser import YamlWorkflowParser, WorkflowConfig
 from .executor import WorkflowExecutor
+from .node_factory import NodeFactory
 
 
 class GilWorkflow:
@@ -18,7 +20,7 @@ class GilWorkflow:
         self.nodes: Dict[str, Node] = {}
         self.connections: List[Dict[str, str]] = []
         self.config: Optional[WorkflowConfig] = None
-        self.executor = WorkflowExecutor()
+        self.executor = WorkflowExecutor(node_factory=NodeFactory())
     
     @classmethod
     def from_yaml(cls, yaml_path: str | Path) -> 'GilWorkflow':
@@ -83,7 +85,7 @@ class GilWorkflow:
     
     def _infer_connections_from_flow(self, flow: List[Any]) -> None:
         """플로우 정의에서 연결 추론"""
-        prev_nodes = []
+        prev_nodes: List[str] = []
         
         for step in flow:
             if isinstance(step, str):
@@ -98,7 +100,8 @@ class GilWorkflow:
                 if prev_nodes:
                     for prev_node in prev_nodes:
                         for parallel_node in step:
-                            self.connect(prev_node, parallel_node)
+                            if isinstance(parallel_node, str):
+                                self.connect(prev_node, parallel_node)
                 prev_nodes = step
             
             elif isinstance(step, dict):
@@ -106,8 +109,10 @@ class GilWorkflow:
                 node_name = step.get("node")
                 depends_on = step.get("depends_on", [])
                 
-                for dependency in depends_on:
-                    self.connect(dependency, node_name)
+                if node_name and isinstance(node_name, str):
+                    for dependency in depends_on:
+                        if isinstance(dependency, str):
+                            self.connect(dependency, node_name)
                 
                 if node_name:
                     prev_nodes = [node_name]
@@ -120,30 +125,32 @@ class GilWorkflow:
         inputs = inputs or {}
         
         # 설정 기반 입력 처리
-        if self.config:
-            context = {
-                "input": inputs,
-                "environment": self.config.environment
-            }
+        if not self.config:
+            raise ValueError("워크플로우 설정이 로드되지 않았습니다.")
+
+        context = Context({
+            "input": inputs,
+            "environment": self.config.environment
+        })
             
-            # 노드별 입력 설정 적용
-            for node_name, node_config in self.config.nodes.items():
-                if node_config.inputs and node_name in self.nodes:
-                    node_inputs = {}
-                    parser = YamlWorkflowParser()
-                    
-                    for input_name, input_value in node_config.inputs.items():
-                        resolved_value = parser.resolve_references(input_value, context)
-                        node_inputs[input_name] = resolved_value
-                    
-                    inputs[node_name] = node_inputs
+        # 노드별 입력 설정 적용
+        for node_name, node_config in self.config.nodes.items():
+            if node_config.inputs and node_name in self.nodes:
+                node_inputs = {}
+                parser = YamlWorkflowParser()
+                
+                for input_name, input_value in node_config.inputs.items():
+                    resolved_value = parser.resolve_references(input_value, context.to_dict())
+                    node_inputs[input_name] = resolved_value
+                
+                inputs[node_name] = node_inputs
         
         # 워크플로우 실행
-        return await self.executor.execute(self.nodes, self.connections, inputs)
+        return await self.executor.execute(self.config, context)
     
     def validate(self) -> Dict[str, Any]:
         """워크플로우 유효성 검증"""
-        validation_result = {
+        validation_result: Dict[str, Any] = {
             "valid": True,
             "errors": [],
             "warnings": []
@@ -260,4 +267,3 @@ class GilWorkflow:
                 f.write(diagram)
         
         return diagram
-

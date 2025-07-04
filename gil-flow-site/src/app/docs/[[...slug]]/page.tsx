@@ -1,7 +1,12 @@
 import fs from 'fs';
 import path from 'path';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+// import { marked } from 'marked';
+import OptimizedSidebar from '../../components/OptimizedSidebar';
+import { getDocTree } from '@/lib/docs';
+import MarkdownRenderer from '../../components/MarkdownRenderer'; // New client component
+
+const docsPath = path.join(process.cwd(), '..', 'docs');
+const docTree = getDocTree(docsPath);
 
 interface DocPageProps {
   params: {
@@ -10,31 +15,38 @@ interface DocPageProps {
 }
 
 export default async function DocPage({ params }: DocPageProps) {
-  const docsPath = path.join(process.cwd(), '..', 'docs');
-  const slug = params.slug || ['README']; // Default to README.md if no slug
+  const resolvedParams = await params; // Await params
+  const slug = resolvedParams.slug || ['OVERVIEW']; // Default to OVERVIEW.md if no slug
   const filePath = path.join(docsPath, `${slug.join('/')}.md`);
 
   let content: string;
   try {
     content = fs.readFileSync(filePath, 'utf-8');
-  } catch (error) {
+  } catch {
     return (
-      <div className="container mx-auto p-8">
-        <h1 className="text-4xl font-bold mb-4">404 - Document Not Found</h1>
-        <p>The document you are looking for does not exist.</p>
+      <div className="flex">
+        <OptimizedSidebar currentSlug={slug} docTree={docTree} />
+        <div className="container mx-auto p-8">
+          <h1 className="text-4xl font-bold mb-4">404 - Document Not Found</h1>
+          <p>The document you are looking for does not exist.</p>
+        </div>
       </div>
     );
   }
 
+  // const rawHtmlContent = marked.parse(content);
+
   return (
-    <div className="container mx-auto p-8 prose dark:prose-invert">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+    <div className="flex h-screen">
+      <OptimizedSidebar currentSlug={slug} docTree={docTree} />
+      <div className="flex-1 overflow-y-auto p-8 prose dark:prose-invert">
+        <MarkdownRenderer htmlContent={content} />
+      </div>
     </div>
   );
 }
 
 export async function generateStaticParams() {
-  const docsPath = path.join(process.cwd(), '..', 'docs');
   const files: string[] = [];
 
   function walkSync(currentPath: string) {

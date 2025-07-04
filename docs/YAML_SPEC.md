@@ -1,15 +1,15 @@
-# Gil-Flow YAML 문법 표준 (v1.0)
+# Gil-Flow YAML Specification (v1.0)
 
-**Gil-Flow YAML**은 언어 중립적인 노드 기반 워크플로우 정의 표준입니다.
+**Gil-Flow YAML** is the standard for defining language-neutral, node-based workflows.
 
-> **참고**: 전체 개요는 [README.md](../README.md), 노드 사양은 [NODE_SPEC.md](NODE_SPEC.md) 참조
+> **Note**: For a full overview, see [README.md](../README.md). For node specifications, see [NODE_SPEC.md](NODE_SPEC.md).
 
-## 기본 구조
+## Basic Structure
 
 ```yaml
-gil_flow_version: "1.0"
-name: "워크플로우 이름"
-description: "설명"
+version: "1.0"
+name: "Workflow Name"
+description: "A description of the workflow."
 
 nodes:
   node_id:
@@ -27,57 +27,62 @@ outputs:
   result: "@node_id.output"
 ```
 
-## 필수 필드
+## Required Fields
 
-| 필드 | 설명 | 예시 |
-|------|------|------|
-| `gil_flow_version` | Gil-Flow 표준 버전 | `"1.0"` |
-| `name` | 워크플로우 식별자 | `"데이터 처리"` |
-| `nodes` | 노드 정의 목록 | 아래 참조 |
-| `flow` | 실행 순서 | `["step1", "step2"]` |
+| Field       | Description                   | Example                |
+|-------------|-------------------------------|------------------------|
+| `version`   | The Gil-Flow standard version. | `"1.0"`                |
+| `name`      | A unique identifier for the workflow. | `"Data Processing"`    |
+| `nodes`     | The list of node definitions. | (See below)            |
+| `flow`      | The execution order of the nodes. | `["step1", "step2"]`   |
 
-## 노드 정의
+## Node Definition
 
-### 기본 구조
+### Basic Structure
 ```yaml
 node_id:
-  type: "NodeType"               # 필수: 노드 타입
-  config: {}                     # 선택: 설정
-  inputs: {}                     # 선택: 입력 데이터
-  outputs: {}                    # 선택: 출력 매핑
+  type: "NodeType"               # Required: The type of the node.
+  config: {}                     # Optional: Configuration for the node.
+  inputs: {}                     # Optional: Input data for the node.
+  outputs: {}                    # Optional: Output mapping for the node.
 ```
 
-### 주요 노드 타입
-- **DataFile**: 파일 읽기/쓰기
-- **TransformData**: 데이터 변환
-- **AITextGen**: AI 텍스트 생성
-- **AIImageGen**: AI 이미지 생성
-- **CommAPI**: API 호출
-- **ControlCondition**: 조건부 실행
+### Key Node Types
+- **DataReadFile**: Reads a file.
+- **DataTransform**: Transforms data.
+- **OpenAIGenerateText**: Generates text using AI.
+- **OpenAIGenerateImage**: Generates an image using AI.
+- **GilConnectorOpenAI**: A connector for OpenAI.
+- **ControlBranch**: Executes a branch based on a condition.
+- **UtilLogMessage**: Logs a message.
+- **UtilSetVariable**: Sets a variable.
 
-## 참조 체계
+## Reference System
 
-### 환경 변수
+### Environment Variables
 ```yaml
 config:
-  api_key: "${OPENAI_API_KEY}"   # 환경 변수 참조
+  api_key: "${OPENAI_API_KEY}"   # Reference an environment variable.
 ```
 
-### 노드 출력 참조
+### Node Outputs
 ```yaml
 inputs:
-  data: "@previous_node.result"  # 이전 노드 출력 참조
+  data: "@previous_node.output"  # Reference the output of a previous node.
 ```
 
-### 조건부 실행
+### Context References
+The context is used to pass data between nodes via the `Context` object. Values in the context can be referenced using the `${key}` syntax.
+
 ```yaml
-conditions:
-  - "@validator.is_valid == true"
+inputs:
+  user_id: "${user_data.id}"
+  api_key: "${env.OPENAI_API_KEY}"
 ```
 
-## 실행 플로우
+## Execution Flow
 
-### 순차 실행
+### Sequential Execution
 ```yaml
 flow:
   - step1
@@ -85,7 +90,7 @@ flow:
   - step3
 ```
 
-### 병렬 실행
+### Parallel Execution
 ```yaml
 flow:
   - init
@@ -93,7 +98,7 @@ flow:
   - merge
 ```
 
-### 조건부 플로우
+### Conditional Flow
 ```yaml
 flow:
   - validator
@@ -103,25 +108,24 @@ flow:
       else: [handle_error]
 ```
 
-## 출력 정의
+## Output Definition
 
-### 단순 출력
+### Simple Output
 ```yaml
 outputs:
   result: "@final_node.output"
 ```
 
-### 복합 출력
+### Composite Output
 ```yaml
 outputs:
-  processed_data: "@transform.result"
-  metadata: "@analyzer.summary"
+  processed_data: "@transform.output_data"
   status: "@validator.status"
 ```
 
-## 고급 기능
+## Advanced Features
 
-### 재시도 설정
+### Retry Settings
 ```yaml
 node_id:
   type: "CommAPI"
@@ -131,86 +135,81 @@ node_id:
     backoff: "exponential"
 ```
 
-### 타임아웃 설정
+### Timeout Settings
 ```yaml
 node_id:
   type: "AITextGen"
-  timeout: 30000                 # 30초
+  timeout: 30000                 # 30 seconds
 ```
 
-### 메타데이터 (선택)
+### Metadata (Optional)
 ```yaml
 metadata:
-  author: "작성자"
+  author: "Author Name"
   version: "1.0.0"
   tags: ["data", "ai"]
 ```
 
-## 예시 워크플로우
+## Example Workflows
 
-### 이미지 생성
+### Image Generation
 ```yaml
-gil_flow_version: "1.0"
-name: "AI 이미지 생성"
+version: "1.0"
+name: "AI Image Generation"
 
 nodes:
-  openai:
+  openai_connection:
     type: "GilConnectorOpenAI"
     config:
       api_key: "${OPENAI_API_KEY}"
   
-  generator:
-    type: "GilGenImage"
-    config:
-      connector: "@openai"
+  image_generator:
+    type: "OpenAIGenerateImage"
     inputs:
-      prompt: "아름다운 일몰"
+      client: "@openai_connection.client"
+      prompt: "A beautiful sunset"
       size: "1024x1024"
 
 flow:
-  - openai
-  - generator
+  - openai_connection
+  - image_generator
 
 outputs:
-  image: "@generator.image_url"
+  image: "@image_generator.image_url"
 ```
 
-### 데이터 파이프라인
+### Data Pipeline
 ```yaml
-gil_flow_version: "1.0"
-name: "데이터 처리 파이프라인"
+version: "1.0"
+name: "Data Processing Pipeline"
 
 nodes:
-  reader:
-    type: "DataFile"
+  file_reader:
+    type: "DataReadFile"
     inputs:
-      path: "data.csv"
-      format: "csv"
+      file_path: "data.txt"
   
-  transformer:
-    type: "TransformData"
+  data_transformer:
+    type: "DataTransform"
+    config:
+      transform_expression: "data.upper()"
     inputs:
-      data: "@reader.content"
-      operation: "filter"
-      condition: "age > 18"
+      input_data: "@file_reader.content"
   
-  writer:
-    type: "DataFile"
+  logger:
+    type: "UtilLogMessage"
     inputs:
-      data: "@transformer.result"
-      path: "output.json"
-      format: "json"
+      input: "@data_transformer.output_data"
 
 flow:
-  - reader
-  - transformer
-  - writer
+  - file_reader
+  - data_transformer
+  - logger
 
 outputs:
-  processed_count: "@transformer.count"
-  output_file: "@writer.path"
+  final_data: "@data_transformer.output_data"
 ```
 
 ---
 
-*상세한 노드 인터페이스는 [NODE_SPEC.md](NODE_SPEC.md)에서 확인하세요.*
+*For detailed node interfaces, please see [NODE_SPEC.md](NODE_SPEC.md).*

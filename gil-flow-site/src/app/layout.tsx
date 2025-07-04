@@ -28,10 +28,8 @@ export default function RootLayout({
                 <Link href="/docs" className="hover:text-blue-400 transition-colors">
                   Docs
                 </Link>
-              </li>
-              <li>
-                <Link href="/demo" className="hover:text-blue-400 transition-colors">
-                  Demo
+                <Link href="https://github.com/iyulab/gil" className="hover:text-blue-400 transition-colors ml-4">
+                  GitHub
                 </Link>
               </li>
             </ul>
@@ -39,7 +37,7 @@ export default function RootLayout({
         </header>
         {children}
         <footer className="bg-gray-800 text-white p-4 text-center text-sm mt-auto">
-          © {new Date().getFullYear()} Gil-Flow. All rights reserved.
+          © {new Date().getFullYear()} iyulab. All rights reserved.
         </footer>
       </body>
     </html>
