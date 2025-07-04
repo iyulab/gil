@@ -13,9 +13,11 @@ from gil_py.yaml_parser import YamlWorkflowParser as YamlParser
 app = FastAPI()
 
 # Initialize NodeFactory globally to discover nodes once
+_node_factory_instance = NodeFactory()
+
 # Dependency to get NodeFactory instance
 def get_node_factory_dependency():
-    return NodeFactory()
+    return _node_factory_instance
 
 # In a real application, API keys would be stored securely (e.g., database)
 # and managed with proper authentication mechanisms.

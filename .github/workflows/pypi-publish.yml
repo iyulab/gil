@@ -37,7 +37,7 @@ jobs:
 
       - name: Build and publish gil-node-openai
         run: |
-          cd gil-node-openai
+          cd gil-py/nodes/gil-node-openai
           python -m build
           twine upload dist/* --verbose
         env:
@@ -46,7 +46,7 @@ jobs:
 
       - name: Build and publish gil-node-text
         run: |
-          cd gil-node-text
+          cd gil-py/nodes/gil-node-text
           python -m build
           twine upload dist/* --verbose
         env:
@@ -55,7 +55,7 @@ jobs:
 
       - name: Build and publish gil-node-data
         run: |
-          cd gil-node-data
+          cd gil-py/nodes/gil-node-data
           python -m build
           twine upload dist/* --verbose
         env:

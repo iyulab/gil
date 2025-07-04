@@ -24,10 +24,8 @@ def override_api_key():
 
 @pytest.fixture
 def client(override_api_key):
-    test_node_factory = NodeFactory()
-    test_node_factory.register("Util-LogMessage", UtilLogMessageNode)
-    test_node_factory.register("Util-SetVariable", UtilSetVariableNode)
-    test_node_factory.register("Control-Branch", ControlBranchNode)
+    # Use the globally initialized NodeFactory instance
+    test_node_factory = get_node_factory_dependency()
 
     app.dependency_overrides[get_node_factory_dependency] = lambda: test_node_factory
 
@@ -55,6 +53,7 @@ async def test_get_nodes(client):
 @pytest.mark.asyncio
 async def test_run_workflow_success(client):
     workflow_yaml = """
+    version: "1.0"
     name: Main Test Workflow
     nodes:
       main_log_node:
@@ -72,6 +71,8 @@ async def test_run_workflow_success(client):
             "context": {}
         }
     )
+    print(f"Response Status Code: {response.status_code}")
+    print(f"Response JSON: {response.json()}")
     assert response.status_code == 200
     assert response.json()["status"] == "success"
     assert "main_log_node" in response.json()["result"]["node_outputs"]
