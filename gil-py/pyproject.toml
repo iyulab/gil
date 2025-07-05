@@ -7,7 +7,7 @@ name = "gil-flow"
 version = "0.1.0"
 description = "Gil-Flow: A language-neutral, YAML-based workflow system core SDK"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
 authors = [
     { name = "iyulab", email = "caveman@iyulab.com" },
 ]
@@ -44,12 +44,12 @@ dev = [
 ]
 
 [project.scripts]
-gil-flow = "gil_py.cli.main:main"
+gil-flow = "gil.cli.main:main"
 
 [project.entry-points."gil.nodes"]
-Util-LogMessage = "gil_py.core.util.log_message:UtilLogMessageNode"
-Util-SetVariable = "gil_py.core.util.set_variable:UtilSetVariableNode"
-Control-Branch = "gil_py.core.control.branch:ControlBranchNode"
+Util-LogMessage = "gil.core.util.log_message:UtilLogMessageNode"
+Util-SetVariable = "gil.core.util.set_variable:UtilSetVariableNode"
+Control-Branch = "gil.core.control.branch:ControlBranchNode"
 
 [project.urls]
 Homepage = "https://github.com/iyulab/gil"
@@ -57,9 +57,9 @@ Repository = "https://github.com/iyulab/gil"
 Documentation = "https://github.com/iyulab/gil#readme"
 Issues = "https://github.com/iyulab/gil/issues"
 
-[tool.setuptools]
-packages = ["gil_py"]
-package-dir = {"gil_py" = "gil"}
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["gil*"]
 
 [tool.ruff]
 ignore = ["E402"]

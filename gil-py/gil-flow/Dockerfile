@@ -5,16 +5,16 @@ FROM python:3.10-slim-buster as builder
 WORKDIR /app
 
 # Copy only requirements.txt to leverage Docker cache
-COPY gil-flow-py/requirements.txt .
+COPY requirements.txt .
 
 # Install build dependencies and then the project itself
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy gil-py and gil-node-* packages
-COPY gil-py /app/gil-py
-COPY gil-node-data /app/gil-node-data
-COPY gil-node-text /app/gil-node-text
-COPY gil-node-openai /app/gil-node-openai
+# Copy gil-py (gil-flow) and gil-node-* packages from correct paths
+COPY ../.. /app/gil-py
+COPY ../../nodes/gil-node-data /app/gil-node-data
+COPY ../../nodes/gil-node-text /app/gil-node-text
+COPY ../../nodes/gil-node-openai /app/gil-node-openai
 
 # Reinstall editable packages to ensure they are linked correctly within the container
 RUN pip install --no-cache-dir -e /app/gil-py \
@@ -23,7 +23,7 @@ RUN pip install --no-cache-dir -e /app/gil-py \
     -e /app/gil-node-openai
 
 # Copy the application code
-COPY gil-flow-py/gil_flow_py ./gil_flow_py
+COPY gil_flow_py ./gil_flow_py
 
 # --- Final Stage ---
 FROM python:3.10-slim-buster

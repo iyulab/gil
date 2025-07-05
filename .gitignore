@@ -408,3 +408,5 @@ venv.bak/
 .idea/
 *.swp
 *.swo
+
+build-env/
