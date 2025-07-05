@@ -8,7 +8,10 @@
       "Bash(curl:*)",
       "Bash(npm install)",
       "WebFetch(domain:docs.github.com)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(mkdir:*)",
+      "Bash(git add:*)",
+      "Bash(ls:*)"
     ],
     "deny": []
   }
