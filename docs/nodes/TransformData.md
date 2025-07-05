@@ -1,4 +1,4 @@
-# DataTransform 노드
+# Data-Transform 노드
 
 제공된 Python 표현식을 사용하여 입력 데이터를 변환합니다.
 
@@ -18,7 +18,7 @@
 
 ```yaml
 multiply_by_two:
-  type: "DataTransform"
+  type: "Data-Transform"
   config:
     transform_expression: "data * 2"
   inputs:

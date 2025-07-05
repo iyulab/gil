@@ -1,4 +1,4 @@
-# GilConnectorOpenAI 노드
+# OpenAI-Connector 노드
 
 OpenAI API와의 연결 및 인증을 관리합니다. OpenAI 클라이언트를 초기화하고 출력 포트를 통해 제공합니다.
 
@@ -20,7 +20,7 @@ OpenAI API와의 연결 및 인증을 관리합니다. OpenAI 클라이언트를
 
 ```yaml
 openai_connection:
-  type: "GilConnectorOpenAI"
+  type: "OpenAI-Connector"
   config:
     api_key: "${OPENAI_API_KEY}"
     organization: "org-your_org_id"

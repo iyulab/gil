@@ -1,4 +1,4 @@
-# UtilSetVariable 노드
+# Util-SetVariable 노드
 
 워크플로우 컨텍스트에 변수를 설정합니다. 설정된 변수는 다른 노드에서 컨텍스트 표현식을 사용하여 액세스할 수 있습니다.
 
@@ -18,7 +18,7 @@
 
 ```yaml
 set_workflow_status:
-  type: "UtilSetVariable"
+  type: "Util-SetVariable"
   config:
     variable_name: "workflow_status"
   inputs:

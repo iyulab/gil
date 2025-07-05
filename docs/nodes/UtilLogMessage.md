@@ -1,4 +1,4 @@
-# UtilLogMessage 노드
+# Util-LogMessage 노드
 
 입력 데이터를 콘솔에 로깅하는 유틸리티 노드입니다. 디버깅 목적으로 사용됩니다.
 
@@ -18,7 +18,7 @@
 
 ```yaml
 log_data:
-  type: "UtilLogMessage"
+  type: "Util-LogMessage"
   config:
     prefix: "Workflow Debug"
   inputs:

@@ -2,7 +2,7 @@
 
 Gil-Flow 표준의 Python 구현체 개발 가이드입니다.
 
-> **참고**: 전체 프로젝트는 [README.md](../README.md), Gil-Flow 표준은 [YAML_SPEC.md](YAML_SPEC.md) 참조
+> **참고**: 전체 프로젝트는 [README](../README), Gil-Flow 표준은 [YAML_SPEC](YAML_SPEC) 참조
 
 ## 프로젝트 구조
 

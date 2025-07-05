@@ -1,6 +1,6 @@
-# OpenAIGenerateImage 노드
+# OpenAI-GenerateImage 노드
 
-텍스트 프롬프트를 기반으로 OpenAI DALL-E 모델을 사용하여 이미지를 생성합니다. 이 노드에는 `GilConnectorOpenAI` 노드에 대한 연결이 필요합니다.
+텍스트 프롬프트를 기반으로 OpenAI DALL-E 모델을 사용하여 이미지를 생성합니다. 이 노드에는 `OpenAI-Connector` 노드에 대한 연결이 필요합니다.
 
 ## 설정 (config)
 
@@ -10,7 +10,7 @@
 
 ## 입력 (inputs)
 
-*   `client` (필수, 객체): `GilConnectorOpenAI` 노드에서 가져온 초기화된 OpenAI 클라이언트 인스턴스입니다.
+*   `client` (필수, 객체): `OpenAI-Connector` 노드에서 가져온 초기화된 OpenAI 클라이언트 인스턴스입니다.
 *   `prompt` (필수, 텍스트): 이미지를 생성할 텍스트 프롬프트입니다.
 
 ## 출력 (outputs)
@@ -21,7 +21,7 @@
 
 ```yaml
 image_generator:
-  type: "OpenAIGenerateImage"
+  type: "OpenAI-GenerateImage"
   config:
     model: "dall-e-3"
     size: "1024x1024"

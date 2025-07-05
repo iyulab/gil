@@ -1,4 +1,4 @@
-# DataReadFile 노드
+# Data-ReadFile 노드
 
 파일 시스템에서 텍스트 파일의 내용을 읽습니다.
 
@@ -18,7 +18,7 @@
 
 ```yaml
 read_text_file:
-  type: "DataReadFile"
+  type: "Data-ReadFile"
   inputs:
     file_path: "/app/data/my_document.txt"
 ```

@@ -2,7 +2,7 @@
 
 **Gil-Flow YAML** is the standard for defining language-neutral, node-based workflows.
 
-> **Note**: For a full overview, see [README.md](../README.md). For node specifications, see [NODE_SPEC.md](NODE_SPEC.md).
+> **Note**: For a full overview, see [README](../README). For node specifications, see [NODE_SPEC](NODE_SPEC).
 
 ## Basic Structure
 
@@ -48,14 +48,14 @@ node_id:
 ```
 
 ### Key Node Types
-- **DataReadFile**: Reads a file.
-- **DataTransform**: Transforms data.
-- **OpenAIGenerateText**: Generates text using AI.
-- **OpenAIGenerateImage**: Generates an image using AI.
-- **GilConnectorOpenAI**: A connector for OpenAI.
-- **ControlBranch**: Executes a branch based on a condition.
-- **UtilLogMessage**: Logs a message.
-- **UtilSetVariable**: Sets a variable.
+- **Data-ReadFile**: Reads a file.
+- **Data-Transform**: Transforms data.
+- **OpenAI-GenerateText**: Generates text using AI.
+- **OpenAI-GenerateImage**: Generates an image using AI.
+- **OpenAI-Connector**: A connector for OpenAI.
+- **Control-Branch**: Executes a branch based on a condition.
+- **Util-LogMessage**: Logs a message.
+- **Util-SetVariable**: Sets a variable.
 
 ## Reference System
 
@@ -159,12 +159,12 @@ name: "AI Image Generation"
 
 nodes:
   openai_connection:
-    type: "GilConnectorOpenAI"
+    type: "OpenAI-Connector"
     config:
       api_key: "${OPENAI_API_KEY}"
   
   image_generator:
-    type: "OpenAIGenerateImage"
+    type: "OpenAI-GenerateImage"
     inputs:
       client: "@openai_connection.client"
       prompt: "A beautiful sunset"
@@ -185,19 +185,19 @@ name: "Data Processing Pipeline"
 
 nodes:
   file_reader:
-    type: "DataReadFile"
+    type: "Data-ReadFile"
     inputs:
       file_path: "data.txt"
   
   data_transformer:
-    type: "DataTransform"
+    type: "Data-Transform"
     config:
       transform_expression: "data.upper()"
     inputs:
       input_data: "@file_reader.content"
   
   logger:
-    type: "UtilLogMessage"
+    type: "Util-LogMessage"
     inputs:
       input: "@data_transformer.output_data"
 
@@ -212,4 +212,4 @@ outputs:
 
 ---
 
-*For detailed node interfaces, please see [NODE_SPEC.md](NODE_SPEC.md).*
+*For detailed node interfaces, please see [NODE_SPEC](NODE_SPEC).*

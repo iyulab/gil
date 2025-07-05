@@ -2,7 +2,7 @@
 
 모든 구현체 공통 노드 사양을 정의합니다.
 
-> **참고**: YAML 문법은 [YAML_SPEC.md](YAML_SPEC.md), 아키텍처는 [ARCHITECTURE.md](ARCHITECTURE.md) 참조
+> **참고**: YAML 문법은 [YAML_SPEC](YAML_SPEC), 아키텍처는 [ARCHITECTURE](ARCHITECTURE) 참조
 
 ## 노드 인터페이스 표준
 
@@ -32,11 +32,11 @@ node_name:
 
 ### 데이터 노드
 
-#### DataReadFile
+#### Data-ReadFile
 파일 읽기
 ```yaml
 file_reader:
-  type: "DataReadFile"
+  type: "Data-ReadFile"
   inputs:
     file_path: "data.txt"
 ```
@@ -58,11 +58,11 @@ db_query:
 
 ### 변환 노드
 
-#### DataTransform
+#### Data-Transform
 데이터 변환
 ```yaml
 transformer:
-  type: "DataTransform"
+  type: "Data-Transform"
   config:
     transform_expression: "data * 2" # Python 표현식
   inputs:
@@ -86,11 +86,11 @@ template:
 
 ### AI 노드
 
-#### OpenAIGenerateText
+#### OpenAI-GenerateText
 텍스트 생성
 ```yaml
 text_gen:
-  type: "OpenAIGenerateText"
+  type: "OpenAI-GenerateText"
   config:
     # 이 노드에는 특정 설정이 없습니다.
   inputs:
@@ -101,11 +101,11 @@ text_gen:
 
 **출력**: `generated_text` (생성된 텍스트)
 
-#### OpenAIGenerateImage
+#### OpenAI-GenerateImage
 이미지 생성
 ```yaml
 image_gen:
-  type: "OpenAIGenerateImage"
+  type: "OpenAI-GenerateImage"
   config:
     model: "dall-e-3"
     size: "1024x1024"
@@ -119,11 +119,11 @@ image_gen:
 
 ### 유틸리티 노드
 
-#### UtilSetVariable
+#### Util-SetVariable
 워크플로우 컨텍스트에 변수 설정
 ```yaml
 set_my_var:
-  type: "UtilSetVariable"
+  type: "Util-SetVariable"
   config:
     variable_name: "my_variable"
   inputs:
@@ -134,11 +134,11 @@ set_my_var:
 
 ### 제어 노드
 
-#### ControlBranch
+#### Control-Branch
 조건부 실행
 ```yaml
 branch_node:
-  type: "ControlBranch"
+  type: "Control-Branch"
   inputs:
     condition: "@validator.is_valid"
     input: "@data_source.output"
@@ -148,11 +148,11 @@ branch_node:
 
 ## 커넥터 노드
 
-### GilConnectorOpenAI
+### OpenAI-Connector
 OpenAI API 연결
 ```yaml
 openai_connector:
-  type: "GilConnectorOpenAI"
+  type: "OpenAI-Connector"
   config:
     api_key: "${OPENAI_API_KEY}"
     organization: "${OPENAI_ORG}"
@@ -225,7 +225,3 @@ node_name:
 - `TIMEOUT`: 타임아웃 
 - `API_ERROR`: API 호출 실패
 - `INTERNAL_ERROR`: 내부 오류
-
----
-
-*각 노드의 상세 구현 가이드는 [docs/nodes/](nodes/) 디렉토리를 참조하세요.*

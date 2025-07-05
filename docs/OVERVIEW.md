@@ -38,11 +38,11 @@ name: "이미지 생성"
 
 nodes:
   openai:
-    type: "GilConnectorOpenAI"
+    type: "OpenAI-Connector"
     config: { api_key: "${OPENAI_API_KEY}" }
   
   generator:
-    type: "GilGenImage"
+    type: "OpenAI-GenerateImage"
     config: { connector: "@openai" }
     inputs: { prompt: "아름다운 일몰" }
 
@@ -63,10 +63,10 @@ gil list-nodes
 
 ## 문서 구조
 
-- **[YAML_SPEC.md](docs/YAML_SPEC.md)**: Gil-Flow YAML 문법 표준
-- **[NODE_SPEC.md](docs/NODE_SPEC.md)**: 표준 노드 타입과 인터페이스
-- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)**: 언어 중립적 아키텍처 가이드  
-- **[DEV.md](docs/DEV.md)**: gil-py 구현체 개발 가이드
+- **[YAML_SPEC](docs/YAML_SPEC)**: Gil-Flow YAML 문법 표준
+- **[NODE_SPEC](docs/NODE_SPEC)**: 표준 노드 타입과 인터페이스
+- **[ARCHITECTURE](docs/ARCHITECTURE)**: 언어 중립적 아키텍처 가이드  
+- **[DEV](docs/DEV)**: gil-py 구현체 개발 가이드
 - **[TASKS.md](TASKS.md)**: 작업 현황 및 계획
 
 ## 현재 상태
@@ -78,7 +78,3 @@ gil list-nodes
 - 🤖 **AI 통합**: OpenAI DALL-E 3 이미지 생성 지원
 - 📚 **문서화**: 간결하고 명확한 구조의 완전한 문서
 - ✅ **검증 완료**: 실제 API 테스트 및 사용성 검증
-
----
-
-*자세한 내용은 [docs/](docs/) 디렉토리를 참조하세요.*

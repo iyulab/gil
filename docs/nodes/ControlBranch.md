@@ -1,4 +1,4 @@
-# ControlBranch 노드
+# Control-Branch 노드
 
 부울 조건에 따라 실행 흐름을 지시합니다. 조건이 참이면 입력 데이터가 `true_output`으로 전달됩니다. 그렇지 않으면 `false_output`으로 전달됩니다.
 
@@ -20,7 +20,7 @@
 
 ```yaml
 check_value:
-  type: "ControlBranch"
+  type: "Control-Branch"
   inputs:
     condition: "@some_node.is_valid"
     input: "@data_source.result"
