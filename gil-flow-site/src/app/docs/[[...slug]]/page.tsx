@@ -5,7 +5,7 @@ import OptimizedSidebar from '../../components/OptimizedSidebar';
 import { getDocTree } from '@/lib/docs';
 import MarkdownRenderer from '../../components/MarkdownRenderer'; // New client component
 
-const docsPath = path.join(process.cwd(), '..', 'docs-content');
+const docsPath = path.join(process.cwd(), '..', 'docs');
 const docTree = getDocTree(docsPath);
 
 interface DocPageProps {
