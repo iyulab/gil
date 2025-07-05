@@ -28,12 +28,26 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'gil-flow-site/package-lock.json'
       
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+        with:
+          static_site_generator: next
+      
+      - name: Restore cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            gil-flow-site/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('gil-flow-site/package-lock.json') }}-${{ hashFiles('gil-flow-site/**.[jt]s', 'gil-flow-site/**.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('gil-flow-site/package-lock.json') }}-
+      
       - name: Install dependencies
         run: npm ci
         working-directory: ./gil-flow-site
       
-      - name: Build static site
-        run: npm run build
+      - name: Build with Next.js
+        run: npx next build
         working-directory: ./gil-flow-site
       
       - name: Upload artifact
