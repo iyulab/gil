@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "build:static": "rimraf ../site-publish && next build",
+    "build:static": "rimraf ../docs && next build",
     "publish:static": "rd /s /q .next && next build"
   },
   "dependencies": {
