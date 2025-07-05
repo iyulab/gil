@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: 'export',
-  distDir: 'publish',
+  distDir: '../site-publish',
   /* config options here */
 };
 
