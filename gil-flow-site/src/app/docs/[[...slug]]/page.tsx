@@ -9,14 +9,14 @@ const docsPath = path.join(process.cwd(), '..', 'docs');
 const docTree = getDocTree(docsPath);
 
 interface DocPageProps {
-  params: {
+  params: Promise<{
     slug: string[];
-  };
+  }>;
 }
 
 export default async function DocPage({ params }: DocPageProps) {
-  const resolvedParams = await params; // Await params
-  const slug = resolvedParams.slug || ['OVERVIEW']; // Default to OVERVIEW.md if no slug
+  const resolvedParams = await params;
+  const slug = resolvedParams.slug && resolvedParams.slug.length > 0 ? resolvedParams.slug : ['OVERVIEW']; // Default to OVERVIEW.md if no slug
   const filePath = path.join(docsPath, `${slug.join('/')}.md`);
 
   let content: string;
@@ -63,7 +63,12 @@ export async function generateStaticParams() {
 
   walkSync(docsPath);
 
-  return files.map((file) => ({
+  const params = files.map((file) => ({
     slug: file.split('/'),
   }));
+
+  // Add empty slug for /docs route
+  params.push({ slug: [] });
+
+  return params;
 }

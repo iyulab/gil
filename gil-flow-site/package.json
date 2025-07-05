@@ -6,7 +6,9 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "build:static": "rimraf publish && next build",
+    "publish:static": "rd /s /q .next && next build"
   },
   "dependencies": {
     "dompurify": "^3.2.6",
@@ -24,6 +26,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "15.3.4",
+    "rimraf": "^5.0.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

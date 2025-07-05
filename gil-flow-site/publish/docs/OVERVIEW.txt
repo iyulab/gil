@@ -1,0 +1,107 @@
+1:"$Sreact.fragment"
+2:I[6874,["6874","static/chunks/6874-6ca4feef1c5e2050.js","8974","static/chunks/app/page-42071eb7779b7d55.js"],""]
+3:I[87555,[],""]
+4:I[31295,[],""]
+6:I[59665,[],"OutletBoundary"]
+9:I[74911,[],"AsyncMetadataOutlet"]
+b:I[59665,[],"ViewportBoundary"]
+d:I[59665,[],"MetadataBoundary"]
+f:I[26614,[],""]
+:HL["/_next/static/css/88dadc3596b93c7c.css","style"]
+:HL["/_next/static/css/ec6ab958af97b9c3.css","style"]
+0:{"P":null,"b":"rleqL-q2GT-Z0JAucq8Qx","p":"","c":["","docs","OVERVIEW"],"i":false,"f":[[["",{"children":["docs",{"children":[["slug","OVERVIEW","oc"],{"children":["__PAGE__",{}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/88dadc3596b93c7c.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"en","children":["$","body",null,{"className":"__className_e8ce0c","children":[["$","header",null,{"className":"bg-gray-800 text-white p-4 shadow-md","children":["$","nav",null,{"className":"container mx-auto flex justify-between items-center","children":[["$","$L2",null,{"href":"/","className":"text-2xl font-bold","children":"Gil-Flow"}],["$","ul",null,{"className":"flex space-x-4","children":["$","li",null,{"children":[["$","$L2",null,{"href":"/docs","className":"hover:text-blue-400 transition-colors","children":"Docs"}],["$","$L2",null,{"href":"https://github.com/iyulab/gil","className":"hover:text-blue-400 transition-colors ml-4","children":"GitHub"}]]}]}]]}]}],["$","$L3",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L4",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":404}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],[]],"forbidden":"$undefined","unauthorized":"$undefined"}],["$","footer",null,{"className":"bg-gray-800 text-white p-4 text-center text-sm mt-auto","children":["© ",2025," iyulab. All rights reserved."]}]]}]}]]}],{"children":["docs",["$","$1","c",{"children":[null,["$","$L3",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L4",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]]}],{"children":[["slug","OVERVIEW","oc"],["$","$1","c",{"children":[null,["$","$L3",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L4",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]]}],{"children":["__PAGE__",["$","$1","c",{"children":["$L5",[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/ec6ab958af97b9c3.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","$L6",null,{"children":["$L7","$L8",["$","$L9",null,{"promise":"$@a"}]]}]]}],{},null,false]},null,false]},null,false]},null,false],["$","$1","h",{"children":[null,["$","$1","Vd0IzbWTtBEQ5U7_LmwWvv",{"children":[["$","$Lb",null,{"children":"$Lc"}],null]}],["$","$Ld",null,{"children":"$Le"}]]}],false]],"m":"$undefined","G":["$f","$undefined"],"s":false,"S":true}
+10:"$Sreact.suspense"
+11:I[74911,[],"AsyncMetadata"]
+13:I[52099,["6249","static/chunks/cb15b0f3-2afaac53bf45f539.js","6874","static/chunks/6874-6ca4feef1c5e2050.js","6822","static/chunks/6822-2958c995e5aaa32a.js","7870","static/chunks/app/docs/%5B%5B...slug%5D%5D/page-8ea8e9f2adedb049.js"],"default"]
+14:I[5278,["6249","static/chunks/cb15b0f3-2afaac53bf45f539.js","6874","static/chunks/6874-6ca4feef1c5e2050.js","6822","static/chunks/6822-2958c995e5aaa32a.js","7870","static/chunks/app/docs/%5B%5B...slug%5D%5D/page-8ea8e9f2adedb049.js"],"default"]
+e:["$","div",null,{"hidden":true,"children":["$","$10",null,{"fallback":null,"children":["$","$L11",null,{"promise":"$@12"}]}]}]
+15:T9b1,# Gil - 언어 중립적 노드 기반 워크플로우 표준
+
+**Gil**은 자기완결적인 노드들을 조합하여 복잡한 워크플로우를 구성할 수 있는 언어 중립적 표준입니다.
+
+## 핵심 철학
+
+### 언어 중립성
+Gil-Flow YAML로 한 번 정의하면 Python, C#, Node.js 등 다양한 구현체에서 동일하게 실행됩니다.
+
+### 자기완결성  
+각 노드는 독립적으로 작동하며, 명확한 입출력 인터페이스를 통해 예측 가능한 결과를 보장합니다.
+
+### 범용성
+AI, 데이터 처리, 통신, 파일 처리 등 모든 영역에서 사용 가능하며, 새로운 노드 타입을 쉽게 추가할 수 있습니다.
+
+## 생태계 구조
+
+```
+Gil-Flow YAML (언어 중립적 표준)
+    ↓
+├── gil-py (Python) ✅
+├── gil-sharp (C#) 🚧  
+└── gil-node (Node.js) 🚧
+```
+
+## 빠른 시작
+
+### 설치 (gil-py)
+```bash
+cd gil-py
+pip install -e .
+```
+
+### YAML 워크플로우 예시
+```yaml
+version: "1.0"
+name: "이미지 생성"
+
+nodes:
+  openai:
+    type: "GilConnectorOpenAI"
+    config: { api_key: "${OPENAI_API_KEY}" }
+  
+  generator:
+    type: "GilGenImage"
+    config: { connector: "@openai" }
+    inputs: { prompt: "아름다운 일몰" }
+
+flow: [openai, generator]
+outputs: { image: "@generator.image_url" }
+```
+
+### 실행
+```bash
+# 워크플로우 실행
+python -m gil_py workflow.yaml
+
+# CLI 도구 사용
+gil run workflow.yaml
+gil validate workflow.yaml
+gil list-nodes
+```
+
+## 문서 구조
+
+- **[YAML_SPEC.md](docs/YAML_SPEC.md)**: Gil-Flow YAML 문법 표준
+- **[NODE_SPEC.md](docs/NODE_SPEC.md)**: 표준 노드 타입과 인터페이스
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)**: 언어 중립적 아키텍처 가이드  
+- **[DEV.md](docs/DEV.md)**: gil-py 구현체 개발 가이드
+- **[TASKS.md](TASKS.md)**: 작업 현황 및 계획
+
+## 현재 상태
+
+**Gil-Flow**는 실제 사용 가능한 YAML 기반 AI 워크플로우 시스템으로 완성되었습니다.
+
+- 🎯 **워크플로우 엔진**: YAML 파싱, 실행, 노드 관리 완성
+- 🚀 **CLI 도구**: 완전한 명령줄 인터페이스 제공
+- 🤖 **AI 통합**: OpenAI DALL-E 3 이미지 생성 지원
+- 📚 **문서화**: 간결하고 명확한 구조의 완전한 문서
+- ✅ **검증 완료**: 실제 API 테스트 및 사용성 검증
+
+---
+
+*자세한 내용은 [docs/](docs/) 디렉토리를 참조하세요.*
+5:["$","div",null,{"className":"flex h-screen","children":[["$","$L13",null,{"currentSlug":["OVERVIEW"],"docTree":[{"name":"Overview","slug":["OVERVIEW"],"path":"D:\\data\\gil\\docs\\OVERVIEW.md","isFolder":false},{"name":"YAML Specification","slug":["YAML_SPEC"],"path":"D:\\data\\gil\\docs\\YAML_SPEC.md","isFolder":false},{"name":"Node Specification","slug":["NODE_SPEC"],"path":"D:\\data\\gil\\docs\\NODE_SPEC.md","isFolder":false},{"name":"Architecture","slug":["ARCHITECTURE"],"path":"D:\\data\\gil\\docs\\ARCHITECTURE.md","isFolder":false},{"name":"Development Guide","slug":["DEV"],"path":"D:\\data\\gil\\docs\\DEV.md","isFolder":false},{"name":"Context System","slug":["CONTEXT_SYSTEM"],"path":"D:\\data\\gil\\docs\\CONTEXT_SYSTEM.md","isFolder":false},{"name":"Nodes","slug":["nodes"],"path":"D:\\data\\gil\\docs\\nodes","isFolder":true,"children":[{"name":"Overview","slug":["nodes","README"],"path":"D:\\data\\gil\\docs\\nodes\\README.md","isFolder":false},{"name":"AITextGeneration","slug":["nodes","AITextGeneration"],"path":"D:\\data\\gil\\docs\\nodes\\AITextGeneration.md","isFolder":false},{"name":"ControlBranch","slug":["nodes","ControlBranch"],"path":"D:\\data\\gil\\docs\\nodes\\ControlBranch.md","isFolder":false},{"name":"DataReadFile","slug":["nodes","DataReadFile"],"path":"D:\\data\\gil\\docs\\nodes\\DataReadFile.md","isFolder":false},{"name":"GilConnectorOpenAI","slug":["nodes","GilConnectorOpenAI"],"path":"D:\\data\\gil\\docs\\nodes\\GilConnectorOpenAI.md","isFolder":false},{"name":"GilGenImage","slug":["nodes","GilGenImage"],"path":"D:\\data\\gil\\docs\\nodes\\GilGenImage.md","isFolder":false},{"name":"TransformData","slug":["nodes","TransformData"],"path":"D:\\data\\gil\\docs\\nodes\\TransformData.md","isFolder":false},{"name":"UtilLogMessage","slug":["nodes","UtilLogMessage"],"path":"D:\\data\\gil\\docs\\nodes\\UtilLogMessage.md","isFolder":false},{"name":"UtilSetVariable","slug":["nodes","UtilSetVariable"],"path":"D:\\data\\gil\\docs\\nodes\\UtilSetVariable.md","isFolder":false}]}]}],["$","div",null,{"className":"flex-1 overflow-y-auto p-8 prose dark:prose-invert","children":["$","$L14",null,{"htmlContent":"$15"}]}]]}]
+8:null
+c:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]
+7:null
+a:{"metadata":[["$","title","0",{"children":"Gil-Flow"}],["$","meta","1",{"name":"description","content":"A powerful workflow automation engine."}],["$","link","2",{"rel":"icon","href":"/favicon.ico","type":"image/x-icon","sizes":"16x16"}]],"error":null,"digest":"$undefined"}
+12:{"metadata":"$a:metadata","error":null,"digest":"$undefined"}
