@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { docPriority } from '../../lib/docPriority';
+import { docPriority } from '@/lib/docPriority';
 
 interface DocEntry {
   name: string;

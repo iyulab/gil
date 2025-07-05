@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 // import { marked } from 'marked';
 import OptimizedSidebar from '../../components/OptimizedSidebar';
-import { getDocTree } from '../../../lib/docs';
+import { getDocTree } from '@/lib/docs';
 import MarkdownRenderer from '../../components/MarkdownRenderer'; // New client component
 
 const docsPath = path.join(process.cwd(), '..', 'docs');
