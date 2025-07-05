@@ -1,9 +1,97 @@
 import fs from 'fs';
 import path from 'path';
+import { cache } from 'react';
 // import { marked } from 'marked';
 import OptimizedSidebar from '../../components/OptimizedSidebar';
-import { getDocTree } from '../../../lib/docs';
 import MarkdownRenderer from '../../components/MarkdownRenderer'; // New client component
+
+interface DocEntry {
+  name: string;
+  slug: string[];
+  path: string;
+  isFolder: boolean;
+  children?: DocEntry[];
+}
+
+// Document priority configuration
+const docPriority = {
+  high: [
+    { file: 'OVERVIEW.md', label: 'Overview', icon: '📋' },
+    { file: 'YAML_SPEC.md', label: 'YAML Specification', icon: '📝' },
+    { file: 'NODE_SPEC.md', label: 'Node Specification', icon: '🔧' },
+  ],
+  medium: [
+    { file: 'ARCHITECTURE.md', label: 'Architecture', icon: '🏗️' },
+    { file: 'DEV.md', label: 'Development Guide', icon: '💻' },
+    { file: 'CONTEXT_SYSTEM.md', label: 'Context System', icon: '🔗' },
+  ],
+  nodes: [
+    { file: 'nodes', label: 'Nodes', icon: '🧩' },
+  ],
+  low: [
+    { file: 'TASKS.md', label: 'Tasks', icon: '✅' },
+  ]
+};
+
+// Flattened priority order for sorting
+const docOrder = [
+  ...docPriority.high,
+  ...docPriority.medium,
+  ...docPriority.nodes,
+  ...docPriority.low,
+];
+
+const getDocTree = cache((dirPath: string, baseSlug: string[] = []): DocEntry[] => {
+  const entries: DocEntry[] = [];
+  const files = fs.readdirSync(dirPath, { withFileTypes: true });
+
+  // Custom sort for nodes directory to put README.md first
+  if (baseSlug.includes('nodes')) {
+    files.sort((a, b) => {
+      if (a.name === 'README.md') return -1;
+      if (b.name === 'README.md') return 1;
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  const orderedFiles = docOrder
+    .map(item => files.find(file => file.name === item.file))
+    .filter((file): file is fs.Dirent => !!file);
+
+  const remainingFiles = files.filter(file => !docOrder.some(item => item.file === file.name));
+
+  const allFiles = [...orderedFiles, ...remainingFiles];
+
+  allFiles.forEach(file => {
+    const fullPath = path.join(dirPath, file.name);
+    const slug = [...baseSlug, file.name.replace(/\.md$/, '')];
+    const docConfig = docOrder.find(item => item.file === file.name);
+    let name = docConfig ? docConfig.label : file.name.replace(/\.md$/, '');
+
+    if (file.name === 'README.md' && baseSlug.includes('nodes')) {
+      name = 'Overview'; // Special label for nodes/README.md
+    }
+
+    if (file.isDirectory()) {
+      entries.push({
+        name,
+        slug: slug,
+        path: fullPath,
+        isFolder: true,
+        children: getDocTree(fullPath, slug),
+      });
+    } else if (file.isFile() && file.name.endsWith('.md')) {
+      entries.push({
+        name,
+        slug: slug,
+        path: fullPath,
+        isFolder: false,
+      });
+    }
+  });
+
+  return entries;
+});
 
 const docsPath = path.join(process.cwd(), '..', 'docs');
 const docTree = getDocTree(docsPath);

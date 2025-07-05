@@ -2,7 +2,29 @@
 
 import Link from 'next/link';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { docPriority } from '../../lib/docPriority';
+// Document priority configuration - organized by importance and user journey
+const docPriority = {
+  // High priority - essential docs for getting started
+  high: [
+    { file: 'OVERVIEW.md', label: 'Overview', icon: '📋' },
+    { file: 'YAML_SPEC.md', label: 'YAML Specification', icon: '📝' },
+    { file: 'NODE_SPEC.md', label: 'Node Specification', icon: '🔧' },
+  ],
+  // Medium priority - important for development
+  medium: [
+    { file: 'ARCHITECTURE.md', label: 'Architecture', icon: '🏗️' },
+    { file: 'DEV.md', label: 'Development Guide', icon: '💻' },
+    { file: 'CONTEXT_SYSTEM.md', label: 'Context System', icon: '🔗' },
+  ],
+  // Nodes - special category that's always expandable
+  nodes: [
+    { file: 'nodes', label: 'Nodes', icon: '🧩' },
+  ],
+  // Low priority - additional resources
+  low: [
+    { file: 'TASKS.md', label: 'Tasks', icon: '✅' },
+  ]
+};
 
 interface DocEntry {
   name: string;
