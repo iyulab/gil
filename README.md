@@ -306,7 +306,11 @@ view. `Settlement.Enter` is for a person who settled the field with no suggestio
 withheld it, kept it below the threshold it shows, or had none. `Settlement.Fill` is for the application settling the
 suggested value on its own, with no person confirming it. The snapshot keeps the kind of each judged value in
 `SettledDocument.Settlements`; save it with the document. A value put back with `Settlement.Restore` is not known to have
-been settled any way.
+been settled any way. A filled value stays in the document, but memory does not learn it and choosing thresholds does not
+ask about it. Remembered, a suggestion's own answer would come back as evidence for itself. Replaying a public stream
+with nine in ten trusted answers filled, a replay that learned from them promised 0.97 where 0.73 was right, and one
+stream's key layer ended up answering every document with 0.11 right. Learning only from what a person settled kept the
+promise within a few points of what was right.
 
 Each field is tried in a fixed order, and `FieldSuggestion.Source` says which layer the first candidate came from:
 1. Values settled alongside the values the document already has, when the keys backing them score high enough

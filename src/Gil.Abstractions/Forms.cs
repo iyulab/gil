@@ -378,8 +378,8 @@ public sealed record SettledDocument(
     /// Judged field name to how its current value was settled — <see cref="SettlementKind.Accept"/>,
     /// <see cref="SettlementKind.Correct"/>, <see cref="SettlementKind.Enter"/>, <see cref="SettlementKind.Fill"/> or
     /// <see cref="SettlementKind.Set"/> — which is what a form session's snapshot gives. A field left out is not known: its
-    /// value was restored without it, or saved before settlements were kept. Choosing thresholds can count only the
-    /// settlements of some kinds; memory does not use it.
+    /// value was restored without it, or saved before settlements were kept. Memory leaves out the values filled
+    /// (<see cref="SettlementKind.Fill"/>), and choosing thresholds can count only the settlements of some kinds.
     /// </summary>
     public IReadOnlyDictionary<string, SettlementKind> Settlements { get; init; } =
         new Dictionary<string, SettlementKind>(StringComparer.Ordinal);
@@ -553,6 +553,8 @@ public enum SettlementKind
 
     /// <summary>
     /// The application settled the suggested value on its own, with no person confirming it — a settlement nobody checked.
+    /// The value stays in the document, but memory does not learn it and choosing thresholds does not ask about it: a
+    /// suggestion's own answer remembered would come back as evidence for itself.
     /// </summary>
     Fill,
 }

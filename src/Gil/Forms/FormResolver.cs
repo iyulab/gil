@@ -415,6 +415,7 @@ public sealed class FormResolver
     /// <summary>Replaces the document's contribution to both memories with what its current values imply.</summary>
     internal async Task<double> PutAsync(FormDefinition form, SettledDocument document, string traceId, CancellationToken cancellationToken)
     {
+        document = Remembered(document);
         FieldMemory.Put(form, document);
         if (DocumentMemory is null)
         {
@@ -453,6 +454,27 @@ public sealed class FormResolver
         }
 
         return energy;
+    }
+
+    /// <summary>
+    /// What memory takes of a settled document: everything but the values the application filled on its own
+    /// (<see cref="SettlementKind.Fill"/>). Memory learns only what a person settled — a filled value remembered would come
+    /// back as evidence for itself, and choosing thresholds on it would promise what no one checked.
+    /// </summary>
+    internal static SettledDocument Remembered(SettledDocument document)
+    {
+        if (!document.Settlements.Values.Contains(SettlementKind.Fill))
+        {
+            return document;
+        }
+
+        var filled = document.Settlements.Where(s => s.Value == SettlementKind.Fill).Select(s => s.Key).ToHashSet(StringComparer.Ordinal);
+        return document with
+        {
+            Values = document.Values.Where(v => !filled.Contains(v.Key)).ToDictionary(StringComparer.Ordinal),
+            Sets = document.Sets.Where(v => !filled.Contains(v.Key)).ToDictionary(StringComparer.Ordinal),
+            Settlements = document.Settlements.Where(s => !filled.Contains(s.Key)).ToDictionary(StringComparer.Ordinal),
+        };
     }
 
     /// <summary>

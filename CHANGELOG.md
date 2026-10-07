@@ -24,7 +24,9 @@ with what to do.
   mean a person had the suggestion in view: `Settlement.Enter` (a person settled the field with no suggestion shown)
   and `Settlement.Fill` (the application settled the suggested value on its own). `SettledDocument.Settlements` keeps
   the kind of each judged value, and `FormSession.Snapshot()` fills it. A restored value, and a document saved before
-  this release, is not known to have been settled any way.
+  this release, is not known to have been settled any way. A filled value stays in the document, but memory does not
+  learn it and choosing thresholds does not ask about it: a suggestion's own answer remembered would come back as
+  evidence for itself.
 - **Choosing thresholds can count only some settlements.** Every `ThresholdSelection` method takes
   `counting`, the settlement kinds whose lookups count. For example, `[SettlementKind.Enter]` measures a layer on values
   settled with no suggestion in view. Every document is still replayed into memory. Left out, every settlement counts,

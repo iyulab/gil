@@ -125,7 +125,8 @@ public static class ThresholdSelection
     /// The kinds of settlement (<see cref="SettledDocument.Settlements"/>) whose lookups are counted — say only
     /// <see cref="SettlementKind.Enter"/>, the values settled with no suggestion in view. Every document is still replayed
     /// into memory; the others are just not asked about. Null, the default, counts every settlement, including those not
-    /// known; given, a field whose settlement is not known is not counted.
+    /// known; given, a field whose settlement is not known is not counted. A value the application filled
+    /// (<see cref="SettlementKind.Fill"/>) is never asked about nor remembered, as memory does not learn it.
     /// </param>
     /// <param name="cancellationToken">Cancels the replay.</param>
     public static async Task<ThresholdReplay> SelectAsync(
@@ -179,7 +180,8 @@ public static class ThresholdSelection
     /// The kinds of settlement (<see cref="SettledDocument.Settlements"/>) whose lookups are counted — say only
     /// <see cref="SettlementKind.Enter"/>, the values settled with no suggestion in view. Every document is still replayed
     /// into memory; the others are just not asked about. Null, the default, counts every settlement, including those not
-    /// known; given, a field whose settlement is not known is not counted.
+    /// known; given, a field whose settlement is not known is not counted. A value the application filled
+    /// (<see cref="SettlementKind.Fill"/>) is never asked about nor remembered, as memory does not learn it.
     /// </param>
     /// <param name="cancellationToken">Cancels the replay.</param>
     /// <returns>
@@ -247,7 +249,8 @@ public static class ThresholdSelection
     /// The kinds of settlement (<see cref="SettledDocument.Settlements"/>) whose lookups are counted — say only
     /// <see cref="SettlementKind.Enter"/>, the values settled with no suggestion in view. Every document is still replayed
     /// into memory; the others are just not asked about. Null, the default, counts every settlement, including those not
-    /// known; given, a field whose settlement is not known is not counted.
+    /// known; given, a field whose settlement is not known is not counted. A value the application filled
+    /// (<see cref="SettlementKind.Fill"/>) is never asked about nor remembered, as memory does not learn it.
     /// </param>
     /// <param name="cancellationToken">Cancels the replay.</param>
     /// <returns>
@@ -318,7 +321,8 @@ public static class ThresholdSelection
     /// The kinds of settlement (<see cref="SettledDocument.Settlements"/>) whose lookups are counted — say only
     /// <see cref="SettlementKind.Enter"/>, the values settled with no suggestion in view. Every document is still replayed
     /// into memory; the others are just not asked about. Null, the default, counts every settlement, including those not
-    /// known; given, a field whose settlement is not known is not counted.
+    /// known; given, a field whose settlement is not known is not counted. A value the application filled
+    /// (<see cref="SettlementKind.Fill"/>) is never asked about nor remembered, as memory does not learn it.
     /// </param>
     public static ThresholdReplay SelectKeyThreshold(
         FieldMemory memory,
@@ -338,6 +342,7 @@ public static class ThresholdSelection
         var matches = new List<(double Score, bool Correct)>();
         var lookups = 0;
         var ordered = documents
+            .Select(FormResolver.Remembered) // a filled value is neither remembered nor asked about
             .OrderBy(d => d.SettledAt)
             .ThenBy(d => d.DocumentId, StringComparer.Ordinal); // the order the field memory weighs settlements in
         foreach (var document in ordered)
@@ -405,7 +410,8 @@ public static class ThresholdSelection
     /// The kinds of settlement (<see cref="SettledDocument.Settlements"/>) whose lookups are counted — say only
     /// <see cref="SettlementKind.Enter"/>, the values settled with no suggestion in view. Every document is still replayed
     /// into memory; the others are just not asked about. Null, the default, counts every settlement, including those not
-    /// known; given, a field whose settlement is not known is not counted.
+    /// known; given, a field whose settlement is not known is not counted. A value the application filled
+    /// (<see cref="SettlementKind.Fill"/>) is never asked about nor remembered, as memory does not learn it.
     /// </param>
     /// <exception cref="ArgumentException">The field takes several values.</exception>
     public static TypedKeyThresholds SelectTypedKeyThresholds(
@@ -433,6 +439,7 @@ public static class ThresholdSelection
         // with each length of it.
         var asked = new List<Asked>();
         var ordered = documents
+            .Select(FormResolver.Remembered) // a filled value is neither remembered nor asked about
             .OrderBy(d => d.SettledAt)
             .ThenBy(d => d.DocumentId, StringComparer.Ordinal); // the order the field memory weighs settlements in
         foreach (var document in ordered)
@@ -529,7 +536,8 @@ public static class ThresholdSelection
     /// The kinds of settlement (<see cref="SettledDocument.Settlements"/>) whose lookups are counted — say only
     /// <see cref="SettlementKind.Enter"/>, the values settled with no suggestion in view. Every document is still replayed
     /// into memory; the others are just not asked about. Null, the default, counts every settlement, including those not
-    /// known; given, a field whose settlement is not known is not counted.
+    /// known; given, a field whose settlement is not known is not counted. A value the application filled
+    /// (<see cref="SettlementKind.Fill"/>) is never asked about nor remembered, as memory does not learn it.
     /// </param>
     /// <exception cref="ArgumentException">Typing is counted for a field that takes several values.</exception>
     public static DependsOnChoice SelectDependsOn(
@@ -685,6 +693,7 @@ public static class ThresholdSelection
         var cases = new Dictionary<string, string>(StringComparer.Ordinal); // case → the document representing it
         var caseOf = new Dictionary<string, string>(StringComparer.Ordinal); // document → the case it represents
         var ordered = documents
+            .Select(FormResolver.Remembered) // a filled value is neither remembered nor asked about
             .OrderBy(d => d.SettledAt)
             .ThenBy(d => d.DocumentId, StringComparer.Ordinal); // the form resolver's order: later wins, then the larger id
         foreach (var document in ordered)
