@@ -23,8 +23,9 @@ with what to do.
 
 ### Dependencies
 
-- `IronHive.Providers.OpenAI.Compatible` 0.50.0 → 0.55.1 (`Gil.IronHive`). Nothing `Gil.IronHive` uses changed shape;
-  a template switch given in `ExtraBody` is still sent as given, and no thinking budget is added to Gil's requests.
+- `IronHive.Providers.OpenAI.Compatible` 0.50.0 → 0.57.0 (`Gil.IronHive`). Nothing `Gil.IronHive` uses changed shape;
+  a template switch given in `ExtraBody` is still sent as given, and no thinking budget is added to Gil's requests (Gil sets
+  no reasoning effort, so 0.57.0's fitting of the thinking budget inside `MaxTokens` does not apply).
 
 ## 0.17.0
 
