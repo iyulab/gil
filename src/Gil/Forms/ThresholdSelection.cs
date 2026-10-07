@@ -88,6 +88,17 @@ public sealed record LayerThresholds(ThresholdReplay Key, ThresholdReplay Memory
 /// </summary>
 public static class ThresholdSelection
 {
+    /// <summary>As <see cref="SelectAsync(IMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>, counting every settlement.</summary>
+    public static Task<ThresholdReplay> SelectAsync(
+        IMemory memory,
+        FormDefinition form,
+        string field,
+        IEnumerable<SettledDocument> documents,
+        double targetPrecision,
+        int minimumAnswered,
+        CancellationToken cancellationToken = default) =>
+        SelectAsync(memory, form, field, documents, targetPrecision, minimumAnswered, counting: null, cancellationToken);
+
     /// <summary>
     /// Replays the documents in the order they were settled: each is looked up in a memory holding only the documents
     /// settled before it, by the evidence lines its last suggestion was made from — the values that had arrived before
@@ -99,7 +110,7 @@ public static class ThresholdSelection
     /// answers in all. When no threshold does, <see cref="ThresholdReplay.Chosen"/> is null and memory should not answer
     /// this field on its own; <see cref="ThresholdReplay.MostPrecise"/> still says how close it came. On its own this
     /// is right only for a field without a <see cref="FieldDefinition.KeyThreshold"/>: with one, a similar document answers
-    /// only where no key did — choose both with <see cref="SelectLayersAsync"/>.
+    /// only where no key did — choose both with <see cref="SelectLayersAsync(FieldMemory, IMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>.
     /// </summary>
     /// <param name="memory">An empty memory of the kind in use; the replay fills it. Never the one serving suggestions.</param>
     /// <param name="form">The form.</param>
@@ -110,6 +121,12 @@ public static class ThresholdSelection
     /// The fewest answers a precision may rest on. There is no default: a precision from a handful of answers is noise,
     /// and how much noise the field tolerates is the application's call.
     /// </param>
+    /// <param name="counting">
+    /// The kinds of settlement (<see cref="SettledDocument.Settlements"/>) whose lookups are counted — say only
+    /// <see cref="SettlementKind.Enter"/>, the values settled with no suggestion in view. Every document is still replayed
+    /// into memory; the others are just not asked about. Null, the default, counts every settlement, including those not
+    /// known; given, a field whose settlement is not known is not counted.
+    /// </param>
     /// <param name="cancellationToken">Cancels the replay.</param>
     public static async Task<ThresholdReplay> SelectAsync(
         IMemory memory,
@@ -118,6 +135,7 @@ public static class ThresholdSelection
         IEnumerable<SettledDocument> documents,
         double targetPrecision,
         int minimumAnswered,
+        IReadOnlyCollection<SettlementKind>? counting,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(memory);
@@ -126,9 +144,21 @@ public static class ThresholdSelection
         Check(form, field, targetPrecision, minimumAnswered);
         NotASet(form, field);
 
-        var steps = await ReplayAsync(null, memory, form, field, documents, cancellationToken).ConfigureAwait(false);
+        var steps = await ReplayAsync(null, memory, form, field, documents, counting, cancellationToken).ConfigureAwait(false);
         return Similarity(steps.Where(s => s.Looked), form.Field(field), targetPrecision, minimumAnswered);
     }
+
+    /// <summary>As <see cref="SelectLayersAsync(FieldMemory, IMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>, counting every settlement.</summary>
+    public static Task<LayerThresholds> SelectLayersAsync(
+        FieldMemory fieldMemory,
+        IMemory memory,
+        FormDefinition form,
+        string field,
+        IEnumerable<SettledDocument> documents,
+        double targetPrecision,
+        int minimumAnswered,
+        CancellationToken cancellationToken = default) =>
+        SelectLayersAsync(fieldMemory, memory, form, field, documents, targetPrecision, minimumAnswered, counting: null, cancellationToken);
 
     /// <summary>
     /// Chooses both thresholds of a field in the order the form resolver consults its layers. A value under a key answers
@@ -145,6 +175,12 @@ public static class ThresholdSelection
     /// <param name="documents">Settled documents, in any order. One settled more than once under the same id is asked about each time without its earlier version as evidence, as a suggestion for a saved document passes over it.</param>
     /// <param name="targetPrecision">The share of answers that must match, in (0, 1], for each layer.</param>
     /// <param name="minimumAnswered">The fewest answers a precision may rest on, for each layer; the application's call.</param>
+    /// <param name="counting">
+    /// The kinds of settlement (<see cref="SettledDocument.Settlements"/>) whose lookups are counted — say only
+    /// <see cref="SettlementKind.Enter"/>, the values settled with no suggestion in view. Every document is still replayed
+    /// into memory; the others are just not asked about. Null, the default, counts every settlement, including those not
+    /// known; given, a field whose settlement is not known is not counted.
+    /// </param>
     /// <param name="cancellationToken">Cancels the replay.</param>
     /// <returns>
     /// A replay of each layer. The memory layer's <see cref="ThresholdReplay.Lookups"/>, and the answer rates of its
@@ -158,6 +194,7 @@ public static class ThresholdSelection
         IEnumerable<SettledDocument> documents,
         double targetPrecision,
         int minimumAnswered,
+        IReadOnlyCollection<SettlementKind>? counting,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(fieldMemory);
@@ -167,7 +204,7 @@ public static class ThresholdSelection
         Check(form, field, targetPrecision, minimumAnswered);
         NotASet(form, field);
 
-        var steps = await ReplayAsync(fieldMemory, memory, form, field, documents, cancellationToken).ConfigureAwait(false);
+        var steps = await ReplayAsync(fieldMemory, memory, form, field, documents, counting, cancellationToken).ConfigureAwait(false);
         var keyed = steps.Where(s => s.KeyLooked).ToList();
         var key = Fit(
             [.. keyed.Where(s => s.Key is not null).Select(s => s.Key!.Value)],
@@ -178,12 +215,24 @@ public static class ThresholdSelection
         return new LayerThresholds(key, Similarity(left, form.Field(field), targetPrecision, minimumAnswered));
     }
 
+    /// <summary>As <see cref="SelectCoarseAsync(FieldMemory, IMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>, counting every settlement.</summary>
+    public static Task<LayerThresholds> SelectCoarseAsync(
+        FieldMemory fieldMemory,
+        IMemory memory,
+        FormDefinition form,
+        string field,
+        IEnumerable<SettledDocument> documents,
+        double targetPrecision,
+        int minimumAnswered,
+        CancellationToken cancellationToken = default) =>
+        SelectCoarseAsync(fieldMemory, memory, form, field, documents, targetPrecision, minimumAnswered, counting: null, cancellationToken);
+
     /// <summary>
     /// Chooses the thresholds of a field's coarse level (<see cref="FieldDefinition.Coarse"/>) in the order a suggestion
     /// offers it: on the lookups the field's value layers leave unanswered at the thresholds it has
     /// (<see cref="FieldDefinition.KeyThreshold"/>, <see cref="FieldDefinition.MemoryThreshold"/> with its floor — choose
     /// those first), the prefix the keys back, as <see cref="SelectKeyThreshold"/> chooses for a value; on the lookups that
-    /// leaves, the prefix the similar documents vote for, as <see cref="SelectAsync"/> does, with its similarity floor. A
+    /// leaves, the prefix the similar documents vote for, as <see cref="SelectAsync(IMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/> does, with its similarity floor. A
     /// prefix is right when the settled value begins with it. Each document is asked about in memories holding only the
     /// documents settled before it, then put into both, as for the value.
     /// </summary>
@@ -194,6 +243,12 @@ public static class ThresholdSelection
     /// <param name="documents">Settled documents, in any order.</param>
     /// <param name="targetPrecision">The share of prefixes offered that must be right, in (0, 1], for each layer.</param>
     /// <param name="minimumAnswered">The fewest answers a precision may rest on, for each layer; the application's call.</param>
+    /// <param name="counting">
+    /// The kinds of settlement (<see cref="SettledDocument.Settlements"/>) whose lookups are counted — say only
+    /// <see cref="SettlementKind.Enter"/>, the values settled with no suggestion in view. Every document is still replayed
+    /// into memory; the others are just not asked about. Null, the default, counts every settlement, including those not
+    /// known; given, a field whose settlement is not known is not counted.
+    /// </param>
     /// <param name="cancellationToken">Cancels the replay.</param>
     /// <returns>
     /// For <see cref="CoarseLevel.KeyThreshold"/>, and for <see cref="CoarseLevel.MemoryThreshold"/> with
@@ -208,6 +263,7 @@ public static class ThresholdSelection
         IEnumerable<SettledDocument> documents,
         double targetPrecision,
         int minimumAnswered,
+        IReadOnlyCollection<SettlementKind>? counting,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(fieldMemory);
@@ -220,7 +276,7 @@ public static class ThresholdSelection
             throw new ArgumentException($"'{field}' has no coarse level to choose thresholds for.", nameof(field));
         }
 
-        var steps = await ReplayAsync(fieldMemory, memory, form, field, documents, cancellationToken, coarse: true).ConfigureAwait(false);
+        var steps = await ReplayAsync(fieldMemory, memory, form, field, documents, counting, cancellationToken, coarse: true).ConfigureAwait(false);
         var left = steps.Where(s => (s.KeyLooked || s.Looked) && !s.Coarse!.ValueAnswered).ToList();
         var key = Fit([.. left.Where(s => s.Coarse!.Keys is not null).Select(s => s.Coarse!.Keys!.Value)], left.Count, targetPrecision, minimumAnswered);
         var rest = left.Where(s => !(key.Chosen is { } chosen && s.Coarse!.Keys is { } k && k.Score >= chosen.Threshold)).ToList();
@@ -240,7 +296,7 @@ public static class ThresholdSelection
     /// <paramref name="minimumAnswered"/> of them in all; when no score does, <see cref="ThresholdReplay.Chosen"/> is
     /// null — the field's keys then should not answer on their own. A document whose keys were never seen before is a lookup without an answer. Repeats of
     /// the same documents answering each other well do not lower the score that a weakly backed value needs. The key layer
-    /// is consulted first, on every lookup, so this is right on its own; <see cref="SelectLayersAsync"/> chooses it the
+    /// is consulted first, on every lookup, so this is right on its own; <see cref="SelectLayersAsync(FieldMemory, IMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/> chooses it the
     /// same way together with the memory threshold.
     /// <para>
     /// A field that takes several values (<see cref="FieldDefinition.Multiple"/>) trusts each value on its own score, so
@@ -258,13 +314,20 @@ public static class ThresholdSelection
     /// <param name="documents">Settled documents, in any order. One settled more than once under the same id is asked about each time without its earlier version as evidence, as a suggestion for a saved document passes over it.</param>
     /// <param name="targetPrecision">The share of answers that must match, in (0, 1].</param>
     /// <param name="minimumAnswered">The fewest answers a precision may rest on; the application's call, as for similarity.</param>
+    /// <param name="counting">
+    /// The kinds of settlement (<see cref="SettledDocument.Settlements"/>) whose lookups are counted — say only
+    /// <see cref="SettlementKind.Enter"/>, the values settled with no suggestion in view. Every document is still replayed
+    /// into memory; the others are just not asked about. Null, the default, counts every settlement, including those not
+    /// known; given, a field whose settlement is not known is not counted.
+    /// </param>
     public static ThresholdReplay SelectKeyThreshold(
         FieldMemory memory,
         FormDefinition form,
         string field,
         IEnumerable<SettledDocument> documents,
         double targetPrecision,
-        int minimumAnswered)
+        int minimumAnswered,
+        IReadOnlyCollection<SettlementKind>? counting = null)
     {
         ArgumentNullException.ThrowIfNull(memory);
         ArgumentNullException.ThrowIfNull(form);
@@ -287,7 +350,7 @@ public static class ThresholdSelection
             }
 
             memory.Remove(form.Name, document.DocumentId); // a document settled again is not its own evidence
-            if (memory.Count(form.Name) > 0)
+            if (memory.Count(form.Name) > 0 && Counts(document, field, counting))
             {
                 var (before, beforeSets) = (Before(form, document, field), BeforeSets(form, document, field));
                 if (!multiple)
@@ -338,6 +401,12 @@ public static class ThresholdSelection
     /// <param name="targetPrecision">The share of answers that must match, in (0, 1].</param>
     /// <param name="minimumAnswered">The fewest answers a precision may rest on, for each length.</param>
     /// <param name="longest">The most characters typed a threshold is chosen for.</param>
+    /// <param name="counting">
+    /// The kinds of settlement (<see cref="SettledDocument.Settlements"/>) whose lookups are counted — say only
+    /// <see cref="SettlementKind.Enter"/>, the values settled with no suggestion in view. Every document is still replayed
+    /// into memory; the others are just not asked about. Null, the default, counts every settlement, including those not
+    /// known; given, a field whose settlement is not known is not counted.
+    /// </param>
     /// <exception cref="ArgumentException">The field takes several values.</exception>
     public static TypedKeyThresholds SelectTypedKeyThresholds(
         FieldMemory memory,
@@ -346,7 +415,8 @@ public static class ThresholdSelection
         IEnumerable<SettledDocument> documents,
         double targetPrecision,
         int minimumAnswered,
-        int longest = 3)
+        int longest = 3,
+        IReadOnlyCollection<SettlementKind>? counting = null)
     {
         ArgumentNullException.ThrowIfNull(memory);
         ArgumentNullException.ThrowIfNull(form);
@@ -373,7 +443,7 @@ public static class ThresholdSelection
             }
 
             memory.Remove(form.Name, document.DocumentId); // a document settled again is not its own evidence
-            if (memory.Count(form.Name) > 0)
+            if (memory.Count(form.Name) > 0 && Counts(document, field, counting))
             {
                 var (before, beforeSets) = (Before(form, document, field), BeforeSets(form, document, field));
                 asked.Add(new Asked(settled, memory.Typed(form, field, before, settled, longest, beforeSets)));
@@ -455,6 +525,12 @@ public static class ThresholdSelection
     /// For a field typed into, the most characters typed to count answers for (as for
     /// <see cref="SelectTypedKeyThresholds"/>); 0, the default, counts answers before typing only.
     /// </param>
+    /// <param name="counting">
+    /// The kinds of settlement (<see cref="SettledDocument.Settlements"/>) whose lookups are counted — say only
+    /// <see cref="SettlementKind.Enter"/>, the values settled with no suggestion in view. Every document is still replayed
+    /// into memory; the others are just not asked about. Null, the default, counts every settlement, including those not
+    /// known; given, a field whose settlement is not known is not counted.
+    /// </param>
     /// <exception cref="ArgumentException">Typing is counted for a field that takes several values.</exception>
     public static DependsOnChoice SelectDependsOn(
         Func<FieldMemory> createMemory,
@@ -463,7 +539,8 @@ public static class ThresholdSelection
         IEnumerable<SettledDocument> documents,
         double targetPrecision,
         int minimumAnswered,
-        int typedLongest = 0)
+        int typedLongest = 0,
+        IReadOnlyCollection<SettlementKind>? counting = null)
     {
         ArgumentNullException.ThrowIfNull(createMemory);
         ArgumentNullException.ThrowIfNull(form);
@@ -480,11 +557,11 @@ public static class ThresholdSelection
         DependsOnTrial Replay(IReadOnlyList<string>? dependsOn)
         {
             var resting = RestingOn(form, field, dependsOn);
-            var replay = SelectKeyThreshold(createMemory(), resting, field, saved, targetPrecision, minimumAnswered);
+            var replay = SelectKeyThreshold(createMemory(), resting, field, saved, targetPrecision, minimumAnswered, counting);
             var typed = typedLongest == 0
                 ? null
                 : SelectTypedKeyThresholds(
-                    createMemory(), With(resting, field, f => f with { KeyThreshold = replay.Chosen?.Threshold }), field, saved, targetPrecision, minimumAnswered, typedLongest);
+                    createMemory(), With(resting, field, f => f with { KeyThreshold = replay.Chosen?.Threshold }), field, saved, targetPrecision, minimumAnswered, typedLongest, counting);
             return new DependsOnTrial(dependsOn ?? [], replay) { Typed = typed };
         }
 
@@ -596,6 +673,7 @@ public static class ThresholdSelection
         FormDefinition form,
         string field,
         IEnumerable<SettledDocument> documents,
+        IReadOnlyCollection<SettlementKind>? counting,
         CancellationToken cancellationToken,
         bool coarse = false)
     {
@@ -641,7 +719,9 @@ public static class ThresholdSelection
                 match = SimilarVote.Decide(admitted, definition.SimilarDocumentVotes) is ({ } winner, var score) ? (score, winner.Answer == settled, winner.Similarity, SimilarVote.Voters(admitted, definition.SimilarDocumentVotes) > 1) : null;
             }
 
-            var step = new Step(keyLooked, first, remembered > 0, match);
+            // A settlement not counted is replayed into memory like any other, but not asked about.
+            var counted = Counts(document, field, counting);
+            var step = new Step(keyLooked && counted, first, remembered > 0 && counted, match);
             if (coarse && definition.Coarse is { } level)
             {
                 // As a suggestion: the value layers answer at the field's own thresholds; only where they do not is the level offered.
@@ -782,6 +862,10 @@ public static class ThresholdSelection
     }
 
     /// <summary>The similar document layer does not suggest a field that takes several values, so it has no threshold to choose.</summary>
+    /// <summary>Whether the field's settlement in the document is of a kind counted; every one is when none are named.</summary>
+    private static bool Counts(SettledDocument document, string field, IReadOnlyCollection<SettlementKind>? counting) =>
+        counting is null || (document.Settlements.TryGetValue(field, out var kind) && counting.Contains(kind));
+
     private static void NotASet(FormDefinition form, string field)
     {
         if (form.Field(field).Multiple)

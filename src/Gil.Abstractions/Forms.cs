@@ -375,6 +375,16 @@ public sealed record SettledDocument(
         new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
 
     /// <summary>
+    /// Judged field name to how its current value was settled — <see cref="SettlementKind.Accept"/>,
+    /// <see cref="SettlementKind.Correct"/>, <see cref="SettlementKind.Enter"/>, <see cref="SettlementKind.Fill"/> or
+    /// <see cref="SettlementKind.Set"/> — which is what a form session's snapshot gives. A field left out is not known: its
+    /// value was restored without it, or saved before settlements were kept. Choosing thresholds can count only the
+    /// settlements of some kinds; memory does not use it.
+    /// </summary>
+    public IReadOnlyDictionary<string, SettlementKind> Settlements { get; init; } =
+        new Dictionary<string, SettlementKind>(StringComparer.Ordinal);
+
+    /// <summary>
     /// Checks that the document keeps each field of <paramref name="form"/> where its kind belongs: a field that takes
     /// several values only in <see cref="Sets"/>, any other field only in <see cref="Values"/>. Names the form does not
     /// have are left alone, as everywhere.
@@ -534,6 +544,17 @@ public enum SettlementKind
     /// were suggested and whichever a person added. Settling the field again replaces them.
     /// </summary>
     Set,
+
+    /// <summary>
+    /// A person settled a value with no suggestion in view — none was shown, because the application withheld it, kept it
+    /// below the threshold it shows, or had none. It says nothing about the suggestion either way.
+    /// </summary>
+    Enter,
+
+    /// <summary>
+    /// The application settled the suggested value on its own, with no person confirming it — a settlement nobody checked.
+    /// </summary>
+    Fill,
 }
 
 /// <summary>
@@ -565,6 +586,12 @@ public sealed record Settlement
     public static Settlement Revert() => new(SettlementKind.Revert, null);
 
     public static Settlement Restore(string value) => new(SettlementKind.Restore, Required(value));
+
+    /// <summary>A value a person settled with no suggestion in view (<see cref="SettlementKind.Enter"/>).</summary>
+    public static Settlement Enter(string value) => new(SettlementKind.Enter, Required(value));
+
+    /// <summary>The suggested value, settled by the application with no person confirming it (<see cref="SettlementKind.Fill"/>).</summary>
+    public static Settlement Fill(string value) => new(SettlementKind.Fill, Required(value));
 
     /// <summary>Settles a field that takes several values with these — none at all clears it. Order and repeats carry no meaning.</summary>
     public static Settlement Set(IEnumerable<string> values) => new(SettlementKind.Set, null, Elements(values));

@@ -7,8 +7,10 @@ namespace Gil.Forms;
 /// </summary>
 /// <remarks>
 /// A settled value can be settled again: accepting a suggestion and correcting it later leaves only the correction in
-/// memory, because the document's contribution is always what its current values imply. Accepting or correcting a field
-/// moves the document's settlement time to the present; observing, restoring, rejecting and reverting do not. A rejected field is not
+/// memory, because the document's contribution is always what its current values imply. Accepting, correcting, entering
+/// or filling a field moves the document's settlement time to the present; observing, restoring, rejecting and reverting
+/// do not. The snapshot keeps how each judged value was settled (<see cref="SettledDocument.Settlements"/>); a restored
+/// value is not known to have been settled any way, and a document opened from its saved snapshot keeps what it had. A rejected field is not
 /// suggested again until it is reverted or settled. A field that takes several values (<see cref="FieldDefinition.Multiple"/>)
 /// stays open once settled: the values chosen so far are evidence for the rest, which go on being suggested — settling it
 /// again with more or fewer values replaces them. Not thread-safe.
@@ -20,10 +22,42 @@ public sealed class FormSession
     private readonly Dictionary<string, IReadOnlyList<string>> _sets = new(StringComparer.Ordinal);
     private readonly HashSet<string> _rejected = new(StringComparer.Ordinal);
     private readonly List<string> _arrival = []; // fields with a value, in the order their current values arrived
+    private readonly Dictionary<string, SettlementKind> _settlements = new(StringComparer.Ordinal); // how each judged value was settled
     private DateTimeOffset _settledAt;
 
     internal FormSession(FormResolver resolver, FormDefinition form, string documentId, DateTimeOffset settledAt) =>
         (_resolver, Form, DocumentId, _settledAt) = (resolver, form, documentId, settledAt);
+
+    /// <summary>A saved document as it was: its values, the order they arrived in, its time and how its judged values were settled.</summary>
+    internal FormSession(FormResolver resolver, FormDefinition form, SettledDocument saved)
+        : this(resolver, form, saved.DocumentId, saved.SettledAt)
+    {
+        saved.Validate(form);
+        foreach (var (field, value) in saved.Values)
+        {
+            _values[field] = value;
+        }
+
+        foreach (var (field, values) in saved.Sets.Where(s => s.Value.Count > 0))
+        {
+            _sets[field] = values;
+        }
+
+        // The saved order, any field it leaves out counting as there from the start, as a replay takes it; with no order
+        // saved, the observed values from the start and the judged ones settled in the form's order.
+        var arrival = saved.Arrival
+            ?? [.. Form.Fields.Where(f => f.Role == FieldRole.Observed).Concat(Form.Fields.Where(f => f.Role == FieldRole.Judged)).Select(f => f.Name)];
+        var present = arrival.Where(Has).Distinct(StringComparer.Ordinal).ToList();
+        _arrival.AddRange(_values.Keys.Concat(_sets.Keys).Where(f => !present.Contains(f, StringComparer.Ordinal)).Order(StringComparer.Ordinal));
+        _arrival.AddRange(present);
+        foreach (var (field, kind) in saved.Settlements)
+        {
+            if (Has(field) && Form.Fields.Any(f => f.Name == field && f.Role == FieldRole.Judged))
+            {
+                _settlements[field] = kind;
+            }
+        }
+    }
 
     public FormDefinition Form { get; }
 
@@ -96,6 +130,15 @@ public sealed class FormSession
             }
         }
 
+        if (clears || settlement.Kind == SettlementKind.Restore || !Has(field))
+        {
+            _settlements.Remove(field); // nothing settled it, or nothing known did
+        }
+        else
+        {
+            _settlements[field] = settlement.Kind;
+        }
+
         return await ChangedAsync(field, reopened: settlement.Kind == SettlementKind.Revert, cancellationToken).ConfigureAwait(false);
     }
 
@@ -133,14 +176,17 @@ public sealed class FormSession
 
     /// <summary>
     /// The document's values as they stand — observed and settled — which is what the application saves, with the time a
-    /// field was last accepted or corrected (or the time the document was opened with, if none was since), and the order
-    /// the values arrived in, by which choosing thresholds replays the document.
+    /// field was last settled (or the time the document was opened with, if none was since), the order the values arrived
+    /// in, by which choosing thresholds replays the document, and how each judged value was settled.
     /// </summary>
     public SettledDocument Snapshot() =>
         new(DocumentId, new Dictionary<string, string>(_values, StringComparer.Ordinal), _settledAt, [.. _arrival])
         {
             Sets = new Dictionary<string, IReadOnlyList<string>>(_sets, StringComparer.Ordinal),
+            Settlements = new Dictionary<string, SettlementKind>(_settlements, StringComparer.Ordinal),
         };
+
+    private bool Has(string field) => _values.ContainsKey(field) || _sets.ContainsKey(field);
 
     private void Clear(string field)
     {

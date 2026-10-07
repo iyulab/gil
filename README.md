@@ -301,6 +301,13 @@ var updated = await session.SettleAsync("team", Settlement.Accept("network"));
 var document = session.Snapshot();
 ```
 
+Say how a value was settled. `Settlement.Accept` and `Settlement.Correct` are for a person who had the suggestion in
+view. `Settlement.Enter` is for a person who settled the field with no suggestion shown — because the application
+withheld it, kept it below the threshold it shows, or had none. `Settlement.Fill` is for the application settling the
+suggested value on its own, with no person confirming it. The snapshot keeps the kind of each judged value in
+`SettledDocument.Settlements`; save it with the document. A value put back with `Settlement.Restore` is not known to have
+been settled any way.
+
 Each field is tried in a fixed order, and `FieldSuggestion.Source` says which layer the first candidate came from:
 1. Values settled alongside the values the document already has, when the keys backing them score high enough
    (`KeyThreshold`).
@@ -384,14 +391,16 @@ Every `SettledDocument` carries `SettledAt`, when it was last settled — a file
 documents disagree, the later settlement wins: `FieldMemory` weighs each settlement by how many came after it under
 the same key (`recencyDecay`, 0.95 by default — a correction overtakes an older practice without first outnumbering
 it), ties go to the latest settlement, and documents whose evidence reads the same are one case that a
-similar-document lookup answers with its latest settlement. The result is the same whatever order documents arrive in. When reopening a saved document, pass its time
-and put its judged values back with `Settlement.Restore`, which records no acceptance or correction and leaves the
-time as it was; only accepting or correcting a field moves it on:
+similar-document lookup answers with its latest settlement. The result is the same whatever order documents arrive in. Reopen a saved document from its snapshot.
+It comes back as it was saved: its values, the order they arrived in, its time and how each value was settled. Only
+settling a field moves the time on:
 
 ```csharp
-var reopened = forms.Open(form, saved[0].DocumentId, saved[0].SettledAt);
-await reopened.SettleAsync("team", Settlement.Restore(saved[0].Values["team"]));
+var reopened = forms.Open(form, saved[0]);
 ```
+
+Putting values back one by one with `Settlement.Restore` also keeps the time. But it takes the order they are put back in
+as the order they arrived in, and does not know how they were settled.
 
 The right thresholds move as memory grows. Choose them again from time to time — for instance when memory has grown
 by a tenth — by replaying the saved documents. Both are chosen in one replay, in the order the resolver consults the
@@ -408,6 +417,15 @@ var team = form.Field("team") with
     MemoryThreshold = layers.Memory.Chosen?.Threshold,
     MemorySimilarityFloor = layers.Memory.Chosen?.SimilarityFloor,
 };
+```
+
+A value a person accepted with the suggestion in view may be right because it was suggested. A value the application
+filled was never checked. To know how right a layer is on its own, count only the settlements that saw no suggestion.
+Every document is still replayed into memory; only the lookups counted change. A document that does not say how a field
+was settled is counted only when `counting` is left out:
+
+```csharp
+var unprompted = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30, counting: [SettlementKind.Enter]);
 ```
 
 Where a field's values name their class in their leading characters — the chapter of a fault code, the class of a

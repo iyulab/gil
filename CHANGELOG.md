@@ -20,6 +20,19 @@ with what to do.
   `FormSession.SuggestAsync(field, typed)` suggest one open judged field as the whole form's suggestion would, making
   the similar document lookup and the model call for that field only. An application that shows one field at a time
   no longer pays for the rest. A field that is not judged, is off, or already has a value is refused.
+- **How a value was settled is kept with the document.** Two settlement kinds join `Accept` and `Correct`, which
+  mean a person had the suggestion in view: `Settlement.Enter` (a person settled the field with no suggestion shown)
+  and `Settlement.Fill` (the application settled the suggested value on its own). `SettledDocument.Settlements` keeps
+  the kind of each judged value, and `FormSession.Snapshot()` fills it. A restored value, and a document saved before
+  this release, is not known to have been settled any way.
+- **Choosing thresholds can count only some settlements.** Every `ThresholdSelection` method takes
+  `counting`, the settlement kinds whose lookups count. For example, `[SettlementKind.Enter]` measures a layer on values
+  settled with no suggestion in view. Every document is still replayed into memory. Left out, every settlement counts,
+  as before.
+- **A saved document reopens as it was saved.** `FormResolver.Open(form, saved)` brings back a snapshot's values, the
+  order they arrived in, its time and how each value was settled. Putting values back one by one with
+  `Settlement.Restore` took the order they were put back in as the order they arrived in, so a replay of a document
+  saved after a reopening in another order asked about its fields with other evidence than its suggestions had.
 
 ### Dependencies
 

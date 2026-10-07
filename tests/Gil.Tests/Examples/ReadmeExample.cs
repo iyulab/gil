@@ -117,8 +117,7 @@ internal static class ReadmeExample
         // … on save:
         await forms.RebuildAsync(form, [savedDocument]);
 
-        var reopened = forms.Open(form, saved[0].DocumentId, saved[0].SettledAt);
-        await reopened.SettleAsync("team", Settlement.Restore(saved[0].Values["team"]));
+        var reopened = forms.Open(form, saved[0]);
 
         var layers = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30);
         var team = form.Field("team") with
@@ -127,6 +126,7 @@ internal static class ReadmeExample
             MemoryThreshold = layers.Memory.Chosen?.Threshold,
             MemorySimilarityFloor = layers.Memory.Chosen?.SimilarityFloor,
         };
+        var unprompted = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30, counting: [SettlementKind.Enter]);
 
         var gilVersion = typeof(FormResolver).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;

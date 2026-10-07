@@ -77,9 +77,11 @@ public sealed class FormResolver
     internal int SimilarDocumentCount { get; }
 
     /// <summary>
-    /// Opens a document of the form. Put back a saved document's values with <see cref="FormSession.ObserveAsync"/> and
-    /// <see cref="Settlement.Restore(string)"/> (or <see cref="Settlement.Restore(IEnumerable{string})"/> for a set), and pass its <see cref="SettledDocument.SettledAt"/>: restoring does not make old
-    /// values new, and only accepting or correcting a field moves the document's settlement time on.
+    /// Opens a document of the form. To reopen a saved document, prefer <see cref="Open(FormDefinition, SettledDocument)"/>;
+    /// putting its values back one by one with <see cref="FormSession.ObserveAsync"/> and
+    /// <see cref="Settlement.Restore(string)"/> (or <see cref="Settlement.Restore(IEnumerable{string})"/> for a set), passing its <see cref="SettledDocument.SettledAt"/>,
+    /// keeps its time — restoring does not make old values new — but takes the order they are put back in as the order they
+    /// arrived in, and does not know how they were settled.
     /// </summary>
     /// <param name="form">The form.</param>
     /// <param name="documentId">Opaque; the key the document's contribution to memory is kept under.</param>
@@ -89,6 +91,22 @@ public sealed class FormResolver
         ArgumentNullException.ThrowIfNull(form);
         ArgumentException.ThrowIfNullOrWhiteSpace(documentId);
         return new FormSession(this, form, documentId, settledAt ?? Time.GetUtcNow());
+    }
+
+    /// <summary>
+    /// Reopens a saved document as its snapshot left it: its values, the order they arrived in, its settlement time and how
+    /// each judged value was settled. Memory is not touched until a field changes — the saved document is already there
+    /// once memory is rebuilt from the saved documents (<see cref="RebuildAsync"/>).
+    /// </summary>
+    /// <param name="form">The form.</param>
+    /// <param name="saved">A snapshot of a document of the form, as saved.</param>
+    /// <exception cref="ArgumentException">The document keeps a field where its kind does not belong (<see cref="SettledDocument.Validate"/>).</exception>
+    public FormSession Open(FormDefinition form, SettledDocument saved)
+    {
+        ArgumentNullException.ThrowIfNull(form);
+        ArgumentNullException.ThrowIfNull(saved);
+        ArgumentException.ThrowIfNullOrWhiteSpace(saved.DocumentId, nameof(saved));
+        return new FormSession(this, form, saved);
     }
 
     /// <summary>
@@ -143,7 +161,7 @@ public sealed class FormResolver
     /// document lookup that finds it passes it over for the next most similar document.
     /// </summary>
     /// <param name="form">The form.</param>
-    /// <param name="documentId">The document asked about; opaque, as in <see cref="Open"/>.</param>
+    /// <param name="documentId">The document asked about; opaque, as in <see cref="Open(FormDefinition, string, DateTimeOffset?)"/>.</param>
     /// <param name="values">The document's values as they stand — observed and judged alike.</param>
     /// <param name="cancellationToken">Cancels the calls made.</param>
     public Task<IReadOnlyList<FieldSuggestion>> SuggestAsync(
@@ -193,7 +211,7 @@ public sealed class FormResolver
     /// as a guess, and no model is asked — a person who is typing asks again with every pause.
     /// </summary>
     /// <param name="form">The form.</param>
-    /// <param name="documentId">The document asked about; opaque, as in <see cref="Open"/>.</param>
+    /// <param name="documentId">The document asked about; opaque, as in <see cref="Open(FormDefinition, string, DateTimeOffset?)"/>.</param>
     /// <param name="field">An open judged field: not <see cref="FieldPolicy.Off"/>, and without a value unless it takes several.</param>
     /// <param name="values">The document's values as they stand — observed and judged alike.</param>
     /// <param name="sets">The values chosen so far of fields that take several; null when there are none.</param>
