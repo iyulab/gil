@@ -33,10 +33,10 @@ public sealed record ThresholdChoice(double Threshold, double Precision, double 
 /// <param name="Candidates">How many of them found a candidate at any score.</param>
 public sealed record ThresholdReplay(ThresholdChoice? Chosen, ThresholdChoice? MostPrecise, int Lookups, int Candidates);
 
-/// <summary>One set of fields tried for a judged field's <see cref="FieldDefinition.DependsOn"/>, and how its key layer replayed.</summary>
-/// <param name="DependsOn">The fields the judged field rested on in this replay.</param>
+/// <summary>One set of fields tried for a judged field's <see cref="FieldDefinition.KeyFields"/>, and how its key layer replayed.</summary>
+/// <param name="KeyFields">The fields that keyed the judged field in this replay.</param>
 /// <param name="Replay">The key layer's replay with them, as <see cref="ThresholdSelection.SelectKeyThreshold"/> makes it.</param>
-public sealed record DependsOnTrial(IReadOnlyList<string> DependsOn, ThresholdReplay Replay)
+public sealed record KeyFieldsTrial(IReadOnlyList<string> KeyFields, ThresholdReplay Replay)
 {
     /// <summary>
     /// When the field is typed into, the thresholds chosen for typing with these fields and their key threshold, as
@@ -46,17 +46,17 @@ public sealed record DependsOnTrial(IReadOnlyList<string> DependsOn, ThresholdRe
 }
 
 /// <summary>
-/// The fields a judged field's suggestions should rest on (<see cref="FieldDefinition.DependsOn"/>), chosen by replaying
-/// its key layer, and the replays the choice was made from.
+/// The fields that should key a judged field in the settled field memory (<see cref="FieldDefinition.KeyFields"/>), chosen
+/// by replaying its key layer, and the replays the choice was made from.
 /// </summary>
-/// <param name="DependsOn">
-/// The fields to name, in the order they were added; null when no narrower set answered more often than every evidence
-/// field together — leave <see cref="FieldDefinition.DependsOn"/> unset.
+/// <param name="KeyFields">
+/// The fields to name, in the order they were added; null when no narrower set answered more often than every field the
+/// field rests on — leave <see cref="FieldDefinition.KeyFields"/> unset.
 /// </param>
-/// <param name="Chosen">The key layer's replay with the choice — with every evidence field when <paramref name="DependsOn"/> is null.</param>
-/// <param name="AllFields">The key layer's replay with every evidence field, as the field stands without <see cref="FieldDefinition.DependsOn"/>.</param>
-/// <param name="Trials">Every set tried: each evidence field alone, in the form's order, then each set the greedy additions tried.</param>
-public sealed record DependsOnChoice(IReadOnlyList<string>? DependsOn, ThresholdReplay Chosen, ThresholdReplay AllFields, IReadOnlyList<DependsOnTrial> Trials)
+/// <param name="Chosen">The key layer's replay with the choice — keyed by every field it rests on when <paramref name="KeyFields"/> is null.</param>
+/// <param name="AllFields">The key layer's replay keyed by every field the field rests on, as it stands without <see cref="FieldDefinition.KeyFields"/>.</param>
+/// <param name="Trials">Every set tried: each field it rests on alone, in the form's order, then each set the greedy additions tried.</param>
+public sealed record KeyFieldsChoice(IReadOnlyList<string>? KeyFields, ThresholdReplay Chosen, ThresholdReplay AllFields, IReadOnlyList<KeyFieldsTrial> Trials)
 {
     /// <summary>
     /// When typing was counted, the thresholds for typing chosen with the choice — set them as
@@ -509,13 +509,15 @@ public static class ThresholdSelection
     }
 
     /// <summary>
-    /// Chooses the fields a judged field should rest on (<see cref="FieldDefinition.DependsOn"/>) by how often its key
-    /// layer then answers at <paramref name="targetPrecision"/>. A key that rarely decides the field still adds to every
-    /// value's score, so where a few fields decide a field with many values and the rest only blur it, resting on those few
-    /// answers more often at the same precision. Replays the key layer as <see cref="SelectKeyThreshold"/> does with each
-    /// evidence field alone, ranks them by the answers their chosen threshold gives, then adds them in that order while
-    /// each addition answers more often. The result names that set only if it answers more often than every evidence field
-    /// together; otherwise <see cref="DependsOnChoice.DependsOn"/> is null. It costs one replay per evidence field and one
+    /// Chooses the fields that should key a judged field in the settled field memory (<see cref="FieldDefinition.KeyFields"/>)
+    /// by how often its key layer then answers at <paramref name="targetPrecision"/>. A key that rarely decides the field
+    /// still adds to every value's score, so where a few fields decide a field with many values and the rest only blur it,
+    /// keying it by those few answers more often at the same precision. Only the key layer narrows: the similar document
+    /// layer and a model keep every field the field rests on (<see cref="FieldDefinition.DependsOn"/>), which narrowing
+    /// would starve. Replays the key layer as <see cref="SelectKeyThreshold"/> does with each field the field rests on
+    /// alone, ranks them by the answers their chosen threshold gives, then adds them in that order while each addition
+    /// answers more often. The result names that set only if it answers more often than every such field
+    /// together; otherwise <see cref="KeyFieldsChoice.KeyFields"/> is null. It costs one replay per such field and one
     /// per addition tried. Choose the field's thresholds again with the fields chosen: a narrower set changes the scores.
     /// A field that is typed into answers questions with typed text too, and the fields that decide it before typing may
     /// blur it once a prefix has narrowed its values: give <paramref name="typedLongest"/>, and each set is counted by the
@@ -524,7 +526,10 @@ public static class ThresholdSelection
     /// </summary>
     /// <param name="createMemory">Makes an empty field memory configured as the one in use, one per replay. Never the one serving suggestions.</param>
     /// <param name="form">The form.</param>
-    /// <param name="field">A judged field of the form; its own <see cref="FieldDefinition.DependsOn"/> is ignored.</param>
+    /// <param name="field">
+    /// A judged field of the form; its own <see cref="FieldDefinition.KeyFields"/> is ignored, and its
+    /// <see cref="FieldDefinition.DependsOn"/> bounds the fields tried.
+    /// </param>
     /// <param name="documents">Settled documents, in any order, as for <see cref="SelectKeyThreshold"/>.</param>
     /// <param name="targetPrecision">The share of answers that must match, in (0, 1].</param>
     /// <param name="minimumAnswered">The fewest answers a precision may rest on; the application's call, as for similarity.</param>
@@ -540,7 +545,7 @@ public static class ThresholdSelection
     /// (<see cref="SettlementKind.Fill"/>) is never asked about nor remembered, as memory does not learn it.
     /// </param>
     /// <exception cref="ArgumentException">Typing is counted for a field that takes several values.</exception>
-    public static DependsOnChoice SelectDependsOn(
+    public static KeyFieldsChoice SelectKeyFields(
         Func<FieldMemory> createMemory,
         FormDefinition form,
         string field,
@@ -561,36 +566,36 @@ public static class ThresholdSelection
         }
 
         var saved = documents.ToList();
-        var trials = new List<DependsOnTrial>();
-        DependsOnTrial Replay(IReadOnlyList<string>? dependsOn)
+        var trials = new List<KeyFieldsTrial>();
+        KeyFieldsTrial Replay(IReadOnlyList<string>? keyFields)
         {
-            var resting = RestingOn(form, field, dependsOn);
+            var resting = KeyedBy(form, field, keyFields);
             var replay = SelectKeyThreshold(createMemory(), resting, field, saved, targetPrecision, minimumAnswered, counting);
             var typed = typedLongest == 0
                 ? null
                 : SelectTypedKeyThresholds(
                     createMemory(), With(resting, field, f => f with { KeyThreshold = replay.Chosen?.Threshold }), field, saved, targetPrecision, minimumAnswered, typedLongest, counting);
-            return new DependsOnTrial(dependsOn ?? [], replay) { Typed = typed };
+            return new KeyFieldsTrial(keyFields ?? [], replay) { Typed = typed };
         }
 
-        DependsOnTrial Try(IReadOnlyList<string> dependsOn)
+        KeyFieldsTrial Try(IReadOnlyList<string> keyFields)
         {
-            var trial = Replay(dependsOn);
+            var trial = Replay(keyFields);
             trials.Add(trial);
             return trial;
         }
 
-        static int Answers(DependsOnTrial trial) =>
+        static int Answers(KeyFieldsTrial trial) =>
             (trial.Replay.Chosen?.Answered ?? 0) + (trial.Typed?.ByLength.Sum(r => r.Chosen?.Answered ?? 0) ?? 0);
 
         var all = Replay(null);
-        var evidence = form.Fields.Where(f => f.Name != field && f.UseAsEvidence).Select(f => f.Name).ToList();
+        var evidence = form.Fields.Where(f => form.Supports(f.Name, field)).Select(f => f.Name).ToList();
         var ranked = evidence
             .Select(name => Try([name]))
             .OrderByDescending(Answers) // stable: on a tie, the form's order
             .ToList();
         var best = ranked.FirstOrDefault();
-        var everyField = new DependsOnChoice(null, all.Replay, all.Replay, trials) { Typed = all.Typed };
+        var everyField = new KeyFieldsChoice(null, all.Replay, all.Replay, trials) { Typed = all.Typed };
         if (best is null || Answers(best) == 0)
         {
             return everyField;
@@ -598,12 +603,12 @@ public static class ThresholdSelection
 
         foreach (var next in ranked.Skip(1))
         {
-            if (best.DependsOn.Count + 1 == evidence.Count)
+            if (best.KeyFields.Count + 1 == evidence.Count)
             {
-                break; // every evidence field: the replay without DependsOn
+                break; // every field it rests on: the replay without KeyFields
             }
 
-            var trial = Try([.. best.DependsOn, next.DependsOn[0]]);
+            var trial = Try([.. best.KeyFields, next.KeyFields[0]]);
             if (Answers(trial) <= Answers(best))
             {
                 break;
@@ -613,13 +618,13 @@ public static class ThresholdSelection
         }
 
         return Answers(best) > Answers(all)
-            ? new DependsOnChoice(best.DependsOn, best.Replay, all.Replay, trials) { Typed = best.Typed }
+            ? new KeyFieldsChoice(best.KeyFields, best.Replay, all.Replay, trials) { Typed = best.Typed }
             : everyField;
     }
 
-    /// <summary>The form with <paramref name="field"/> resting on <paramref name="dependsOn"/> (every evidence field when null).</summary>
-    private static FormDefinition RestingOn(FormDefinition form, string field, IReadOnlyList<string>? dependsOn) =>
-        With(form, field, f => f with { DependsOn = dependsOn });
+    /// <summary>The form with <paramref name="field"/> keyed by <paramref name="keyFields"/> (every field it rests on when null).</summary>
+    private static FormDefinition KeyedBy(FormDefinition form, string field, IReadOnlyList<string>? keyFields) =>
+        With(form, field, f => f with { KeyFields = keyFields });
 
     /// <summary>The form with <paramref name="field"/>'s definition changed.</summary>
     private static FormDefinition With(FormDefinition form, string field, Func<FieldDefinition, FieldDefinition> change) =>

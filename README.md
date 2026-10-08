@@ -483,24 +483,34 @@ Thresholds chosen there for a target of 0.8 delivered 0.66 to 0.72 on the docume
 documents come in batches that share their observed values, expect the similar document layer to fall short of a high
 target, and read even `MostPrecise` as optimistic: it is measured on the same documents it was chosen on.
 
-Which fields a judged field rests on matters most when the field has many values. A field that rarely decides it still
+Which fields key a judged field matters most when the field has many values. A field that rarely decides it still
 adds to the score of the values settled alongside its own: a value drawn from many, each seen only a few times — a
 model number, say — lends a few wrong values most of their strength and pushes them above the right one. Name the
-fields that decide the field in `DependsOn`. To find them in the saved documents, replay the key layer with
-`ThresholdSelection.SelectDependsOn`. It tries each evidence field alone, adds them in order of how often their key
-layer answers at the target precision while each addition answers more often, and names a set only if it answers more
-often than every field together; otherwise `DependsOn` comes back null. Then choose the thresholds again with the fields
-it named, since a narrower set changes the scores:
+fields that decide the field in `KeyFields`. To find them in the saved documents, replay the key layer with
+`ThresholdSelection.SelectKeyFields`. It tries each field the field rests on alone, adds them in order of how often
+their key layer answers at the target precision while each addition answers more often, and names a set only if it
+answers more often than every field together; otherwise `KeyFields` comes back null. Then choose the thresholds again
+with the fields it named, since a narrower set changes the scores:
 
 ```csharp
-var narrowed = ThresholdSelection.SelectDependsOn(() => new FieldMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30);
-var resting = form.Field("team") with { DependsOn = narrowed.DependsOn };
+var narrowed = ThresholdSelection.SelectKeyFields(() => new FieldMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30);
+var keyed = form.Field("team") with { KeyFields = narrowed.KeyFields };
 ```
 
 Replaying a public stream of maintenance reports, it chose two of thirteen observed fields for a fault code with several
 hundred values: the key layer answered 1.9 times as often as with every field, at a precision of 0.94 against 0.90.
 These were the two fields a learned weighting of the fields ranked highest, and resting on them answered 2.2 times as
-often on the documents that followed, at 0.95 against 0.89. It costs one replay per evidence field and one per addition.
+often on the documents that followed, at 0.95 against 0.89. It costs one replay per field tried and one per addition.
+
+`KeyFields` narrows the key layer only. The similar document layer and a model still read every field the field rests
+on (`DependsOn`): matching a whole document discounts a line that does not decide the field rather than counting it,
+and cut down to a field or two the lookups read alike. Replaying a public issue tracker with both layers on, resting a
+component field on the one field the key layer chose (`DependsOn`) answered half as often; keying it by that field
+(`KeyFields`) answered rightly 1.02 times as often as every field, on the same documents at the same target. The key
+layer took more of the answers and the similar document layer fewer, so precision moved from 0.89 to 0.88 — above the
+target of 0.8, which is what the thresholds promise. On the maintenance reports above, with the similar document layer
+and a coarse level on and a target of 0.95, keying the fault code by the one field chosen answered it rightly 1.36
+times as often as every field, at 0.96 either way; resting it on that field had answered less often than every field.
 
 When another form has already settled the same subject — the same order, case or applicant — give its settled values
 to this form as observed fields. The key layer learns from the settled documents which of their values go with which

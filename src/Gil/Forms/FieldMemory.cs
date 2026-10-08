@@ -318,14 +318,15 @@ public sealed class FieldMemory
     }
 
     /// <summary>
-    /// The keys the document's values give <paramref name="field"/>: every other field that supports it, with a short enough
-    /// value — each value of a field that takes several being a key of its own.
+    /// The keys the document's values give <paramref name="field"/>: every other field that keys it
+    /// (<see cref="FormDefinition.Keys"/>), with a short enough value — each value of a field that takes several being a key
+    /// of its own.
     /// </summary>
     private IEnumerable<Key> Keys(
         FormDefinition form, FieldDefinition field, IReadOnlyDictionary<string, string> values, IReadOnlyDictionary<string, IReadOnlyList<string>> sets)
     {
         var keys = new List<Key>();
-        foreach (var evidence in form.Fields.Where(e => form.Supports(e.Name, field.Name)))
+        foreach (var evidence in form.Fields.Where(e => form.Keys(e.Name, field.Name)))
         {
             if (evidence.Multiple)
             {

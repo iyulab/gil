@@ -162,6 +162,18 @@ public sealed record FieldDefinition(string Name, FieldRole Role)
     public IReadOnlyList<string>? DependsOn { get; init; }
 
     /// <summary>
+    /// The fields whose values key this field in the settled field memory — a narrower set than the fields it rests on
+    /// (<see cref="DependsOn"/>), for a field with many values that a field rarely deciding it would push the wrong way: each
+    /// key lends its settled values strength, so a key drawn from many values, each seen only a few times, lifts a few wrong
+    /// values above the right one. Null keys the field by every field it rests on. Only the settled field memory reads it:
+    /// a similar document is still looked up by, and a model still reads, every field the field rests on, as their
+    /// matching discounts a line that does not decide the field rather than counting it. Each name must be a field that
+    /// supports this one (<see cref="FormDefinition.Supports"/>). <c>ThresholdSelection.SelectKeyFields</c> chooses it from
+    /// settled documents.
+    /// </summary>
+    public IReadOnlyList<string>? KeyFields { get; init; }
+
+    /// <summary>
     /// False keeps this field's value out of every other field's evidence, in every layer: it is never a key of the settled
     /// field memory, never a line of the request a similar document is looked up by, and never in a model's context. For
     /// fields that identify a person, so that "this person, therefore this outcome" cannot harden into memory. The field's
@@ -311,6 +323,17 @@ public sealed record FormDefinition
                 }
             }
 
+            foreach (var key in field.KeyFields ?? [])
+            {
+                if (key == field.Name
+                    || !byName.TryGetValue(key, out var other)
+                    || !other.UseAsEvidence
+                    || (field.DependsOn is { } scope && !scope.Contains(key, StringComparer.Ordinal)))
+                {
+                    throw new ArgumentException($"Field '{field.Name}' is keyed by '{key}', which is not a field it rests on.", nameof(fields));
+                }
+            }
+
             if (field.CandidatesFrom is { } from && (from == field.Name || !byName.ContainsKey(from)))
             {
                 throw new ArgumentException($"Field '{field.Name}' takes its candidates from '{from}', which is not another field of the form.", nameof(fields));
@@ -345,6 +368,15 @@ public sealed record FormDefinition
             && source.UseAsEvidence
             && (target.DependsOn is null || target.DependsOn.Contains(source.Name, StringComparer.Ordinal));
     }
+
+    /// <summary>
+    /// Whether the value of the field named <paramref name="evidence"/> keys the field named <paramref name="field"/> in
+    /// the settled field memory: a field that supports it (<see cref="Supports"/>) and, when the field names its
+    /// <see cref="FieldDefinition.KeyFields"/>, one of them.
+    /// </summary>
+    /// <exception cref="ArgumentException">Either name is not a field of the form.</exception>
+    public bool Keys(string evidence, string field) =>
+        Supports(evidence, field) && (Field(field).KeyFields is not { } keys || keys.Contains(evidence, StringComparer.Ordinal));
 }
 
 /// <summary>A document's field values as last settled — observed fields included, since they are the evidence.</summary>

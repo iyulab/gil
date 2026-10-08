@@ -13,6 +13,18 @@ with what to do.
   with five such fields and 100,000 saved documents took about 0.2 s a pause. Call
   `FormResolver.SuggestAsync(form, documentId, field, values, typed: text)` or `FormSession.SuggestAsync(field, text)`
   instead; both return the one field's `FieldSuggestion`, and keep the other fields' suggestions as last shown.
+- **Narrowing what a field rests on is for its key layer alone: `SelectDependsOn` is now `SelectKeyFields`.** The
+  fields it chose went into `DependsOn`, which also decides what a similar document is looked up by. Its choice was made
+  on the key layer — where a many-valued field that rarely decides the field pushes wrong values up — but the similar
+  document layer matches every line it is given and discounts the ones that do not decide; narrowed to a field or two,
+  its lookups read alike and it stopped answering. Replaying a public issue tracker with both layers on, resting a
+  component field on the one field chosen halved its answers. `FieldDefinition.KeyFields` now names the fields that key
+  a field in the settled field memory, within the fields it rests on; the similar document layer and a model still read
+  every field it rests on. `ThresholdSelection.SelectKeyFields` returns `KeyFieldsChoice.KeyFields` (`KeyFieldsTrial`
+  for each set tried), and the field's own `DependsOn` now bounds the fields it tries. Replace
+  `field with { DependsOn = narrowed.DependsOn }` with `field with { KeyFields = narrowed.KeyFields }` and keep
+  `DependsOn` as it was; then rebuild the document memory and choose the thresholds again. The key layer replays exactly
+  as it did resting on the same fields.
 
 ### Added
 

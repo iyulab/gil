@@ -131,8 +131,8 @@ internal static class ReadmeExample
         var gilVersion = typeof(FormResolver).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
 
-        var narrowed = ThresholdSelection.SelectDependsOn(() => new FieldMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30);
-        var resting = form.Field("team") with { DependsOn = narrowed.DependsOn };
+        var narrowed = ThresholdSelection.SelectKeyFields(() => new FieldMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30);
+        var keyed = form.Field("team") with { KeyFields = narrowed.KeyFields };
 
         var typedTeam = form.Field("team") with { TypedKeyThresholds = ThresholdSelection.SelectTypedKeyThresholds(new FieldMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30).Thresholds };
         var whileTyping = await forms.SuggestAsync(form, "tickets/0412", "team", valuesOnScreen, typed: "ne");
