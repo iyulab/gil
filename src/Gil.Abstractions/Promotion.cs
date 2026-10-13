@@ -12,6 +12,7 @@ namespace Gil;
 /// <param name="Verdict">Feedback as it stands when read: correct, wrong or null.</param>
 /// <param name="Correction">The right output when the verdict was wrong.</param>
 /// <param name="FallbackEnergy">The cost of this request's fallback calls alone — what a habit would save.</param>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public sealed record PromotionCandidate(
     string TraceId,
     string State,
@@ -26,9 +27,11 @@ public sealed record PromotionCandidate(
 /// <param name="Energy">The call's cost.</param>
 /// <param name="StateChars">Input characters alone.</param>
 /// <param name="NoneChars">Characters of the "none of these" candidate.</param>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public sealed record JudgeCostSample(int Chars, double Energy, int StateChars, int NoneChars);
 
 /// <summary>What promotion reads from a task's log.</summary>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public interface IPromotionEvidenceSource
 {
     /// <summary>Requests the fallback answered on a non-empty path, in arrival order.</summary>
@@ -50,6 +53,7 @@ public interface IPromotionEvidenceSource
 /// <param name="ExpectedSaving">Expected energy saved per visit to the anchor.</param>
 /// <param name="AddedCost">Judgment energy added per visit to the anchor.</param>
 /// <param name="Warnings">Loading warnings the new habit raises, such as a description overlapping a sibling's.</param>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public sealed record PromotionProposal(
     string Anchor,
     Habit Habit,
@@ -64,6 +68,7 @@ public sealed record PromotionProposal(
 }
 
 /// <summary>Turns a task's promotion evidence into proposals. A port, so other proposers can run over the same log.</summary>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public interface IPromotionProposer
 {
     IReadOnlyList<PromotionProposal> Propose(Node root, IReadOnlyList<PromotionCandidate> candidates);
@@ -74,6 +79,7 @@ public interface IPromotionProposer
 /// reads the rounds back instead of running the proposer again — a second run would see requests the first did not.
 /// The tree at any point is the authored tree with every recorded proposal up to that point applied, in order.
 /// </summary>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public interface IPromotionLog
 {
     /// <summary>

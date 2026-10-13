@@ -1,7 +1,7 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using Gil.Habits;
-using Gil.Ontology;
+using Gil.Tree;
 using Gil.Telemetry;
 using Microsoft.Data.Sqlite;
 
@@ -9,7 +9,7 @@ namespace Gil.Tests.Habits;
 
 public sealed class DeactivationTests : IDisposable
 {
-    private static readonly Node Tree = OntologyYaml.Parse("""
+    private static readonly Node Tree = TreeYaml.Parse("""
         id: root
         children:
           - id: bank
@@ -101,7 +101,7 @@ public sealed class DeactivationTests : IDisposable
         using var document = JsonDocument.Parse(File.ReadAllText(path));
         var fixture = document.RootElement;
         var task = fixture.GetProperty("task").GetString()!;
-        var tree = OntologyYaml.Parse(fixture.GetProperty("tree").GetString()!).Root;
+        var tree = TreeYaml.Parse(fixture.GetProperty("tree").GetString()!).Root;
         var w = fixture.GetProperty("weights");
         var weights = new ReliabilityWeights(w.GetProperty("reinforce").GetDouble(), w.GetProperty("penalty").GetDouble(), w.GetProperty("prior_strength").GetDouble());
         var statistics = new FixedStatistics(fixture.GetProperty("counts").EnumerateObject().ToDictionary(

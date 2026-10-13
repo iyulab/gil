@@ -7,6 +7,7 @@ namespace Gil.Habits;
 /// Rules shared by candidates learned from the log (promoted habits and shadows), so every implementation reading the
 /// same log derives the same ids and labels.
 /// </summary>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public static class DerivedHabits
 {
     public const string PromotedPrefix = "promoted-";

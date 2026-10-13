@@ -4,14 +4,14 @@ using AwesomeAssertions;
 using Gil.Fallback;
 using Gil.Habits;
 using Gil.Llm;
-using Gil.Ontology;
+using Gil.Tree;
 using Gil.Traverse;
 
 namespace Gil.Tests;
 
 public sealed class ResolverTests
 {
-    private static readonly Node Tree = OntologyYaml.Parse("""
+    private static readonly Node Tree = TreeYaml.Parse("""
         id: root
         children:
           - id: work
@@ -466,7 +466,7 @@ public sealed class ResolverTests
     {
         // Free-answer tasks can gain nothing from judgments (their fallback rarely writes the organisation's answer;
         // accuracy comes from memory), so a task may be defined with a bare root: nothing to judge, nothing to pay.
-        var bare = OntologyYaml.Parse("id: root").Root;
+        var bare = TreeYaml.Parse("id: root").Root;
         var task = new TaskDefinition("support", new TextContract(), bare, new TaskPolicy { Thresholds = Strict, MemoryThreshold = 0.9 }, PromptLanguage.Korean);
         var rig = new Rig(Judgments(), "Your parcel ships tomorrow.");
         rig.Memory.Items.Add(("refund please", "Refunds take five days.", 0.95));
@@ -492,7 +492,7 @@ public sealed class ResolverTests
         var rig = new Rig(Judgments(("work", 0.95), (shadow, 0.95)), null, evidence, "leave_balance");
 
         // The contract knows more answers than the tree has habits for, as in any task still growing its tree.
-        var contract = OntologyYaml.Parse("""
+        var contract = TreeYaml.Parse("""
             id: root
             children:
               - id: work

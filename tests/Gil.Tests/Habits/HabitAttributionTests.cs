@@ -1,12 +1,12 @@
 using AwesomeAssertions;
 using Gil.Habits;
-using Gil.Ontology;
+using Gil.Tree;
 
 namespace Gil.Tests.Habits;
 
 public sealed class HabitAttributionTests
 {
-    private static readonly Node Tree = OntologyYaml.Parse("""
+    private static readonly Node Tree = TreeYaml.Parse("""
         id: root
         children:
           - id: bank

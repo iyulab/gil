@@ -5,9 +5,11 @@ namespace Gil;
 /// <param name="Label">Name shown to the judge.</param>
 /// <param name="Description">Description shown to the judge — the main lever on judgment accuracy.</param>
 /// <param name="Answer">The output choosing it would produce (answer habits); never used to judge, kept in the record.</param>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record Candidate(string Id, string Label, string Description, string? Answer = null);
 
 /// <summary>A pairwise scorer's verdict over the candidates it was shown.</summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record Judgment
 {
     /// <summary>Candidate id to probability, renormalized over the labels the judge could answer with.</summary>
@@ -33,6 +35,7 @@ public sealed record Judgment
 /// Scores one input against a set of candidates that changes from call to call — no fixed label head, so adding a
 /// habit never requires retraining.
 /// </summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public interface IJudge
 {
     Task<Judgment> JudgeAsync(

@@ -10,6 +10,7 @@ namespace Gil;
 /// <param name="Missed">Times the fallback produced this habit's answer after the tree failed to reach it.</param>
 /// <param name="Explored">Times the habit's answer was cross-checked by an independent fallback.</param>
 /// <param name="Disputed">Times that cross-check disagreed. Evidence about the pair, not a penalty: the fallback errs too.</param>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public sealed record HabitCounts(int Reinforced = 0, int Penalized = 0, int Missed = 0, int Explored = 0, int Disputed = 0)
 {
     /// <summary>
@@ -33,15 +34,18 @@ public sealed record HabitCounts(int Reinforced = 0, int Penalized = 0, int Miss
 /// <param name="Reinforce">Weight of one confirmation.</param>
 /// <param name="Penalty">Weight of one penalty.</param>
 /// <param name="PriorStrength">Virtual observations pulling the score towards 0.5 before evidence arrives.</param>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public sealed record ReliabilityWeights(double Reinforce, double Penalty, double PriorStrength);
 
 /// <summary>How often a node was visited and how its judgments ended. A skip is a hit that is neither.</summary>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public sealed record NodeVisits(int Hits, int Accepts, int Exits, DateTimeOffset? LastUsedAt);
 
 /// <summary>
 /// Runtime statistics of a tree, kept apart from the tree itself so that the authored file does not change on every
 /// request. Statistics belong to a scope — one task — because the same ids recur across tasks sharing a store.
 /// </summary>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public interface IHabitStatistics
 {
     /// <summary>

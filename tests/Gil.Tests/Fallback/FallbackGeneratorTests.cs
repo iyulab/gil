@@ -3,7 +3,7 @@ using AwesomeAssertions;
 using Gil.Fallback;
 using Gil.Judge;
 using Gil.Llm;
-using Gil.Ontology;
+using Gil.Tree;
 
 namespace Gil.Tests.Fallback;
 
@@ -40,7 +40,7 @@ public sealed class FallbackGeneratorTests
     [Fact]
     public void The_tree_answer_contract_narrows_to_a_confirmed_category_with_an_escape()
     {
-        var contract = new TreeAnswerContract(OntologyYaml.Parse(Tree).Root);
+        var contract = new TreeAnswerContract(TreeYaml.Parse(Tree).Root);
 
         contract.Validate("book_flight", PromptLanguage.Korean).Should().BeNull();
         contract.Validate("해당 없음", PromptLanguage.Korean).Should().BeNull();
@@ -90,7 +90,7 @@ public sealed class FallbackGeneratorTests
 
         using var document = JsonDocument.Parse(File.ReadAllText(path));
         var fixture = document.RootElement;
-        var root = OntologyYaml.Parse(fixture.GetProperty("tree").GetString()!).Root;
+        var root = TreeYaml.Parse(fixture.GetProperty("tree").GetString()!).Root;
         var ct = TestContext.Current.CancellationToken;
 
         foreach (var expected in fixture.GetProperty("judges").EnumerateArray())

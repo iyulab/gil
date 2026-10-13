@@ -10,6 +10,7 @@ namespace Gil.Llm;
 /// "fewer long calls" from "more short calls". For an API, the published prices are the coefficients and the
 /// intercept is zero.
 /// </remarks>
+[Experimental(Stability.Recording, UrlFormat = Stability.Url)]
 public sealed record EnergyModel(double Fixed, double PerFreshPromptToken, double PerCachedToken, double PerOutputToken)
 {
     public double Of(int promptTokens, int cachedTokens, int completionTokens)
@@ -135,4 +136,5 @@ public sealed record EnergyModel(double Fixed, double PerFreshPromptToken, doubl
 }
 
 /// <summary>One recorded call: its token counts and what it cost in the unit being fitted.</summary>
+[Experimental(Stability.Recording, UrlFormat = Stability.Url)]
 public sealed record CallCostSample(int PromptTokens, int CachedTokens, int CompletionTokens, double Cost);

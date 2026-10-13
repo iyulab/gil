@@ -2,14 +2,14 @@ using AwesomeAssertions;
 using Gil.Fallback;
 using Gil.Judge;
 using Gil.Llm;
-using Gil.Ontology;
+using Gil.Tree;
 using Gil.Traverse;
 
 namespace Gil.Tests;
 
 public sealed class PromptLanguageTests
 {
-    private static readonly Node Tree = OntologyYaml.Parse("""
+    private static readonly Node Tree = TreeYaml.Parse("""
         id: root
         children:
           - id: work

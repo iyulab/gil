@@ -4,6 +4,7 @@ namespace Gil.Memory;
 /// <param name="Key">The request's trace id — the key memory stores it under and a later verdict overturns it by.</param>
 /// <param name="State">The request as it arrived.</param>
 /// <param name="Answer">The confirmed answer.</param>
+[Experimental(Stability.Recording, UrlFormat = Stability.Url)]
 public sealed record ConfirmedAnswer(string Key, string State, string Answer);
 
 /// <summary>
@@ -13,6 +14,7 @@ public sealed record ConfirmedAnswer(string Key, string State, string Answer);
 /// </summary>
 /// <param name="Remember">The answers to hold, in the order they were confirmed.</param>
 /// <param name="Forget">The keys of remembered answers that were served and judged wrong.</param>
+[Experimental(Stability.Recording, UrlFormat = Stability.Url)]
 public sealed record MemoryReplay(IReadOnlyList<ConfirmedAnswer> Remember, IReadOnlyCollection<string> Forget)
 {
     /// <summary>Reads the replay off a task's feedback history, oldest first.</summary>

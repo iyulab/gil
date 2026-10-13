@@ -9,7 +9,7 @@ using Gil.Habits;
 using Gil.Judge;
 using Gil.Llm;
 using Gil.Memory;
-using Gil.Ontology;
+using Gil.Tree;
 using Gil.Telemetry;
 using Gil.Traverse;
 
@@ -53,7 +53,7 @@ internal static class ReadmeExample
             statistics: store,
             shadowEvidence: store);
 
-        var tree = OntologyYaml.Load("support.yaml").Root;
+        var tree = TreeYaml.Load("support.yaml").Root;
         // The last argument is the language support.yaml is written in: every prompt the task sends is worded in it.
         var task = new TaskDefinition("support", new TreeAnswerContract(tree), tree, new TaskPolicy
         {
@@ -71,7 +71,7 @@ internal static class ReadmeExample
         var lexical = new LexicalMemory();
         await MemoryReplay.From(store.FeedbackHistory("support")).ApplyAsync(lexical, "support", traceId: "startup");
         var offline = new Resolver(lexical, store);
-        var bare = OntologyYaml.Parse("id: root").Root;   // the tree is not used without models
+        var bare = TreeYaml.Parse("id: root").Root;   // the tree is not used without models
         var answered = await offline.ResolveAsync(new TaskDefinition("support", new TextContract(), bare,
             new TaskPolicy { Thresholds = new([1.0], 1.0), MemoryThreshold = 0.5 }, PromptLanguage.English), "I lost my card");
 

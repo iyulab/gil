@@ -1,7 +1,7 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using Gil.Habits;
-using Gil.Ontology;
+using Gil.Tree;
 using Gil.Telemetry;
 using Microsoft.Data.Sqlite;
 
@@ -9,7 +9,7 @@ namespace Gil.Tests.Habits;
 
 public sealed class ShadowIndexTests : IDisposable
 {
-    private static readonly Node Tree = OntologyYaml.Parse("""
+    private static readonly Node Tree = TreeYaml.Parse("""
         id: root
         children:
           - id: bank
@@ -116,7 +116,7 @@ public sealed class ShadowIndexTests : IDisposable
 
         using var document = JsonDocument.Parse(File.ReadAllText(path));
         var fixture = document.RootElement;
-        var tree = OntologyYaml.Parse(fixture.GetProperty("tree").GetString()!).Root;
+        var tree = TreeYaml.Parse(fixture.GetProperty("tree").GetString()!).Root;
         var exclude = fixture.GetProperty("exclude").EnumerateArray().Select(e => e.GetString()!).ToHashSet();
         var evidence = fixture.GetProperty("evidence").EnumerateArray().Select(Evidence).OfType<ShadowEvidence>().ToList();
         var checkpoints = 0;

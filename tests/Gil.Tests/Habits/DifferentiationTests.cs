@@ -2,13 +2,13 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Gil.Fallback;
 using Gil.Habits;
-using Gil.Ontology;
+using Gil.Tree;
 
 namespace Gil.Tests.Habits;
 
 public sealed class DifferentiationTests
 {
-    private static readonly Node Tree = OntologyYaml.Parse("""
+    private static readonly Node Tree = TreeYaml.Parse("""
         id: root
         children:
           - id: bank
@@ -25,7 +25,7 @@ public sealed class DifferentiationTests
         """).Root;
 
     // The contract knows answers the tree has no habits for yet.
-    private static readonly TreeAnswerContract Contract = new(OntologyYaml.Parse("""
+    private static readonly TreeAnswerContract Contract = new(TreeYaml.Parse("""
         id: root
         children:
           - id: bank
@@ -109,8 +109,8 @@ public sealed class DifferentiationTests
         foreach (var run in document.RootElement.GetProperty("runs").EnumerateArray())
         {
             var task = run.GetProperty("task").GetString();
-            var tree = OntologyYaml.Parse(run.GetProperty("tree").GetString()!).Root;
-            var contract = new TreeAnswerContract(OntologyYaml.Parse(run.GetProperty("contract_tree").GetString()!).Root);
+            var tree = TreeYaml.Parse(run.GetProperty("tree").GetString()!).Root;
+            var contract = new TreeAnswerContract(TreeYaml.Parse(run.GetProperty("contract_tree").GetString()!).Root);
             var candidates = run.GetProperty("candidates").EnumerateArray().Select(c => new PromotionCandidate(
                 c.GetProperty("trace_id").GetString()!, c.GetProperty("state").GetString()!, c.GetProperty("anchor").GetString()!,
                 Text(c, "output"), Text(c, "verdict"), Text(c, "correction"), c.GetProperty("fallback_energy").GetDouble())).ToList();

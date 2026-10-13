@@ -3,7 +3,7 @@ using AwesomeAssertions;
 using Gil.Fallback;
 using Gil.Judge;
 using Gil.Llm;
-using Gil.Ontology;
+using Gil.Tree;
 using Gil.Telemetry;
 using Gil.Traverse;
 
@@ -42,7 +42,7 @@ public sealed class ResolverLiveTests
             new FallbackGenerator(recorder),
             new SlotFiller(recorder),
             store);
-        var tree = OntologyYaml.Parse("""
+        var tree = TreeYaml.Parse("""
             id: root
             children:
               - id: alarm

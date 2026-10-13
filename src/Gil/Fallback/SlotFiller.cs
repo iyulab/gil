@@ -6,6 +6,7 @@ using Gil.Llm;
 namespace Gil.Fallback;
 
 /// <summary>The filled template, or null with the reason when some blanks could not be filled.</summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record SlotFillResult(string? Output, double Energy, string? FailedReason);
 
 /// <summary>
@@ -14,6 +15,7 @@ public sealed record SlotFillResult(string? Output, double Energy, string? Faile
 /// </summary>
 /// <param name="recorder">Sends and records each call.</param>
 /// <param name="maxAttempts">Calls before giving up on missing blanks.</param>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed partial class SlotFiller(CallRecorder recorder, int maxAttempts = 2)
 {
     public async Task<SlotFillResult> FillAsync(string state, Habit habit, PromptLanguage language, string traceId, CancellationToken cancellationToken = default)

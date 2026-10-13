@@ -1,10 +1,11 @@
 using Gil.Judge;
-using Gil.Ontology;
+using Gil.Tree;
 
 namespace Gil.Habits;
 
 /// <summary>What promotion accepts as a habit.</summary>
 /// <param name="MinSupport">Outputs repeated fewer times than this are chance, not habit.</param>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public sealed record PromotionPolicy(int MinSupport)
 {
     /// <summary>Outputs that mean there is no answer; as habits they would duplicate the judgment's "none of these".</summary>
@@ -23,6 +24,7 @@ public sealed record PromotionPolicy(int MinSupport)
 /// descriptions)</c>, fitted on a task's judgments. It prices a first habit on an empty anchor by its own size
 /// rather than by the mean judgment, which cold starts measure only at the crowded root.
 /// </summary>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public sealed record JudgeCostModel(double Fixed, double PerChar, double MeanStateChars, int NoneChars)
 {
     /// <summary>A judgment that did not happen before: the anchor had no habits and was skipped.</summary>
@@ -69,6 +71,7 @@ public sealed record JudgeCostModel(double Fixed, double PerChar, double MeanSta
 /// What counts as the same output is the grouping's call. The default groups identical text, which suits closed
 /// outputs (classification, choice); free-form answers need a grouping by meaning.
 /// </remarks>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public sealed class RepeatedOutputProposer : IPromotionProposer
 {
     private readonly PromotionPolicy _policy;
@@ -221,7 +224,7 @@ public sealed class RepeatedOutputProposer : IPromotionProposer
                 : _newCallEnergy;
 
         var warnings = new List<string>();
-        OntologyYaml.WarnOnSiblingOverlap(node with { Habits = [.. node.Habits, habit] }, warnings);
+        TreeYaml.WarnOnSiblingOverlap(node with { Habits = [.. node.Habits, habit] }, warnings);
         return new PromotionProposal(
             node.Id,
             habit,
@@ -240,6 +243,7 @@ public sealed class RepeatedOutputProposer : IPromotionProposer
 /// <param name="Proposals">What was proposed, with the requests behind each.</param>
 /// <param name="NotApplied">Proposals the tree could not take, with the reason.</param>
 /// <param name="Applied">The proposals the tree took, in order — what a round records once accepted.</param>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public sealed record PromotionReview(
     string Before,
     string After,
@@ -248,6 +252,7 @@ public sealed record PromotionReview(
     IReadOnlyList<PromotionProposal> Applied);
 
 /// <summary>Applying proposals to a tree and preparing them for review.</summary>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public static class Promotion
 {
     /// <summary>
@@ -299,6 +304,6 @@ public static class Promotion
                 && after.Find(p.Anchor)?.Habits.Any(h => h.Id == p.Habit.Id) == true
                 && added.Add((p.Anchor, p.Habit.Id)))
             .ToList();
-        return new PromotionReview(OntologyYaml.Dump(root), OntologyYaml.Dump(after), proposals, notApplied, applied);
+        return new PromotionReview(TreeYaml.Dump(root), TreeYaml.Dump(after), proposals, notApplied, applied);
     }
 }

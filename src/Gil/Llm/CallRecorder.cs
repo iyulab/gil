@@ -5,6 +5,7 @@ namespace Gil.Llm;
 /// guarantees no call escapes the telemetry — a component that talks to the model directly would leave costs
 /// and distributions out of the record.
 /// </summary>
+[Experimental(Stability.Recording, UrlFormat = Stability.Url)]
 public sealed class CallRecorder(IChatModel model, EnergyModel energy, ITelemetrySink? sink = null, TimeProvider? clock = null)
 {
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;

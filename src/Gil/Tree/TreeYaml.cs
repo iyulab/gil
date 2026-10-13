@@ -3,49 +3,52 @@ using System.Text.RegularExpressions;
 using Gil.Judge;
 using YamlDotNet.Serialization;
 
-namespace Gil.Ontology;
+namespace Gil.Tree;
 
 /// <summary>The tree could not be built: the file breaks a structural rule. Warnings, by contrast, still load.</summary>
-public sealed class OntologyException : Exception
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
+public sealed class TreeException : Exception
 {
-    public OntologyException()
+    public TreeException()
     {
     }
 
-    public OntologyException(string message)
+    public TreeException(string message)
         : base(message)
     {
     }
 
-    public OntologyException(string message, Exception innerException)
+    public TreeException(string message, Exception innerException)
         : base(message, innerException)
     {
     }
 }
 
 /// <summary>A loaded tree and the things a person should look at before trusting it.</summary>
-public sealed record LoadedOntology(Node Root, IReadOnlyList<string> Warnings);
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
+public sealed record LoadedTree(Node Root, IReadOnlyList<string> Warnings);
 
 /// <summary>
 /// Reads and writes the tree's YAML — the editable source of truth, reviewed as diffs. Runtime statistics never
 /// go in it. Writing omits fields equal to their defaults so generated and hand-written files diff cleanly.
 /// </summary>
-public static partial class OntologyYaml
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
+public static partial class TreeYaml
 {
     // A word that appears in more than this share of the siblings' descriptions is shared vocabulary, not
     // evidence that two siblings overlap.
     private const double CommonVocabularyShare = 0.3;
     private const int MinimumSharedWords = 3;
 
-    public static LoadedOntology Load(string path) => Parse(File.ReadAllText(path));
+    public static LoadedTree Load(string path) => Parse(File.ReadAllText(path));
 
-    public static LoadedOntology Parse(string yaml)
+    public static LoadedTree Parse(string yaml)
     {
         var raw = new DeserializerBuilder().Build().Deserialize<object>(yaml) as IDictionary<object, object>
-            ?? throw new OntologyException("the document is not a mapping");
+            ?? throw new TreeException("the document is not a mapping");
         var warnings = new List<string>();
         var root = ReadNode(raw, warnings, [], inheritedScheme: "letters");
-        return new LoadedOntology(root, warnings);
+        return new LoadedTree(root, warnings);
     }
 
     public static string Dump(Node root)
@@ -99,7 +102,7 @@ public static partial class OntologyYaml
         var optionsRaw = Sequence(raw, "options");
         if (childrenRaw.Count > 0 && optionsRaw.Count > 0)
         {
-            throw new OntologyException(
+            throw new TreeException(
                 $"{id}: children and options together — a node asks about categories or about concrete candidates, not both");
         }
 
@@ -108,14 +111,14 @@ public static partial class OntologyYaml
         var count = Math.Max(children.Count, options.Count);
         if (!LabelScheme.IsKnown(scheme))
         {
-            throw new OntologyException($"{id}: unknown label scheme {scheme}");
+            throw new TreeException($"{id}: unknown label scheme {scheme}");
         }
 
         var capacity = LabelScheme.Capacity(scheme);
 
         if (count > capacity)
         {
-            throw new OntologyException(
+            throw new TreeException(
                 $"{id}: {count} candidates, but the {scheme} scheme labels at most {capacity} — split the node or use another scheme");
         }
 
@@ -144,7 +147,7 @@ public static partial class OntologyYaml
             "answer" => HabitKind.Answer,
             "template" => HabitKind.Template,
             "procedure" => HabitKind.Procedure,
-            _ => throw new OntologyException($"{id}: unknown kind {kindText}"),
+            _ => throw new TreeException($"{id}: unknown kind {kindText}"),
         };
         var text = Text(raw, "text");
         var template = Text(raw, "template");
@@ -157,22 +160,22 @@ public static partial class OntologyYaml
         switch (kind)
         {
             case HabitKind.Answer when string.IsNullOrEmpty(text):
-                throw new OntologyException($"{id}: an answer needs text");
+                throw new TreeException($"{id}: an answer needs text");
             case HabitKind.Template when string.IsNullOrEmpty(template):
-                throw new OntologyException($"{id}: a template needs template text");
+                throw new TreeException($"{id}: a template needs template text");
             case HabitKind.Template when slots.Count == 0:
-                throw new OntologyException($"{id}: a template needs slots");
+                throw new TreeException($"{id}: a template needs slots");
             case HabitKind.Template:
                 var missing = Placeholder().Matches(template!).Select(m => m.Groups[1].Value)
                     .Except(slots.Select(s => s.Name)).Order(StringComparer.Ordinal).ToList();
                 if (missing.Count > 0)
                 {
-                    throw new OntologyException($"{id}: template blanks without a slot — [{string.Join(", ", missing)}]");
+                    throw new TreeException($"{id}: template blanks without a slot — [{string.Join(", ", missing)}]");
                 }
 
                 break;
             case HabitKind.Procedure when string.IsNullOrEmpty(steps):
-                throw new OntologyException($"{id}: a procedure needs steps");
+                throw new TreeException($"{id}: a procedure needs steps");
         }
 
         return new Habit
@@ -296,12 +299,12 @@ public static partial class OntologyYaml
     {
         if (!seen.Add(id))
         {
-            throw new OntologyException($"duplicate id: {id}");
+            throw new TreeException($"duplicate id: {id}");
         }
     }
 
     private static string Required(IDictionary<object, object> raw, string key) =>
-        Text(raw, key) ?? throw new OntologyException($"missing {key}");
+        Text(raw, key) ?? throw new TreeException($"missing {key}");
 
     private static string? Text(IDictionary<object, object> raw, string key) =>
         raw.TryGetValue(key, out var value) && value is not null ? Convert.ToString(value, CultureInfo.InvariantCulture) : null;
@@ -310,7 +313,7 @@ public static partial class OntologyYaml
         raw.TryGetValue(key, out var value) && value is List<object> items ? items : [];
 
     private static IDictionary<object, object> Mapping(object item, string parent) =>
-        item as IDictionary<object, object> ?? throw new OntologyException($"{parent}: expected a mapping");
+        item as IDictionary<object, object> ?? throw new TreeException($"{parent}: expected a mapping");
 
     [GeneratedRegex(@"\{([^{}]+)\}")]
     private static partial Regex Placeholder();

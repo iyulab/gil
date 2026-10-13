@@ -1,7 +1,7 @@
 using AwesomeAssertions;
 using Gil.Fallback;
 using Gil.Memory;
-using Gil.Ontology;
+using Gil.Tree;
 
 namespace Gil.Tests.Memory;
 
@@ -243,7 +243,7 @@ public sealed class LexicalMemoryTests
 
     private static TaskDefinition BareTask(double? memoryThreshold)
     {
-        var root = OntologyYaml.Parse("id: root").Root;
+        var root = TreeYaml.Parse("id: root").Root;
         return new TaskDefinition("support", new TextContract(), root, new TaskPolicy { Thresholds = new([1.0], 1.0), MemoryThreshold = memoryThreshold }, PromptLanguage.English);
     }
 

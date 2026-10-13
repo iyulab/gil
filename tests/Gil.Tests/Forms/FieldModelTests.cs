@@ -3,7 +3,7 @@ using AwesomeAssertions;
 using Gil.Fallback;
 using Gil.Forms;
 using Gil.Memory;
-using Gil.Ontology;
+using Gil.Tree;
 
 namespace Gil.Tests.Forms;
 
@@ -71,7 +71,7 @@ public sealed class FieldModelTests
         var sink = new ListSink();
         var answers = new LexicalMemory();
         await answers.RememberAsync("ticket/team", "earlier", "summary: badge reader is broken", "security", "t0", Ct);
-        var bare = OntologyYaml.Parse("id: root").Root;
+        var bare = TreeYaml.Parse("id: root").Root;
         var teamTask = new TaskDefinition("ticket/team", new TextContract(), bare,
             new TaskPolicy { Thresholds = new([1.0], 1.0), MemoryThreshold = 0.5 }, PromptLanguage.English);
         var model = new ResolverFieldModel(new Resolver(answers, sink), new Dictionary<string, TaskDefinition> { ["team"] = teamTask });

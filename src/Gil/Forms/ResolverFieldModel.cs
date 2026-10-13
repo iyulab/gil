@@ -11,6 +11,7 @@ namespace Gil.Forms;
 /// would any request. The resolver puts the request inside its prompt, so a model that could reuse the form's fixed
 /// prefix across a document's events does not get to here; that needs a prompt built for it.
 /// </remarks>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed class ResolverFieldModel : IFieldModel
 {
     private readonly Resolver _resolver;

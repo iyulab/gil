@@ -64,7 +64,7 @@ public sealed class TaskStatsTests : IDisposable
     [Fact]
     public void Misroutes_count_confirmed_answers_outside_the_category_a_request_was_routed_to()
     {
-        var tree = Gil.Ontology.OntologyYaml.Parse("""
+        var tree = Gil.Tree.TreeYaml.Parse("""
             id: root
             children:
             - id: billing

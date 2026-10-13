@@ -3,6 +3,7 @@ using System.Globalization;
 namespace Gil.Fallback;
 
 /// <summary>Free text in the task's language, optionally bounded in length.</summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record TextContract(int? MaxChars = null) : IOutputContract
 {
     public string Instruction(PromptLanguage language)
@@ -31,6 +32,7 @@ public sealed record TextContract(int? MaxChars = null) : IOutputContract
 }
 
 /// <summary>Exactly one of a fixed set of outputs.</summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record ChoiceContract(IReadOnlyList<string> Choices) : IOutputContract
 {
     public string Instruction(PromptLanguage language)
@@ -49,6 +51,7 @@ public sealed record ChoiceContract(IReadOnlyList<string> Choices) : IOutputCont
 }
 
 /// <summary>One integer in a closed range.</summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record ScoreContract(int Low, int High) : IOutputContract
 {
     public string Instruction(PromptLanguage language)
@@ -78,6 +81,7 @@ public sealed record ScoreContract(int Low, int High) : IOutputContract
 /// the generator must be able to answer requests that have no habit yet — and narrows to the subtree below a confirmed
 /// category, where the language's <see cref="PromptLanguage.OutOfCategory"/> takes the place of "none of these".
 /// </summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record TreeAnswerContract(Node Root) : IOutputContract, IScopableContract
 {
     /// <summary>Narrowed to a confirmed category: the escape is offered instead of "none of these".</summary>

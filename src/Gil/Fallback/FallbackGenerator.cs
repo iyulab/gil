@@ -3,12 +3,14 @@ using Gil.Llm;
 namespace Gil.Fallback;
 
 /// <summary>The outcome of a fallback: the output, or null with the last violation when the contract was never met.</summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record FallbackResult(string? Output, int Attempts, double Energy, string? FailedReason);
 
 /// <summary>
 /// Full generation under an output contract. The categories the tree already confirmed are passed as context: they
 /// are settled, so the model need not infer them again. A violation is fed back into the next attempt.
 /// </summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed class FallbackGenerator(CallRecorder recorder, int maxAttempts = 3)
 {
     private readonly int _maxAttempts = Math.Max(1, maxAttempts);

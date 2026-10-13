@@ -1,6 +1,7 @@
 namespace Gil.Judge;
 
 /// <summary>The first-token alternatives reduced to the labels the judge was allowed to answer with.</summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record LabelDistribution(IReadOnlyDictionary<string, double> Probs, double LabelMass, string? Choice, double Confidence, bool Trusted)
 {
     /// <summary>

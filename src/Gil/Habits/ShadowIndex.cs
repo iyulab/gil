@@ -13,6 +13,7 @@ namespace Gil.Habits;
 /// Shadows are runtime state derived from the log, not part of the tree: in the tree, review, promotion, attribution
 /// and deactivation would read them as habits.
 /// </remarks>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public static class ShadowIndex
 {
     public const string Prefix = "shadow-";

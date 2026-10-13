@@ -3,6 +3,37 @@
 Versions follow `0.x`: a minor release may change the public API. Each such change is listed under **Breaking**
 with what to do.
 
+## Unreleased
+
+### Breaking
+
+- **The experimental surface is marked, and using it needs its diagnostic id suppressed.** The library now says which
+  part is supported — filling forms: `FormResolver`, `FormSession`, `FieldMemory`, `ThresholdSelection`, the form
+  definitions and settlements, the memories, the chat and embedding models — and marks the rest `[Experimental]`:
+  `GIL0001` the tree judgment path (`Resolver`, task and tree definitions, `TreeYaml`, traversal, one-token judging,
+  output contracts and fallback generation, `ResolverFieldModel`), `GIL0002` habit promotion (proposals and review,
+  deactivation, differentiation, shadow evidence), `GIL0003` recording and pricing (`ITelemetrySink`,
+  `SqliteTelemetryStore`, `CallRecorder`, `EmbeddingRecorder`, `EnergyModel`, statistics, `MemoryReplay` and rebuilding
+  a memory from the feedback log). A marked type may change or go in any release without a migration note. Code that
+  uses one stops compiling until the id is suppressed: add `<NoWarn>$(NoWarn);GIL0001;GIL0003</NoWarn>` (the ids you use)
+  to the project, or `#pragma warning disable` around the use. A form consumer needs none, with one case to change:
+  `new EmbeddingMemory(new EmbeddingRecorder(model, energy))` uses a marked type — write `new EmbeddingMemory(model)`
+  if the embedding calls need no recording or pricing, or suppress `GIL0003` to keep the recorder. README "Stability"
+  lists what each id covers.
+- **The tree is called a tree: `Gil.Ontology` is `Gil.Tree`.** `OntologyYaml` is `TreeYaml`, `LoadedOntology` is
+  `LoadedTree`, `OntologyException` is `TreeException`, and `TaskDefinition.Ontology` is `TaskDefinition.Tree`. The
+  type reads and writes a decision tree, which the README already called one. Rename the four; the YAML itself — its
+  keys and files — is unchanged.
+
+### Added
+
+- `EmbeddingMemory(IEmbeddingModel model, int pendingLimit = 10_000)` — an embedding memory straight from a model, for
+  a consumer that neither records nor prices its embedding calls. Lookups and remembering report an energy of zero.
+
+### Documentation
+
+- README: what makes a key — a consumer-supplied short field, and values longer than the key limit are not keys.
+
 ## 0.18.0
 
 ### Breaking

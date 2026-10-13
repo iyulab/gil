@@ -10,6 +10,7 @@ namespace Gil;
 /// <param name="Verdict">Feedback: correct or wrong; null without feedback.</param>
 /// <param name="Correction">The right output when the verdict was wrong.</param>
 /// <param name="Explored">The exploration cross-check's output, when the request was explored.</param>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public sealed record ShadowEvidence(
     string State,
     string Anchor,
@@ -20,6 +21,7 @@ public sealed record ShadowEvidence(
     string? Explored);
 
 /// <summary>Where shadows are derived from: a task's recorded requests, in the order they arrived.</summary>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public interface IShadowEvidenceSource
 {
     IReadOnlyList<ShadowEvidence> ShadowEvidence(string task);

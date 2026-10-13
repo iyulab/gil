@@ -11,9 +11,11 @@ public sealed record TokenLogprob(string Token, double Logprob);
 /// <param name="Label">The candidate's name as shown.</param>
 /// <param name="Description">The candidate's description as shown; null when it had none.</param>
 /// <param name="Answer">The output choosing this candidate would produce (answer options and shadows); null for category nodes.</param>
+[Experimental(Stability.Recording, UrlFormat = Stability.Url)]
 public sealed record ShownCandidate(string? Id, string ShownAs, string Label, string? Description, string? Answer);
 
 /// <summary>One model call. Every call that costs something is recorded, including retried ones.</summary>
+[Experimental(Stability.Recording, UrlFormat = Stability.Url)]
 public sealed record CallRecord
 {
     public required string CallId { get; init; }
@@ -70,6 +72,7 @@ public sealed record CallRecord
 /// <param name="NoneProb">Probability of the "none of these" label — on an exit it tells "none of these won" from "no
 /// candidate was confident enough", which call for different fixes. Null on a skip, and in records written before it
 /// was kept.</param>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record PathStep(
     string Node,
     int Layer,
@@ -101,6 +104,7 @@ public sealed record PathStep(
 /// </param>
 /// <param name="Hit">Whether the remembered answer was returned.</param>
 /// <param name="Error">Why the lookup failed (exception type and message); null when it succeeded.</param>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record Recall(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Source,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? Similarity,
@@ -117,6 +121,7 @@ public sealed record Recall(
 }
 
 /// <summary>How a request was finally closed.</summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record TraceOutcome
 {
     /// <summary>memory, habit/answer, habit/template, habit/procedure, partial, fallback or abstain.</summary>

@@ -1,11 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <!-- The tests exercise the experimental surface too; tests/SupportedSurface compiles without these. -->
+    <NoWarn>$(NoWarn);GIL0001;GIL0002;GIL0003</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Gil\Gil.csproj" />
     <ProjectReference Include="..\..\src\Gil.IronHive\Gil.IronHive.csproj" />
     <ProjectReference Include="..\..\src\Gil.Sqlite\Gil.Sqlite.csproj" />
+    <ProjectReference Include="..\SupportedSurface\SupportedSurface.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

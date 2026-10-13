@@ -14,6 +14,7 @@ namespace Gil;
 /// while memory is down, every request pays for the tree.</param>
 /// <param name="Cost">Mean cost per request in consecutive windows, oldest first — the trend.</param>
 /// <param name="Misroutes">Requests the tree sent to the wrong category; null unless the tree was given.</param>
+[Experimental(Stability.Recording, UrlFormat = Stability.Url)]
 public sealed record TaskStats(
     string Task,
     int Requests,
@@ -36,10 +37,13 @@ public sealed record TaskStats(
 /// <param name="Rate">Misrouted ÷ judged; null without judged requests.</param>
 /// <param name="Low">Lower end of the rate's 95% Wilson interval.</param>
 /// <param name="High">Upper end of the rate's 95% Wilson interval.</param>
+[Experimental(Stability.Recording, UrlFormat = Stability.Url)]
 public sealed record MisrouteStats(int Judged, int Misrouted, double? Rate, double? Low, double? High);
 
 /// <summary>One mode's requests and its observed accuracy with a 95% Wilson interval; null accuracy without verdicts.</summary>
+[Experimental(Stability.Recording, UrlFormat = Stability.Url)]
 public sealed record ModeStats(string Mode, int Requests, int Judged, int Correct, double? Accuracy, double? Low, double? High);
 
 /// <summary>A run of consecutive requests, numbered from 0 in the order they arrived, and their mean cost.</summary>
+[Experimental(Stability.Recording, UrlFormat = Stability.Url)]
 public sealed record CostWindow(int First, int Requests, double MeanCost);

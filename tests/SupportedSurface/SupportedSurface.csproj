@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Compiles a consumer's use of the supported surface with no experimental diagnostic suppressed: if a supported type
+    starts to require an experimental one (GIL0001-GIL0003), this project stops building.
+  -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Gil\Gil.csproj" />
+    <ProjectReference Include="..\..\src\Gil.IronHive\Gil.IronHive.csproj" />
+  </ItemGroup>
+</Project>

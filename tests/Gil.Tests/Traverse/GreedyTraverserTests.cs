@@ -1,6 +1,6 @@
 using System.Text.Json;
 using AwesomeAssertions;
-using Gil.Ontology;
+using Gil.Tree;
 using Gil.Traverse;
 
 namespace Gil.Tests.Traverse;
@@ -24,7 +24,7 @@ public sealed class GreedyTraverserTests
             description: no habits yet
         """;
 
-    private static readonly Node Root = OntologyYaml.Parse(Tree).Root;
+    private static readonly Node Root = TreeYaml.Parse(Tree).Root;
     private static readonly Thresholds Loose = new([0.5, 0.5], 0.5);
 
     [Fact]
@@ -105,7 +105,7 @@ public sealed class GreedyTraverserTests
         }
 
         using var document = JsonDocument.Parse(File.ReadAllText(path));
-        var root = OntologyYaml.Parse(document.RootElement.GetProperty("tree").GetString()!).Root;
+        var root = TreeYaml.Parse(document.RootElement.GetProperty("tree").GetString()!).Root;
         var compared = 0;
         foreach (var @case in document.RootElement.GetProperty("cases").EnumerateArray())
         {

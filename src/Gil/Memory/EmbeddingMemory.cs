@@ -3,6 +3,7 @@ using Gil.Llm;
 namespace Gil.Memory;
 
 /// <summary>A request that received feedback, as the log holds it — the input memory is rebuilt from.</summary>
+[Experimental(Stability.Recording, UrlFormat = Stability.Url)]
 public sealed record FeedbackEntry(string TraceId, string State, string? Mode, string? Output, Recall? Recall, string Verdict, string? Correction);
 
 /// <summary>
@@ -28,6 +29,15 @@ public sealed class EmbeddingMemory(EmbeddingRecorder embedder, int pendingLimit
     // judged fields read the same evidence), and a text embeds to the same vector whichever task asks.
     private readonly Dictionary<string, float[]> _recent = new(StringComparer.Ordinal);
     private readonly Queue<string> _recentOrder = new();
+
+    /// <summary>
+    /// A memory over an embedding model whose calls are neither recorded nor priced: lookups and remembering report an
+    /// energy of zero. Use the recorder constructor to record each embedding call and price it with an energy model.
+    /// </summary>
+    public EmbeddingMemory(IEmbeddingModel model, int pendingLimit = 10_000)
+        : this(new EmbeddingRecorder(model, new EnergyModel(Fixed: 0, PerFreshPromptToken: 0, PerCachedToken: 0, PerOutputToken: 0)), pendingLimit)
+    {
+    }
 
     public int Count(string task) => _indexes.TryGetValue(task, out var index) ? index.Count : 0;
 
@@ -99,6 +109,7 @@ public sealed class EmbeddingMemory(EmbeddingRecorder embedder, int pendingLimit
     /// top of the current index — seed first, then rebuild, so an overturned seed stays forgotten. The rule is
     /// <see cref="MemoryReplay"/>'s; this applies it in embedding batches.
     /// </summary>
+    [Experimental(Stability.Recording, UrlFormat = Stability.Url)]
     public async Task<int> RebuildAsync(string task, IReadOnlyList<FeedbackEntry> history, string traceId, bool clear = true, int batch = 64, CancellationToken cancellationToken = default)
     {
         var replay = MemoryReplay.From(history);

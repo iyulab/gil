@@ -5,6 +5,7 @@ namespace Gil.Judge;
 /// starts with the token "1" and the two candidates' probabilities would mix. The first symbol of the pool
 /// belongs to "none of these", keeping it in the same symbol family as the candidates.
 /// </summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public static class LabelScheme
 {
     public const string Digits = "digits";

@@ -3,6 +3,7 @@ using Gil.Judge;
 namespace Gil.Habits;
 
 /// <summary>Why a node may need splitting or a new category.</summary>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public enum DifferentiationKind
 {
     /// <summary>The node holds as many candidates as its label scheme can label: no habit can be added; it needs intermediate categories.</summary>
@@ -32,6 +33,7 @@ public enum DifferentiationKind
 /// <param name="Target">Missed: the node holding the answer. Reanchor: the child that accepts it. Otherwise null.</param>
 /// <param name="Support">Capacity: the node's candidates. Unserved: the similar requests. Otherwise: how often the answer repeated.</param>
 /// <param name="Sources">The requests behind it.</param>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public sealed record DifferentiationSignal(
     DifferentiationKind Kind,
     string Node,
@@ -44,6 +46,7 @@ public sealed record DifferentiationSignal(
 /// Signals for what promotion cannot handle: a node that can take no more habits, and answers that keep coming back
 /// at an anchor with children (which takes no habits). Promotion used to drop these silently.
 /// </summary>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public static class Differentiation
 {
     /// <summary>Nodes whose candidates reach the label scheme's capacity less <paramref name="headroom"/> — headroom warns before they are full.</summary>

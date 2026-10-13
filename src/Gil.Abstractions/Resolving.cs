@@ -1,6 +1,7 @@
 namespace Gil;
 
 /// <summary>Where the fallback's contract applies after the tree confirmed some categories.</summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public enum FallbackScope
 {
     /// <summary>Always the full contract.</summary>
@@ -16,6 +17,7 @@ public enum FallbackScope
 /// </summary>
 /// <param name="PerLayer">Per inner layer, from the root; deeper layers reuse the last value.</param>
 /// <param name="Leaf">For choosing a habit.</param>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record Thresholds(IReadOnlyList<double> PerLayer, double Leaf)
 {
     public double For(int layer, bool isLeaf)
@@ -31,6 +33,7 @@ public sealed record Thresholds(IReadOnlyList<double> PerLayer, double Leaf)
 }
 
 /// <summary>What a failing memory does; see <see cref="TaskPolicy.MemoryFailure"/>.</summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public enum MemoryFailure
 {
     /// <summary>Treat the failure as a miss and record it.</summary>
@@ -41,6 +44,7 @@ public enum MemoryFailure
 }
 
 /// <summary>How a task resolves requests.</summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record TaskPolicy
 {
     /// <summary>
@@ -95,13 +99,14 @@ public sealed record TaskPolicy
 /// <summary>A task: its output contract, its decision tree, its policy and the language its tree is written in.</summary>
 /// <param name="Name">Scopes memory, statistics and telemetry.</param>
 /// <param name="Contract">The shape every answer must have.</param>
-/// <param name="Ontology">The decision tree.</param>
+/// <param name="Tree">The decision tree.</param>
 /// <param name="Policy">How requests are resolved.</param>
 /// <param name="Language">
 /// The wording every model call for this task is made in. There is no default: "none of these" must be in the same
 /// language as the tree's candidates for out-of-scope input to be rejected, and only the task knows its tree's language.
 /// </param>
-public sealed record TaskDefinition(string Name, IOutputContract Contract, Node Ontology, TaskPolicy Policy, PromptLanguage Language);
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
+public sealed record TaskDefinition(string Name, IOutputContract Contract, Node Tree, TaskPolicy Policy, PromptLanguage Language);
 
 /// <summary>The nearest remembered request and the answer it confirmed.</summary>
 public sealed record MemoryMatch(string Source, double Similarity, string Answer);
@@ -167,6 +172,7 @@ public interface IMemory
 /// Why <paramref name="Output"/> is null: the last contract violation, or the blanks a template could not fill, from the
 /// step that produced the final result. Null whenever there is an output, and on abstain.
 /// </param>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record Resolution(
     string? Output,
     string Mode,

@@ -51,7 +51,39 @@ without memory, including memory failures), shadows, promotion, deactivation, di
 replayed from synthetic fixtures under `tests/fixtures/conformance`, which the reference implementation produced from a
 made-up support task and a deterministic model. Set the matching `GIL_COMPAT_*` variable to replay a recorded run instead.
 
+## Stability
+
+The library has a supported surface and an experimental one.
+
+**Supported** is filling forms: `FormResolver`, `FormSession`, `FieldMemory`, `ThresholdSelection`, the form
+definitions and settlements, the memories (`LexicalMemory`, `EmbeddingMemory`, `CircuitBreakingMemory`), and the chat
+and embedding models. Within 0.x a release may still change it; each such change is listed in the changelog under
+**Breaking** with what to do.
+
+**Experimental** types carry `[Experimental]`. Using one is a compile error until its id is suppressed, and a marked
+type may change shape or be removed in any release without a migration note.
+
+| Id | Covers |
+|---|---|
+| `GIL0001` | The tree judgment path: `Resolver`, task and tree definitions, `TreeYaml`, traversal, one-token judging, output contracts and fallback generation, `ResolverFieldModel` |
+| `GIL0002` | Habit promotion: proposals and their review, deactivation, differentiation, shadow evidence |
+| `GIL0003` | Recording and pricing: `ITelemetrySink` and `SqliteTelemetryStore`, the call recorders, `EnergyModel`, statistics, rebuilding a memory from the feedback log |
+
+Suppress the ids of what you use, in the project file or around the code:
+
+```xml
+<PropertyGroup>
+  <NoWarn>$(NoWarn);GIL0001;GIL0003</NoWarn>
+</PropertyGroup>
+```
+
+[Filling forms](#filling-forms) needs none of them — a telemetry sink passed to `FormResolver` is the one optional piece
+there that does (`GIL0003`). The walkthrough under [Usage](#usage) is the tree judgment path: it needs `GIL0001` and
+`GIL0003`, and `GIL0002` for its habit promotion part.
+
 ## Usage
+
+This walkthrough is the tree judgment path, which is experimental — see [Stability](#stability) for the ids to suppress.
 
 ```sh
 dotnet add package Gil
@@ -71,7 +103,7 @@ using Gil.Habits;
 using Gil.Judge;
 using Gil.Llm;
 using Gil.Memory;
-using Gil.Ontology;
+using Gil.Tree;
 using Gil.Telemetry;
 using Gil.Traverse;
 
@@ -109,7 +141,7 @@ var resolver = new Resolver(
     statistics: store,
     shadowEvidence: store);
 
-var tree = OntologyYaml.Load("support.yaml").Root;
+var tree = TreeYaml.Load("support.yaml").Root;
 // The last argument is the language support.yaml is written in: every prompt the task sends is worded in it.
 var task = new TaskDefinition("support", new TreeAnswerContract(tree), tree, new TaskPolicy
 {
@@ -140,7 +172,7 @@ replaying your feedback history rather than reusing an embedding memory's value.
 var lexical = new LexicalMemory();
 await MemoryReplay.From(store.FeedbackHistory("support")).ApplyAsync(lexical, "support", traceId: "startup");
 var offline = new Resolver(lexical, store);
-var bare = OntologyYaml.Parse("id: root").Root;   // the tree is not used without models
+var bare = TreeYaml.Parse("id: root").Root;   // the tree is not used without models
 var answered = await offline.ResolveAsync(new TaskDefinition("support", new TextContract(), bare,
     new TaskPolicy { Thresholds = new([1.0], 1.0), MemoryThreshold = 0.5 }, PromptLanguage.English), "I lost my card");
 ```
@@ -265,7 +297,8 @@ from the model client, not from Gil, and nest under `gil.call`.
 A form is a different shape of task: a document with several fields, some typed by a person (observed) and some to
 be suggested (judged), settled one at a time. `FormResolver` suggests the judged fields without a model. It learns
 from settled documents only: which values were settled alongside which values of the other fields, and optionally
-which settled document is most similar.
+which settled document is most similar. Everything in this section is the supported surface (see
+[Stability](#stability)).
 
 ```csharp
 using Gil;
@@ -284,6 +317,10 @@ var form = new FormDefinition("ticket",
 var forms = new FormResolver(new FieldMemory(), new LexicalMemory());
 await forms.RebuildAsync(form, saved);
 ```
+
+The second argument is the document memory. `LexicalMemory` compares documents by their characters and needs no model.
+To compare them by meaning, pass `new EmbeddingMemory(embedder)` over any `IEmbeddingModel`; built that way its calls are
+neither recorded nor priced. (Its other constructor takes an `EmbeddingRecorder`, which is experimental.)
 
 `UseAsEvidence = false` keeps a field's value out of every other field's suggestions. Use it for fields that identify a
 person, so that "this person, therefore this outcome" never hardens into memory. `ConfirmRequired` tells the

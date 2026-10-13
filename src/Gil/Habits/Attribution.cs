@@ -4,6 +4,7 @@ namespace Gil.Habits;
 /// <param name="Reinforce">Items confirmed, root first.</param>
 /// <param name="Penalize">The one item blamed, if any.</param>
 /// <param name="Missed">A habit the tree failed to reach although it held the right answer.</param>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public sealed record Attribution(IReadOnlyList<string> Reinforce, string? Penalize = null, string? Missed = null)
 {
     public static readonly Attribution None = new([]);
@@ -20,6 +21,7 @@ public sealed record Attribution(IReadOnlyList<string> Reinforce, string? Penali
 /// <item>No habit is involved: nothing changes. That is the promotion log's concern.</item>
 /// </list>
 /// </summary>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public static class HabitAttribution
 {
     public static Attribution Attribute(Node root, IReadOnlyList<PathStep> path, string mode, string? output, bool correct, string? correction)

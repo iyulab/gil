@@ -1,7 +1,7 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using Gil.Habits;
-using Gil.Ontology;
+using Gil.Tree;
 using Gil.Telemetry;
 using Microsoft.Data.Sqlite;
 
@@ -9,7 +9,7 @@ namespace Gil.Tests.Habits;
 
 public sealed class PromotionTests : IDisposable
 {
-    private static readonly Node Tree = OntologyYaml.Parse("""
+    private static readonly Node Tree = TreeYaml.Parse("""
         id: root
         children:
           - id: bank
@@ -145,7 +145,7 @@ public sealed class PromotionTests : IDisposable
         var review = Promotion.Review(Tree, [proposal]);
         review.Before.Should().NotContain("promoted-x");
         review.After.Should().Contain("promoted-x");
-        OntologyYaml.Parse(review.After).Root.Find("bank")!.Habits.Select(h => h.Id).Should().Equal("balance", "promoted-x");
+        TreeYaml.Parse(review.After).Root.Find("bank")!.Habits.Select(h => h.Id).Should().Equal("balance", "promoted-x");
         review.Applied.Should().Equal(proposal);
         Promotion.Review(full, [proposal]).Applied.Should().BeEmpty("a full scheme takes nothing, so the round records nothing");
     }
@@ -196,7 +196,7 @@ public sealed class PromotionTests : IDisposable
         foreach (var round in fixture.GetProperty("rounds").EnumerateArray())
         {
             var at = round.GetProperty("at_index").GetInt32();
-            var tree = OntologyYaml.Parse(round.GetProperty("tree").GetString()!).Root;
+            var tree = TreeYaml.Parse(round.GetProperty("tree").GetString()!).Root;
             var candidates = round.GetProperty("candidates").EnumerateArray().Select(c => new PromotionCandidate(
                 c.GetProperty("trace_id").GetString()!, c.GetProperty("state").GetString()!, c.GetProperty("anchor").GetString()!,
                 Text(c, "output"), Text(c, "verdict"), Text(c, "correction"), c.GetProperty("fallback_energy").GetDouble())).ToList();

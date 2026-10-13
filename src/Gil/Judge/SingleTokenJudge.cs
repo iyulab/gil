@@ -5,6 +5,7 @@ using Gil.Llm;
 namespace Gil.Judge;
 
 /// <summary>Settings for <see cref="SingleTokenJudge"/>.</summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record SingleTokenJudgeOptions
 {
     /// <summary>Below this much probability on valid labels, the judgment is not trusted and traversal stops there.</summary>
@@ -26,6 +27,7 @@ public sealed record SingleTokenJudgeOptions
 /// A judge built on any chat model: one generated token, read as a distribution over candidate labels through the
 /// first token's log-probabilities. "None of these" is always offered, in the same symbol family as the candidates.
 /// </summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed class SingleTokenJudge(CallRecorder recorder, SingleTokenJudgeOptions? options = null) : IJudge
 {
     private readonly SingleTokenJudgeOptions _options = options ?? new SingleTokenJudgeOptions();

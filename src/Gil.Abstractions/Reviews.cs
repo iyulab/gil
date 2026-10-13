@@ -1,6 +1,7 @@
 namespace Gil;
 
 /// <summary>What a person reviewed: a proposed habit, a habit proposed for retirement, or a node signalled for splitting.</summary>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public enum ReviewKind
 {
     /// <summary>A habit proposed by a promotion round.</summary>
@@ -14,6 +15,7 @@ public enum ReviewKind
 }
 
 /// <summary>What the reviewer decided.</summary>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public enum ReviewDecision
 {
     /// <summary>Taken into the tree.</summary>
@@ -29,6 +31,7 @@ public enum ReviewDecision
 /// <param name="ItemId">The proposed habit's id (promotion), the habit's id (deactivation), or the node's id (differentiation).</param>
 /// <param name="Decision">Accepted or rejected.</param>
 /// <param name="Note">Why, in the reviewer's words; optional.</param>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public sealed record ReviewRecord(DateTimeOffset At, ReviewKind Kind, string ItemId, ReviewDecision Decision, string? Note);
 
 /// <summary>
@@ -36,6 +39,7 @@ public sealed record ReviewRecord(DateTimeOffset At, ReviewKind Kind, string Ite
 /// accepted and rejected, and of how much reviewing a task costs. An item may be reviewed more than once; every
 /// decision is kept.
 /// </summary>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public interface IReviewLog
 {
     /// <summary>Records one decision on one item of a review list.</summary>

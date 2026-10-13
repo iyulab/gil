@@ -1,6 +1,7 @@
 namespace Gil;
 
 /// <summary>Where requests and model calls are recorded. The stored layout is a contract shared with analysis tooling.</summary>
+[Experimental(Stability.Recording, UrlFormat = Stability.Url)]
 public interface ITelemetrySink
 {
     /// <summary>Opens a request. Opening an existing request leaves it untouched, so a known label can be written first.</summary>
@@ -21,6 +22,7 @@ public interface ITelemetrySink
 }
 
 /// <summary>What feedback needs to know about a recorded request.</summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record TraceSummary(string Task, string State, string? Mode, string? Output, Recall? Recall)
 {
     /// <summary>The traversal path; empty when the request never reached the tree.</summary>

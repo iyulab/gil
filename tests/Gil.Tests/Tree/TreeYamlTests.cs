@@ -1,9 +1,9 @@
 using AwesomeAssertions;
-using Gil.Ontology;
+using Gil.Tree;
 
-namespace Gil.Tests.Ontology;
+namespace Gil.Tests.Tree;
 
-public sealed class OntologyYamlTests
+public sealed class TreeYamlTests
 {
     private const string Example = """
         id: root
@@ -54,7 +54,7 @@ public sealed class OntologyYamlTests
     [Fact]
     public void Reads_nodes_habits_slots_and_the_inherited_label_scheme()
     {
-        var (root, warnings) = OntologyYaml.Parse(Example);
+        var (root, warnings) = TreeYaml.Parse(Example);
 
         warnings.Should().BeEmpty();
         root.CandidateIds.Should().Equal("quality", "document");
@@ -73,10 +73,10 @@ public sealed class OntologyYamlTests
     [Fact]
     public void Writing_then_reading_gives_the_same_tree_and_omits_defaults()
     {
-        var (root, _) = OntologyYaml.Parse(Example);
+        var (root, _) = TreeYaml.Parse(Example);
 
-        var written = OntologyYaml.Dump(root);
-        var again = OntologyYaml.Dump(OntologyYaml.Parse(written).Root);
+        var written = TreeYaml.Dump(root);
+        var again = TreeYaml.Dump(TreeYaml.Parse(written).Root);
 
         again.Should().Be(written);
         written.Should().NotContain("kind: concept").And.Contain("fixed: Quality assurance");
@@ -100,7 +100,7 @@ public sealed class OntologyYamlTests
                 text: Three.
             """;
 
-        OntologyYaml.Dump(OntologyYaml.Parse(minimal).Root).ReplaceLineEndings("\n").Should().Be(minimal.ReplaceLineEndings("\n") + "\n");
+        TreeYaml.Dump(TreeYaml.Parse(minimal).Root).ReplaceLineEndings("\n").Should().Be(minimal.ReplaceLineEndings("\n") + "\n");
     }
 
     [Theory]
@@ -121,10 +121,10 @@ public sealed class OntologyYamlTests
             Habits = [new Habit { Id = "h", Kind = HabitKind.Answer, Label = answer, Description = answer, Text = answer }],
         };
 
-        var written = OntologyYaml.Dump(root);
+        var written = TreeYaml.Dump(root);
 
         written.Should().MatchRegex($"text: ['\"]{answer}['\"]");
-        OntologyYaml.Parse(written).Root.Habits.Single().Text.Should().Be(answer);
+        TreeYaml.Parse(written).Root.Habits.Single().Text.Should().Be(answer);
     }
 
     [Theory]
@@ -136,9 +136,9 @@ public sealed class OntologyYamlTests
     [InlineData("id: a\noptions: [{id: b, kind: guess, text: x}]", "unknown kind guess")]
     public void Structural_rules_are_errors(string yaml, string message)
     {
-        var parse = () => OntologyYaml.Parse(yaml);
+        var parse = () => TreeYaml.Parse(yaml);
 
-        parse.Should().Throw<OntologyException>().WithMessage($"*{message}*");
+        parse.Should().Throw<TreeException>().WithMessage($"*{message}*");
     }
 
     [Fact]
@@ -146,9 +146,9 @@ public sealed class OntologyYamlTests
     {
         var tenOptions = string.Join(", ", Enumerable.Range(0, 10).Select(i => $"{{id: o{i}, kind: answer, text: t{i}}}"));
 
-        var parse = () => OntologyYaml.Parse($"id: a\nlabel_scheme: digits\noptions: [{tenOptions}]");
+        var parse = () => TreeYaml.Parse($"id: a\nlabel_scheme: digits\noptions: [{tenOptions}]");
 
-        parse.Should().Throw<OntologyException>().WithMessage("*10 candidates*digits*at most 9*");
+        parse.Should().Throw<TreeException>().WithMessage("*10 candidates*digits*at most 9*");
     }
 
     [Fact]
@@ -163,7 +163,7 @@ public sealed class OntologyYamlTests
               - {id: d, label: D, description: password reset}
             """;
 
-        var (root, warnings) = OntologyYaml.Parse(yaml);
+        var (root, warnings) = TreeYaml.Parse(yaml);
 
         root.Children.Should().HaveCount(4);
         warnings.Should().ContainSingle().Which.Should().Contain("a and b").And.Contain("damaged, parcel, refund");
@@ -184,9 +184,9 @@ public sealed class OntologyYamlTests
         files.Should().NotBeEmpty();
         foreach (var file in files)
         {
-            var (root, _) = OntologyYaml.Load(file);
-            var written = OntologyYaml.Dump(root);
-            OntologyYaml.Dump(OntologyYaml.Parse(written).Root).Should().Be(written, file);
+            var (root, _) = TreeYaml.Load(file);
+            var written = TreeYaml.Dump(root);
+            TreeYaml.Dump(TreeYaml.Parse(written).Root).Should().Be(written, file);
             var target = Environment.GetEnvironmentVariable("GIL_COMPAT_ONTOLOGY_OUT");
             if (target is not null)
             {

@@ -4,6 +4,7 @@ namespace Gil.Llm;
 /// Sends embedding requests and records each as a call with role <c>embed</c>. It takes its own energy model: an
 /// embedding model's cost per token is not the chat model's, and pricing both alike would overstate lookups.
 /// </summary>
+[Experimental(Stability.Recording, UrlFormat = Stability.Url)]
 public sealed class EmbeddingRecorder(IEmbeddingModel model, EnergyModel energy, ITelemetrySink? sink = null, TimeProvider? clock = null)
 {
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;

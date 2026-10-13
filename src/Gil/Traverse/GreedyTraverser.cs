@@ -4,6 +4,7 @@ namespace Gil.Traverse;
 /// Where a traversal ended. <see cref="Habit"/> is set when a habit was accepted; otherwise <see cref="ExitReason"/> says
 /// why it stopped: skip, none_selected, untrusted, low_confidence or shadow.
 /// </summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record TraverseResult(IReadOnlyList<PathStep> Path, Habit? Habit, string? ExitReason, double Energy, int Calls)
 {
     /// <summary>The categories confirmed before the traversal stopped — the context a narrowed fallback works within.</summary>
@@ -15,6 +16,7 @@ public sealed record TraverseResult(IReadOnlyList<PathStep> Path, Habit? Habit, 
 /// Walks the tree from the root, one judgment per layer, and decides only which node to ask next and when to stop.
 /// It never calls a model itself — the judge is injected, so the whole walk is testable with recorded judgments.
 /// </summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed class GreedyTraverser(IJudge judge)
 {
     /// <param name="state">The input to classify.</param>

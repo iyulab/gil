@@ -1,6 +1,7 @@
 namespace Gil;
 
 /// <summary>What a habit produces: a fixed answer, a template with slots, or a procedure to follow.</summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public enum HabitKind
 {
     Answer,
@@ -9,9 +10,11 @@ public enum HabitKind
 }
 
 /// <summary>A blank in a template. A slot with a <see cref="Fixed"/> value is not filled from the input.</summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record Slot(string Name, string Instruction, string? Fixed = null);
 
 /// <summary>A concrete candidate under a node: a habit. The YAML calls these <c>options</c>.</summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record Habit
 {
     public required string Id { get; init; }
@@ -38,6 +41,7 @@ public sealed record Habit
 /// A category in the decision tree. A node asks either which child category applies or which option does —
 /// never both. With neither, it has no habits yet and is skipped without a model call.
 /// </summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed record Node
 {
     public required string Id { get; init; }

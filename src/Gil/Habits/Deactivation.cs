@@ -7,6 +7,7 @@ namespace Gil.Habits;
 /// <param name="MinVerdicts">…once confirmations and penalties add up to at least this, so no verdict comes without evidence.</param>
 /// <param name="DisputeRate">Disputed over explored at or above this is disputed…</param>
 /// <param name="MinExplored">…once at least this many cross-checks were made.</param>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public sealed record DeactivationPolicy(
     double HalfLife,
     double StaleBelow,
@@ -16,6 +17,7 @@ public sealed record DeactivationPolicy(
     int MinExplored);
 
 /// <summary>Why a habit is proposed for deactivation. The reasons call for different remedies, so they are never merged into one score.</summary>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public enum DeactivationReason
 {
     /// <summary>Evidence that it answers wrongly has built up: fix it or retire it.</summary>
@@ -29,11 +31,13 @@ public enum DeactivationReason
 }
 
 /// <summary>A habit proposed for deactivation, for a person to decide.</summary>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public sealed record DeactivationProposal(string HabitId, string Anchor, DeactivationReason Reason, double Recency, HabitCounts Counts, double Score);
 
 /// <summary>
 /// Proposes habits to deactivate. Only proposes: a person applies the change in the tree's authored YAML.
 /// </summary>
+[Experimental(Stability.Habits, UrlFormat = Stability.Url)]
 public static class Deactivation
 {
     /// <summary>

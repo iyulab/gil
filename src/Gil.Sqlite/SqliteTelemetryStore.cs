@@ -13,6 +13,7 @@ namespace Gil.Telemetry;
 /// any language read these files directly, so columns may be added but never renamed or repurposed.
 /// Timestamps are UTC ISO-8601 strings; JSON columns keep non-ASCII text unescaped.
 /// </summary>
+[Experimental(Stability.Recording, UrlFormat = Stability.Url)]
 public sealed class SqliteTelemetryStore : ITelemetrySink, IHabitStatistics, IShadowEvidenceSource, IPromotionEvidenceSource, IPromotionLog, IReviewLog, IHabitUsageSource, IDisposable
 {
     internal const string Schema = """

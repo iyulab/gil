@@ -10,6 +10,7 @@ namespace Gil;
 /// then the full fallback — or a hand-off to a person when the task does not allow generation. The output contract
 /// is the same whichever path answered; <see cref="Resolution.Mode"/> tells which one did.
 /// </summary>
+[Experimental(Stability.Tree, UrlFormat = Stability.Url)]
 public sealed class Resolver
 {
     private readonly Models? _models;
@@ -110,9 +111,9 @@ public sealed class Resolver
 
         // 2. The tree, with shadows rebuilt per request: they are a pure function of the feedback so far.
         var shadows = task.Policy.Shadows && _shadowEvidence is not null
-            ? ShadowIndex.Build(_shadowEvidence.ShadowEvidence(task.Name), task.Ontology, task.Policy.NonAnswers)
+            ? ShadowIndex.Build(_shadowEvidence.ShadowEvidence(task.Name), task.Tree, task.Policy.NonAnswers)
             : null;
-        var traversed = await models.Traverser.TraverseAsync(state, task.Ontology, task.Policy.Thresholds, task.Language, traceId, shadows, cancellationToken).ConfigureAwait(false);
+        var traversed = await models.Traverser.TraverseAsync(state, task.Tree, task.Policy.Thresholds, task.Language, traceId, shadows, cancellationToken).ConfigureAwait(false);
         energy += traversed.Energy;
         var confidence = traversed.Path.Count > 0 ? traversed.Path[^1].P : 0;
         string? output;
@@ -175,7 +176,7 @@ public sealed class Resolver
 
         if (_statistics is not null && trace.Path.Count > 0 && trace.Mode is string mode)
         {
-            var credit = HabitAttribution.Attribute(task.Ontology, trace.Path, mode, trace.Output, correct, correction);
+            var credit = HabitAttribution.Attribute(task.Tree, trace.Path, mode, trace.Output, correct, correction);
             foreach (var item in credit.Reinforce)
             {
                 _statistics.RecordOutcome(task.Name, item, new HabitCounts(Reinforced: 1));
@@ -271,7 +272,7 @@ public sealed class Resolver
     private static async Task<(string? Output, double Energy, string? Failure)> GenerateAsync(
         Models models, TaskDefinition task, string state, IReadOnlyList<string> confirmed, string traceId, CancellationToken cancellationToken)
     {
-        var labels = confirmed.Select(id => task.Ontology.Find(id)?.Label ?? id).ToList();
+        var labels = confirmed.Select(id => task.Tree.Find(id)?.Label ?? id).ToList();
         var scoped = task.Policy.FallbackScope == FallbackScope.Path && confirmed.Count > 0 && task.Contract is IScopableContract scopable
             ? scopable.Scoped(confirmed[^1])
             : null;

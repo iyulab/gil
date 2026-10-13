@@ -5,7 +5,7 @@ using Microsoft.Data.Sqlite;
 using Gil.Fallback;
 using Gil.Llm;
 using Gil.Memory;
-using Gil.Ontology;
+using Gil.Tree;
 using Gil.Telemetry;
 using Gil.Traverse;
 
@@ -126,7 +126,7 @@ public sealed class EmbeddingMemoryTests
         try
         {
             var path = Path.Combine(directory, "m.sqlite");
-            var tree = OntologyYaml.Parse("id: root\noptions: [{id: refund, kind: answer, label: refund, description: refunds, text: refund_policy}]").Root;
+            var tree = TreeYaml.Parse("id: root\noptions: [{id: refund, kind: answer, label: refund, description: refunds, text: refund_policy}]").Root;
             var task = new TaskDefinition("support", new TreeAnswerContract(tree), tree, new TaskPolicy { Thresholds = new([0.5], 0.5), MemoryThreshold = 0.9 }, PromptLanguage.Korean);
             using (var store = new SqliteTelemetryStore(path))
             {

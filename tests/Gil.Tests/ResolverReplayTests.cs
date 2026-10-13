@@ -3,7 +3,7 @@ using AwesomeAssertions;
 using Gil.Fallback;
 using Gil.Llm;
 using Gil.Memory;
-using Gil.Ontology;
+using Gil.Tree;
 using Gil.Telemetry;
 using Gil.Traverse;
 using Microsoft.Data.Sqlite;
@@ -52,8 +52,8 @@ public sealed class ResolverReplayTests : IDisposable
         var thresholds = new Thresholds([.. fixture.GetProperty("per_layer").EnumerateArray().Select(v => v.GetDouble())], fixture.GetProperty("leaf").GetDouble());
         var task = new TaskDefinition(
             name,
-            new TreeAnswerContract(OntologyYaml.Parse(fixture.GetProperty("contract_tree").GetString()!).Root),
-            OntologyYaml.Parse(fixture.GetProperty("tree").GetString()!).Root,
+            new TreeAnswerContract(TreeYaml.Parse(fixture.GetProperty("contract_tree").GetString()!).Root),
+            TreeYaml.Parse(fixture.GetProperty("tree").GetString()!).Root,
             new TaskPolicy
             {
                 Thresholds = thresholds,

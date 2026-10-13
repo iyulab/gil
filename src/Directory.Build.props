@@ -1,0 +1,16 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!--
+    The library projects declare the experimental surface (README "Stability") and use it across one another, so its
+    ids are suppressed here. A consumer's use is checked by tests/SupportedSurface, which suppresses none.
+  -->
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);GIL0001;GIL0002;GIL0003</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)Stability.cs" Link="Stability.cs" />
+    <Using Include="System.Diagnostics.CodeAnalysis" />
+  </ItemGroup>
+</Project>
