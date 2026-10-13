@@ -182,6 +182,40 @@ public sealed class SettlementOriginTests
     }
 
     [Fact]
+    public async Task A_filled_value_settled_again_as_entered_is_learned_and_counted()
+    {
+        // An application that fills a field itself can have the value checked later with no suggestion in view, and
+        // settle the same field of the same document again with what the check found.
+        var resolver = new FormResolver(new FieldMemory(), new LexicalMemory());
+        var session = resolver.Open(Ticket, "d1");
+        await session.ObserveAsync("summary", "vpn drops", Ct);
+        await session.SettleAsync("team", Settlement.Fill("facilities"), Ct);
+        await session.SettleAsync("team", Settlement.Enter("network"), Ct);
+        session.Snapshot().Settlements["team"].Should().Be(SettlementKind.Enter);
+
+        var candidates = (await resolver.Open(Ticket, "d2").ObserveAsync("summary", "vpn drops", Ct))
+            .Single(s => s.Field == "team").Candidates.Select(c => c.Value).ToList();
+        candidates.Should().Contain("network").And.NotContain("facilities"); // the checked value replaced the filled one
+
+        SettlementKind[] byHand = [SettlementKind.Accept, SettlementKind.Correct, SettlementKind.Enter];
+        SettledDocument[] filled =
+        [
+            Doc("d1", "vpn drops", "network", 0, SettlementKind.Accept),
+            Doc("d2", "vpn drops", "network", 1, SettlementKind.Fill),
+            Doc("d3", "vpn drops", "network", 2, SettlementKind.Fill),
+        ];
+        ThresholdSelection.SelectKeyThreshold(new FieldMemory(), Ticket, "team", filled, 1.0, 1, counting: byHand)
+            .Lookups.Should().Be(0); // nothing the application filled is asked about
+
+        SettledDocument[] checkedLater = [filled[0], filled[1], Doc("d3", "vpn drops", "network", 2, SettlementKind.Enter)];
+        var keys = new FieldMemory();
+        var replay = ThresholdSelection.SelectKeyThreshold(keys, Ticket, "team", checkedLater, 1.0, 1, counting: byHand);
+        replay.Lookups.Should().Be(1); // the checked d3 is asked about, against what d1 taught
+        replay.Chosen.Should().NotBeNull();
+        keys.Count("ticket").Should().Be(2); // d1 and the checked d3 — the filled d2 is still left out
+    }
+
+    [Fact]
     public async Task Choosing_thresholds_neither_asks_about_nor_remembers_a_filled_value()
     {
         SettledDocument[] documents =

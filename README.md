@@ -512,6 +512,14 @@ target of 0.8, which is what the thresholds promise. On the maintenance reports 
 and a coarse level on and a target of 0.95, keying the fault code by the one field chosen answered it rightly 1.36
 times as often as every field, at 0.96 either way; resting it on that field had answered less often than every field.
 
+A key is a short value that recurs. `FieldMemory` uses a value as a key only up to `maxKeyLength` characters once
+normalised (60 by default): free text rarely recurs, and a value that never repeats keys nothing. Where the evidence
+is a line of text that differs from one document to the next only in its variable parts — numbers, addresses,
+identifiers — give the form an observed field that holds the line's shape instead: the text with each variable token
+replaced by a placeholder, or a short id of that text. Keep the text itself as another field for the similar document
+layer to read, and name the shape in `KeyFields`. Whether a key recurs can be counted before replaying anything: the
+share of saved documents whose key was seen in an earlier document bounds how often the key layer can answer.
+
 When another form has already settled the same subject — the same order, case or applicant — give its settled values
 to this form as observed fields. The key layer learns from the settled documents which of their values go with which
 of this field's, and the similar document layer reads them as evidence; the two forms' values need not map one to one.
