@@ -29,6 +29,15 @@ with what to do.
 
 - `EmbeddingMemory(IEmbeddingModel model, int pendingLimit = 10_000)` — an embedding memory straight from a model, for
   a consumer that neither records nor prices its embedding calls. Lookups and remembering report an energy of zero.
+- **Checking filled values.** `Settlement.Check(value, probability)` (`SettlementKind.Check`) settles a value the
+  application filled again, by someone who did not see it, the decision having been drawn to be checked with
+  `probability` — fixed before the draw. Memory learns the checked value, the snapshot keeps the probability in
+  `SettledDocument.Probabilities` (save it with the document), and choosing thresholds counts a check as one ÷ its
+  probability decisions: the decisions it was drawn from. Precision and answer rate are then weighted, and the minimum
+  number of answers is held to the effective number — `ThresholdChoice.EffectiveAnswered`, the squared sum of the weights
+  over the sum of their squares — beside `ThresholdChoice.AnsweredWeight`. With no check every choice is what it was.
+  Choosing key fields ranks them by the weighted answers. Name `SettlementKind.Check` in `counting` to count checks
+  beside what a person settled.
 
 ### Documentation
 

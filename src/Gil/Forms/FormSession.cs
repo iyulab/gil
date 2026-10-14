@@ -23,6 +23,7 @@ public sealed class FormSession
     private readonly HashSet<string> _rejected = new(StringComparer.Ordinal);
     private readonly List<string> _arrival = []; // fields with a value, in the order their current values arrived
     private readonly Dictionary<string, SettlementKind> _settlements = new(StringComparer.Ordinal); // how each judged value was settled
+    private readonly Dictionary<string, double> _probabilities = new(StringComparer.Ordinal); // a checked value's draw probability
     private DateTimeOffset _settledAt;
 
     internal FormSession(FormResolver resolver, FormDefinition form, string documentId, DateTimeOffset settledAt) =>
@@ -55,6 +56,10 @@ public sealed class FormSession
             if (Has(field) && Form.Fields.Any(f => f.Name == field && f.Role == FieldRole.Judged))
             {
                 _settlements[field] = kind;
+                if (kind == SettlementKind.Check && saved.Probabilities.TryGetValue(field, out var probability))
+                {
+                    _probabilities[field] = probability;
+                }
             }
         }
     }
@@ -130,6 +135,7 @@ public sealed class FormSession
             }
         }
 
+        _probabilities.Remove(field);
         if (clears || settlement.Kind == SettlementKind.Restore || !Has(field))
         {
             _settlements.Remove(field); // nothing settled it, or nothing known did
@@ -137,6 +143,10 @@ public sealed class FormSession
         else
         {
             _settlements[field] = settlement.Kind;
+            if (settlement.Kind == SettlementKind.Check)
+            {
+                _probabilities[field] = settlement.Probability;
+            }
         }
 
         return await ChangedAsync(field, reopened: settlement.Kind == SettlementKind.Revert, cancellationToken).ConfigureAwait(false);
@@ -177,13 +187,15 @@ public sealed class FormSession
     /// <summary>
     /// The document's values as they stand — observed and settled — which is what the application saves, with the time a
     /// field was last settled (or the time the document was opened with, if none was since), the order the values arrived
-    /// in, by which choosing thresholds replays the document, and how each judged value was settled.
+    /// in, by which choosing thresholds replays the document, and how each judged value was settled — with the probability
+    /// a checked one was drawn with.
     /// </summary>
     public SettledDocument Snapshot() =>
         new(DocumentId, new Dictionary<string, string>(_values, StringComparer.Ordinal), _settledAt, [.. _arrival])
         {
             Sets = new Dictionary<string, IReadOnlyList<string>>(_sets, StringComparer.Ordinal),
             Settlements = new Dictionary<string, SettlementKind>(_settlements, StringComparer.Ordinal),
+            Probabilities = new Dictionary<string, double>(_probabilities, StringComparer.Ordinal),
         };
 
     private bool Has(string field) => _values.ContainsKey(field) || _sets.ContainsKey(field);

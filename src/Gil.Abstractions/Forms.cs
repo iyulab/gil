@@ -408,13 +408,21 @@ public sealed record SettledDocument(
 
     /// <summary>
     /// Judged field name to how its current value was settled — <see cref="SettlementKind.Accept"/>,
-    /// <see cref="SettlementKind.Correct"/>, <see cref="SettlementKind.Enter"/>, <see cref="SettlementKind.Fill"/> or
-    /// <see cref="SettlementKind.Set"/> — which is what a form session's snapshot gives. A field left out is not known: its
+    /// <see cref="SettlementKind.Correct"/>, <see cref="SettlementKind.Enter"/>, <see cref="SettlementKind.Fill"/>,
+    /// <see cref="SettlementKind.Check"/> or <see cref="SettlementKind.Set"/> — which is what a form session's snapshot gives. A field left out is not known: its
     /// value was restored without it, or saved before settlements were kept. Memory leaves out the values filled
     /// (<see cref="SettlementKind.Fill"/>), and choosing thresholds can count only the settlements of some kinds.
     /// </summary>
     public IReadOnlyDictionary<string, SettlementKind> Settlements { get; init; } =
         new Dictionary<string, SettlementKind>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Judged field name to the probability its <see cref="SettlementKind.Check"/> was drawn with
+    /// (<see cref="Settlement.Probability"/>); a field left out counts as 1. Save it with the document: choosing thresholds
+    /// counts a checked value as one ÷ this many decisions.
+    /// </summary>
+    public IReadOnlyDictionary<string, double> Probabilities { get; init; } =
+        new Dictionary<string, double>(StringComparer.Ordinal);
 
     /// <summary>
     /// Checks that the document keeps each field of <paramref name="form"/> where its kind belongs: a field that takes
@@ -589,6 +597,14 @@ public enum SettlementKind
     /// suggestion's own answer remembered would come back as evidence for itself.
     /// </summary>
     Fill,
+
+    /// <summary>
+    /// A value settled again by someone who did not see the answer — a check of a value the application filled, drawn at
+    /// random with a known probability (<see cref="Settlement.Probability"/>). Memory learns it as a settled value, and
+    /// choosing thresholds counts it as one ÷ that probability decisions: it stands for the filled decisions it was drawn
+    /// from, so drawing some keys more often than others does not tilt the promise toward them.
+    /// </summary>
+    Check,
 }
 
 /// <summary>
@@ -598,9 +614,16 @@ public enum SettlementKind
 /// </summary>
 public sealed record Settlement
 {
-    private Settlement(SettlementKind kind, string? value, IReadOnlyList<string>? values = null) => (Kind, Value, Values) = (kind, value, values);
+    private Settlement(SettlementKind kind, string? value, IReadOnlyList<string>? values = null, double probability = 1) =>
+        (Kind, Value, Values, Probability) = (kind, value, values, probability);
 
     public SettlementKind Kind { get; }
+
+    /// <summary>
+    /// For <see cref="SettlementKind.Check"/>, the probability with which this decision was drawn to be checked, fixed
+    /// before the draw; 1 for every other kind.
+    /// </summary>
+    public double Probability { get; }
 
     /// <summary>The settled value of a single-valued field; null for <see cref="SettlementKind.Reject"/>, <see cref="SettlementKind.Revert"/> and settlements of a set.</summary>
     public string? Value { get; }
@@ -626,6 +649,22 @@ public sealed record Settlement
 
     /// <summary>The suggested value, settled by the application with no person confirming it (<see cref="SettlementKind.Fill"/>).</summary>
     public static Settlement Fill(string value) => new(SettlementKind.Fill, Required(value));
+
+    /// <summary>
+    /// A value settled again by someone who did not see the answer, the decision having been drawn to be checked with
+    /// <paramref name="probability"/> (<see cref="SettlementKind.Check"/>). Pass the probability the draw used, fixed before
+    /// it — a decision picked because it looked doubtful has no such probability and is not a check.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="probability"/> is not above 0 and at most 1.</exception>
+    public static Settlement Check(string value, double probability)
+    {
+        if (!(probability > 0 && probability <= 1))
+        {
+            throw new ArgumentOutOfRangeException(nameof(probability), probability, "A check is drawn with a probability above 0 and at most 1.");
+        }
+
+        return new(SettlementKind.Check, Required(value), probability: probability);
+    }
 
     /// <summary>Settles a field that takes several values with these — none at all clears it. Order and repeats carry no meaning.</summary>
     public static Settlement Set(IEnumerable<string> values) => new(SettlementKind.Set, null, Elements(values));

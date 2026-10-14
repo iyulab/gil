@@ -349,6 +349,16 @@ with nine in ten trusted answers filled, a replay that learned from them promise
 stream's key layer ended up answering every document with 0.11 right. Learning only from what a person settled kept the
 promise within a few points of what was right.
 
+An application that fills values on its own still needs some of them checked, or nothing tells it when the fills go
+wrong. Draw the decisions to check at random, with a probability fixed before the draw — the same for every decision
+unless some keys need watching more closely — and have someone settle the field again without seeing the filled value:
+`Settlement.Check(value, probability)`. Memory learns the checked value in place of the filled one, and choosing
+thresholds counts each check as one ÷ its probability decisions, the filled decisions it was drawn from, so checking some
+keys more often does not tilt the promise toward them. Name `SettlementKind.Check` in `counting` beside the kinds a
+person settles. A decision picked because it looked doubtful has no such probability and is not a check: counted as one,
+it would lean the promise toward the doubtful ones. Few checks weigh much but say little, so
+the fewest answers a threshold must rest on is held to their effective number (`ThresholdChoice.EffectiveAnswered`).
+
 Each field is tried in a fixed order, and `FieldSuggestion.Source` says which layer the first candidate came from:
 1. Values settled alongside the values the document already has, when the keys backing them score high enough
    (`KeyThreshold`).
