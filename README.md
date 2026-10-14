@@ -532,11 +532,12 @@ values count as there from the start and judged fields as settled in the form's 
 reports can be optimistic. `targetPrecision` is checked on the documents the threshold is chosen on. Where settled documents
 come in batches — several at once from one source, alike in their observed values — whether a near-identical
 document's value is right tends to hold or fail for the whole batch. The replay then sees fewer independent cases than
-it counts. Replaying two public streams, thresholds chosen for a target of 0.8 answered right 0.63 to 0.74 of the time
-on the documents that followed, and those chosen for 0.7 answered right 0.64 to 0.72. The one exception, at 0.8, was a key layer
-backed by settled judged fields in one of the streams. Wider statistical margins did not close the gap. To know the
-precision a field actually delivers, check it on your own documents: choose on those settled up to a date and count
-the answers on those settled after it.
+it counts. With this version, key layer thresholds chosen once for a target of 0.8 on the first forty thousand documents of
+two public streams — an issue tracker and aircraft maintenance reports — answered right 0.85 and 0.90 of the time on
+the forty thousand that followed, and 0.82 to 0.91 for the six fields of a smaller stream of biological sample records.
+Version 0.6.0, on two other streams of sample records, saw 0.63 to 0.74 at 0.8 and
+0.64 to 0.72 at 0.7; wider statistical margins did not close that gap. To know the precision a field actually delivers,
+check it on your own documents: choose on those settled up to a date and count the answers on those settled after it.
 
 Settle a record that arrives again — a retransmission, a re-save — under the same document id. The memories keep one
 version per id, and the replay asks a document settled again without its earlier version, as a suggestion for a saved
