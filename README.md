@@ -358,6 +358,10 @@ keys more often does not tilt the promise toward them. Name `SettlementKind.Chec
 person settles. A decision picked because it looked doubtful has no such probability and is not a check: counted as one,
 it would lean the promise toward the doubtful ones. Few checks weigh much but say little, so
 the fewest answers a threshold must rest on is held to their effective number (`ThresholdChoice.EffectiveAnswered`).
+Replaying two public streams with nine in ten trusted answers filled and the tenth checked, counting the checks by their
+weight kept the promise within two points of what was right in both, where counting them once had promised more than two points
+less than was right in one. Weighting makes the promise honest rather than generous: where the answers had been doing
+worse than promised, thresholds rose and about 8% fewer answers were right; where better, slightly more were.
 
 Each field is tried in a fixed order, and `FieldSuggestion.Source` says which layer the first candidate came from:
 1. Values settled alongside the values the document already has, when the keys backing them score high enough
