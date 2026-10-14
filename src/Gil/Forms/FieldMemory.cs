@@ -151,7 +151,7 @@ public sealed class FieldMemory
         typed = string.IsNullOrEmpty(typed) ? null : typed;
         var ranked = Keyed(index, form, definition, known, sets, excluding, typed).Where(s => !chosen.Contains(s.Value)).ToList();
         var threshold = definition.KeyThresholdFor(typed?.Length ?? 0);
-        var layerTrusted = ranked.Count > 0 && (ranked[0].Score >= threshold || (typed is not null && !definition.Multiple && Claimed(
+        var layerTrusted = ranked.Count > 0 && !Caught(index, form, definition, known, sets, excluding) && (ranked[0].Score >= threshold || (typed is not null && !definition.Multiple && Claimed(
             Keyed(index, form, definition, known, sets, excluding), definition, typed, ranked[0].Value)));
         var keyed = ranked
             .Take(count)
@@ -178,7 +178,10 @@ public sealed class FieldMemory
             return [];
         }
 
-        return [.. Keyed(index, form, form.Field(field), known, knownSets ?? NoSets, excluding).Select(s => (s.Value, s.Score, (string?)$"{s.Key.Field}: {s.Key.Value}"))];
+        var definition = form.Field(field);
+        return Caught(index, form, definition, known, knownSets ?? NoSets, excluding)
+            ? []
+            : [.. Keyed(index, form, definition, known, knownSets ?? NoSets, excluding).Select(s => (s.Value, s.Score, (string?)$"{s.Key.Field}: {s.Key.Value}"))];
     }
 
     /// <summary>
@@ -193,7 +196,13 @@ public sealed class FieldMemory
             return null;
         }
 
-        var ranked = Keyed(index, form, form.Field(field), known, knownSets ?? NoSets, excluding: null);
+        var definition = form.Field(field);
+        if (Caught(index, form, definition, known, knownSets ?? NoSets, excluding: null))
+        {
+            return null; // the key layer does not answer here, as a suggestion would not
+        }
+
+        var ranked = Keyed(index, form, definition, known, knownSets ?? NoSets, excluding: null);
         return ranked.Count > 0 ? (ranked[0].Score, ranked[0].Value == value) : null;
     }
 
@@ -212,7 +221,13 @@ public sealed class FieldMemory
             return best;
         }
 
-        var ranked = Keyed(index, form, form.Field(field), known, knownSets ?? NoSets, excluding: null);
+        var definition = form.Field(field);
+        if (Caught(index, form, definition, known, knownSets ?? NoSets, excluding: null))
+        {
+            return best; // the key layer does not answer here at any length
+        }
+
+        var ranked = Keyed(index, form, definition, known, knownSets ?? NoSets, excluding: null);
         for (var length = 0; length < best.Length; length++)
         {
             var typed = length == 0 ? null : value[..length];
@@ -315,6 +330,35 @@ public sealed class FieldMemory
             .ThenByDescending(s => s.Value.Latest)
             .ThenBy(s => s.Key, StringComparer.Ordinal)
             .Select(s => (s.Key, s.Value.Score, s.Value.Key))];
+    }
+
+    /// <summary>
+    /// Whether a value the field must not miss (<see cref="FieldDefinition.MustCatch"/>) was ever settled under a key the
+    /// document has — then the key layer does not answer the field for it.
+    /// </summary>
+    private bool Caught(
+        FormIndex index,
+        FormDefinition form,
+        FieldDefinition field,
+        IReadOnlyDictionary<string, string> known,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> knownSets,
+        string? excluding)
+    {
+        if (field.MustCatch is not { Count: > 0 } mustCatch || field.Multiple)
+        {
+            return false;
+        }
+
+        foreach (var key in Keys(form, field, known, knownSets))
+        {
+            if (index.Values.TryGetValue(new Slot(field.Name, key), out var counts)
+                && counts.Shares(excluding).Any(s => mustCatch.Contains(s.Value, StringComparer.Ordinal)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

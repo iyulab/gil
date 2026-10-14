@@ -363,6 +363,15 @@ weight kept the promise within two points of what was right in both, where count
 less than was right in one. Weighting makes the promise honest rather than generous: where the answers had been doing
 worse than promised, thresholds rose and about 8% fewer answers were right; where better, slightly more were.
 
+Some values must not be missed: answering a dangerous grade as a harmless one costs far more than asking. A threshold
+cannot hold such a value back where it is rare — a key under which it was settled once among hundreds of other values
+still scores its usual value high. Name those values in `FieldDefinition.MustCatch`, and once one of them has been
+settled under a key the document has, the key layer does not answer the field for that document. Replaying public
+system logs whose risk grade a model had judged, naming grades 3 and above cut the lines graded 3 or more that were
+answered below 3 from 2 to 1 of 1,425, while keeping 81% of the lines the key layer answered. It reaches only keys where
+such a value was already settled: the first one under a key is caught only if someone checks the answer, so it does not
+replace checking.
+
 Each field is tried in a fixed order, and `FieldSuggestion.Source` says which layer the first candidate came from:
 1. Values settled alongside the values the document already has, when the keys backing them score high enough
    (`KeyThreshold`).

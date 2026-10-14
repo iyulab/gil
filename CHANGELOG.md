@@ -38,6 +38,10 @@ with what to do.
   over the sum of their squares — beside `ThresholdChoice.AnsweredWeight`. With no check every choice is what it was.
   Choosing key fields ranks them by the weighted answers. Name `SettlementKind.Check` in `counting` to count checks
   beside what a person settled.
+- **Values a field must not miss.** `FieldDefinition.MustCatch` names values — a dangerous grade, say — that answering
+  as something else costs far more than asking. Once one of them has been settled under a key the document has, the key
+  layer does not answer the field for that document (its values are still offered, untrusted), and choosing key
+  thresholds asks such lookups without counting them as the key layer's. Only for a judged field with a single value.
 
 ### Documentation
 

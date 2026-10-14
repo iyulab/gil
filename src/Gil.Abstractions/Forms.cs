@@ -201,6 +201,17 @@ public sealed record FieldDefinition(string Name, FieldRole Role)
     /// group of a product code. Null offers none. See <see cref="CoarseLevel"/>. Not for a field that takes several values.
     /// </summary>
     public CoarseLevel? Coarse { get; init; }
+
+    /// <summary>
+    /// Values the field must not miss — for a field where answering a dangerous value as a harmless one costs far more
+    /// than asking. Once one of them has been settled under a key the document has, the settled field memory does not
+    /// answer the field for that document: its values under such a key are still offered, as guesses. A threshold cannot
+    /// do this — a key under which a rare value was settled once among hundreds of others still scores its usual value
+    /// high. It only reaches keys where such a value was already settled: the first time one turns up under a key, it is
+    /// caught only if someone checks the answer. Null or empty leaves the key layer as it is. Not for a field that takes
+    /// several values.
+    /// </summary>
+    public IReadOnlyList<string>? MustCatch { get; init; }
 }
 
 /// <summary>
@@ -301,6 +312,11 @@ public sealed record FormDefinition
         if (fields.FirstOrDefault(f => f.Coarse is not null && (f.Multiple || f.Role != FieldRole.Judged)) is { } coarseField)
         {
             throw new ArgumentException($"Field '{coarseField.Name}' takes a coarse level, which only a judged field with a single value has.", nameof(fields));
+        }
+
+        if (fields.FirstOrDefault(f => f.MustCatch is { Count: > 0 } && (f.Multiple || f.Role != FieldRole.Judged)) is { } mustCatchField)
+        {
+            throw new ArgumentException($"Field '{mustCatchField.Name}' names values it must not miss, which only a judged field with a single value has.", nameof(fields));
         }
 
         if (fields.FirstOrDefault(f => f.Multiple && f.TypedKeyThresholds is not null) is { } typedSet)
