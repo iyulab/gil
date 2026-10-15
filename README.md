@@ -383,7 +383,7 @@ stretch where that precision had drifted 9.6 points above the answers, `Promise`
 mend a threshold chosen on the wrong lookups: a similar document threshold chosen apart from the key layer
 (`SelectAsync` on a field that also has a `KeyThreshold`) promised 2.4–2.6 points more than it kept, as its
 whole-replay precision did. On a small form, with too few answers among the latest documents, it falls back to the
-whole replay's precision and promises as much. For the key layer, `ThresholdReplay.Keys` says, under each key that backed a best
+whole replay's precision and is no more honest than it. For the key layer, `ThresholdReplay.Keys` says, under each key that backed a best
 value, how many lookups it had, how many the chosen threshold answered and how precise those were (weighted, as
 checks are), and whether it answers under that key now — what an application checking its answers reads to decide how
 often to check each key. That policy stays the application's: a key answered rightly many times may be checked less
