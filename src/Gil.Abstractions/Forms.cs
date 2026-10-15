@@ -198,24 +198,52 @@ public sealed record FieldDefinition(string Name, FieldRole Role)
     /// <summary>
     /// A coarser level of the field's values to offer when neither memory layer answers the value itself — for values
     /// whose leading characters name a broader class, as a chapter of a fault code, a class of a patent classification or a
-    /// group of a product code. Null offers none. See <see cref="CoarseLevel"/>. Not for a field that takes several values.
+    /// group of a product code, or whose class a table gives, as the review panel of a device code. Null offers none. See
+    /// <see cref="CoarseLevel"/>. Not for a field that takes several values.
     /// </summary>
     public CoarseLevel? Coarse { get; init; }
 }
 
 /// <summary>
-/// The coarse level of a judged field (<see cref="FieldDefinition.Coarse"/>): the first <see cref="Prefix"/> characters of
-/// its values. When neither memory layer answers a value, the same two layers are asked for the level instead — the
-/// scores of the values under the document's keys added up by their prefix, then the similarities of the documents voting
-/// added up by theirs — and the prefix they back is offered as <see cref="FieldSuggestion.Coarse"/>. A person who cannot
-/// be given the value can often be given its class, which is enough for what follows from the class (routing, a
-/// reviewer, a form section) and narrows what is left to type. The hierarchy is the values' own: a field whose classes are
-/// not prefixes of its values maps them in the application. Choose the thresholds with
-/// <c>ThresholdSelection.SelectCoarseAsync</c>, after the field's own.
+/// The coarse level of a judged field (<see cref="FieldDefinition.Coarse"/>): the class of each of its values — its first
+/// <see cref="Prefix"/> characters, or what a table of <see cref="Classes"/> says. When neither memory layer answers a
+/// value, the same two layers are asked for the level instead — the scores of the values under the document's keys added
+/// up by their class, then the similarities of the documents voting added up by theirs — and the class they back is
+/// offered as <see cref="FieldSuggestion.Coarse"/>. A person who cannot be given the value can often be given its class,
+/// which is enough for what follows from the class (routing, a reviewer, a form section). The values are remembered as
+/// they were settled: the classes are read off them, so a table can change without settling anything again. Choose the
+/// thresholds with <c>ThresholdSelection.SelectCoarseAsync</c>, after the field's own.
 /// </summary>
-/// <param name="Prefix">How many leading characters of a value name its class; at least 1.</param>
+/// <param name="Prefix">How many leading characters of a value name its class; at least 1. 0 for a level made from a table of <see cref="Classes"/>.</param>
 public sealed record CoarseLevel(int Prefix)
 {
+    /// <summary>
+    /// A level whose classes a table gives — value to class, compared ordinally — for values whose leading characters do
+    /// not name their class: a device code and the panel that reviews it, a product and its category. A value the table
+    /// does not list is a class of its own, so it is offered only as itself. Classes that name some values' prefixes and
+    /// not others' belong in the table too.
+    /// </summary>
+    /// <param name="classes">Value to class; at least one entry, no class blank.</param>
+    public CoarseLevel(IReadOnlyDictionary<string, string> classes)
+        : this(0)
+    {
+        ArgumentNullException.ThrowIfNull(classes);
+        if (classes.Count == 0)
+        {
+            throw new ArgumentException("A table of classes needs at least one value.", nameof(classes));
+        }
+
+        if (classes.FirstOrDefault(c => string.IsNullOrWhiteSpace(c.Value)) is { Key: { } blank })
+        {
+            throw new ArgumentException($"Value '{blank}' has a blank class.", nameof(classes));
+        }
+
+        Classes = new Dictionary<string, string>(classes, StringComparer.Ordinal);
+    }
+
+    /// <summary>The table of classes the level was made from, value to class; null for a level by prefix.</summary>
+    public IReadOnlyDictionary<string, string>? Classes { get; }
+
     /// <summary>
     /// Score at or above which the prefix the document's keys back is trusted: the summed key scores of the values that
     /// share it, on the key layer's scale. Null makes no promise from the keys.
@@ -235,10 +263,18 @@ public sealed record CoarseLevel(int Prefix)
     /// </summary>
     public double? MemorySimilarityFloor { get; init; }
 
-    /// <summary>The class of <paramref name="value"/>: its first <see cref="Prefix"/> characters, or all of it when shorter.</summary>
+    /// <summary>
+    /// The class of <paramref name="value"/>: what <see cref="Classes"/> says, the value itself when it does not list it;
+    /// without a table, its first <see cref="Prefix"/> characters, or all of it when shorter.
+    /// </summary>
     public string Of(string value)
     {
         ArgumentNullException.ThrowIfNull(value);
+        if (Classes is { } table)
+        {
+            return table.TryGetValue(value, out var named) ? named : value;
+        }
+
         return value.Length <= Prefix ? value : value[..Prefix];
     }
 }
@@ -293,7 +329,7 @@ public sealed record FormDefinition
             throw new ArgumentException($"Field '{voteless.Name}' gives {voteless.SimilarDocumentVotes} similar documents a vote; at least one must.", nameof(fields));
         }
 
-        if (fields.FirstOrDefault(f => f.Coarse is { Prefix: < 1 }) is { } prefixless)
+        if (fields.FirstOrDefault(f => f.Coarse is { Prefix: < 1, Classes: null }) is { } prefixless)
         {
             throw new ArgumentException($"Field '{prefixless.Name}' gives its coarse level a prefix of {prefixless.Coarse!.Prefix} characters; at least one.", nameof(fields));
         }
@@ -508,10 +544,10 @@ public sealed record FieldSuggestion(
 
     /// <summary>
     /// When the field has a coarse level (<see cref="FieldDefinition.Coarse"/>) and no layer answered its value: the class
-    /// the memory layers back, as a candidate whose value is the prefix — trusted when its layer's coarse threshold is met,
-    /// otherwise a guess. Kept apart from <see cref="Candidates"/>, which hold settled values only. Null when a layer
-    /// answered the value, the field has no coarse level, text is being typed into it, or no settled document backs a
-    /// prefix.
+    /// the memory layers back, as a candidate whose value is the class (<see cref="CoarseLevel.Of"/>) — trusted when its
+    /// layer's coarse threshold is met, otherwise a guess. Kept apart from <see cref="Candidates"/>, which hold settled
+    /// values only. Null when a layer answered the value, the field has no coarse level, text is being typed into it, or
+    /// no settled document backs a class.
     /// </summary>
     public FieldCandidate? Coarse { get; init; }
 }

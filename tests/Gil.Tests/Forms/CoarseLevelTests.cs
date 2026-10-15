@@ -142,6 +142,57 @@ public sealed class CoarseLevelTests
             .Should().ThrowAsync<ArgumentException>().WithMessage("*coarse level*");
     }
 
+    // The systems the codes belong to, named as a table would name them rather than by their leading digits.
+    private static readonly Dictionary<string, string> Systems = new()
+    {
+        ["2710"] = "flight controls",
+        ["2711"] = "flight controls",
+        ["2712"] = "flight controls",
+        ["2730"] = "flight controls",
+        ["3230"] = "landing gear",
+        ["3250"] = "landing gear",
+    };
+
+    [Fact]
+    public async Task A_table_of_classes_offers_the_class_it_names()
+    {
+        var suggestion = await SuggestAsync(Report(new CoarseLevel(Systems) { KeyThreshold = 0.5 }));
+
+        suggestion.Answered.Should().BeFalse();
+        suggestion.Coarse!.Value.Should().Be("flight controls");
+        suggestion.Coarse.Trusted.Should().BeTrue();
+        suggestion.Candidates.Should().OnlyContain(c => c.Value.Length == 4); // the settled values stay as they were
+    }
+
+    [Fact]
+    public async Task A_replay_counts_a_class_right_by_the_table()
+    {
+        // Each part keeps to one system but never repeats a code: by the table every class the keys back is right, while
+        // with each code a class of its own none is.
+        var bySystem = await ThresholdSelection.SelectCoarseAsync(new FieldMemory(), new LexicalMemory(), Report(new CoarseLevel(Systems)), "code", History, 0.5, 1, Ct);
+        var byCode = await ThresholdSelection.SelectCoarseAsync(new FieldMemory(), new LexicalMemory(), Report(new CoarseLevel(4)), "code", History, 0.5, 1, Ct);
+
+        bySystem.Key.Chosen!.Precision.Should().Be(1);
+        bySystem.Key.Chosen.Answered.Should().Be(bySystem.Key.Candidates);
+        byCode.Key.Candidates.Should().Be(bySystem.Key.Candidates);
+        byCode.Key.Chosen.Should().BeNull();
+        byCode.Key.MostPrecise!.Precision.Should().Be(0);
+    }
+
+    [Fact]
+    public void A_table_names_the_classes_it_lists_and_leaves_any_other_value_a_class_of_its_own()
+    {
+        var level = new CoarseLevel(Systems) { KeyThreshold = 0.5 };
+        level.Of("2730").Should().Be("flight controls");
+        level.Of("2900").Should().Be("2900");
+        level.Prefix.Should().Be(0);
+        (level with { KeyThreshold = 0.7 }).Classes.Should().BeEquivalentTo(Systems); // kept by a copy
+        FluentActions.Invoking(() => Report(level)).Should().NotThrow();
+
+        FluentActions.Invoking(() => new CoarseLevel(new Dictionary<string, string>())).Should().Throw<ArgumentException>().WithMessage("*at least one*");
+        FluentActions.Invoking(() => new CoarseLevel(new Dictionary<string, string> { ["2710"] = " " })).Should().Throw<ArgumentException>().WithMessage("*'2710'*blank*");
+    }
+
     [Fact]
     public void A_class_is_the_value_s_prefix_and_needs_one_character_and_a_single_valued_judged_field()
     {

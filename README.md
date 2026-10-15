@@ -481,6 +481,11 @@ thresholds chosen on the first ten thousand documents, the chapter of an
 aircraft fault code was trusted for 42% of the reports whose code went unanswered at a target of 0.95, and was right
 for 97% of them; the class of a patent classification, for 10% of the patents unanswered at 0.8, right for 85%.
 
+Where a value's class is not in its characters but in a table — the panel that reviews a device code, the category of a
+product — give the table instead: `new CoarseLevel(classes)`, value to class. The values stay as they were settled and
+the classes are read off them, so the table can change without settling anything again. A value the table does not list
+is a class of its own; list every value, putting those without a class under one of their own naming.
+
 A chosen threshold also holds only for the version of Gil that chose it. A threshold rests on how a layer scores its
 candidates and on what the replay asks, and a release may change either: 0.9.0 changed the key layer's scale, 0.10.0
 and 0.11.0 what the replay asks, 0.16.0 the similar document layer's scale, and 0.17.0 added its similarity floor. When you store a threshold, store the Gil version with it and choose again when that

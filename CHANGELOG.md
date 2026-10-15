@@ -29,6 +29,10 @@ with what to do.
 
 - `EmbeddingMemory(IEmbeddingModel model, int pendingLimit = 10_000)` — an embedding memory straight from a model, for
   a consumer that neither records nor prices its embedding calls. Lookups and remembering report an energy of zero.
+- **A coarse level from a table.** `new CoarseLevel(classes)` takes value-to-class pairs for a field whose classes are not
+  prefixes of its values; `CoarseLevel.Classes` keeps the table and `Prefix` is 0. Suggestions and
+  `ThresholdSelection.SelectCoarseAsync` group and judge by `CoarseLevel.Of`, which reads the table — a value it does not
+  list is a class of its own. Before, such a field had to store its values with the class in front.
 
 ### Documentation
 
