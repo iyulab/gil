@@ -484,7 +484,10 @@ for 97% of them; the class of a patent classification, for 10% of the patents un
 Where a value's class is not in its characters but in a table — the panel that reviews a device code, the category of a
 product — give the table instead: `new CoarseLevel(classes)`, value to class. The values stay as they were settled and
 the classes are read off them, so the table can change without settling anything again. A value the table does not list
-is a class of its own, so list every value — those without a known class under a class named for them.
+is a class of its own, so list every value — those without a known class under a class named for them. Replaying public
+medical device recall records with the review panel of each product code from the public classification table — 19
+panels — the panel was trusted for 54% of the records whose code went unanswered at 0.8, and was right for 90% of
+them; the code's own first letter, as a prefix, managed 9%.
 
 A chosen threshold also holds only for the version of Gil that chose it. A threshold rests on how a layer scores its
 candidates and on what the replay asks, and a release may change either: 0.9.0 changed the key layer's scale, 0.10.0
