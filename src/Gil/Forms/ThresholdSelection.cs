@@ -40,7 +40,8 @@ public sealed record ThresholdChoice(double Threshold, double Precision, double 
     /// <see cref="ThresholdSelection.RecentDocuments"/> documents replayed, weighted as <see cref="Precision"/> is — or
     /// <see cref="Precision"/> itself when those answers are worth fewer than the minimum number the threshold rests on.
     /// <see cref="Precision"/> runs over the whole replay, and a layer that did better long ago keeps it high after the
-    /// layer has changed; this is the number to show as the promise.
+    /// layer has changed. Like <see cref="Precision"/>, it is only as honest as the lookups the threshold was chosen on: a
+    /// similar document threshold chosen on every lookup, where the key layer answers first, promises too much either way.
     /// </summary>
     public double Promise { get; init; } = Precision;
 
