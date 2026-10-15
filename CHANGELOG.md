@@ -44,8 +44,9 @@ with what to do.
   thresholds asks such lookups without counting them as the key layer's. Only for a judged field with a single value.
 - **The promise over the latest documents.** `ThresholdChoice.Promise` is the precision of the threshold's answers among
   the latest `ThresholdSelection.RecentDocuments` (5,000) documents replayed — the whole replay's `Precision` when those
-  answers are worth fewer than the minimum — with `PromiseAnswered`, how many answers it rests on. `Precision` still runs
-  over every document and keeps a better past; README says where the two were measured apart.
+  answers are worth fewer than the minimum — with `PromiseAnswered`, how many answers it rests on. Show it as the promise
+  for thresholds chosen layer by layer (`SelectLayersAsync`, or `SelectKeyThreshold` with the key layer alone):
+  `Precision` still runs over every document and keeps a better past. README has what was measured.
 - **State under each key.** `ThresholdReplay.Keys` lists, for the key layer of a single-valued field, each key that
   backed a best value (`KeyState`): its lookups, the answers the chosen threshold gave under it, their weighted
   precision, and whether its latest lookup was answered. Null for the other layers. A lookup held back by `MustCatch` is the key's
