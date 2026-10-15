@@ -3,7 +3,7 @@
 Versions follow `0.x`: a minor release may change the public API. Each such change is listed under **Breaking**
 with what to do.
 
-## Unreleased
+## 0.19.0
 
 ### Breaking
 
@@ -60,6 +60,9 @@ with what to do.
 ### Documentation
 
 - README: what makes a key — a consumer-supplied short field, and values longer than the key limit are not keys.
+- README leads with filling forms; the tree judgment path moves under "Stability" with the experimental ids.
+- README: what thresholds chosen once delivered afterwards, measured again with this version; the earlier figures stay
+  with the version that measured them.
 
 ## 0.18.0
 
