@@ -48,7 +48,9 @@ with what to do.
   `Precision` still runs over every document and keeps a better past.
 - **State under each key.** `ThresholdReplay.Keys` lists, for the key layer of a single-valued field, each key that
   backed a best value (`KeyState`): its lookups, the answers the chosen threshold gave under it, their weighted
-  precision, and whether its latest lookup was answered. Null for the other layers.
+  precision, and whether its latest lookup was answered. Null for the other layers. A lookup held back by `MustCatch` is the key's
+  but never answered. `ThresholdReplay` now holds a list, so two replays compare equal only by their contents
+  (`Keys` compares by reference).
 
 ### Documentation
 

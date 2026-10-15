@@ -271,9 +271,9 @@ public static class ThresholdSelection
 
         var (steps, latest) = await ReplayAsync(fieldMemory, memory, form, field, documents, counting, cancellationToken).ConfigureAwait(false);
         var keyed = steps.Where(s => s.KeyLooked).ToList();
-        var answers = keyed.Where(s => s.Key is not null).Select(s => new Answer(s.Key!.Value.Score, s.Key!.Value.Matches, s.Weight, s.Order, s.Key!.Value.Key)).ToList();
-        var key = WithKeys(Fit(answers, keyed, latest, targetPrecision, minimumAnswered), answers);
-        var left = steps.Where(s => s.Looked && !(key.Chosen is { } chosen && s.Key is { } first && first.Score >= chosen.Threshold));
+        var answers = keyed.Where(s => s.Key is not null).Select(s => new Answer(s.Key!.Value.Score, s.Key!.Value.Matches, s.Weight, s.Order, s.Key!.Value.Key, s.Key!.Value.Caught)).ToList();
+        var key = WithKeys(Fit([.. answers.Where(a => !a.Caught)], keyed, latest, targetPrecision, minimumAnswered), answers);
+        var left = steps.Where(s => s.Looked && !(key.Chosen is { } chosen && s.Key is { Caught: false } first && first.Score >= chosen.Threshold));
         return new LayerThresholds(key, Similarity(left, latest, form.Field(field), targetPrecision, minimumAnswered));
     }
 
@@ -426,7 +426,7 @@ public static class ThresholdSelection
                     lookupWeight += weight;
                     if (memory.First(form, field, before, settled!, beforeSets) is { } first)
                     {
-                        matches.Add(new Answer(first.Score, first.Matches, weight, order, first.Key));
+                        matches.Add(new Answer(first.Score, first.Matches, weight, order, first.Key, first.Caught));
                     }
                 }
                 else
@@ -445,7 +445,7 @@ public static class ThresholdSelection
             memory.Put(form, document);
         }
 
-        var replay = Fit(matches, lookups, lookupWeight, order, targetPrecision, minimumAnswered);
+        var replay = Fit([.. matches.Where(m => !m.Caught)], lookups, lookupWeight, order, targetPrecision, minimumAnswered);
         return multiple ? replay : WithKeys(replay, matches);
     }
 
@@ -699,7 +699,7 @@ public static class ThresholdSelection
         new(form.Name, [.. form.Fields.Select(f => f.Name == field ? change(f) : f)], form.Language);
 
     /// <summary>One document of a replay: what the field memory and the document memory held before it said about it.</summary>
-    private readonly record struct Step(bool KeyLooked, (double Score, bool Matches, string Key)? Key, bool Looked, (double Score, bool Correct, double Nearest, bool Voted)? Match, double Weight, int Order)
+    private readonly record struct Step(bool KeyLooked, (double Score, bool Matches, string Key, bool Caught)? Key, bool Looked, (double Score, bool Correct, double Nearest, bool Voted)? Match, double Weight, int Order)
     {
         /// <summary>For a coarse replay: the level as the keys and the vote back it, and whether the field's value layers answered.</summary>
         public CoarseStep? Coarse { get; init; }
@@ -816,7 +816,7 @@ public static class ThresholdSelection
             if (coarse && definition.Coarse is { } level)
             {
                 // As a suggestion: the value layers answer at the field's own thresholds; only where they do not is the level offered.
-                var valueAnswered = first is { } f && f.Score >= definition.KeyThreshold
+                var valueAnswered = first is { Caught: false } f && f.Score >= definition.KeyThreshold
                     || match is { } m && m.Item1 >= definition.MemoryThreshold && !(m.Item4 && definition.MemorySimilarityFloor is { } floor && m.Item3 < floor);
                 var cls = level.Of(settled);
                 var keys = keyLooked ? CoarseGroups.Keys(fieldMemory!.KeyedValues(form, field, before, knownSets: beforeSets), level) : null;
@@ -1028,17 +1028,19 @@ public static class ThresholdSelection
 
     /// <summary>
     /// The state under each key that backed a best value: its lookups, and what <paramref name="replay"/>'s chosen
-    /// threshold made of them.
+    /// threshold made of them. A lookup where a value the field must not miss was settled under the document's keys is
+    /// the key's, but never answered.
     /// </summary>
     private static ThresholdReplay WithKeys(ThresholdReplay replay, IEnumerable<Answer> answers)
     {
         var threshold = replay.Chosen?.Threshold;
+        bool Answers(Answer a) => !a.Caught && a.Score >= threshold;
         var keys = answers
             .Where(a => a.Key is not null)
             .GroupBy(a => a.Key!, StringComparer.Ordinal)
             .Select(g =>
             {
-                var answered = g.Where(a => a.Score >= threshold).ToList();
+                var answered = g.Where(a => Answers(a)).ToList();
                 var weight = answered.Sum(a => a.Weight);
                 var squares = answered.Sum(a => a.Weight * a.Weight);
                 return new KeyState(
@@ -1046,7 +1048,7 @@ public static class ThresholdSelection
                     g.Count(),
                     answered.Count,
                     weight > 0 ? answered.Where(a => a.Correct).Sum(a => a.Weight) / weight : null,
-                    g.MaxBy(a => a.Order).Score >= threshold)
+                    Answers(g.MaxBy(a => a.Order)))
                 {
                     AnsweredWeight = weight,
                     EffectiveAnswered = weight > 0 ? weight * weight / squares : 0,
@@ -1107,9 +1109,9 @@ public static class ThresholdSelection
     /// <summary>
     /// One answer a layer would give at some threshold: its score, whether it matched, how many decisions it counts as, the
     /// place of its document in settlement order (from 1, counting every document), and for the key layer the key that
-    /// backed it most strongly.
+    /// backed it most strongly, and whether a value the field must not miss held the key layer back from it.
     /// </summary>
-    private readonly record struct Answer(double Score, bool Correct, double Weight, int Order, string? Key = null);
+    private readonly record struct Answer(double Score, bool Correct, double Weight, int Order, string? Key = null, bool Caught = false);
 
     /// <summary>A band of answers the fit pooled: its lowest score, how many answers, their weight, the weight of the right ones, and the sum of the squared weights.</summary>
     private readonly record struct Block(double Lowest, int Count, double Weight, double Correct, double Squares)

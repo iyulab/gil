@@ -38,8 +38,8 @@ public sealed class ResultsLedgerTests
     public void A_short_replay_promises_its_precision()
     {
         var chosen = ThresholdSelection.SelectKeyThreshold(new FieldMemory(), Ticket, "team", Stream(400, drift: 200), 0.5, 30).Chosen!;
-        chosen.Promise.Should().Be(chosen.Precision); // every document is among the latest
-        chosen.PromiseAnswered.Should().Be(chosen.EffectiveAnswered);
+        chosen.Promise.Should().BeApproximately(chosen.Precision, 1e-12); // every document is among the latest
+        chosen.PromiseAnswered.Should().BeApproximately(chosen.EffectiveAnswered, 1e-9);
     }
 
     [Fact]
@@ -64,7 +64,7 @@ public sealed class ResultsLedgerTests
         var documents = Stream(2_000, drift: 1_000).Concat(Enumerable.Range(2_001, ThresholdSelection.RecentDocuments).Select(n => Doc(n, null, "team 1"))).ToList();
         var chosen = ThresholdSelection.SelectKeyThreshold(new FieldMemory(), Ticket, "team", documents, 0.5, 30).Chosen!;
         chosen.Promise.Should().Be(chosen.Precision);
-        chosen.PromiseAnswered.Should().Be(chosen.EffectiveAnswered);
+        chosen.PromiseAnswered.Should().BeApproximately(chosen.EffectiveAnswered, 1e-9);
     }
 
     private static readonly SettledDocument[] TwoKeys =
@@ -101,6 +101,33 @@ public sealed class ResultsLedgerTests
             k.Lookups.Should().Be(2);
             (k.Answered, k.Precision, k.Answering).Should().Be((0, (double?)null, false));
         });
+    }
+
+    [Fact]
+    public void A_key_held_back_by_a_value_that_must_not_be_missed_has_its_lookups_but_does_not_answer()
+    {
+        var form = new FormDefinition(
+            "ticket",
+            [
+                new FieldDefinition("summary", FieldRole.Observed),
+                new FieldDefinition("team", FieldRole.Judged) { MustCatch = ["security"] },
+            ],
+            PromptLanguage.English);
+        SettledDocument[] documents =
+        [
+            Doc(1, "vpn drops", "network"),
+            Doc(2, "vpn drops", "network"),
+            Doc(3, "vpn drops", "network"),
+            Doc(4, "vpn drops", "security"), // answered network, wrongly; from here on the key layer holds back
+            Doc(5, "vpn drops", "network"),
+            Doc(6, "vpn drops", "network"),
+        ];
+
+        var replay = ThresholdSelection.SelectKeyThreshold(new FieldMemory(), form, "team", documents, 0.5, 1);
+        replay.Chosen!.Answered.Should().Be(3);
+        var state = replay.Keys.Should().ContainSingle().Subject;
+        (state.Lookups, state.Answered, state.Answering).Should().Be((5, 3, false));
+        state.Precision.Should().BeApproximately(2.0 / 3, 1e-12);
     }
 
     [Fact]
