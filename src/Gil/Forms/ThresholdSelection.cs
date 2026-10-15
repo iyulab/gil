@@ -294,17 +294,17 @@ public static class ThresholdSelection
     /// Chooses the thresholds of a field's coarse level (<see cref="FieldDefinition.Coarse"/>) in the order a suggestion
     /// offers it: on the lookups the field's value layers leave unanswered at the thresholds it has
     /// (<see cref="FieldDefinition.KeyThreshold"/>, <see cref="FieldDefinition.MemoryThreshold"/> with its floor — choose
-    /// those first), the prefix the keys back, as <see cref="SelectKeyThreshold"/> chooses for a value; on the lookups that
-    /// leaves, the prefix the similar documents vote for, as <see cref="SelectAsync(IMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/> does, with its similarity floor. A
-    /// prefix is right when the settled value begins with it. Each document is asked about in memories holding only the
-    /// documents settled before it, then put into both, as for the value.
+    /// those first), the class the keys back, as <see cref="SelectKeyThreshold"/> chooses for a value; on the lookups that
+    /// leaves, the class the similar documents vote for, as <see cref="SelectAsync(IMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/> does, with its similarity floor. A
+    /// class is right when it is the settled value's (<see cref="CoarseLevel.Of"/>). Each document is asked about in
+    /// memories holding only the documents settled before it, then put into both, as for the value.
     /// </summary>
     /// <param name="fieldMemory">An empty field memory configured as the one in use; the replay fills it. Never the one serving suggestions.</param>
     /// <param name="memory">An empty memory of the kind in use; the replay fills it. Never the one serving suggestions.</param>
     /// <param name="form">The form, with the field's value thresholds set.</param>
     /// <param name="field">A judged field of the form with a coarse level.</param>
     /// <param name="documents">Settled documents, in any order.</param>
-    /// <param name="targetPrecision">The share of prefixes offered that must be right, in (0, 1], for each layer.</param>
+    /// <param name="targetPrecision">The share of classes offered that must be right, in (0, 1], for each layer.</param>
     /// <param name="minimumAnswered">The fewest answers a precision may rest on, for each layer; the application's call.</param>
     /// <param name="counting">
     /// The kinds of settlement (<see cref="SettledDocument.Settlements"/>) whose lookups are counted — say only
@@ -826,8 +826,8 @@ public static class ThresholdSelection
                 {
                     Coarse = new CoarseStep(
                         valueAnswered,
-                        keys is { } k ? (k.Score, k.Prefix == cls) : null,
-                        vote is { } v ? (v.Score, v.Prefix == cls, v.Nearest.Similarity, v.Voted) : null),
+                        keys is { } k ? (k.Score, k.Class == cls) : null,
+                        vote is { } v ? (v.Score, v.Class == cls, v.Nearest.Similarity, v.Voted) : null),
                 };
             }
 

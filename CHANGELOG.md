@@ -52,6 +52,10 @@ with what to do.
   precision, and whether its latest lookup was answered. Null for the other layers. A lookup held back by `MustCatch` is the key's
   but never answered. `ThresholdReplay` now holds a list, so two replays compare equal only by their contents
   (`Keys` compares by reference).
+- **A coarse level from a table.** `new CoarseLevel(classes)` takes value-to-class pairs for a field whose classes are not
+  prefixes of its values; `CoarseLevel.Classes` keeps the table and `Prefix` is 0. Suggestions and
+  `ThresholdSelection.SelectCoarseAsync` group and judge by `CoarseLevel.Of`, which reads the table — a value it does not
+  list is a class of its own. Before, such a field had to store its values with the class in front.
 
 ### Documentation
 
