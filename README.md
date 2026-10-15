@@ -1,9 +1,10 @@
 # Gil
 
-Confirmed-answer memory and cheap one-token judgments in front of an LLM. Repeated requests are answered from
-memory or from a small tree of single-token judgments; only what they cannot settle goes to full generation,
-narrowed to the category the tree already confirmed. Every call is recorded and priced. Promoting answers that keep
-coming back into habits is an experimental feature: off unless a task turns it on, and behind a review gate.
+Suggests the judged fields of a form — a ticket's team, a report's fault code — from the documents already settled, and
+says how often a suggestion it trusts is right. It needs no model: it learns from the values settled together and from
+the settled documents most like the one being filled, and how far to trust each is chosen by replaying the saved
+documents in the order they were settled. The library also carries an experimental path that answers requests in front
+of an LLM from confirmed answers and one-token judgments; see [Stability](#stability).
 
 **Status: early.** The library is being built from a specification whose behaviour was measured first in a
 research harness. Published on NuGet as `Gil` (with `Gil.Abstractions`), `Gil.IronHive` and `Gil.Sqlite`; the API may still change within 0.x —
@@ -11,26 +12,27 @@ research harness. Published on NuGet as `Gil` (with `Gil.Abstractions`), `Gil.Ir
 
 ## When to use it
 
-Gil is for a task that keeps receiving requests of the same few kinds — support tickets, service requests,
-recurring log messages — where each request needs one answer from a known set of categories and someone can say,
-at least some of the time, whether the answer was right. It sits in front of a model you already call:
+Gil is for a form that is filled in again and again — support tickets, service requests, maintenance reports — where
+some fields are typed and others take one of a set of values that the typed ones mostly decide, and where what a person
+finally settled is kept. It suggests those judged fields one at a time:
 
-- **Memory** answers a request that means the same as one whose answer was confirmed. Like a semantic cache, but
-  only confirmed answers enter it, and an answer later marked wrong is forgotten.
-- **The tree** of one-token judgments settles what memory missed when the categories are clear enough to judge,
-  and narrows generation to the confirmed category when they are not.
-- **Every call is recorded and priced**, so whether the tree pays for itself is read off the log rather than assumed.
+- **From values settled together**: a value settled alongside the same value of another field, weighted toward the
+  more recent.
+- **From similar settled documents**: the nearest settled documents vote, compared by their characters with no model,
+  or by meaning through an embedding model you choose.
+- **At a precision you choose**: each layer's threshold is chosen by replaying the saved documents, so a suggestion it
+  trusts carries the precision the replay saw. What falls short is still offered as an untrusted guess.
 
-What was measured: wherever requests repeated, memory did most of the work. Behind memory, the tree with narrowed
-generation beat full generation — one to three points more accurate at about half the cost — on an English benchmark
-with a hosted model. With a mid-size open model on non-English service data it made no difference to accuracy, and
-its cost ran from somewhat lower to nearly double, depending on how long the full generation prompt was. Promoting
-answers into habits did not pay on the realistic datasets and stays off unless a task turns it on. Measure it on your
-own log before relying on it.
+What was measured, on a public stream of aircraft maintenance reports: letting the replay choose the fields that key a
+fault code with several hundred values made the key layer answer it 1.9 times as often as keying it by every field, at
+a precision of 0.94 against 0.90; and the code's chapter — its first two characters — was trusted for 42% of the reports
+whose code went unanswered at a target of 0.95, and was right for 97% of them.
+The precision a replay promises can still be optimistic, most of all where settled documents arrive in batches —
+[Filling forms](#filling-forms) says when and what to do about it. Measure it on your own saved documents before
+relying on it.
 
-It is not the right tool for free conversation (there is no answer to remember or category to judge), for choosing
-between models (a router does that), or for a task that never gets feedback (memory then stays empty — see
-"Memory lives in the process" below for filling it from answers you already have confirmed).
+It is not the right tool for a field whose value the other fields do not decide (free text, a new name), for a form
+nobody settles (memory then stays empty), or for choosing between models (a router does that).
 
 ## Layout
 
@@ -80,6 +82,35 @@ Suppress the ids of what you use, in the project file or around the code:
 [Filling forms](#filling-forms) needs none of them — a telemetry sink passed to `FormResolver` is the one optional piece
 there that does (`GIL0003`). The walkthrough under [Usage](#usage) is the tree judgment path: it needs `GIL0001` and
 `GIL0003`, and `GIL0002` for its habit promotion part.
+
+### The tree judgment path
+
+What the experimental ids cover is the library's first shape: confirmed-answer memory and cheap one-token judgments in
+front of an LLM. Repeated requests are answered from memory or from a small tree of single-token judgments; only what
+they cannot settle goes to full generation, narrowed to the category the tree already confirmed. Every call is recorded
+and priced. Promoting answers that keep coming back into habits is off unless a task turns it on, and behind a review
+gate.
+
+It is for a task that keeps receiving requests of the same few kinds — support tickets, service requests,
+recurring log messages — where each request needs one answer from a known set of categories and someone can say,
+at least some of the time, whether the answer was right. It sits in front of a model you already call:
+
+- **Memory** answers a request that means the same as one whose answer was confirmed. Like a semantic cache, but
+  only confirmed answers enter it, and an answer later marked wrong is forgotten.
+- **The tree** of one-token judgments settles what memory missed when the categories are clear enough to judge,
+  and narrows generation to the confirmed category when they are not.
+- **Every call is recorded and priced**, so whether the tree pays for itself is read off the log rather than assumed.
+
+What was measured: wherever requests repeated, memory did most of the work. Behind memory, the tree with narrowed
+generation beat full generation — one to three points more accurate at about half the cost — on an English benchmark
+with a hosted model. With a mid-size open model on non-English service data it made no difference to accuracy, and
+its cost ran from somewhat lower to nearly double, depending on how long the full generation prompt was. Promoting
+answers into habits did not pay on the realistic datasets and stays off unless a task turns it on. Measure it on your
+own log before relying on it.
+
+It is not the right tool for free conversation (there is no answer to remember or category to judge), for choosing
+between models (a router does that), or for a task that never gets feedback (memory then stays empty — see
+"Memory lives in the process" below for filling it from answers you already have confirmed).
 
 ## Usage
 
@@ -520,6 +551,10 @@ of the form — more than typing: a right two-character chapter saves one keystr
 thresholds chosen on the first ten thousand documents, the chapter of an
 aircraft fault code was trusted for 42% of the reports whose code went unanswered at a target of 0.95, and was right
 for 97% of them; the class of a patent classification, for 10% of the patents unanswered at 0.8, right for 85%.
+Where the class is not in the value, put it there: an application that stored each medical device product code behind
+the two letters of its review panel, from the public classification table, had the panel trusted for 54% of the recall
+records whose code went unanswered at 0.8, right for 90% of them — against 9% from the code's own first letter. A finer
+class with over a thousand values, the regulation number, was trusted for about 4%.
 
 A chosen threshold also holds only for the version of Gil that chose it. A threshold rests on how a layer scores its
 candidates and on what the replay asks, and a release may change either: 0.9.0 changed the key layer's scale, 0.10.0
@@ -537,11 +572,12 @@ values count as there from the start and judged fields as settled in the form's 
 reports can be optimistic. `targetPrecision` is checked on the documents the threshold is chosen on. Where settled documents
 come in batches — several at once from one source, alike in their observed values — whether a near-identical
 document's value is right tends to hold or fail for the whole batch. The replay then sees fewer independent cases than
-it counts. Replaying two public streams, thresholds chosen for a target of 0.8 answered right 0.63 to 0.74 of the time
-on the documents that followed, and those chosen for 0.7 answered right 0.64 to 0.72. The one exception, at 0.8, was a key layer
-backed by settled judged fields in one of the streams. Wider statistical margins did not close the gap. To know the
-precision a field actually delivers, check it on your own documents: choose on those settled up to a date and count
-the answers on those settled after it.
+it counts. With this version, key layer thresholds chosen once for a target of 0.8 on the first forty thousand documents of
+two public streams — an issue tracker and aircraft maintenance reports — answered right 0.85 and 0.90 of the time on
+the forty thousand that followed, and 0.82 to 0.91 for the six fields of a smaller stream of biological sample records.
+Version 0.6.0, on two other streams of sample records, saw 0.63 to 0.74 at 0.8 and
+0.64 to 0.72 at 0.7; wider statistical margins did not close that gap. To know the precision a field actually delivers,
+check it on your own documents: choose on those settled up to a date and count the answers on those settled after it.
 
 Settle a record that arrives again — a retransmission, a re-save — under the same document id. The memories keep one
 version per id, and the replay asks a document settled again without its earlier version, as a suggestion for a saved
