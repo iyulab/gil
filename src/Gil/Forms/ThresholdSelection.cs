@@ -34,6 +34,37 @@ public sealed record ThresholdChoice(double Threshold, double Precision, double 
     /// voter: a lone voter's score is its similarity, so the threshold already is its floor.
     /// </summary>
     public double? SimilarityFloor { get; init; }
+
+    /// <summary>
+    /// The precision to expect of the next answers: that of the answers at or above the threshold among the most recent
+    /// <see cref="ThresholdSelection.RecentDocuments"/> documents replayed, weighted as <see cref="Precision"/> is — or
+    /// <see cref="Precision"/> itself when those answers are worth fewer than the minimum number the threshold rests on.
+    /// <see cref="Precision"/> runs over the whole replay, and a layer that did better long ago keeps it high after the
+    /// layer has changed; this is the number to show as the promise.
+    /// </summary>
+    public double Promise { get; init; } = Precision;
+
+    /// <summary>How many independent answers <see cref="Promise"/> is worth, counted as <see cref="EffectiveAnswered"/> is.</summary>
+    public double PromiseAnswered { get; init; } = Answered;
+}
+
+/// <summary>
+/// How the key layer did under one key, in a replay that chose a key threshold: the lookups whose best value this key backed
+/// most strongly, and how the chosen threshold treated them. A consumer that checks some answered decisions reads it to
+/// see which keys answer, and how well, before deciding how often to check each.
+/// </summary>
+/// <param name="Key">The key, as a suggestion's evidence names it — <c>field: value</c>.</param>
+/// <param name="Lookups">How many lookups this key backed the best value of.</param>
+/// <param name="Answered">How many of them the chosen threshold answered; 0 when none was chosen.</param>
+/// <param name="Precision">The share of those answers that matched, weighted as <see cref="ThresholdChoice.Precision"/> is; null when none was answered.</param>
+/// <param name="Answering">Whether the chosen threshold answered this key's latest lookup — whether it answers under it now.</param>
+public sealed record KeyState(string Key, int Lookups, int Answered, double? Precision, bool Answering)
+{
+    /// <summary>The answers with their weights, as <see cref="ThresholdChoice.AnsweredWeight"/>.</summary>
+    public double AnsweredWeight { get; init; } = Answered;
+
+    /// <summary>How many independent answers <see cref="Precision"/> is worth, as <see cref="ThresholdChoice.EffectiveAnswered"/>.</summary>
+    public double EffectiveAnswered { get; init; } = Answered;
 }
 
 /// <summary>
@@ -49,7 +80,14 @@ public sealed record ThresholdChoice(double Threshold, double Precision, double 
 /// </param>
 /// <param name="Lookups">How many lookups the replay made for this layer.</param>
 /// <param name="Candidates">How many of them found a candidate at any score.</param>
-public sealed record ThresholdReplay(ThresholdChoice? Chosen, ThresholdChoice? MostPrecise, int Lookups, int Candidates);
+public sealed record ThresholdReplay(ThresholdChoice? Chosen, ThresholdChoice? MostPrecise, int Lookups, int Candidates)
+{
+    /// <summary>
+    /// For the key layer of a field that takes one value, the state under each key that backed a best value, most lookups
+    /// first; null for the similar document layer, a coarse level, typing, and a field that takes several values.
+    /// </summary>
+    public IReadOnlyList<KeyState>? Keys { get; init; }
+}
 
 /// <summary>One set of fields tried for a judged field's <see cref="FieldDefinition.KeyFields"/>, and how its key layer replayed.</summary>
 /// <param name="KeyFields">The fields that keyed the judged field in this replay.</param>
@@ -106,6 +144,13 @@ public sealed record LayerThresholds(ThresholdReplay Key, ThresholdReplay Memory
 /// </summary>
 public static class ThresholdSelection
 {
+    /// <summary>
+    /// How many of the latest documents replayed <see cref="ThresholdChoice.Promise"/> is taken over — every document in
+    /// settlement order counts, whether or not it was asked about. Long enough that a field answered on a few percent of its
+    /// documents still has answers to rest on, short enough to leave behind a stretch the layer did better in.
+    /// </summary>
+    public const int RecentDocuments = 5_000;
+
     /// <summary>As <see cref="SelectAsync(IMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>, counting every settlement.</summary>
     public static Task<ThresholdReplay> SelectAsync(
         IMemory memory,
@@ -163,8 +208,8 @@ public static class ThresholdSelection
         Check(form, field, targetPrecision, minimumAnswered);
         NotASet(form, field);
 
-        var steps = await ReplayAsync(null, memory, form, field, documents, counting, cancellationToken).ConfigureAwait(false);
-        return Similarity(steps.Where(s => s.Looked), form.Field(field), targetPrecision, minimumAnswered);
+        var (steps, latest) = await ReplayAsync(null, memory, form, field, documents, counting, cancellationToken).ConfigureAwait(false);
+        return Similarity(steps.Where(s => s.Looked), latest, form.Field(field), targetPrecision, minimumAnswered);
     }
 
     /// <summary>As <see cref="SelectLayersAsync(FieldMemory, IMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>, counting every settlement.</summary>
@@ -224,15 +269,12 @@ public static class ThresholdSelection
         Check(form, field, targetPrecision, minimumAnswered);
         NotASet(form, field);
 
-        var steps = await ReplayAsync(fieldMemory, memory, form, field, documents, counting, cancellationToken).ConfigureAwait(false);
+        var (steps, latest) = await ReplayAsync(fieldMemory, memory, form, field, documents, counting, cancellationToken).ConfigureAwait(false);
         var keyed = steps.Where(s => s.KeyLooked).ToList();
-        var key = Fit(
-            [.. keyed.Where(s => s.Key is not null).Select(s => (s.Key!.Value.Score, s.Key!.Value.Matches, s.Weight))],
-            keyed,
-            targetPrecision,
-            minimumAnswered);
+        var answers = keyed.Where(s => s.Key is not null).Select(s => new Answer(s.Key!.Value.Score, s.Key!.Value.Matches, s.Weight, s.Order, s.Key!.Value.Key)).ToList();
+        var key = WithKeys(Fit(answers, keyed, latest, targetPrecision, minimumAnswered), answers);
         var left = steps.Where(s => s.Looked && !(key.Chosen is { } chosen && s.Key is { } first && first.Score >= chosen.Threshold));
-        return new LayerThresholds(key, Similarity(left, form.Field(field), targetPrecision, minimumAnswered));
+        return new LayerThresholds(key, Similarity(left, latest, form.Field(field), targetPrecision, minimumAnswered));
     }
 
     /// <summary>As <see cref="SelectCoarseAsync(FieldMemory, IMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>, counting every settlement.</summary>
@@ -297,12 +339,12 @@ public static class ThresholdSelection
             throw new ArgumentException($"'{field}' has no coarse level to choose thresholds for.", nameof(field));
         }
 
-        var steps = await ReplayAsync(fieldMemory, memory, form, field, documents, counting, cancellationToken, coarse: true).ConfigureAwait(false);
+        var (steps, latest) = await ReplayAsync(fieldMemory, memory, form, field, documents, counting, cancellationToken, coarse: true).ConfigureAwait(false);
         var left = steps.Where(s => (s.KeyLooked || s.Looked) && !s.Coarse!.ValueAnswered).ToList();
-        var key = Fit([.. left.Where(s => s.Coarse!.Keys is not null).Select(s => (s.Coarse!.Keys!.Value.Score, s.Coarse!.Keys!.Value.Correct, s.Weight))], left, targetPrecision, minimumAnswered);
+        var key = Fit([.. left.Where(s => s.Coarse!.Keys is not null).Select(s => new Answer(s.Coarse!.Keys!.Value.Score, s.Coarse!.Keys!.Value.Correct, s.Weight, s.Order))], left, latest, targetPrecision, minimumAnswered);
         var rest = left.Where(s => !(key.Chosen is { } chosen && s.Coarse!.Keys is { } k && k.Score >= chosen.Threshold)).ToList();
-        var votes = rest.Where(s => s.Coarse!.Vote is not null).Select(s => (Vote: s.Coarse!.Vote!.Value, s.Weight)).ToList();
-        var vote = Fit([.. votes.Select(v => (v.Vote.Score, v.Vote.Correct, v.Weight))], rest, targetPrecision, minimumAnswered);
+        var votes = rest.Where(s => s.Coarse!.Vote is not null).Select(s => (Vote: s.Coarse!.Vote!.Value, s.Weight, s.Order)).ToList();
+        var vote = Fit([.. votes.Select(v => new Answer(v.Vote.Score, v.Vote.Correct, v.Weight, v.Order))], rest, latest, targetPrecision, minimumAnswered);
         var voted = votes.Where(v => v.Vote.Voted).Select(v => (v.Vote.Score, v.Vote.Nearest)).ToList();
         ThresholdChoice? Floored(ThresholdChoice? choice) => choice is null ? null : choice with { SimilarityFloor = SimilarityFloor(voted, choice.Threshold) };
         return new LayerThresholds(key, vote with { Chosen = Floored(vote.Chosen), MostPrecise = Floored(vote.MostPrecise) });
@@ -357,14 +399,15 @@ public static class ThresholdSelection
         Check(form, field, targetPrecision, minimumAnswered);
 
         var multiple = form.Field(field).Multiple;
-        var matches = new List<(double Score, bool Correct, double Weight)>();
-        var (lookups, lookupWeight) = (0, 0.0);
+        var matches = new List<Answer>();
+        var (lookups, lookupWeight, order) = (0, 0.0, 0);
         var ordered = documents
             .Select(FormResolver.Remembered) // a filled value is neither remembered nor asked about
             .OrderBy(d => d.SettledAt)
             .ThenBy(d => d.DocumentId, StringComparer.Ordinal); // the order the field memory weighs settlements in
         foreach (var document in ordered)
         {
+            order++;
             var settledSet = multiple ? PickOrder(document, field) : [];
             string? settled = null;
             if (multiple ? settledSet.Count == 0 : !document.Values.TryGetValue(field, out settled))
@@ -383,7 +426,7 @@ public static class ThresholdSelection
                     lookupWeight += weight;
                     if (memory.First(form, field, before, settled!, beforeSets) is { } first)
                     {
-                        matches.Add((first.Score, first.Matches, weight));
+                        matches.Add(new Answer(first.Score, first.Matches, weight, order, first.Key));
                     }
                 }
                 else
@@ -394,7 +437,7 @@ public static class ThresholdSelection
                         var sought = new HashSet<string>(settledSet[chosen..], StringComparer.Ordinal);
                         lookups += sought.Count;
                         lookupWeight += sought.Count * weight;
-                        matches.AddRange(memory.Scored(form, field, before, sets).Select(s => (s.Score, sought.Contains(s.Value), weight)));
+                        matches.AddRange(memory.Scored(form, field, before, sets).Select(s => new Answer(s.Score, sought.Contains(s.Value), weight, order)));
                     }
                 }
             }
@@ -402,7 +445,8 @@ public static class ThresholdSelection
             memory.Put(form, document);
         }
 
-        return Fit(matches, lookups, lookupWeight, targetPrecision, minimumAnswered);
+        var replay = Fit(matches, lookups, lookupWeight, order, targetPrecision, minimumAnswered);
+        return multiple ? replay : WithKeys(replay, matches);
     }
 
     /// <summary>
@@ -459,12 +503,14 @@ public static class ThresholdSelection
         // Every document asked about: what the key layer's best value was with none of the settled value typed, then
         // with each length of it.
         var asked = new List<Asked>();
+        var order = 0;
         var ordered = documents
             .Select(FormResolver.Remembered) // a filled value is neither remembered nor asked about
             .OrderBy(d => d.SettledAt)
             .ThenBy(d => d.DocumentId, StringComparer.Ordinal); // the order the field memory weighs settlements in
         foreach (var document in ordered)
         {
+            order++;
             if (!document.Values.TryGetValue(field, out var settled))
             {
                 continue;
@@ -475,7 +521,7 @@ public static class ThresholdSelection
             if (memory.Count(form.Name) > 0 && weight > 0)
             {
                 var (before, beforeSets) = (Before(form, document, field), BeforeSets(form, document, field));
-                asked.Add(new Asked(settled, memory.Typed(form, field, before, settled, longest, beforeSets), weight));
+                asked.Add(new Asked(settled, memory.Typed(form, field, before, settled, longest, beforeSets), weight, order));
             }
 
             memory.Put(form, document);
@@ -496,9 +542,9 @@ public static class ThresholdSelection
             var reaching = asked.Where(a => !a.Right && a.Best.Length > length && !a.Holds(length)).ToList();
             var matches = reaching
                 .Where(a => a.Best[length] is not null)
-                .Select(a => (a.Best[length]!.Value.Score, a.Best[length]!.Value.Value == a.Settled, a.Weight))
+                .Select(a => new Answer(a.Best[length]!.Value.Score, a.Best[length]!.Value.Value == a.Settled, a.Weight, a.Order))
                 .ToList();
-            var replay = Fit(matches, reaching.Count, reaching.Sum(a => a.Weight), targetPrecision, minimumAnswered);
+            var replay = Fit(matches, reaching.Count, reaching.Sum(a => a.Weight), order, targetPrecision, minimumAnswered);
             byLength.Add(replay);
             foreach (var a in reaching)
             {
@@ -653,7 +699,7 @@ public static class ThresholdSelection
         new(form.Name, [.. form.Fields.Select(f => f.Name == field ? change(f) : f)], form.Language);
 
     /// <summary>One document of a replay: what the field memory and the document memory held before it said about it.</summary>
-    private readonly record struct Step(bool KeyLooked, (double Score, bool Matches)? Key, bool Looked, (double Score, bool Correct, double Nearest, bool Voted)? Match, double Weight)
+    private readonly record struct Step(bool KeyLooked, (double Score, bool Matches, string Key)? Key, bool Looked, (double Score, bool Correct, double Nearest, bool Voted)? Match, double Weight, int Order)
     {
         /// <summary>For a coarse replay: the level as the keys and the vote back it, and whether the field's value layers answered.</summary>
         public CoarseStep? Coarse { get; init; }
@@ -665,7 +711,7 @@ public static class ThresholdSelection
     /// One document of a typed replay: its settled value, the key layer's best value with none of it typed and with each
     /// length typed (<see cref="FieldMemory.Typed"/>), and what the thresholds chosen so far claimed for it.
     /// </summary>
-    private sealed class Asked(string settled, (double Score, string Value)?[] best, double weight)
+    private sealed class Asked(string settled, (double Score, string Value)?[] best, double weight, int order)
     {
         private readonly List<string> _wrong = [];
 
@@ -673,6 +719,9 @@ public static class ThresholdSelection
 
         /// <summary>How many decisions the document counts as (see <c>Weight</c>).</summary>
         public double Weight { get; } = weight;
+
+        /// <summary>The document's place in settlement order.</summary>
+        public int Order { get; } = order;
 
         public (double Score, string Value)?[] Best { get; } = best;
 
@@ -705,7 +754,7 @@ public static class ThresholdSelection
     /// Replays the documents in the order they were settled, asking each memory about each document before putting it in
     /// — the document memory keeping one document per case, as the form resolver does.
     /// </summary>
-    private static async Task<List<Step>> ReplayAsync(
+    private static async Task<(List<Step> Steps, int Latest)> ReplayAsync(
         FieldMemory? fieldMemory,
         IMemory memory,
         FormDefinition form,
@@ -726,8 +775,10 @@ public static class ThresholdSelection
             .Select(FormResolver.Remembered) // a filled value is neither remembered nor asked about
             .OrderBy(d => d.SettledAt)
             .ThenBy(d => d.DocumentId, StringComparer.Ordinal); // the form resolver's order: later wins, then the larger id
+        var order = 0;
         foreach (var document in ordered)
         {
+            order++;
             if (!document.Values.TryGetValue(field, out var settled))
             {
                 continue;
@@ -761,7 +812,7 @@ public static class ThresholdSelection
             // A settlement not counted is replayed into memory like any other, but not asked about.
             var weight = Weight(document, field, counting);
             var counted = weight > 0;
-            var step = new Step(keyLooked && counted, first, remembered > 0 && counted, match, weight);
+            var step = new Step(keyLooked && counted, first, remembered > 0 && counted, match, weight, order);
             if (coarse && definition.Coarse is { } level)
             {
                 // As a suggestion: the value layers answer at the field's own thresholds; only where they do not is the level offered.
@@ -795,7 +846,7 @@ public static class ThresholdSelection
             remembered++;
         }
 
-        return steps;
+        return (steps, order);
     }
 
     /// <summary>
@@ -866,11 +917,11 @@ public static class ThresholdSelection
     /// The similarity choice over the given lookups: every one counts, answered or not. With more than one voter each
     /// threshold carries the similarity floor of the answers it rests on (<see cref="ThresholdChoice.SimilarityFloor"/>).
     /// </summary>
-    private static ThresholdReplay Similarity(IEnumerable<Step> looked, FieldDefinition definition, double targetPrecision, int minimumAnswered)
+    private static ThresholdReplay Similarity(IEnumerable<Step> looked, int latest, FieldDefinition definition, double targetPrecision, int minimumAnswered)
     {
         var steps = looked.ToList();
         var matches = steps.Where(s => s.Match is not null).Select(s => s.Match!.Value).ToList();
-        var replay = Fit([.. steps.Where(s => s.Match is not null).Select(s => (s.Match!.Value.Score, s.Match!.Value.Correct, s.Weight))], steps, targetPrecision, minimumAnswered);
+        var replay = Fit([.. steps.Where(s => s.Match is not null).Select(s => new Answer(s.Match!.Value.Score, s.Match!.Value.Correct, s.Weight, s.Order))], steps, latest, targetPrecision, minimumAnswered);
         if (definition.SimilarDocumentVotes == 1)
         {
             return replay;
@@ -944,10 +995,70 @@ public static class ThresholdSelection
     /// falls from the top block down, so the answers above a block are at their most precise at the first block that
     /// gathers <paramref name="minimumAnswered"/> of them.
     /// </summary>
-    private static ThresholdReplay Fit(List<(double Score, bool Correct, double Weight)> matches, List<Step> looked, double targetPrecision, int minimumAnswered) =>
-        Fit(matches, looked.Count, looked.Sum(s => s.Weight), targetPrecision, minimumAnswered);
+    private static ThresholdReplay Fit(List<Answer> matches, List<Step> looked, int latest, double targetPrecision, int minimumAnswered) =>
+        Fit(matches, looked.Count, looked.Sum(s => s.Weight), latest, targetPrecision, minimumAnswered);
 
-    private static ThresholdReplay Fit(List<(double Score, bool Correct, double Weight)> matches, int lookups, double lookupWeight, double targetPrecision, int minimumAnswered)
+    private static ThresholdReplay Fit(List<Answer> matches, int lookups, double lookupWeight, int latest, double targetPrecision, int minimumAnswered)
+    {
+        var replay = Fit(matches, lookups, lookupWeight, targetPrecision, minimumAnswered);
+        var recent = matches.Where(m => m.Order > latest - RecentDocuments).ToList();
+        ThresholdChoice? Promised(ThresholdChoice? choice)
+        {
+            if (choice is null)
+            {
+                return null;
+            }
+
+            var (weight, correct, squares) = (0.0, 0.0, 0.0);
+            foreach (var m in recent.Where(m => m.Score >= choice.Threshold))
+            {
+                weight += m.Weight;
+                correct += m.Correct ? m.Weight : 0;
+                squares += m.Weight * m.Weight;
+            }
+
+            var effective = weight > 0 ? weight * weight / squares : 0;
+            return effective >= minimumAnswered
+                ? choice with { Promise = correct / weight, PromiseAnswered = effective }
+                : choice with { Promise = choice.Precision, PromiseAnswered = choice.EffectiveAnswered };
+        }
+
+        return replay with { Chosen = Promised(replay.Chosen), MostPrecise = Promised(replay.MostPrecise) };
+    }
+
+    /// <summary>
+    /// The state under each key that backed a best value: its lookups, and what <paramref name="replay"/>'s chosen
+    /// threshold made of them.
+    /// </summary>
+    private static ThresholdReplay WithKeys(ThresholdReplay replay, IEnumerable<Answer> answers)
+    {
+        var threshold = replay.Chosen?.Threshold;
+        var keys = answers
+            .Where(a => a.Key is not null)
+            .GroupBy(a => a.Key!, StringComparer.Ordinal)
+            .Select(g =>
+            {
+                var answered = g.Where(a => a.Score >= threshold).ToList();
+                var weight = answered.Sum(a => a.Weight);
+                var squares = answered.Sum(a => a.Weight * a.Weight);
+                return new KeyState(
+                    g.Key,
+                    g.Count(),
+                    answered.Count,
+                    weight > 0 ? answered.Where(a => a.Correct).Sum(a => a.Weight) / weight : null,
+                    g.MaxBy(a => a.Order).Score >= threshold)
+                {
+                    AnsweredWeight = weight,
+                    EffectiveAnswered = weight > 0 ? weight * weight / squares : 0,
+                };
+            })
+            .OrderByDescending(k => k.Lookups)
+            .ThenBy(k => k.Key, StringComparer.Ordinal)
+            .ToList();
+        return replay with { Keys = keys };
+    }
+
+    private static ThresholdReplay Fit(List<Answer> matches, int lookups, double lookupWeight, double targetPrecision, int minimumAnswered)
     {
         var blocks = new List<Block>();
         foreach (var group in matches.GroupBy(m => m.Score).OrderBy(g => g.Key))
@@ -992,6 +1103,13 @@ public static class ThresholdSelection
 
         return new ThresholdReplay(chosen, mostPrecise, lookups, matches.Count);
     }
+
+    /// <summary>
+    /// One answer a layer would give at some threshold: its score, whether it matched, how many decisions it counts as, the
+    /// place of its document in settlement order (from 1, counting every document), and for the key layer the key that
+    /// backed it most strongly.
+    /// </summary>
+    private readonly record struct Answer(double Score, bool Correct, double Weight, int Order, string? Key = null);
 
     /// <summary>A band of answers the fit pooled: its lowest score, how many answers, their weight, the weight of the right ones, and the sum of the squared weights.</summary>
     private readonly record struct Block(double Lowest, int Count, double Weight, double Correct, double Squares)

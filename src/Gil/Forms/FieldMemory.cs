@@ -185,10 +185,11 @@ public sealed class FieldMemory
     }
 
     /// <summary>
-    /// The score of the best-ranked value settled under the known keys and whether it is <paramref name="value"/> — what
-    /// <see cref="FieldDefinition.KeyThreshold"/> is compared with; null when no known key was seen.
+    /// The score of the best-ranked value settled under the known keys, whether it is <paramref name="value"/>, and the key
+    /// that backs it most strongly — what <see cref="FieldDefinition.KeyThreshold"/> is compared with; null when no known key
+    /// was seen.
     /// </summary>
-    internal (double Score, bool Matches)? First(
+    internal (double Score, bool Matches, string Key)? First(
         FormDefinition form, string field, IReadOnlyDictionary<string, string> known, string value, IReadOnlyDictionary<string, IReadOnlyList<string>>? knownSets = null)
     {
         if (!_forms.TryGetValue(form.Name, out var index))
@@ -203,7 +204,7 @@ public sealed class FieldMemory
         }
 
         var ranked = Keyed(index, form, definition, known, knownSets ?? NoSets, excluding: null);
-        return ranked.Count > 0 ? (ranked[0].Score, ranked[0].Value == value) : null;
+        return ranked.Count > 0 ? (ranked[0].Score, ranked[0].Value == value, $"{ranked[0].Key.Field}: {ranked[0].Key.Value}") : null;
     }
 
     /// <summary>

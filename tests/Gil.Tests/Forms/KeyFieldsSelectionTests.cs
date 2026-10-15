@@ -77,8 +77,8 @@ public sealed class KeyFieldsSelectionTests
         var again = ThresholdSelection.SelectKeyThreshold(new FieldMemory(), Report(choice.KeyFields), "code", documents, 0.8, 30);
         var all = ThresholdSelection.SelectKeyThreshold(new FieldMemory(), Report(), "code", documents, 0.8, 30);
 
-        choice.Chosen.Should().Be(again);
-        choice.AllFields.Should().Be(all);
+        choice.Chosen.Should().BeEquivalentTo(again);
+        choice.AllFields.Should().BeEquivalentTo(all);
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public sealed class KeyFieldsSelectionTests
         var keyed = ThresholdSelection.SelectKeyThreshold(new FieldMemory(), Report(keyFields: ["part", "place"]), "code", documents, 0.8, 30);
         var resting = ThresholdSelection.SelectKeyThreshold(new FieldMemory(), Report(dependsOn: ["part", "place"]), "code", documents, 0.8, 30);
 
-        keyed.Should().Be(resting);
+        keyed.Should().BeEquivalentTo(resting);
     }
 
     [Fact]
@@ -115,9 +115,9 @@ public sealed class KeyFieldsSelectionTests
         var bounded = ThresholdSelection.SelectKeyFields(() => new FieldMemory(), Report(dependsOn: ["part", "model"]), "code", documents, 0.8, 30);
 
         set.KeyFields.Should().Equal(unset.KeyFields!);
-        set.AllFields.Should().Be(unset.AllFields);
+        set.AllFields.Should().BeEquivalentTo(unset.AllFields);
         bounded.Trials.SelectMany(t => t.KeyFields).Distinct().Should().BeSubsetOf(["part", "model"]);
-        bounded.AllFields.Should().Be(ThresholdSelection.SelectKeyThreshold(new FieldMemory(), Report(dependsOn: ["part", "model"]), "code", documents, 0.8, 30));
+        bounded.AllFields.Should().BeEquivalentTo(ThresholdSelection.SelectKeyThreshold(new FieldMemory(), Report(dependsOn: ["part", "model"]), "code", documents, 0.8, 30));
     }
 
     [Theory]

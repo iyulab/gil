@@ -199,7 +199,7 @@ public sealed class ThresholdSelectionTests
         var replayed = ThresholdSelection.SelectKeyThreshold(new FieldMemory(), Triage, "priority", arrived, 0.9, minimumAnswered: 5);
         var blind = ThresholdSelection.SelectKeyThreshold(new FieldMemory(), Triage, "priority", withoutTeam, 0.9, minimumAnswered: 5);
 
-        replayed.Should().Be(blind);
+        replayed.Should().BeEquivalentTo(blind);
         replayed.Chosen.Should().BeNull(); // the summary alone cannot tell high from low
     }
 }

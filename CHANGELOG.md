@@ -42,6 +42,13 @@ with what to do.
   as something else costs far more than asking. Once one of them has been settled under a key the document has, the key
   layer does not answer the field for that document (its values are still offered, untrusted), and choosing key
   thresholds asks such lookups without counting them as the key layer's. Only for a judged field with a single value.
+- **The promise over the latest documents.** `ThresholdChoice.Promise` is the precision of the threshold's answers among
+  the latest `ThresholdSelection.RecentDocuments` (5,000) documents replayed — the whole replay's `Precision` when those
+  answers are worth fewer than the minimum — with `PromiseAnswered`, how many answers it rests on. Show it as the promise:
+  `Precision` still runs over every document and keeps a better past.
+- **State under each key.** `ThresholdReplay.Keys` lists, for the key layer of a single-valued field, each key that
+  backed a best value (`KeyState`): its lookups, the answers the chosen threshold gave under it, their weighted
+  precision, and whether its latest lookup was answered. Null for the other layers.
 
 ### Documentation
 

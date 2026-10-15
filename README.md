@@ -372,6 +372,16 @@ answered below 3 from 2 to 1 of 1,425, while keeping 81% of the lines the key la
 such a value was already settled: the first one under a key is caught only if someone checks the answer, so it does not
 replace checking.
 
+A replay's precision runs over every document it saw, so a layer that did better long ago keeps it high after the layer
+has changed. Show `ThresholdChoice.Promise` instead: the precision of the answers the threshold gives among the latest
+`ThresholdSelection.RecentDocuments` documents, falling back to the whole replay's when those answers are too few to rest
+on (`PromiseAnswered` says how many they are worth). Choose thresholds again as checks come in, and the promise follows
+what the answers have lately been doing. For the key layer, `ThresholdReplay.Keys` says, under each key that backed a best
+value, how many lookups it had, how many the chosen threshold answered and how precise those were (weighted, as
+checks are), and whether it answers under that key now — what an application checking its answers reads to decide how
+often to check each key. That policy stays the application's: a key answered rightly many times may be checked less
+often, as long as the probability of each draw is still fixed before it.
+
 Each field is tried in a fixed order, and `FieldSuggestion.Source` says which layer the first candidate came from:
 1. Values settled alongside the values the document already has, when the keys backing them score high enough
    (`KeyThreshold`).
