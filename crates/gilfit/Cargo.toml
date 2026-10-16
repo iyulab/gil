@@ -1,0 +1,15 @@
+[package]
+name = "gilfit"
+version = "0.0.0"
+description = "Suggests and decides form field values from how settled documents were filled - the decision core, with no I/O."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+unicode-normalization = "0.1"
+
+[dev-dependencies]
+serde_json = "1"

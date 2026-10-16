@@ -44,6 +44,10 @@ with what to do.
 - A golden for the form path under `tests/fixtures/core`: made-up settled documents and what this implementation decides
   from them, for another implementation to reproduce byte for byte (README "Build and test"). It includes the key
   concentrations chosen for one field.
+- A text golden, `tests/fixtures/core/text.jsonl`: texts that exercise each step of docs/text-normalization.md with
+  the normalized text, key and n-grams each makes.
+- The decision core's Rust rebuild starts under `crates/gilfit` (not published): text normalization, keys and
+  n-grams, reproducing the text golden. CI checks its format, lints and tests.
 
 ## 0.20.0
 

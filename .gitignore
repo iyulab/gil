@@ -6,3 +6,6 @@ bin/
 obj/
 *.user
 .vs/
+
+# Rust build output
+target/

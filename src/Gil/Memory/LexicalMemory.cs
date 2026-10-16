@@ -94,7 +94,10 @@ public sealed class LexicalMemory : IMemory
     /// n-grams of their own; text shorter than the shortest n-gram is one n-gram. Listed in scalar order
     /// (<see cref="ScalarOrdinal"/>), which every sum over them follows.
     /// </summary>
-    private (string Gram, int Count)[] Grams(string text)
+    private (string Gram, int Count)[] Grams(string text) => Grams(text, _minGram, _maxGram);
+
+    /// <summary>As the instance's n-grams, for the given lengths — what docs/text-normalization.md specifies.</summary>
+    internal static (string Gram, int Count)[] Grams(string text, int minGram, int maxGram)
     {
         var normal = TextNormal.Collapse(text);
         if (normal.Length == 0)
@@ -105,13 +108,13 @@ public sealed class LexicalMemory : IMemory
         var padded = $" {normal} ";
         var starts = TextNormal.ScalarStarts(padded);
         var scalars = starts.Length - 1;
-        if (scalars < _minGram)
+        if (scalars < minGram)
         {
             return [(padded, 1)];
         }
 
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
-        for (var n = _minGram; n <= _maxGram && n <= scalars; n++)
+        for (var n = minGram; n <= maxGram && n <= scalars; n++)
         {
             for (var i = 0; i + n <= scalars; i++)
             {
