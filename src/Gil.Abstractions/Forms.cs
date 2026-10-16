@@ -174,6 +174,18 @@ public sealed record FieldDefinition(string Name, FieldRole Role)
     public IReadOnlyList<string>? KeyFields { get; init; }
 
     /// <summary>
+    /// How readily a key of each field is believed after only a few settlements, by the key's field name. A value's
+    /// strength under a key is its weighted count there over the key's weighted total plus this concentration — in a
+    /// Chinese restaurant process, the weight the next settlement under the key gives to a value not yet seen under it. A
+    /// field whose keys keep the value they were first seen with — one that names the very thing this field describes, as
+    /// a reference to another form's document or an equipment number — earns a small concentration, so a key seen once
+    /// already speaks for its value; a broad field whose keys mix values keeps a larger one. Each name must be a field of
+    /// the form, each concentration finite and above 0. A field not named, and every field when this is null, takes 1.
+    /// <c>ThresholdSelection.SelectKeyConcentrations</c> chooses it from settled documents.
+    /// </summary>
+    public IReadOnlyDictionary<string, double>? KeyConcentrations { get; init; }
+
+    /// <summary>
     /// False keeps this field's value out of every other field's evidence, in every layer: it is never a key of the settled
     /// field memory, never a line of the request a similar document is looked up by, and never in a model's context. For
     /// fields that identify a person, so that "this person, therefore this outcome" cannot harden into memory. The field's
@@ -299,9 +311,10 @@ public sealed record FormDefinition
     /// <exception cref="ArgumentException">
     /// A duplicate field name, no judged field, an observed field marked <see cref="FieldDefinition.Multiple"/> or such a
     /// field with a <see cref="FieldDefinition.MemoryThreshold"/> or <see cref="FieldDefinition.TypedKeyThresholds"/>, a
-    /// <see cref="FieldDefinition.SimilarDocumentVotes"/> below 1, or a
+    /// <see cref="FieldDefinition.SimilarDocumentVotes"/> below 1, a
     /// <see cref="FieldDefinition.DependsOn"/> that names an unknown field, the field itself, or a field that is not evidence,
-    /// or a <see cref="FieldDefinition.CandidatesFrom"/> that names an unknown field or the field itself.
+    /// a <see cref="FieldDefinition.CandidatesFrom"/> that names an unknown field or the field itself, or a
+    /// <see cref="FieldDefinition.KeyConcentrations"/> entry for an unknown field or with a concentration that is not finite and above 0.
     /// </exception>
     public FormDefinition(string name, IReadOnlyList<FieldDefinition> fields, PromptLanguage language)
     {
@@ -383,6 +396,14 @@ public sealed record FormDefinition
                     || (field.DependsOn is { } scope && !scope.Contains(key, StringComparer.Ordinal)))
                 {
                     throw new ArgumentException($"Field '{field.Name}' is keyed by '{key}', which is not a field it rests on.", nameof(fields));
+                }
+            }
+
+            foreach (var (key, concentration) in field.KeyConcentrations ?? new Dictionary<string, double>())
+            {
+                if (!byName.ContainsKey(key) || !double.IsFinite(concentration) || concentration <= 0)
+                {
+                    throw new ArgumentException($"Field '{field.Name}' has a key concentration for '{key}' that is not a field of the form with a finite concentration above 0.", nameof(fields));
                 }
             }
 

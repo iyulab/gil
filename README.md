@@ -640,6 +640,30 @@ target of 0.8, which is what the thresholds promise. On the maintenance reports 
 and a coarse level on and a target of 0.95, keying the fault code by the one field chosen answered it rightly 1.36
 times as often as every field, at 0.96 either way; resting it on that field had answered less often than every field.
 
+How far a key seen only a few times is trusted depends on its field. A value's strength under a key is its weighted
+count there over the key's weighted total plus a concentration, 1 unless set: a key seen once lends its value half its
+strength, whatever field it comes from. A field that names the very thing the judged field describes — a reference to
+another form's document, an equipment or customer number — keeps the value its keys were first seen with, so a key of it
+seen once is as good as settled; a broad field whose keys mix values deserves less than half. Choose a concentration for
+each field from the saved documents with `ThresholdSelection.SelectKeyConcentrations`. It replays them in the order
+they were settled and asks, before each, how often a key seen before brought a value new to it; the concentration under
+which that was likeliest is the field's. Two predictions from a key seen once are counted for every field besides, so a
+field whose keys were seldom seen again stays near 1. Then choose the thresholds again, since the scores move:
+
+```csharp
+var concentrations = ThresholdSelection.SelectKeyConcentrations(new FieldMemory(), form, "risk", saved);
+var trusting = form.Field("risk") with { KeyConcentrations = concentrations };
+```
+
+Replaying a year of public food inspections of one area (701 inspections, 382 establishments), where a risk level is
+set per establishment and an inspection's kind is drawn from a few, the establishment field came out at 0.004 and the
+kind at 0.23. Of the 319 inspections of an establishment inspected before, the key layer had answered 291 — 12 wrongly,
+following the kind against the establishment's own record — and abstained on 28; with the concentrations it answered
+313, all right, and abstained on 6. Establishments seen for the first time were answered as before (270 at 0.92, then
+266 at 0.92). On a public issue tracker and the maintenance reports above, where no field names what is judged, the
+concentrations ranged from 0.2 to 5 and the answers given rightly moved by −0.2% to +1.9%, every threshold keeping its
+target.
+
 A key is a short value that recurs. `FieldMemory` uses a value as a key only up to `maxKeyLength` characters once
 normalised (60 by default): free text rarely recurs, and a value that never repeats keys nothing. Where the evidence
 is a line of text that differs from one document to the next only in its variable parts — numbers, addresses,
@@ -728,7 +752,7 @@ dotnet test --solution Gil.slnx
 
 The form path's golden lives in `tests/fixtures/core`: `records.jsonl` holds made-up settled documents, one per line
 (values, sets, how each judged value was settled), and `golden.jsonl` what this implementation decides from them — the
-key fields, layer and coarse thresholds chosen on the first 200 documents, then every suggestion for the rest, numbers
+key fields, key concentrations, layer and coarse thresholds chosen on the first 200 documents, then every suggestion for the rest, numbers
 in their shortest round-trip form. Another implementation that follows docs/text-normalization.md should write the same
 lines byte for byte. Set `GIL_WRITE_CORE_GOLDEN` to a directory to write both files afresh.
 

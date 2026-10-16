@@ -49,8 +49,10 @@ public static class FormsWalkthrough
         var layers = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30, counting: [SettlementKind.Accept, SettlementKind.Correct, SettlementKind.Enter]);
         var narrowed = ThresholdSelection.SelectKeyFields(() => new FieldMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30);
         var typed = ThresholdSelection.SelectTypedKeyThresholds(new FieldMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30);
+        var concentrations = ThresholdSelection.SelectKeyConcentrations(new FieldMemory(), form, "team", saved);
         _ = form.Field("team") with
         {
+            KeyConcentrations = concentrations,
             KeyThreshold = layers.Key.Chosen?.Threshold,
             MemoryThreshold = layers.Memory.Chosen?.Threshold,
             MemorySimilarityFloor = layers.Memory.Chosen?.SimilarityFloor,

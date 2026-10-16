@@ -5,7 +5,8 @@ namespace Gil.Forms;
 /// <summary>
 /// Suggests a judged field's value from how often each value was settled alongside the values the document's other fields
 /// have — no model, no call, energy 0. Each other field's value is a key; a value's score is the sum over the document's
-/// keys of its strength under that key: its weighted count there over the key's weighted total plus one. The same score
+/// keys of its strength under that key: its weighted count there over the key's weighted total plus the concentration of
+/// the key's field (<see cref="FieldDefinition.KeyConcentrations"/>, 1 unless set). The same score
 /// ranks the values and decides whether the first one is trusted. When no key has been seen, the field's most frequently
 /// settled values stand in.
 /// </summary>
@@ -315,8 +316,10 @@ public sealed class FieldMemory
                 continue;
             }
 
-            foreach (var (value, _, strength, latest) in counts.Shares(excluding).Where(s => field.Admits(s.Value, known, knownSets) && Begins(s.Value, typed)))
+            var concentration = Concentration(field, key.Field);
+            foreach (var (value, _, weight, total, latest) in counts.Shares(excluding).Where(s => field.Admits(s.Value, known, knownSets) && Begins(s.Value, typed)))
             {
+                var strength = weight / (total + concentration);
                 var (score, strongest, backing, last) = scores.GetValueOrDefault(value, (0, 0, default, DateTimeOffset.MinValue));
                 (backing, strongest) = strength > strongest ? (key, strength) : (backing, strongest);
                 scores[value] = (score + strength, strongest, backing, latest > last ? latest : last);
@@ -328,6 +331,37 @@ public sealed class FieldMemory
             .ThenByDescending(s => s.Value.Latest)
             .ThenBy(s => s.Key, ScalarOrdinal.Instance)
             .Select(s => (s.Key, s.Value.Score, s.Value.Key))];
+    }
+
+    /// <summary>The concentration of <paramref name="keyField"/>'s keys for <paramref name="field"/> — 1 unless set (<see cref="FieldDefinition.KeyConcentrations"/>).</summary>
+    private static double Concentration(FieldDefinition field, string keyField) =>
+        field.KeyConcentrations is { } concentrations && concentrations.TryGetValue(keyField, out var concentration) ? concentration : 1;
+
+    /// <summary>
+    /// For each key the document's known values give <paramref name="field"/> and that was seen before: the key's field, its
+    /// weighted total and the weight <paramref name="value"/> has under it (0 when the key has not had it). What the next
+    /// settlement under each key is predicted from — <c>ThresholdSelection.SelectKeyConcentrations</c> fits the
+    /// concentrations to it.
+    /// </summary>
+    internal List<(string KeyField, double Total, double Weight)> KeyTotals(
+        FormDefinition form, string field, IReadOnlyDictionary<string, string> known, string value)
+    {
+        if (!_forms.TryGetValue(form.Name, out var index))
+        {
+            return [];
+        }
+
+        var found = new List<(string, double, double)>();
+        foreach (var key in Keys(form, form.Field(field), known, NoSets))
+        {
+            if (index.Values.TryGetValue(new Slot(field, key), out var counts) && counts.Shares() is { Length: > 0 } shares)
+            {
+                var own = Array.FindIndex(shares, s => s.Value == value);
+                found.Add((key.Field, shares[0].Total, own < 0 ? 0 : shares[own].Weight));
+            }
+        }
+
+        return found;
     }
 
     /// <summary>
@@ -480,7 +514,7 @@ public sealed class FieldMemory
         private readonly Dictionary<string, int> _documents = new(StringComparer.Ordinal); // settlements per document
         private Fold _fold = new(recencyDecay);
         private bool _stale;
-        private (string Value, double Share, double Strength, DateTimeOffset Latest)[]? _shares;
+        private (string Value, double Share, double Weight, double Total, DateTimeOffset Latest)[]? _shares;
 
         public int Total => _settled.Count;
 
@@ -511,11 +545,11 @@ public sealed class FieldMemory
         }
 
         /// <summary>
-        /// Each value's share of the weighed total, its strength (its weight over the total plus one) and when it was last
+        /// Each value's share of the weighed total, its weight, the total and when it was last
         /// settled, largest share first; ties to the one settled most recently, then to the ordinally smaller value.
         /// Without caching when a document is left out.
         /// </summary>
-        public (string Value, double Share, double Strength, DateTimeOffset Latest)[] Shares(string? excluding = null)
+        public (string Value, double Share, double Weight, double Total, DateTimeOffset Latest)[] Shares(string? excluding = null)
         {
             if (excluding is not null && _documents.ContainsKey(excluding))
             {
@@ -599,7 +633,7 @@ public sealed class FieldMemory
             _newest.Add(settled);
         }
 
-        public (string Value, double Share, double Strength, DateTimeOffset Latest)[] Shares()
+        public (string Value, double Share, double Weight, double Total, DateTimeOffset Latest)[] Shares()
         {
             if (_newest.Count == 0)
             {
@@ -615,7 +649,7 @@ public sealed class FieldMemory
 
             var total = (_rawTotal * _scale) + _newest.Count;
             return [.. weights
-                .Select(w => (Value: w.Key, Share: w.Value.Weight / total, Strength: w.Value.Weight / (total + 1), w.Value.Latest))
+                .Select(w => (Value: w.Key, Share: w.Value.Weight / total, w.Value.Weight, Total: total, w.Value.Latest))
                 .OrderByDescending(w => w.Share)
                 .ThenByDescending(w => w.Latest)
                 .ThenBy(w => w.Value, ScalarOrdinal.Instance)];

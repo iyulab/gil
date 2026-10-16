@@ -5,10 +5,21 @@ with what to do.
 
 ## Unreleased
 
+### Added
+
+- **How readily each key field's keys are believed, chosen from settled documents.** A value's strength under a key was
+  its weighted count over the key's weighted total plus 1 for every field, so a key seen once lent half its strength
+  even where its field names what is judged — a reference to another form's document, an equipment number — and a broad
+  field whose keys mix values outvoted it. `FieldDefinition.KeyConcentrations` sets the term per key field (1 unless
+  set, which scores exactly as before), and `ThresholdSelection.SelectKeyConcentrations` chooses it by replaying the
+  documents in settlement order: each field takes the concentration under which its keys' predictions of the next value
+  were likeliest. Choose the thresholds again after setting it (README "Filling forms").
+
 ### Documentation
 
 - A golden for the form path under `tests/fixtures/core`: made-up settled documents and what this implementation decides
-  from them, for another implementation to reproduce byte for byte (README "Build and test").
+  from them, for another implementation to reproduce byte for byte (README "Build and test"). It includes the key
+  concentrations chosen for one field.
 
 ## 0.20.0
 

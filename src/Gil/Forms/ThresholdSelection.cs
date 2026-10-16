@@ -825,6 +825,105 @@ public static class ThresholdSelection
             : everyField;
     }
 
+    /// <summary>
+    /// Chooses, for each field that keys a judged field in the settled field memory, how readily its keys are believed
+    /// after only a few settlements (<see cref="FieldDefinition.KeyConcentrations"/>), from how the settled values went.
+    /// Replays the documents in the order the field memory weighs them; before each is remembered, every key its values
+    /// give the field that was seen before predicts the field's value as a Chinese restaurant process does — a value of
+    /// weight w under a key of weighted total W by w ÷ (W + α), a value not yet seen under the key by α ÷ (W + α) — and
+    /// each key field takes the α under which its keys' predictions are likeliest. Two predictions from a key seen once,
+    /// one of the value it had and one of a new value, count for every field besides; alone they make α 1, the strength
+    /// without concentrations, so a field whose keys were seldom seen again stays near it. A field whose keys keep the
+    /// value they were first seen with — one naming the very thing the judged field describes — comes out well below 1,
+    /// and a key of it seen once already speaks for its value; a field whose keys often gain new values comes out above 1.
+    /// The keys are those the form gives the field (<see cref="FieldDefinition.KeyFields"/>), from the values known when
+    /// its suggestion would have been made. Choose the field's thresholds again with the concentrations chosen: they
+    /// change the scores.
+    /// </summary>
+    /// <param name="memory">An empty field memory configured as the one in use; the replay fills it. Never the one serving suggestions.</param>
+    /// <param name="form">The form; its own concentrations for the field are ignored.</param>
+    /// <param name="field">A judged field of the form.</param>
+    /// <param name="documents">Settled documents, in any order, as for <see cref="SelectKeyThreshold"/>.</param>
+    /// <returns>
+    /// A concentration for each key field whose keys were seen again; the rest keep 1. Empty for a field that takes several
+    /// values, whose values under a key are not one prediction each.
+    /// </returns>
+    public static IReadOnlyDictionary<string, double> SelectKeyConcentrations(
+        FieldMemory memory,
+        FormDefinition form,
+        string field,
+        IEnumerable<SettledDocument> documents)
+    {
+        ArgumentNullException.ThrowIfNull(memory);
+        ArgumentNullException.ThrowIfNull(form);
+        ArgumentNullException.ThrowIfNull(documents);
+        if (form.Field(field).Role != FieldRole.Judged)
+        {
+            throw new ArgumentException($"'{field}' is not a judged field.", nameof(field));
+        }
+
+        var concentrations = new Dictionary<string, double>(StringComparer.Ordinal);
+        if (form.Field(field).Multiple)
+        {
+            return concentrations;
+        }
+
+        form = With(form, field, f => f with { KeyConcentrations = null });
+        var predictions = new Dictionary<string, (int Unseen, List<double> Totals)>(StringComparer.Ordinal);
+        var ordered = documents
+            .Select(FormResolver.Remembered) // a filled value is neither remembered nor predicted
+            .OrderBy(d => d.SettledAt)
+            .ThenBy(d => d.DocumentId, ScalarOrdinal.Instance); // the order the field memory weighs settlements in
+        foreach (var document in ordered)
+        {
+            if (!document.Values.TryGetValue(field, out var settled))
+            {
+                continue;
+            }
+
+            memory.Remove(form.Name, document.DocumentId); // a document settled again is not its own evidence
+            foreach (var (keyField, total, weight) in memory.KeyTotals(form, field, Before(form, document, field), settled))
+            {
+                var (unseen, totals) = predictions.TryGetValue(keyField, out var p) ? p : (0, new List<double>());
+                totals.Add(total);
+                predictions[keyField] = (unseen + (weight == 0 ? 1 : 0), totals);
+            }
+
+            memory.Put(form, document);
+        }
+
+        foreach (var (keyField, (unseen, totals)) in predictions)
+        {
+            concentrations[keyField] = Likeliest(unseen, totals);
+        }
+
+        return concentrations;
+    }
+
+    /// <summary>
+    /// The concentration α under which predictions of <paramref name="unseen"/> new values among predictions from keys of
+    /// weighted totals <paramref name="totals"/>, with the two anchoring predictions from a key seen once, are likeliest:
+    /// the root of (unseen + 1) ÷ α = Σ 1 ÷ (W + α) + 2 ÷ (1 + α), which is unique as α times the right side grows from 0
+    /// past the left numerator. Found by halving on a log scale, so the same predictions give the same α to the bit.
+    /// </summary>
+    private static double Likeliest(int unseen, List<double> totals)
+    {
+        var (low, high) = (1e-9, 1e9);
+        for (var step = 0; step < 200; step++)
+        {
+            var mid = Math.Sqrt(low * high);
+            var sum = 2 / (1 + mid);
+            foreach (var total in totals)
+            {
+                sum += 1 / (total + mid);
+            }
+
+            (low, high) = unseen + 1 > mid * sum ? (mid, high) : (low, mid);
+        }
+
+        return Math.Sqrt(low * high);
+    }
+
     /// <summary>The form with <paramref name="field"/> keyed by <paramref name="keyFields"/> (every field it rests on when null).</summary>
     private static FormDefinition KeyedBy(FormDefinition form, string field, IReadOnlyList<string>? keyFields) =>
         With(form, field, f => f with { KeyFields = keyFields });

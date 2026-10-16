@@ -65,6 +65,15 @@ public sealed class CoreGoldenTests
         lines.Add(Line(new JsonObject { ["kind"] = "key_fields", ["field"] = "team", ["fields"] = Strings(keyFields.KeyFields), ["chosen"] = Replay(keyFields.Chosen) }));
         form = With(form, form.Field("team") with { KeyFields = keyFields.KeyFields });
 
+        var concentrations = ThresholdSelection.SelectKeyConcentrations(new FieldMemory(), form, "team", early);
+        lines.Add(Line(new JsonObject
+        {
+            ["kind"] = "key_concentrations",
+            ["field"] = "team",
+            ["concentrations"] = new JsonObject([.. concentrations.OrderBy(c => c.Key, StringComparer.Ordinal).Select(c => KeyValuePair.Create(c.Key, (JsonNode?)c.Value))]),
+        }));
+        form = With(form, form.Field("team") with { KeyConcentrations = concentrations });
+
         var team = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "team", early, 0.8, 10, Counted, Ct);
         lines.Add(Line(new JsonObject { ["kind"] = "layers", ["field"] = "team", ["key"] = Replay(team.Key), ["memory"] = Replay(team.Memory) }));
         form = With(form, form.Field("team") with
