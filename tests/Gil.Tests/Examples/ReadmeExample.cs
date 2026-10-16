@@ -133,6 +133,8 @@ internal static class ReadmeExample
 
         var narrowed = ThresholdSelection.SelectKeyFields(() => new FieldMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30);
         var keyed = form.Field("team") with { KeyFields = narrowed.KeyFields };
+        var concentrations = ThresholdSelection.SelectKeyConcentrations(new FieldMemory(), form, "team", saved);
+        var trusting = form.Field("team") with { KeyConcentrations = concentrations };
 
         var typedTeam = form.Field("team") with { TypedKeyThresholds = ThresholdSelection.SelectTypedKeyThresholds(new FieldMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30).Thresholds };
         var whileTyping = await forms.SuggestAsync(form, "tickets/0412", "team", valuesOnScreen, typed: "ne");

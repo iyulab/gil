@@ -651,8 +651,8 @@ which that was likeliest is the field's. Two predictions from a key seen once ar
 field whose keys were seldom seen again stays near 1. Then choose the thresholds again, since the scores move:
 
 ```csharp
-var concentrations = ThresholdSelection.SelectKeyConcentrations(new FieldMemory(), form, "risk", saved);
-var trusting = form.Field("risk") with { KeyConcentrations = concentrations };
+var concentrations = ThresholdSelection.SelectKeyConcentrations(new FieldMemory(), form, "team", saved);
+var trusting = form.Field("team") with { KeyConcentrations = concentrations };
 ```
 
 Replaying a year of public food inspections of one area (701 inspections, 382 establishments), where a risk level is
