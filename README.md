@@ -7,7 +7,7 @@ documents in the order they were settled. The library also carries an experiment
 of an LLM from confirmed answers and one-token judgments; see [Stability](#stability).
 
 **Status: early.** The library is being built from a specification whose behaviour was measured first in a
-research harness. Published on NuGet as `Gil` (with `Gil.Abstractions`), `Gil.IronHive` and `Gil.Sqlite`; the API may still change within 0.x —
+research harness. Published on NuGet as `Gil` (with `Gil.Abstractions`), `Gil.Tree`, `Gil.IronHive` and `Gil.Sqlite`; the API may still change within 0.x —
 [CHANGELOG.md](https://github.com/iyulab/gilfit/blob/main/CHANGELOG.md) lists each change and what to do about it.
 
 ## When to use it

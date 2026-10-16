@@ -3,7 +3,7 @@
 Versions follow `0.x`: a minor release may change the public API. Each such change is listed under **Breaking**
 with what to do.
 
-## Unreleased
+## 0.20.0
 
 ### Breaking
 
@@ -26,13 +26,13 @@ with what to do.
   call required a memory, so a consumer without one replayed a lexical memory it would never use.
 - **Text is normalized, cut into n-grams and ordered by Unicode scalar value**, as docs/text-normalization.md now
   specifies, so another implementation can reach the same keys, n-grams and sums. Lower-casing is the simple mapping of
-  each scalar, `LexicalMemory` counts n-grams of scalars (a character beyond U+FFFF is no longer two halves), ties and
-  the values of a set sort by scalar value, n-gram ids and every sum over them follow the n-grams' order, and the hash
-  that orders a set's values when choosing thresholds is FNV-1a over UTF-8. Text without characters beyond U+FFFF is
-  normalized as before; replaying three public streams (4,000 documents each), the suggestions and chosen thresholds
-  were the same, with scores differing
-  in the last digits. Choosing thresholds again after upgrading is not needed for that, but a set-valued field's
-  choice may move slightly, as its values are asked about in a new order.
+  each scalar (U+0130 now becomes i), `LexicalMemory` counts n-grams of scalars (a character beyond U+FFFF is no longer
+  two halves), a key's length counts scalars, ties and the values of a set sort by scalar value, n-gram ids and every
+  sum over them follow the n-grams' order, and the hash that orders a set's values when choosing thresholds is FNV-1a
+  over UTF-8. Other text is normalized as before; replaying three public streams (4,000 documents each), the
+  suggestions and chosen thresholds were the same, with scores differing in the last digits. Choosing thresholds again
+  after upgrading is not needed for that, but a set-valued field's choice may move slightly, as its values are asked
+  about in a new order.
 - README says how to leave a field empty: leave it out of the document; an empty string is learned as a value.
 - The repository moved to https://github.com/iyulab/gilfit; the old address redirects. The package and project
   links, the security advisory link and the diagnostic help links for the experimental surface point there.
