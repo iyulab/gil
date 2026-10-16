@@ -7,6 +7,12 @@ with what to do.
 
 ### Breaking
 
+- **The tree judgment path is its own package, `Gil.Tree`.** `Resolver`, the tree and its YAML, traversal, one-token
+  judging, fallback generation and slot filling, habits and their promotion, review, deactivation, differentiation and
+  shadows, and `ResolverFieldModel` moved out of `Gil` into `Gil.Tree`, with the same namespaces and the same
+  experimental ids. Code that uses them adds `Gil.Tree`; `Gil.Sqlite` now depends on it. `Gil` no longer depends on
+  YamlDotNet, and a form consumer changes nothing. The `gil.resolve` span and the `gil.resolution*` metrics come from
+  `Gil.Tree` under the same name (`GilDiagnostics.Name`).
 - **The form path takes one kind of document memory, `LexicalMemory`.** `FormResolver`'s `documentMemory` and the
   `memory` of `ThresholdSelection.SelectAsync`, `SelectLayersAsync` and `SelectCoarseAsync` are `LexicalMemory` instead
   of any `IMemory`. Code that passes a `LexicalMemory` (typed as one) or `null` compiles as before. `EmbeddingMemory`,

@@ -5,7 +5,7 @@
     <PackageTags>$(PackageTags);sqlite;telemetry</PackageTags>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Gil\Gil.csproj" />
+    <ProjectReference Include="..\Gil.Tree\Gil.Tree.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" />

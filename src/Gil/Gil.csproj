@@ -1,14 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>Gil</RootNamespace>
-    <Description>Answers repeated LLM requests from a memory of confirmed answers or from a small tree of one-token judgments, generates only what they cannot settle (narrowed to the category the tree confirmed), and records and prices every call.</Description>
+    <Description>Suggests the judged fields of a record from the records already settled, and says how often a suggestion it trusts is right: values settled together, similar settled records, thresholds chosen by replaying them. No model needed.</Description>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Gil.Abstractions\Gil.Abstractions.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
-    <PackageReference Include="YamlDotNet" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Gil.Tests" />

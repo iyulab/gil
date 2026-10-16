@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Gil\Gil.csproj" />
+    <ProjectReference Include="..\..\src\Gil.Tree\Gil.Tree.csproj" />
     <ProjectReference Include="..\..\src\Gil.IronHive\Gil.IronHive.csproj" />
     <ProjectReference Include="..\..\src\Gil.Sqlite\Gil.Sqlite.csproj" />
     <ProjectReference Include="..\SupportedSurface\SupportedSurface.csproj" />

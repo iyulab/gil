@@ -57,18 +57,18 @@ public sealed class Resolver
     public async Task<Resolution> ResolveAsync(TaskDefinition task, string state, string? traceId = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(task);
-        using var activity = GilDiagnostics.Source.StartActivity("gil.resolve");
+        using var activity = TreeDiagnostics.Source.StartActivity("gil.resolve");
         activity?.SetTag("gil.task", task.Name);
         var started = Stopwatch.GetTimestamp();
         try
         {
             var resolution = await ResolveCoreAsync(task, state, traceId ?? Guid.NewGuid().ToString("N"), cancellationToken).ConfigureAwait(false);
-            GilDiagnostics.Resolved(activity, task.Name, resolution, MemoryOutcome(task, resolution.Recall), Stopwatch.GetElapsedTime(started));
+            TreeDiagnostics.Resolved(activity, task.Name, resolution, MemoryOutcome(task, resolution.Recall), Stopwatch.GetElapsedTime(started));
             return resolution;
         }
         catch (Exception error)
         {
-            GilDiagnostics.Failed(activity, error);
+            TreeDiagnostics.Failed(activity, error);
             throw;
         }
     }

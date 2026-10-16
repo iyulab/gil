@@ -39,7 +39,9 @@ public sealed class ResolverFieldModel : IFieldModel
             return new FieldModelResult([], null, 0);
         }
 
-        var resolution = await _resolver.ResolveAsync(task, FormResolver.Lines(evidence), traceId, cancellationToken).ConfigureAwait(false);
+        // The request is the evidence as `name: value` lines, the form a similar document is looked up by.
+        var request = string.Join('\n', evidence.Select(e => $"{e.Key}: {e.Value}"));
+        var resolution = await _resolver.ResolveAsync(task, request, traceId, cancellationToken).ConfigureAwait(false);
         return resolution.Output is null
             ? new FieldModelResult([], null, resolution.Energy)
             : new FieldModelResult([new FieldCandidate(resolution.Output, resolution.Confidence ?? 0, FieldSource.Model, null)], resolution.Confidence, resolution.Energy);

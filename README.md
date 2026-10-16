@@ -39,7 +39,8 @@ nobody settles (memory then stays empty), or for choosing between models (a rout
 | Project | Contents |
 |---|---|
 | `Gil.Abstractions` | Records and ports: the decision tree, model calls, traversal steps, telemetry sink, habit statistics |
-| `Gil` | The runtime. Currently: the tree YAML reader/writer, calibrated call pricing, the single-token judge, the greedy traverser, output contracts, the fallback generator, slot filling, the resolver (memory → tree → narrowed fallback → full fallback, or memory alone without models), embedding memory (over any Microsoft.Extensions.AI embedding generator too, through `EmbeddingGeneratorModel`), lexical memory (character n-grams, no model), a form resolver that suggests a document's judged fields one at a time from values settled alongside its other values and from similar settled documents (no model), with threshold selection by replay, habit statistics (visits per node, and per-judgment credit and blame from feedback, kept as raw counts), an optional exploration rate that cross-checks accepted answers against the full fallback, optional shadows (answers already known at a node but not yet habits, shown beside its habits so that picking one defers to the fallback instead of letting a similar sibling absorb the request), and promotion proposals (a confirmed fallback answer that keeps recurring at a node, proposed as a habit when it saves more than the judgment it adds, with the tree before and after for review), and deactivation proposals (unreliable, disputed or stale habits, each for its heaviest reason, with age counted in requests), and differentiation signals (a node at its label capacity, and answers repeating at a node with children, told apart as missed, belonging under one child, or needing a new category) |
+| `Gil` | The decision core: form definitions and settlements, the form resolver and its sessions (values settled together, similar settled documents through the lexical memory, an optional model), threshold selection by replay, the document memories, call recording and pricing. No model needed |
+| `Gil.Tree` | The experimental tree judgment path (`GIL0001`, `GIL0002`): the tree YAML reader/writer, the single-token judge, the greedy traverser, output contracts, the fallback generator, slot filling, the resolver (memory → tree → narrowed fallback → full fallback), habits and their promotion, deactivation and differentiation, shadows, and `ResolverFieldModel` |
 | `Gil.IronHive` | Chat and embedding models through any IronHive generator, with ready-made ones for OpenAI-compatible servers (retry rules for busy shared servers, the response kept as received). Optional: implement `IChatModel` and `IEmbeddingModel` yourself and `Gil` needs nothing else |
 | `Gil.Sqlite` | The telemetry store: every trace and model call, habit statistics, promotion and review logs in one SQLite file whose layout is the contract below. Optional: `Gil` takes any `ITelemetrySink`, and a consumer that keeps no telemetry ships no SQLite native library |
 | `Gil.Tests` | Unit tests and the compatibility fixture writer |
@@ -119,6 +120,7 @@ This walkthrough is the tree judgment path, which is experimental — see [Stabi
 
 ```sh
 dotnet add package Gil
+dotnet add package Gil.Tree       # the tree judgment path this walkthrough uses
 dotnet add package Gil.IronHive   # the models below; skip it if you bring your own IChatModel
 dotnet add package Gil.Sqlite     # the telemetry store below; skip it if you keep no telemetry
 ```
