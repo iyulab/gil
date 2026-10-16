@@ -3,6 +3,13 @@
 Versions follow `0.x`: a minor release may change the public API. Each such change is listed under **Breaking**
 with what to do.
 
+## Unreleased
+
+### Changed
+
+- The repository moved to https://github.com/iyulab/gilfit; the old address redirects. The package and project
+  links, the security advisory link and the diagnostic help links for the experimental surface point there.
+
 ## 0.19.0
 
 ### Breaking
