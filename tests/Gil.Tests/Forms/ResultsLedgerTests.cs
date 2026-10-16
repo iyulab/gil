@@ -34,12 +34,25 @@ public sealed class ResultsLedgerTests
     private static List<SettledDocument> Stream(int count, int drift) =>
         [.. Enumerable.Range(1, count).Select(n => Doc(n, $"case {n % 10}", n >= drift && n * 7_919 % 101 < 17 ? "elsewhere" : $"team {n % 10}"))];
 
+    /// <summary>The lower end of the Wilson score interval at one standard error.</summary>
+    private static double Wilson(double p, double n) =>
+        (p + (1 / (2 * n)) - Math.Sqrt((p * (1 - p) / n) + (1 / (4 * n * n)))) / (1 + (1 / n));
+
     [Fact]
-    public void A_short_replay_promises_its_precision()
+    public void A_short_replay_promises_the_low_end_of_its_precision()
     {
         var chosen = ThresholdSelection.SelectKeyThreshold(new FieldMemory(), Ticket, "team", Stream(400, drift: 200), 0.5, 30).Chosen!;
-        chosen.Promise.Should().BeApproximately(chosen.Precision, 1e-12); // every document is among the latest
-        chosen.PromiseAnswered.Should().BeApproximately(chosen.EffectiveAnswered, 1e-9);
+        chosen.PromiseAnswered.Should().BeApproximately(chosen.EffectiveAnswered, 1e-9); // every document is among the latest
+        chosen.Promise.Should().BeApproximately(Wilson(chosen.Precision, chosen.PromiseAnswered), 1e-12);
+        chosen.Promise.Should().BeLessThan(chosen.Precision);
+    }
+
+    [Fact]
+    public void Fewer_answers_lower_the_promise_further_below_the_same_precision()
+    {
+        // The same precision promises less on 30 answers than on 300: the threshold chosen on them flatters a few more.
+        (Wilson(0.9, 30) - 0.9).Should().BeLessThan(Wilson(0.9, 300) - 0.9);
+        (0.9 - Wilson(0.9, 5_000)).Should().BeLessThan(0.005);
     }
 
     [Fact]
@@ -52,7 +65,7 @@ public sealed class ResultsLedgerTests
         var chosen = ThresholdSelection.SelectKeyThreshold(new FieldMemory(), Ticket, "team", documents, 0.5, 30).Chosen!;
         chosen.Answered.Should().Be(9_000 - 10);
         chosen.Precision.Should().BeApproximately(Right(documents.Skip(10)), 1e-12);
-        chosen.Promise.Should().BeApproximately(Right(documents.Skip(9_000 - ThresholdSelection.RecentDocuments)), 1e-12);
+        chosen.Promise.Should().BeApproximately(Wilson(Right(documents.Skip(9_000 - ThresholdSelection.RecentDocuments)), ThresholdSelection.RecentDocuments), 1e-12);
         chosen.Promise.Should().BeLessThan(chosen.Precision - 0.04);
         chosen.PromiseAnswered.Should().Be(ThresholdSelection.RecentDocuments);
     }
@@ -63,8 +76,8 @@ public sealed class ResultsLedgerTests
         // The latest 5,000 documents carry no summary, so no key answers them; the promise has nothing recent to rest on.
         var documents = Stream(2_000, drift: 1_000).Concat(Enumerable.Range(2_001, ThresholdSelection.RecentDocuments).Select(n => Doc(n, null, "team 1"))).ToList();
         var chosen = ThresholdSelection.SelectKeyThreshold(new FieldMemory(), Ticket, "team", documents, 0.5, 30).Chosen!;
-        chosen.Promise.Should().Be(chosen.Precision);
         chosen.PromiseAnswered.Should().BeApproximately(chosen.EffectiveAnswered, 1e-9);
+        chosen.Promise.Should().BeApproximately(Wilson(chosen.Precision, chosen.PromiseAnswered), 1e-12);
     }
 
     private static readonly SettledDocument[] TwoKeys =

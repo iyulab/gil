@@ -5,6 +5,16 @@ with what to do.
 
 ## Unreleased
 
+### Breaking
+
+- **`ThresholdChoice.Promise` is the low end of what the replay supports.** It was the precision of the answers the
+  threshold gives among the latest documents; it is now that precision lowered to the bottom of its Wilson score interval
+  at one standard error for `PromiseAnswered` answers. The threshold is chosen on those same answers, so their precision
+  flattered it most when they were few: on three small public forms (about 670 records each) the similar document
+  layer's promise ran 9.1 points above the answers that followed, and runs 1.5 points above now. On many answers it
+  barely moves; where the old promise was already right it now sits 2–5 points below. Thresholds, `Precision` and every
+  suggestion are unchanged — only the number shown as the promise is lower, by most where the answers are few.
+
 ### Added
 
 - **How readily each key field's keys are believed, chosen from settled documents.** A value's strength under a key was

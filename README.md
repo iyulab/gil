@@ -415,17 +415,25 @@ such a value was already settled: the first one under a key is caught only if so
 replace checking.
 
 A replay's precision runs over every document it saw, so a layer that did better long ago keeps it high after the layer
-has changed. `ThresholdChoice.Promise` is the precision of the answers the threshold gives among the latest
-`ThresholdSelection.RecentDocuments` documents, falling back to the whole replay's when those answers are too few to rest
-on (`PromiseAnswered` says how many they are worth). Show it as the promise when the thresholds were chosen layer by
-layer — `SelectLayersAsync`, or `SelectKeyThreshold` for a field with the key layer alone. Replaying two public streams
-of 80,000 settled documents so, choosing thresholds again as they grew, every layer's `Promise` stayed within half a
-point of what its answers then delivered, where the key layer's whole-replay precision ran 2.5 points high; on a
-stretch where that precision had drifted 9.6 points above the answers, `Promise` was 2.7 points above. It does not
-mend a threshold chosen on the wrong lookups: a similar document threshold chosen apart from the key layer
-(`SelectAsync` on a field that also has a `KeyThreshold`) promised 2.4–2.6 points more than it kept, as its
-whole-replay precision did. On a small form, with too few answers among the latest documents, it falls back to the
-whole replay's precision and is no more honest than it. For the key layer, `ThresholdReplay.Keys` says, under each key that backed a best
+has changed, and the threshold was chosen on those very answers, so their precision flatters it — most of all when they
+are few. `ThresholdChoice.Promise` answers both. It takes the precision of the answers the threshold gives among the
+latest `ThresholdSelection.RecentDocuments` documents (the whole replay's when those are too few to rest on) and lowers
+it to the bottom of its Wilson score interval at one standard error for the answers it rests on, which
+`PromiseAnswered` reports. On many answers the two hardly differ; on a few dozen the promise sits several points
+below. Show it as the promise when the thresholds were chosen layer by layer — `SelectLayersAsync`, or
+`SelectKeyThreshold` for a field with the key layer alone. When `PromiseAnswered` is small, say so beside it: the
+number is a floor, not a forecast.
+
+Replaying three small public forms of about 670 records each, with thresholds chosen again whenever the records grew by
+a tenth, the similar document layer's promise without that lowering ran 9.1 points above what its answers then
+delivered, and 1.5 points above with it; the key layer's moved from between 0.1 below and 6.9 above to between 3.5 below and 1.6
+above. On the first 5,000 records of two larger public streams, where the unlowered promise had already been right,
+the lowered one came out 2.4 and 4.5 points below. Over long replays the recent window is what matters: on two public
+streams of 80,000 records, the recent-window promise stayed within half a point of what its answers delivered where the
+key layer's whole-replay precision ran 2.5 points high, and on a stretch where that precision had drifted 9.6 points
+above the answers it was 2.7 points above. Neither mends a threshold chosen on the wrong lookups: a similar document
+threshold chosen apart from the key layer (`SelectAsync` on a field that also has a `KeyThreshold`) promised 2.4–2.6
+points more than it kept. For the key layer, `ThresholdReplay.Keys` says, under each key that backed a best
 value, how many lookups it had, how many the chosen threshold answered and how precise those were (weighted, as
 checks are), and whether it answers under that key now — what an application checking its answers reads to decide how
 often to check each key. That policy stays the application's: a key answered rightly many times may be checked less

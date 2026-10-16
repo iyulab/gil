@@ -40,9 +40,12 @@ public sealed record ThresholdChoice(double Threshold, double Precision, double 
     public double? SimilarityFloor { get; init; }
 
     /// <summary>
-    /// The precision to expect of the next answers: that of the answers at or above the threshold among the most recent
-    /// <see cref="ThresholdSelection.RecentDocuments"/> documents replayed, weighted as <see cref="Precision"/> is — or
-    /// <see cref="Precision"/> itself when those answers are worth fewer than the minimum number the threshold rests on.
+    /// The precision to expect of the next answers, at the low end of what the replay supports: the precision of the
+    /// answers at or above the threshold among the most recent <see cref="ThresholdSelection.RecentDocuments"/> documents
+    /// replayed, weighted as <see cref="Precision"/> is — or <see cref="Precision"/> itself when those answers are worth
+    /// fewer than the minimum number the threshold rests on — lowered to the bottom of its Wilson score interval at one
+    /// standard error for the <see cref="PromiseAnswered"/> answers it rests on. The threshold was chosen on those same
+    /// answers, so their precision flatters it, most of all when they are few; on many the two hardly differ.
     /// <see cref="Precision"/> runs over the whole replay, and a layer that did better long ago keeps it high after the
     /// layer has changed. Like <see cref="Precision"/>, it is only as honest as the lookups the threshold was chosen on: a
     /// similar document threshold chosen on every lookup, where the key layer answers first, promises too much either way.
@@ -1258,11 +1261,29 @@ public static class ThresholdSelection
 
             var effective = weight > 0 ? weight * weight / squares : 0;
             return effective >= minimumAnswered
-                ? choice with { Promise = correct / weight, PromiseAnswered = effective }
-                : choice with { Promise = choice.Precision, PromiseAnswered = choice.EffectiveAnswered };
+                ? choice with { Promise = Lower(correct / weight, effective), PromiseAnswered = effective }
+                : choice with { Promise = Lower(choice.Precision, choice.EffectiveAnswered), PromiseAnswered = choice.EffectiveAnswered };
         }
 
         return replay with { Chosen = Promised(replay.Chosen), MostPrecise = Promised(replay.MostPrecise) };
+    }
+
+    /// <summary>
+    /// The lower end of the Wilson score interval at one standard error for a precision measured on
+    /// <paramref name="answered"/> independent answers: close to the precision on many answers, well below it on a few —
+    /// where the threshold, chosen on those same answers, flatters them most. One standard error is what a replay of three
+    /// small public forms called for: the promise there ran 9 points above the answers that followed, its lower end 1.5.
+    /// </summary>
+    private static double Lower(double precision, double answered)
+    {
+        if (answered <= 0)
+        {
+            return precision;
+        }
+
+        var centre = precision + (1 / (2 * answered));
+        var margin = Math.Sqrt((precision * (1 - precision) / answered) + (1 / (4 * answered * answered)));
+        return (centre - margin) / (1 + (1 / answered));
     }
 
     /// <summary>
