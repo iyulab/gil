@@ -43,19 +43,26 @@ public sealed class CoreGoldenTests
         {
             Directory.CreateDirectory(target);
             await File.WriteAllLinesAsync(Path.Combine(target, "records.jsonl"), Generate().Select(Write), Ct);
-            await File.WriteAllLinesAsync(Path.Combine(target, "golden.jsonl"), await RunAsync([.. (await File.ReadAllLinesAsync(Path.Combine(target, "records.jsonl"), Ct)).Select(Read)]), Ct);
+            var (written, keys) = await RunAsync([.. (await File.ReadAllLinesAsync(Path.Combine(target, "records.jsonl"), Ct)).Select(Read)]);
+            await File.WriteAllLinesAsync(Path.Combine(target, "golden.jsonl"), written, Ct);
+            await File.WriteAllLinesAsync(Path.Combine(target, "keys.jsonl"), keys, Ct);
             return;
         }
 
         var documents = (await File.ReadAllLinesAsync(records, Ct)).Select(Read).ToList();
 
-        var lines = await RunAsync(documents);
+        var (lines, keyLines) = await RunAsync(documents);
 
         lines.Should().Equal(await File.ReadAllLinesAsync(golden, Ct));
+        keyLines.Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "keys.jsonl"), Ct));
     }
 
-    /// <summary>The settings chosen on the first records, then a suggestion for every judged field of every later record before it is put.</summary>
-    private static async Task<List<string>> RunAsync(IReadOnlyList<SettledDocument> documents)
+    /// <summary>
+    /// The settings chosen on the first records, then a suggestion for every judged field of every later record before it
+    /// is put — and, apart, the key layer alone: what the settled field memory ranks for each single-valued judged field
+    /// of every later record, with the same settings (keys.jsonl), so another implementation can match that layer first.
+    /// </summary>
+    private static async Task<(List<string> Golden, List<string> Keys)> RunAsync(IReadOnlyList<SettledDocument> documents)
     {
         var form = Form();
         var early = documents.Take(Chosen).ToList();
@@ -108,6 +115,30 @@ public sealed class CoreGoldenTests
         lines.Add(Line(new JsonObject { ["kind"] = "key", ["field"] = "tags", ["replay"] = Replay(tags) }));
         form = With(form, form.Field("tags") with { KeyThreshold = tags.Chosen?.Threshold });
 
+        var keyLines = new List<string>();
+        var keyMemory = new FieldMemory();
+        foreach (var document in early)
+        {
+            keyMemory.Put(form, FormResolver.Remembered(document));
+        }
+
+        foreach (var document in documents.Skip(Chosen))
+        {
+            var observed = document.Values.Where(v => form.Field(v.Key).Role == FieldRole.Observed).ToDictionary();
+            foreach (var field in form.Fields.Where(f => f.Role == FieldRole.Judged && !f.Multiple))
+            {
+                keyLines.Add(Line(new JsonObject
+                {
+                    ["kind"] = "key_rank",
+                    ["doc"] = document.DocumentId,
+                    ["field"] = field.Name,
+                    ["candidates"] = new JsonArray([.. keyMemory.Rank(form, field.Name, observed, 3).Select(c => (JsonNode)new JsonArray(c.Value, c.Score, c.Evidence, c.Trusted))]),
+                }));
+            }
+
+            keyMemory.Put(form, FormResolver.Remembered(document));
+        }
+
         var resolver = new FormResolver(new FieldMemory(), new LexicalMemory());
         await resolver.RebuildAsync(form, early, Ct);
         foreach (var document in documents.Skip(Chosen))
@@ -130,7 +161,7 @@ public sealed class CoreGoldenTests
             await resolver.RebuildAsync(form, [document], Ct);
         }
 
-        return lines;
+        return (lines, keyLines);
     }
 
     private static string Line(JsonObject line) => line.ToJsonString(Json);

@@ -767,8 +767,9 @@ The form path's golden lives in `tests/fixtures/core`: `records.jsonl` holds mad
 key fields, key concentrations, layer and coarse thresholds chosen on the first 200 documents, then every suggestion for the rest, numbers
 in their shortest round-trip form. Another implementation that follows docs/text-normalization.md should write the same
 lines byte for byte. `text.jsonl` does the same for the normalization alone: texts that exercise each of its steps,
-with the normalized text, the key and the n-grams each makes. Set `GIL_WRITE_CORE_GOLDEN` to a directory to write the
-files afresh.
+with the normalized text, the key and the n-grams each makes, and `keys.jsonl` for the settled field memory alone:
+what it ranks for each single-valued judged field of every later record, with the same settings. Set
+`GIL_WRITE_CORE_GOLDEN` to a directory to write the files afresh.
 
 The decision core is being rebuilt in Rust under `crates/gilfit`, checked against the same goldens; it is not
 published yet. With a stable Rust toolchain:
