@@ -47,7 +47,9 @@ with what to do.
 - A text golden, `tests/fixtures/core/text.jsonl`: texts that exercise each step of docs/text-normalization.md with
   the normalized text, key and n-grams each makes.
 - The decision core's Rust rebuild starts under `crates/gilfit` (not published): text normalization, keys and
-  n-grams, reproducing the text golden. CI checks its format, lints and tests.
+  n-grams, reproducing the text golden, and the settled field memory, reproducing a new key layer golden
+  (`tests/fixtures/core/keys.jsonl` — the field memory's ranking for each later record of the form path's golden) to
+  the bit. CI checks its format, lints and tests.
 
 ## 0.20.0
 
