@@ -58,6 +58,16 @@ public static class FormsWalkthrough
             TypedKeyThresholds = typed.Thresholds,
         };
 
-        return saved.Count + (reopened is null ? 0 : 1) + onScreen.Count + (whileTyping is null ? 0 : 1);
+        // Without a document memory: the key layer alone, its coarse level chosen with no memory to replay.
+        var keysOnly = new FormResolver(new FieldMemory(), documentMemory: null);
+        await keysOnly.RebuildAsync(form, saved);
+        var coded = new FormDefinition("ticket-coded",
+        [
+            new FieldDefinition("component", FieldRole.Observed),
+            new FieldDefinition("team", FieldRole.Judged) { Coarse = new CoarseLevel(1) },
+        ], PromptLanguage.English);
+        var coarse = await ThresholdSelection.SelectCoarseAsync(new FieldMemory(), memory: null, coded, "team", saved, targetPrecision: 0.9, minimumAnswered: 30);
+
+        return saved.Count + (reopened is null ? 0 : 1) + onScreen.Count + (whileTyping is null ? 0 : 1) + (coarse.Memory.Chosen is null ? 0 : 1);
     }
 }
