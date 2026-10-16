@@ -5,8 +5,19 @@ with what to do.
 
 ## Unreleased
 
+### Breaking
+
+- **The form path takes one kind of document memory, `LexicalMemory`.** `FormResolver`'s `documentMemory` and the
+  `memory` of `ThresholdSelection.SelectAsync`, `SelectLayersAsync` and `SelectCoarseAsync` are `LexicalMemory` instead
+  of any `IMemory`. Code that passes a `LexicalMemory` (typed as one) or `null` compiles as before. `EmbeddingMemory`,
+  `CircuitBreakingMemory` and a memory of your own still fit through overloads that take any `IMemory`, now marked
+  experimental with the new id `GIL0004`: suppress it to keep using them (`<NoWarn>$(NoWarn);GIL0004</NoWarn>`).
+
 ### Changed
 
+- **`SelectCoarseAsync` takes no document memory when the form resolver has none.** Pass `memory: null`: the class the
+  keys back is chosen as before, nothing votes, and `LayerThresholds.Memory` is a replay with no answers. Before, the
+  call required a memory, so a consumer without one replayed a lexical memory it would never use.
 - The repository moved to https://github.com/iyulab/gilfit; the old address redirects. The package and project
   links, the security advisory link and the diagnostic help links for the experimental surface point there.
 

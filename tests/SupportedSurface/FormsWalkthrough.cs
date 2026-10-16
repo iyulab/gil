@@ -10,7 +10,7 @@ namespace SupportedSurface;
 /// </summary>
 public static class FormsWalkthrough
 {
-    public static async Task<int> RunAsync(IEmbeddingModel? embedder = null)
+    public static async Task<int> RunAsync()
     {
         var form = new FormDefinition("ticket",
         [
@@ -21,11 +21,7 @@ public static class FormsWalkthrough
             new FieldDefinition("severity", FieldRole.Judged) { Candidates = ["low", "medium", "high"], Policy = FieldPolicy.ConfirmRequired },
         ], PromptLanguage.English);
 
-        // A document memory without a model, or one over an embedding model — optionally behind a circuit breaker.
-        IMemory documents = embedder is null
-            ? new LexicalMemory()
-            : new CircuitBreakingMemory(new EmbeddingMemory(embedder), TimeSpan.FromSeconds(30));
-        var forms = new FormResolver(new FieldMemory(), documents, similarDocumentCount: 3);
+        var forms = new FormResolver(new FieldMemory(), new LexicalMemory(), similarDocumentCount: 3);
 
         List<SettledDocument> saved = [];
         foreach (var (id, component, owner) in new[] { ("t/1", "vpn", "network"), ("t/2", "vpn", "network"), ("t/3", "billing", "finance") })

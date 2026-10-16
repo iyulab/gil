@@ -142,6 +142,20 @@ public sealed class CoarseLevelTests
             .Should().ThrowAsync<ArgumentException>().WithMessage("*coarse level*");
     }
 
+    [Fact]
+    public async Task Without_a_document_memory_a_replay_chooses_only_the_key_threshold_of_the_level()
+    {
+        // As a form resolver without a document memory: the keys' class is chosen as with one, and nothing votes.
+        var form = Report(new CoarseLevel(2));
+
+        var keysOnly = await ThresholdSelection.SelectCoarseAsync(new FieldMemory(), memory: null, form, "code", History, 0.01, minimumAnswered: 1, Ct);
+        var withMemory = await ThresholdSelection.SelectCoarseAsync(new FieldMemory(), new LexicalMemory(), form, "code", History, 0.01, minimumAnswered: 1, Ct);
+
+        keysOnly.Key.Should().BeEquivalentTo(withMemory.Key);
+        keysOnly.Memory.Chosen.Should().BeNull();
+        keysOnly.Memory.Candidates.Should().Be(0);
+    }
+
     // The systems the codes belong to, named as a table would name them rather than by their leading digits.
     private static readonly Dictionary<string, string> Systems = new()
     {

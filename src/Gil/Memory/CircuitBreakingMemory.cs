@@ -16,6 +16,7 @@ public sealed class MemoryUnavailableException(string message, Exception inner) 
 /// <param name="inner">The memory to protect.</param>
 /// <param name="cooldown">How long calls are refused after a failure.</param>
 /// <param name="time">The clock; the system clock by default.</param>
+[Experimental(Stability.DocumentMemory, UrlFormat = Stability.Url)]
 public sealed class CircuitBreakingMemory(IMemory inner, TimeSpan cooldown, TimeProvider? time = null) : IMemory, IEmbeddingPrefetch
 {
     private readonly IMemory _inner = inner ?? throw new ArgumentNullException(nameof(inner));

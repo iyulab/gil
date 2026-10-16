@@ -11,6 +11,7 @@ public sealed record FeedbackEntry(string TraceId, string State, string? Mode, s
 /// request log — only answers confirmed by feedback go in, and a remembered answer that proved wrong is forgotten — so it
 /// can always be rebuilt from the log.
 /// </summary>
+[Experimental(Stability.DocumentMemory, UrlFormat = Stability.Url)]
 public sealed class EmbeddingMemory(EmbeddingRecorder embedder, int pendingLimit = 10_000) : IMemory, IEmbeddingPrefetch
 {
     /// <summary>How many texts one embedding call carries when several are embedded together.</summary>

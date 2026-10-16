@@ -6,7 +6,7 @@ namespace Gil.Forms;
 /// <summary>
 /// Suggests the judged fields of a form, one document at a time. Each field is tried in a fixed order — values settled
 /// alongside the document's other values (<see cref="FieldMemory"/>) under a key strong enough, then the value of a
-/// similar settled document (an optional <see cref="IMemory"/>) close enough, then a model (an optional
+/// similar settled document (an optional <see cref="LexicalMemory"/>) close enough, then a model (an optional
 /// <see cref="IFieldModel"/>, called only when neither memory had evidence). A layer answers only above its threshold;
 /// below it, what it found is offered after the answering layers as a guess, followed by the values settled most often
 /// overall, and a field without an answer is left to a person (<see cref="FieldSuggestion.Answered"/>). Without a
@@ -48,12 +48,42 @@ public sealed class FormResolver
     /// </param>
     public FormResolver(
         FieldMemory fieldMemory,
-        IMemory? documentMemory = null,
+        LexicalMemory? documentMemory = null,
         IFieldModel? model = null,
         ITelemetrySink? sink = null,
         int candidateCount = 3,
         TimeProvider? timeProvider = null,
         int similarDocumentCount = 0)
+        : this(documentMemory, fieldMemory, model, sink, candidateCount, timeProvider, similarDocumentCount)
+    {
+    }
+
+    /// <summary>
+    /// As the supported constructor, with a document memory of another kind — an embedding memory, a circuit breaker in
+    /// front of one, or a memory of your own. Experimental: a document memory other than <see cref="LexicalMemory"/> is
+    /// outside the supported surface.
+    /// </summary>
+    [Experimental(Stability.DocumentMemory, UrlFormat = Stability.Url)]
+    public FormResolver(
+        FieldMemory fieldMemory,
+        IMemory documentMemory,
+        IFieldModel? model = null,
+        ITelemetrySink? sink = null,
+        int candidateCount = 3,
+        TimeProvider? timeProvider = null,
+        int similarDocumentCount = 0)
+        : this(documentMemory ?? throw new ArgumentNullException(nameof(documentMemory)), fieldMemory, model, sink, candidateCount, timeProvider, similarDocumentCount)
+    {
+    }
+
+    private FormResolver(
+        IMemory? documentMemory,
+        FieldMemory fieldMemory,
+        IFieldModel? model,
+        ITelemetrySink? sink,
+        int candidateCount,
+        TimeProvider? timeProvider,
+        int similarDocumentCount)
     {
         ArgumentNullException.ThrowIfNull(fieldMemory);
         ArgumentOutOfRangeException.ThrowIfLessThan(candidateCount, 1);

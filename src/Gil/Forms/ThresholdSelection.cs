@@ -1,3 +1,6 @@
+using Gil.Memory;
+
+using System.Diagnostics.CodeAnalysis;
 namespace Gil.Forms;
 
 /// <summary>A threshold chosen for one memory layer of a field, and how it did on the replay it was chosen on.</summary>
@@ -152,9 +155,9 @@ public static class ThresholdSelection
     /// </summary>
     public const int RecentDocuments = 5_000;
 
-    /// <summary>As <see cref="SelectAsync(IMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>, counting every settlement.</summary>
+    /// <summary>As <see cref="SelectAsync(LexicalMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>, counting every settlement.</summary>
     public static Task<ThresholdReplay> SelectAsync(
-        IMemory memory,
+        LexicalMemory memory,
         FormDefinition form,
         string field,
         IEnumerable<SettledDocument> documents,
@@ -174,7 +177,7 @@ public static class ThresholdSelection
     /// answers in all. When no threshold does, <see cref="ThresholdReplay.Chosen"/> is null and memory should not answer
     /// this field on its own; <see cref="ThresholdReplay.MostPrecise"/> still says how close it came. On its own this
     /// is right only for a field without a <see cref="FieldDefinition.KeyThreshold"/>: with one, a similar document answers
-    /// only where no key did — choose both with <see cref="SelectLayersAsync(FieldMemory, IMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>.
+    /// only where no key did — choose both with <see cref="SelectLayersAsync(FieldMemory, LexicalMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>.
     /// </summary>
     /// <param name="memory">An empty memory of the kind in use; the replay fills it. Never the one serving suggestions.</param>
     /// <param name="form">The form.</param>
@@ -193,7 +196,36 @@ public static class ThresholdSelection
     /// (<see cref="SettlementKind.Fill"/>) is never asked about nor remembered, as memory does not learn it.
     /// </param>
     /// <param name="cancellationToken">Cancels the replay.</param>
-    public static async Task<ThresholdReplay> SelectAsync(
+    public static Task<ThresholdReplay> SelectAsync(
+        LexicalMemory memory,
+        FormDefinition form,
+        string field,
+        IEnumerable<SettledDocument> documents,
+        double targetPrecision,
+        int minimumAnswered,
+        IReadOnlyCollection<SettlementKind>? counting,
+        CancellationToken cancellationToken = default) =>
+        SimilarAsync(memory, form, field, documents, targetPrecision, minimumAnswered, counting, cancellationToken);
+
+    /// <summary>As the overload taking <c>counting</c>, counting every settlement. Experimental (GIL0004).</summary>
+    [Experimental(Stability.DocumentMemory, UrlFormat = Stability.Url)]
+    public static Task<ThresholdReplay> SelectAsync(
+        IMemory memory,
+        FormDefinition form,
+        string field,
+        IEnumerable<SettledDocument> documents,
+        double targetPrecision,
+        int minimumAnswered,
+        CancellationToken cancellationToken = default) =>
+        SelectAsync(memory, form, field, documents, targetPrecision, minimumAnswered, counting: null, cancellationToken);
+
+    /// <summary>
+    /// As <see cref="SelectAsync(LexicalMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>,
+    /// replaying a document memory of another kind — an embedding memory, or one of your own. Experimental: a document
+    /// memory other than <see cref="LexicalMemory"/> is outside the supported surface.
+    /// </summary>
+    [Experimental(Stability.DocumentMemory, UrlFormat = Stability.Url)]
+    public static Task<ThresholdReplay> SelectAsync(
         IMemory memory,
         FormDefinition form,
         string field,
@@ -201,7 +233,18 @@ public static class ThresholdSelection
         double targetPrecision,
         int minimumAnswered,
         IReadOnlyCollection<SettlementKind>? counting,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        SimilarAsync(memory, form, field, documents, targetPrecision, minimumAnswered, counting, cancellationToken);
+
+    private static async Task<ThresholdReplay> SimilarAsync(
+        IMemory memory,
+        FormDefinition form,
+        string field,
+        IEnumerable<SettledDocument> documents,
+        double targetPrecision,
+        int minimumAnswered,
+        IReadOnlyCollection<SettlementKind>? counting,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(memory);
         ArgumentNullException.ThrowIfNull(form);
@@ -213,10 +256,10 @@ public static class ThresholdSelection
         return Similarity(steps.Where(s => s.Looked), latest, form.Field(field), targetPrecision, minimumAnswered);
     }
 
-    /// <summary>As <see cref="SelectLayersAsync(FieldMemory, IMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>, counting every settlement.</summary>
+    /// <summary>As <see cref="SelectLayersAsync(FieldMemory, LexicalMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>, counting every settlement.</summary>
     public static Task<LayerThresholds> SelectLayersAsync(
         FieldMemory fieldMemory,
-        IMemory memory,
+        LexicalMemory memory,
         FormDefinition form,
         string field,
         IEnumerable<SettledDocument> documents,
@@ -252,7 +295,37 @@ public static class ThresholdSelection
     /// A replay of each layer. The memory layer's <see cref="ThresholdReplay.Lookups"/>, and the answer rates of its
     /// thresholds, count only the lookups left to it.
     /// </returns>
-    public static async Task<LayerThresholds> SelectLayersAsync(
+    public static Task<LayerThresholds> SelectLayersAsync(
+        FieldMemory fieldMemory,
+        LexicalMemory memory,
+        FormDefinition form,
+        string field,
+        IEnumerable<SettledDocument> documents,
+        double targetPrecision,
+        int minimumAnswered,
+        IReadOnlyCollection<SettlementKind>? counting,
+        CancellationToken cancellationToken = default) =>
+        LayersAsync(fieldMemory, memory, form, field, documents, targetPrecision, minimumAnswered, counting, cancellationToken);
+
+    /// <summary>As the overload taking <c>counting</c>, counting every settlement. Experimental (GIL0004).</summary>
+    [Experimental(Stability.DocumentMemory, UrlFormat = Stability.Url)]
+    public static Task<LayerThresholds> SelectLayersAsync(
+        FieldMemory fieldMemory,
+        IMemory memory,
+        FormDefinition form,
+        string field,
+        IEnumerable<SettledDocument> documents,
+        double targetPrecision,
+        int minimumAnswered,
+        CancellationToken cancellationToken = default) =>
+        SelectLayersAsync(fieldMemory, memory, form, field, documents, targetPrecision, minimumAnswered, counting: null, cancellationToken);
+
+    /// <summary>
+    /// As <see cref="SelectLayersAsync(FieldMemory, LexicalMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>,
+    /// replaying a document memory of another kind. Experimental, as for <see cref="SelectAsync(IMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>.
+    /// </summary>
+    [Experimental(Stability.DocumentMemory, UrlFormat = Stability.Url)]
+    public static Task<LayerThresholds> SelectLayersAsync(
         FieldMemory fieldMemory,
         IMemory memory,
         FormDefinition form,
@@ -261,7 +334,19 @@ public static class ThresholdSelection
         double targetPrecision,
         int minimumAnswered,
         IReadOnlyCollection<SettlementKind>? counting,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        LayersAsync(fieldMemory, memory, form, field, documents, targetPrecision, minimumAnswered, counting, cancellationToken);
+
+    private static async Task<LayerThresholds> LayersAsync(
+        FieldMemory fieldMemory,
+        IMemory memory,
+        FormDefinition form,
+        string field,
+        IEnumerable<SettledDocument> documents,
+        double targetPrecision,
+        int minimumAnswered,
+        IReadOnlyCollection<SettlementKind>? counting,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(fieldMemory);
         ArgumentNullException.ThrowIfNull(memory);
@@ -278,10 +363,10 @@ public static class ThresholdSelection
         return new LayerThresholds(key, Similarity(left, latest, form.Field(field), targetPrecision, minimumAnswered));
     }
 
-    /// <summary>As <see cref="SelectCoarseAsync(FieldMemory, IMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>, counting every settlement.</summary>
+    /// <summary>As <see cref="SelectCoarseAsync(FieldMemory, LexicalMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>, counting every settlement.</summary>
     public static Task<LayerThresholds> SelectCoarseAsync(
         FieldMemory fieldMemory,
-        IMemory memory,
+        LexicalMemory? memory,
         FormDefinition form,
         string field,
         IEnumerable<SettledDocument> documents,
@@ -295,12 +380,16 @@ public static class ThresholdSelection
     /// offers it: on the lookups the field's value layers leave unanswered at the thresholds it has
     /// (<see cref="FieldDefinition.KeyThreshold"/>, <see cref="FieldDefinition.MemoryThreshold"/> with its floor — choose
     /// those first), the class the keys back, as <see cref="SelectKeyThreshold"/> chooses for a value; on the lookups that
-    /// leaves, the class the similar documents vote for, as <see cref="SelectAsync(IMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/> does, with its similarity floor. A
+    /// leaves, the class the similar documents vote for, as <see cref="SelectAsync(LexicalMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/> does, with its similarity floor. A
     /// class is right when it is the settled value's (<see cref="CoarseLevel.Of"/>). Each document is asked about in
     /// memories holding only the documents settled before it, then put into both, as for the value.
     /// </summary>
     /// <param name="fieldMemory">An empty field memory configured as the one in use; the replay fills it. Never the one serving suggestions.</param>
-    /// <param name="memory">An empty memory of the kind in use; the replay fills it. Never the one serving suggestions.</param>
+    /// <param name="memory">
+    /// An empty document memory configured as the one in use; the replay fills it. Never the one serving suggestions.
+    /// Null for a form resolver without a document memory: then no similar document answers the value or votes for a
+    /// class, and only <see cref="CoarseLevel.KeyThreshold"/> is chosen — the memory layer's replay has no lookups.
+    /// </param>
     /// <param name="form">The form, with the field's value thresholds set.</param>
     /// <param name="field">A judged field of the form with a coarse level.</param>
     /// <param name="documents">Settled documents, in any order.</param>
@@ -319,7 +408,37 @@ public static class ThresholdSelection
     /// <see cref="ThresholdChoice.SimilarityFloor"/> for <see cref="CoarseLevel.MemorySimilarityFloor"/>. Their
     /// <see cref="ThresholdReplay.Lookups"/> count only the lookups left to each.
     /// </returns>
-    public static async Task<LayerThresholds> SelectCoarseAsync(
+    public static Task<LayerThresholds> SelectCoarseAsync(
+        FieldMemory fieldMemory,
+        LexicalMemory? memory,
+        FormDefinition form,
+        string field,
+        IEnumerable<SettledDocument> documents,
+        double targetPrecision,
+        int minimumAnswered,
+        IReadOnlyCollection<SettlementKind>? counting,
+        CancellationToken cancellationToken = default) =>
+        CoarseAsync(fieldMemory, memory, form, field, documents, targetPrecision, minimumAnswered, counting, cancellationToken);
+
+    /// <summary>As the overload taking <c>counting</c>, counting every settlement. Experimental (GIL0004).</summary>
+    [Experimental(Stability.DocumentMemory, UrlFormat = Stability.Url)]
+    public static Task<LayerThresholds> SelectCoarseAsync(
+        FieldMemory fieldMemory,
+        IMemory memory,
+        FormDefinition form,
+        string field,
+        IEnumerable<SettledDocument> documents,
+        double targetPrecision,
+        int minimumAnswered,
+        CancellationToken cancellationToken = default) =>
+        SelectCoarseAsync(fieldMemory, memory, form, field, documents, targetPrecision, minimumAnswered, counting: null, cancellationToken);
+
+    /// <summary>
+    /// As <see cref="SelectCoarseAsync(FieldMemory, LexicalMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>,
+    /// replaying a document memory of another kind. Experimental, as for <see cref="SelectAsync(IMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>.
+    /// </summary>
+    [Experimental(Stability.DocumentMemory, UrlFormat = Stability.Url)]
+    public static Task<LayerThresholds> SelectCoarseAsync(
         FieldMemory fieldMemory,
         IMemory memory,
         FormDefinition form,
@@ -330,8 +449,22 @@ public static class ThresholdSelection
         IReadOnlyCollection<SettlementKind>? counting,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(fieldMemory);
         ArgumentNullException.ThrowIfNull(memory);
+        return CoarseAsync(fieldMemory, memory, form, field, documents, targetPrecision, minimumAnswered, counting, cancellationToken);
+    }
+
+    private static async Task<LayerThresholds> CoarseAsync(
+        FieldMemory fieldMemory,
+        IMemory? memory,
+        FormDefinition form,
+        string field,
+        IEnumerable<SettledDocument> documents,
+        double targetPrecision,
+        int minimumAnswered,
+        IReadOnlyCollection<SettlementKind>? counting,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(fieldMemory);
         ArgumentNullException.ThrowIfNull(form);
         ArgumentNullException.ThrowIfNull(documents);
         Check(form, field, targetPrecision, minimumAnswered);
@@ -360,7 +493,7 @@ public static class ThresholdSelection
     /// <paramref name="minimumAnswered"/> of them in all; when no score does, <see cref="ThresholdReplay.Chosen"/> is
     /// null — the field's keys then should not answer on their own. A document whose keys were never seen before is a lookup without an answer. Repeats of
     /// the same documents answering each other well do not lower the score that a weakly backed value needs. The key layer
-    /// is consulted first, on every lookup, so this is right on its own; <see cref="SelectLayersAsync(FieldMemory, IMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/> chooses it the
+    /// is consulted first, on every lookup, so this is right on its own; <see cref="SelectLayersAsync(FieldMemory, LexicalMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/> chooses it the
     /// same way together with the memory threshold.
     /// <para>
     /// A field that takes several values (<see cref="FieldDefinition.Multiple"/>) trusts each value on its own score, so
@@ -757,7 +890,7 @@ public static class ThresholdSelection
     /// </summary>
     private static async Task<(List<Step> Steps, int Latest)> ReplayAsync(
         FieldMemory? fieldMemory,
-        IMemory memory,
+        IMemory? memory,
         FormDefinition form,
         string field,
         IEnumerable<SettledDocument> documents,
@@ -787,7 +920,7 @@ public static class ThresholdSelection
 
             // A document settled again is not its own evidence, as a suggestion for a saved document passes over it.
             fieldMemory?.Remove(form.Name, document.DocumentId);
-            if (caseOf.Remove(document.DocumentId, out var own))
+            if (memory is not null && caseOf.Remove(document.DocumentId, out var own))
             {
                 memory.Forget(task, document.DocumentId);
                 cases.Remove(own);
@@ -801,7 +934,7 @@ public static class ThresholdSelection
             var evidence = FormResolver.Evidence(form, field, document.Values, document.Sets);
             (double, bool, double, bool)? match = null;
             IReadOnlyList<MemoryMatch> admitted = [];
-            if (remembered > 0)
+            if (memory is not null && remembered > 0)
             {
                 var asked = FormResolver.Evidence(form, field, before, beforeSets);
                 var (found, _) = await memory.NearestAsync(task, asked, definition.SimilarDocumentVotes, traceId, cancellationToken).ConfigureAwait(false);
@@ -833,6 +966,11 @@ public static class ThresholdSelection
 
             steps.Add(step);
             fieldMemory?.Put(form, document);
+            if (memory is null)
+            {
+                continue;
+            }
+
             var key = FormResolver.CaseKey(evidence);
             if (cases.TryGetValue(key, out var earlier))
             {

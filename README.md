@@ -58,8 +58,7 @@ made-up support task and a deterministic model. Set the matching `GIL_COMPAT_*` 
 The library has a supported surface and an experimental one.
 
 **Supported** is filling forms: `FormResolver`, `FormSession`, `FieldMemory`, `ThresholdSelection`, the form
-definitions and settlements, the memories (`LexicalMemory`, `EmbeddingMemory`, `CircuitBreakingMemory`), and the chat
-and embedding models. Within 0.x a release may still change it; each such change is listed in the changelog under
+definitions and settlements, the document memory `LexicalMemory`, and the chat and embedding models. Within 0.x a release may still change it; each such change is listed in the changelog under
 **Breaking** with what to do.
 
 **Experimental** types carry `[Experimental]`. Using one is a compile error until its id is suppressed, and a marked
@@ -70,6 +69,7 @@ type may change shape or be removed in any release without a migration note.
 | `GIL0001` | The tree judgment path: `Resolver`, task and tree definitions, `TreeYaml`, traversal, one-token judging, output contracts and fallback generation, `ResolverFieldModel` |
 | `GIL0002` | Habit promotion: proposals and their review, deactivation, differentiation, shadow evidence |
 | `GIL0003` | Recording and pricing: `ITelemetrySink` and `SqliteTelemetryStore`, the call recorders, `EnergyModel`, statistics, rebuilding a memory from the feedback log |
+| `GIL0004` | A document memory other than `LexicalMemory` on the form path: `EmbeddingMemory`, `CircuitBreakingMemory`, a memory of your own, and the `FormResolver` and `ThresholdSelection` overloads that take any `IMemory` |
 
 Suppress the ids of what you use, in the project file or around the code:
 
@@ -79,9 +79,10 @@ Suppress the ids of what you use, in the project file or around the code:
 </PropertyGroup>
 ```
 
-[Filling forms](#filling-forms) needs none of them — a telemetry sink passed to `FormResolver` is the one optional piece
-there that does (`GIL0003`). The walkthrough under [Usage](#usage) is the tree judgment path: it needs `GIL0001` and
-`GIL0003`, and `GIL0002` for its habit promotion part.
+[Filling forms](#filling-forms) needs none of them — a telemetry sink passed to `FormResolver` (`GIL0003`) and a
+document memory other than `LexicalMemory` (`GIL0004`) are the optional pieces there that do. The walkthrough under
+[Usage](#usage) is the tree judgment path: it needs `GIL0001`, `GIL0003` and `GIL0004`, and `GIL0002` for its habit
+promotion part.
 
 ### The tree judgment path
 
@@ -349,9 +350,12 @@ var forms = new FormResolver(new FieldMemory(), new LexicalMemory());
 await forms.RebuildAsync(form, saved);
 ```
 
-The second argument is the document memory. `LexicalMemory` compares documents by their characters and needs no model.
-To compare them by meaning, pass `new EmbeddingMemory(embedder)` over any `IEmbeddingModel`; built that way its calls are
-neither recorded nor priced. (Its other constructor takes an `EmbeddingRecorder`, which is experimental.)
+The second argument is the document memory, `LexicalMemory`: it compares documents by their characters and needs no
+model, and it is the only kind the supported surface takes. Pass `null` for a form without one. A memory that compares
+documents by meaning (`EmbeddingMemory` over any `IEmbeddingModel`), one behind a `CircuitBreakingMemory`, or one of
+your own goes through the overloads that take any `IMemory`, which are experimental (`GIL0004`): on two public
+datasets we replayed, the lexical vote of ten neighbours answered more, and more precisely, than an embedding
+memory's nearest document, so the slot stays narrow.
 
 `UseAsEvidence = false` keeps a field's value out of every other field's suggestions. Use it for fields that identify a
 person, so that "this person, therefore this outcome" never hardens into memory. `ConfirmRequired` tells the

@@ -1,14 +1,16 @@
 using System.Security.Cryptography;
 using System.Text;
 using AwesomeAssertions;
+using Gil.Forms;
 using Gil.Memory;
 using SupportedSurface;
 
 namespace Gil.Tests.Forms;
 
 /// <summary>
-/// The form walkthrough that is compiled with no experimental diagnostic suppressed (tests/SupportedSurface) also runs —
-/// over a lexical document memory and over an embedding memory built straight from an embedding model.
+/// The form walkthrough that is compiled with no experimental diagnostic suppressed (tests/SupportedSurface) also runs,
+/// over the lexical document memory. A document memory of another kind takes the same slot through the experimental
+/// overloads (GIL0004).
 /// </summary>
 public sealed class SupportedSurfaceTests
 {
@@ -21,9 +23,26 @@ public sealed class SupportedSurfaceTests
     }
 
     [Fact]
-    public async Task The_walkthrough_runs_on_an_embedding_memory_built_from_a_model()
+    public async Task An_embedding_memory_behind_a_breaker_takes_the_document_memory_slot_through_the_experimental_overloads()
     {
-        (await FormsWalkthrough.RunAsync(new Hashed())).Should().BeGreaterThan(3);
+        var form = new FormDefinition("ticket",
+        [
+            new FieldDefinition("summary", FieldRole.Observed),
+            new FieldDefinition("team", FieldRole.Judged) { MemoryThreshold = 0.5 },
+        ], PromptLanguage.English);
+        var saved = new[] { ("t/1", "vpn drops"), ("t/2", "vpn drops again"), ("t/3", "invoice wrong") }
+            .Select((d, i) => new SettledDocument(d.Item1, new Dictionary<string, string> { ["summary"] = d.Item2, ["team"] = i < 2 ? "network" : "finance" }, DateTimeOffset.UnixEpoch.AddMinutes(i)))
+            .ToList();
+        IMemory memory = new CircuitBreakingMemory(new EmbeddingMemory(new Hashed()), TimeSpan.FromSeconds(30));
+
+        var forms = new FormResolver(new FieldMemory(), memory);
+        await forms.RebuildAsync(form, saved, Ct);
+        var team = (await forms.SuggestAsync(form, "t/4", new Dictionary<string, string> { ["summary"] = "vpn drops" }, Ct)).Single();
+        var layers = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new EmbeddingMemory(new Hashed()), form, "team", saved, 0.5, 1, cancellationToken: Ct);
+
+        team.Candidates[0].Value.Should().Be("network");
+        team.Source.Should().Be(FieldSource.SimilarDocument);
+        layers.Memory.Lookups.Should().Be(saved.Count - 1);
     }
 
     [Fact]

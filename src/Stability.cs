@@ -16,6 +16,12 @@ internal static class Stability
     /// <summary>Recording and pricing: the telemetry sink and its stored records and statistics, the call recorders, the energy model.</summary>
     public const string Recording = "GIL0003";
 
+    /// <summary>
+    /// A document memory other than <c>LexicalMemory</c> on the form path: the embedding memory, the circuit breaker, a
+    /// memory of your own. The supported document memory is the lexical one, and the form path takes only it.
+    /// </summary>
+    public const string DocumentMemory = "GIL0004";
+
     /// <summary>Where the stability of each surface is described.</summary>
     public const string Url = "https://github.com/iyulab/gilfit/blob/main/README.md#stability";
 }
