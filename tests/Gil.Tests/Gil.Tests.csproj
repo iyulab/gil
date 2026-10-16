@@ -17,6 +17,7 @@
   <ItemGroup>
     <None Include="..\fixtures\conformance\*.json" Link="conformance\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\fixtures\conformance\trees\*.yaml" Link="conformance\trees\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\fixtures\core\*.jsonl" Link="core\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="xunit.v3" />

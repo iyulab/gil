@@ -3,6 +3,13 @@
 Versions follow `0.x`: a minor release may change the public API. Each such change is listed under **Breaking**
 with what to do.
 
+## Unreleased
+
+### Documentation
+
+- A golden for the form path under `tests/fixtures/core`: made-up settled documents and what this implementation decides
+  from them, for another implementation to reproduce byte for byte (README "Build and test").
+
 ## 0.20.0
 
 ### Breaking

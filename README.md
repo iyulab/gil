@@ -726,6 +726,12 @@ dotnet build Gil.slnx
 dotnet test --solution Gil.slnx
 ```
 
+The form path's golden lives in `tests/fixtures/core`: `records.jsonl` holds made-up settled documents, one per line
+(values, sets, how each judged value was settled), and `golden.jsonl` what this implementation decides from them — the
+key fields, layer and coarse thresholds chosen on the first 200 documents, then every suggestion for the rest, numbers
+in their shortest round-trip form. Another implementation that follows docs/text-normalization.md should write the same
+lines byte for byte. Set `GIL_WRITE_CORE_GOLDEN` to a directory to write both files afresh.
+
 ## License
 
 Apache-2.0
