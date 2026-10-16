@@ -1,3 +1,4 @@
+using System.Text;
 using Gil.Memory;
 
 using System.Diagnostics.CodeAnalysis;
@@ -538,7 +539,7 @@ public static class ThresholdSelection
         var ordered = documents
             .Select(FormResolver.Remembered) // a filled value is neither remembered nor asked about
             .OrderBy(d => d.SettledAt)
-            .ThenBy(d => d.DocumentId, StringComparer.Ordinal); // the order the field memory weighs settlements in
+            .ThenBy(d => d.DocumentId, ScalarOrdinal.Instance); // the order the field memory weighs settlements in
         foreach (var document in ordered)
         {
             order++;
@@ -641,7 +642,7 @@ public static class ThresholdSelection
         var ordered = documents
             .Select(FormResolver.Remembered) // a filled value is neither remembered nor asked about
             .OrderBy(d => d.SettledAt)
-            .ThenBy(d => d.DocumentId, StringComparer.Ordinal); // the order the field memory weighs settlements in
+            .ThenBy(d => d.DocumentId, ScalarOrdinal.Instance); // the order the field memory weighs settlements in
         foreach (var document in ordered)
         {
             order++;
@@ -695,16 +696,16 @@ public static class ThresholdSelection
     /// </summary>
     private static List<string> PickOrder(SettledDocument document, string field) =>
         document.Sets.TryGetValue(field, out var values)
-            ? [.. values.Distinct(StringComparer.Ordinal).OrderBy(v => Fnv1a($"{document.DocumentId}\u001f{v}")).ThenBy(v => v, StringComparer.Ordinal)]
+            ? [.. values.Distinct(StringComparer.Ordinal).OrderBy(v => Fnv1a($"{document.DocumentId}\u001f{v}")).ThenBy(v => v, ScalarOrdinal.Instance)]
             : [];
 
-    /// <summary>A stable 64-bit FNV-1a hash of the text's UTF-16 code units — the same on every run and platform.</summary>
+    /// <summary>A stable 64-bit FNV-1a hash of the text's UTF-8 bytes — the same on every run, platform and implementation.</summary>
     private static ulong Fnv1a(string text)
     {
         var hash = 14695981039346656037UL;
-        foreach (var c in text)
+        foreach (var b in Encoding.UTF8.GetBytes(text))
         {
-            hash = (hash ^ c) * 1099511628211UL;
+            hash = (hash ^ b) * 1099511628211UL;
         }
 
         return hash;
@@ -908,7 +909,7 @@ public static class ThresholdSelection
         var ordered = documents
             .Select(FormResolver.Remembered) // a filled value is neither remembered nor asked about
             .OrderBy(d => d.SettledAt)
-            .ThenBy(d => d.DocumentId, StringComparer.Ordinal); // the form resolver's order: later wins, then the larger id
+            .ThenBy(d => d.DocumentId, ScalarOrdinal.Instance); // the form resolver's order: later wins, then the larger id
         var order = 0;
         foreach (var document in ordered)
         {
@@ -1194,7 +1195,7 @@ public static class ThresholdSelection
                 };
             })
             .OrderByDescending(k => k.Lookups)
-            .ThenBy(k => k.Key, StringComparer.Ordinal)
+            .ThenBy(k => k.Key, ScalarOrdinal.Instance)
             .ToList();
         return replay with { Keys = keys };
     }

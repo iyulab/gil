@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)Stability.cs" Link="Stability.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ScalarOrdinal.cs" Link="ScalarOrdinal.cs" />
     <Using Include="System.Diagnostics.CodeAnalysis" />
   </ItemGroup>
 </Project>

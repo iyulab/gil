@@ -727,7 +727,7 @@ public sealed record Settlement
     private static string[] Elements(IEnumerable<string> values)
     {
         ArgumentNullException.ThrowIfNull(values);
-        return [.. values.Select(Required).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
+        return [.. values.Select(Required).Distinct(StringComparer.Ordinal).Order(ScalarOrdinal.Instance)];
     }
 
     private static string Required(string value)

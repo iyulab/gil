@@ -384,6 +384,11 @@ with nine in ten trusted answers filled, a replay that learned from them promise
 stream's key layer ended up answering every document with 0.11 right. Learning only from what a person settled kept the
 promise within a few points of what was right.
 
+A field left empty is not settled: leave it out of the document rather than settling an empty string. An empty string
+is a value like any other, so memory would learn it and suggest it to the next similar document; a field the document
+does not have is neither learned nor asked about when thresholds are chosen, and an empty value of another field is no
+key. Where "unknown" is a real answer, make it a value of the field's list and settle it.
+
 An application that fills values on its own still needs some of them checked, or nothing tells it when the fills go
 wrong. Draw the decisions to check at random, with a probability fixed before the draw — the same for every decision
 unless some keys need watching more closely — and have someone settle the field again without seeing the filled value:

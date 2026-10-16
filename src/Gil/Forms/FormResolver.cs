@@ -518,7 +518,7 @@ public sealed class FormResolver
     /// document id, so the order is total and the same whatever order documents arrive in.
     /// </summary>
     internal static bool Later(DateTimeOffset a, string aId, DateTimeOffset b, string bId) =>
-        a != b ? a > b : string.CompareOrdinal(aId, bId) > 0;
+        a != b ? a > b : ScalarOrdinal.Instance.Compare(aId, bId) > 0;
 
     /// <summary>A document's settled value for one field and the evidence it was settled on.</summary>
     private sealed record CaseEntry(string DocumentId, string Evidence, string Value, DateTimeOffset SettledAt);
@@ -639,7 +639,7 @@ public sealed class FormResolver
             {
                 if (sets is not null && sets.TryGetValue(f.Name, out var elements))
                 {
-                    evidence.AddRange(elements.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).Select(e => KeyValuePair.Create(f.Name, e)));
+                    evidence.AddRange(elements.Distinct(StringComparer.Ordinal).Order(ScalarOrdinal.Instance).Select(e => KeyValuePair.Create(f.Name, e)));
                 }
             }
             else if (values.TryGetValue(f.Name, out var value))

@@ -26,7 +26,7 @@ public sealed class FieldMemory
     private readonly double _recencyDecay;
     private readonly Dictionary<string, FormIndex> _forms = new(StringComparer.Ordinal);
 
-    /// <param name="maxKeyLength">The longest normalised value that is used as a key.</param>
+    /// <param name="maxKeyLength">The longest normalised value that is used as a key, in Unicode scalar values.</param>
     /// <param name="recencyDecay">
     /// How much a settlement weighs for each later settlement under the same key, in (0, 1]; 1 counts every settlement
     /// alike. The default, 0.95, was chosen by replaying a public stream of about 50,000 settled fields in the order
@@ -326,7 +326,7 @@ public sealed class FieldMemory
         return [.. scores
             .OrderByDescending(s => s.Value.Score)
             .ThenByDescending(s => s.Value.Latest)
-            .ThenBy(s => s.Key, StringComparer.Ordinal)
+            .ThenBy(s => s.Key, ScalarOrdinal.Instance)
             .Select(s => (s.Key, s.Value.Score, s.Value.Key))];
     }
 
@@ -390,12 +390,12 @@ public sealed class FieldMemory
     private Key? KeyOf(string field, string raw)
     {
         var normal = TextNormal.Collapse(raw);
-        return normal.Length > 0 && normal.Length <= _maxKeyLength ? new Key(field, normal) : null;
+        return normal.Length > 0 && TextNormal.Scalars(normal) <= _maxKeyLength ? new Key(field, normal) : null;
     }
 
     /// <summary>A set field's values, once each and ordinally — the order a set is listed in carries no meaning.</summary>
     private static List<string> Elements(IReadOnlyDictionary<string, IReadOnlyList<string>> sets, string field) =>
-        sets.TryGetValue(field, out var values) ? [.. values.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)] : [];
+        sets.TryGetValue(field, out var values) ? [.. values.Distinct(StringComparer.Ordinal).Order(ScalarOrdinal.Instance)] : [];
 
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> NoSets =
         new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
@@ -533,7 +533,7 @@ public sealed class FieldMemory
 
         /// <summary>Whether <paramref name="a"/> comes after <paramref name="b"/> in the order settlements are weighed in.</summary>
         private static bool Later(Settled a, Settled b) =>
-            a.At > b.At || (a.At == b.At && string.CompareOrdinal(a.DocumentId, b.DocumentId) > 0);
+            a.At > b.At || (a.At == b.At && ScalarOrdinal.Instance.Compare(a.DocumentId, b.DocumentId) > 0);
 
         /// <summary>Whether two settlements are one document's values settled together — they weigh alike.</summary>
         internal static bool Together(Settled a, Settled b) => a.At == b.At && a.DocumentId == b.DocumentId;
@@ -541,7 +541,7 @@ public sealed class FieldMemory
         private Fold Weigh(IEnumerable<Settled> settlements)
         {
             var fold = new Fold(recencyDecay);
-            foreach (var settled in settlements.OrderBy(s => s.At).ThenBy(s => s.DocumentId, StringComparer.Ordinal))
+            foreach (var settled in settlements.OrderBy(s => s.At).ThenBy(s => s.DocumentId, ScalarOrdinal.Instance))
             {
                 fold.Add(settled);
             }
@@ -618,7 +618,7 @@ public sealed class FieldMemory
                 .Select(w => (Value: w.Key, Share: w.Value.Weight / total, Strength: w.Value.Weight / (total + 1), w.Value.Latest))
                 .OrderByDescending(w => w.Share)
                 .ThenByDescending(w => w.Latest)
-                .ThenBy(w => w.Value, StringComparer.Ordinal)];
+                .ThenBy(w => w.Value, ScalarOrdinal.Instance)];
         }
     }
 }

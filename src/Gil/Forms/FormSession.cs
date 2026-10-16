@@ -49,7 +49,7 @@ public sealed class FormSession
         var arrival = saved.Arrival
             ?? [.. Form.Fields.Where(f => f.Role == FieldRole.Observed).Concat(Form.Fields.Where(f => f.Role == FieldRole.Judged)).Select(f => f.Name)];
         var present = arrival.Where(Has).Distinct(StringComparer.Ordinal).ToList();
-        _arrival.AddRange(_values.Keys.Concat(_sets.Keys).Where(f => !present.Contains(f, StringComparer.Ordinal)).Order(StringComparer.Ordinal));
+        _arrival.AddRange(_values.Keys.Concat(_sets.Keys).Where(f => !present.Contains(f, StringComparer.Ordinal)).Order(ScalarOrdinal.Instance));
         _arrival.AddRange(present);
         foreach (var (field, kind) in saved.Settlements)
         {

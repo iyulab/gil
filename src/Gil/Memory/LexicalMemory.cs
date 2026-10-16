@@ -89,36 +89,54 @@ public sealed class LexicalMemory : IMemory
     }
 
     /// <summary>
-    /// Counts of the character n-grams of the text after NFKC normalisation, lower-casing and collapsing whitespace, with
-    /// a space at either end so that a word's first and last characters form n-grams of their own. Text shorter than
-    /// the shortest n-gram is one n-gram.
+    /// Counts of the n-grams of the text — runs of Unicode scalar values — after the shared normalisation
+    /// (<see cref="TextNormal.Collapse"/>), with a space at either end so that a word's first and last characters form
+    /// n-grams of their own; text shorter than the shortest n-gram is one n-gram. Listed in scalar order
+    /// (<see cref="ScalarOrdinal"/>), which every sum over them follows.
     /// </summary>
-    private Dictionary<string, int> Grams(string text)
+    private (string Gram, int Count)[] Grams(string text)
     {
         var normal = TextNormal.Collapse(text);
-        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
         if (normal.Length == 0)
         {
-            return counts;
+            return [];
         }
 
         var padded = $" {normal} ";
-        if (padded.Length < _minGram)
+        var starts = TextNormal.ScalarStarts(padded);
+        var scalars = starts.Length - 1;
+        if (scalars < _minGram)
         {
-            counts[padded] = 1;
-            return counts;
+            return [(padded, 1)];
         }
 
-        for (var n = _minGram; n <= _maxGram && n <= padded.Length; n++)
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var n = _minGram; n <= _maxGram && n <= scalars; n++)
         {
-            for (var i = 0; i + n <= padded.Length; i++)
+            for (var i = 0; i + n <= scalars; i++)
             {
-                var gram = padded.Substring(i, n);
+                var gram = padded[starts[i]..starts[i + n]];
                 counts[gram] = counts.GetValueOrDefault(gram) + 1;
             }
         }
 
-        return counts;
+        var grams = new string[counts.Count];
+        var tallies = new int[counts.Count];
+        var at = 0;
+        foreach (var (gram, count) in counts)
+        {
+            (grams[at], tallies[at]) = (gram, count);
+            at++;
+        }
+
+        Array.Sort(grams, tallies, ScalarOrdinal.Instance); // the grams are distinct, so the order is total
+        var listed = new (string Gram, int Count)[grams.Length];
+        for (var i = 0; i < grams.Length; i++)
+        {
+            listed[i] = (grams[i], tallies[i]);
+        }
+
+        return listed;
     }
 
     /// <summary>
@@ -152,7 +170,7 @@ public sealed class LexicalMemory : IMemory
 
         public int Count => _rows.Count;
 
-        public void Put(string key, Dictionary<string, int> grams, string answer)
+        public void Put(string key, (string Gram, int Count)[] grams, string answer)
         {
             var (ids, counts) = Intern(grams);
             var existing = _position.TryGetValue(key, out var at);
@@ -202,7 +220,7 @@ public sealed class LexicalMemory : IMemory
         }
 
         /// <summary>The most similar row; on a tie, the one remembered first.</summary>
-        public (string Key, double Similarity, string Answer) Nearest(Dictionary<string, int> query)
+        public (string Key, double Similarity, string Answer) Nearest((string Gram, int Count)[] query)
         {
             var similarities = Similarities(query);
             var best = 0;
@@ -218,7 +236,7 @@ public sealed class LexicalMemory : IMemory
         }
 
         /// <summary>The <paramref name="count"/> most similar rows, most similar first; ties in remembered order.</summary>
-        public IEnumerable<(string Key, double Similarity, string Answer)> Top(Dictionary<string, int> query, int count)
+        public IEnumerable<(string Key, double Similarity, string Answer)> Top((string Gram, int Count)[] query, int count)
         {
             var similarities = Similarities(query);
             return Enumerable.Range(0, similarities.Length)
@@ -229,10 +247,11 @@ public sealed class LexicalMemory : IMemory
         }
 
         /// <summary>The cosine of the query with every row, in the rows' order.</summary>
-        private double[] Similarities(Dictionary<string, int> query)
+        private double[] Similarities((string Gram, int Count)[] query)
         {
-            // An n-gram no row has ever held matches nothing, but it still weighs in the query's norm.
-            var known = new List<(int Id, int Count)>(query.Count);
+            // An n-gram no row has ever held matches nothing, but it still weighs in the query's norm — added in the
+            // query's scalar order, the known ones in the order of their ids.
+            var known = new List<(int Id, int Count)>(query.Length);
             var squares = 0.0;
             foreach (var (gram, count) in query)
             {
@@ -279,9 +298,13 @@ public sealed class LexicalMemory : IMemory
             return similarities;
         }
 
-        private (int[] Ids, int[] Counts) Intern(Dictionary<string, int> grams)
+        /// <summary>
+        /// The ids of the n-grams, sorted, with their counts. An n-gram seen for the first time takes the next id, in the
+        /// grams' scalar order — so the ids, and every sum taken in their order, follow only what was remembered and when.
+        /// </summary>
+        private (int[] Ids, int[] Counts) Intern((string Gram, int Count)[] grams)
         {
-            var pairs = new (int Id, int Count)[grams.Count];
+            var pairs = new (int Id, int Count)[grams.Length];
             var n = 0;
             foreach (var (gram, count) in grams)
             {
