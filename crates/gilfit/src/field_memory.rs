@@ -51,6 +51,18 @@ pub struct Candidate {
     pub trusted: bool,
 }
 
+/// The best-ranked value settled under the known keys ([`FieldMemory::first`]): its score, whether it is the value
+/// asked about, the key that backs it most strongly (`field: value`), and whether a value the field must not miss was
+/// settled under the known keys.
+#[derive(Clone, Debug, PartialEq)]
+pub struct First {
+    pub score: f64,
+    pub matches: bool,
+    pub key: String,
+    /// Always false here: values a field must not miss are not yet supported by this implementation.
+    pub caught: bool,
+}
+
 /// The settled field memory. Not thread-safe.
 pub struct FieldMemory {
     max_key_length: usize,
@@ -82,6 +94,13 @@ impl FieldMemory {
             recency_decay,
             forms: HashMap::new(),
         }
+    }
+
+    /// How many documents with at least one settled judged field the form's memory holds.
+    pub fn count(&self, form: &str) -> usize {
+        self.forms
+            .get(form)
+            .map_or(0, |index| index.documents.len())
     }
 
     /// Replaces what the document contributed with what its current values imply. Fields that take several values are
@@ -171,7 +190,7 @@ impl FieldMemory {
             return Vec::new();
         };
 
-        let ranked = self.keyed(index, form, definition, known);
+        let ranked = self.keyed(index, form, definition, known, &BTreeMap::new());
         let trusted = definition
             .key_threshold
             .is_some_and(|t| ranked.first().is_some_and(|(_, score, _)| *score >= t));
@@ -206,6 +225,27 @@ impl FieldMemory {
         candidates
     }
 
+    /// The score of the best-ranked value settled under the known keys, whether it is `value`, and the key that backs it
+    /// most strongly — what the field's key threshold is compared with. `None` when no known key was seen. Values a field
+    /// must not miss are not yet supported, so [`First::caught`] is always false.
+    pub fn first(
+        &self,
+        form: &Form,
+        field: &str,
+        known: &BTreeMap<String, String>,
+        value: &str,
+        known_sets: &BTreeMap<String, Vec<String>>,
+    ) -> Option<First> {
+        let index = self.forms.get(&form.name)?;
+        let ranked = self.keyed(index, form, form.field(field), known, known_sets);
+        ranked.into_iter().next().map(|(best, score, key)| First {
+            score,
+            matches: best == value,
+            key: format!("{}: {}", key.field, key.value),
+            caught: false,
+        })
+    }
+
     /// The values settled under the known keys, best first: by score, then latest settlement, then scalar order. Each
     /// carries the key it is strongest under.
     fn keyed(
@@ -214,10 +254,11 @@ impl FieldMemory {
         form: &Form,
         field: &Field,
         known: &BTreeMap<String, String>,
+        known_sets: &BTreeMap<String, Vec<String>>,
     ) -> Vec<(String, f64, Key)> {
         // value → (score, strongest, backing key, latest); summed in the order the keys come.
         let mut scores: Vec<(String, f64, f64, Key, i64)> = Vec::new();
-        for key in self.keys(form, field, known, &BTreeMap::new()) {
+        for key in self.keys(form, field, known, known_sets) {
             let slot = Slot {
                 field: field.name.clone(),
                 key: Some(key.clone()),

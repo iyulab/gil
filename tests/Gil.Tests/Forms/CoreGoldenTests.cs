@@ -11,7 +11,7 @@ namespace Gil.Tests.Forms;
 /// The decision core's golden: synthetic settled records in, the chosen settings and every decision out, as JSON lines
 /// another implementation can reproduce byte for byte (tests/fixtures/core). The records hold text the normalisation
 /// specification turns on (docs/text-normalization.md) — Hangul, Greek, Turkish, full-width forms, characters beyond
-/// U+FFFF. Set GIL_WRITE_CORE_GOLDEN to rewrite both files from this implementation.
+/// U+FFFF. Set GIL_WRITE_CORE_GOLDEN to rewrite the files from this implementation.
 /// </summary>
 public sealed class CoreGoldenTests
 {
@@ -43,30 +43,41 @@ public sealed class CoreGoldenTests
         {
             Directory.CreateDirectory(target);
             await File.WriteAllLinesAsync(Path.Combine(target, "records.jsonl"), Generate().Select(Write), Ct);
-            var (written, keys) = await RunAsync([.. (await File.ReadAllLinesAsync(Path.Combine(target, "records.jsonl"), Ct)).Select(Read)]);
+            var (written, keys, replays) = await RunAsync([.. (await File.ReadAllLinesAsync(Path.Combine(target, "records.jsonl"), Ct)).Select(Read)]);
             await File.WriteAllLinesAsync(Path.Combine(target, "golden.jsonl"), written, Ct);
             await File.WriteAllLinesAsync(Path.Combine(target, "keys.jsonl"), keys, Ct);
+            await File.WriteAllLinesAsync(Path.Combine(target, "replay.jsonl"), replays, Ct);
             return;
         }
 
         var documents = (await File.ReadAllLinesAsync(records, Ct)).Select(Read).ToList();
 
-        var (lines, keyLines) = await RunAsync(documents);
+        var (lines, keyLines, replayLines) = await RunAsync(documents);
 
         lines.Should().Equal(await File.ReadAllLinesAsync(golden, Ct));
         keyLines.Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "keys.jsonl"), Ct));
+        replayLines.Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "replay.jsonl"), Ct));
     }
 
     /// <summary>
     /// The settings chosen on the first records, then a suggestion for every judged field of every later record before it
     /// is put — and, apart, the key layer alone: what the settled field memory ranks for each single-valued judged field
-    /// of every later record, with the same settings (keys.jsonl), so another implementation can match that layer first.
+    /// of every later record, with the same settings (keys.jsonl), so another implementation can match that layer first —
+    /// and the key layer's threshold replay alone for each single-valued judged field, on the first records with the form
+    /// as it stands when that field's layers are chosen (replay.jsonl).
     /// </summary>
-    private static async Task<(List<string> Golden, List<string> Keys)> RunAsync(IReadOnlyList<SettledDocument> documents)
+    private static async Task<(List<string> Golden, List<string> Keys, List<string> Replays)> RunAsync(IReadOnlyList<SettledDocument> documents)
     {
         var form = Form();
         var early = documents.Take(Chosen).ToList();
         var lines = new List<string>();
+        var replayLines = new List<string>();
+        void KeyThreshold(string field) => replayLines.Add(Line(new JsonObject
+        {
+            ["kind"] = "key_threshold",
+            ["field"] = field,
+            ["replay"] = Replay(ThresholdSelection.SelectKeyThreshold(new FieldMemory(), form, field, early, 0.8, 10, Counted)),
+        }));
 
         var keyFields = ThresholdSelection.SelectKeyFields(() => new FieldMemory(), form, "team", early, 0.8, 10, counting: Counted);
         lines.Add(Line(new JsonObject { ["kind"] = "key_fields", ["field"] = "team", ["fields"] = Strings(keyFields.KeyFields), ["chosen"] = Replay(keyFields.Chosen) }));
@@ -81,6 +92,7 @@ public sealed class CoreGoldenTests
         }));
         form = With(form, form.Field("team") with { KeyConcentrations = concentrations });
 
+        KeyThreshold("team");
         var team = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "team", early, 0.8, 10, Counted, Ct);
         lines.Add(Line(new JsonObject { ["kind"] = "layers", ["field"] = "team", ["key"] = Replay(team.Key), ["memory"] = Replay(team.Memory) }));
         form = With(form, form.Field("team") with
@@ -90,6 +102,7 @@ public sealed class CoreGoldenTests
             MemorySimilarityFloor = team.Memory.Chosen?.SimilarityFloor,
         });
 
+        KeyThreshold("code");
         var code = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "code", early, 0.8, 10, Counted, Ct);
         lines.Add(Line(new JsonObject { ["kind"] = "layers", ["field"] = "code", ["key"] = Replay(code.Key), ["memory"] = Replay(code.Memory) }));
         form = With(form, form.Field("code") with
@@ -161,7 +174,7 @@ public sealed class CoreGoldenTests
             await resolver.RebuildAsync(form, [document], Ct);
         }
 
-        return (lines, keyLines);
+        return (lines, keyLines, replayLines);
     }
 
     private static string Line(JsonObject line) => line.ToJsonString(Json);

@@ -94,11 +94,101 @@ impl Form {
     }
 }
 
+/// What happened to a judged field when it was settled — the names the reference implementation uses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SettlementKind {
+    /// The suggested value was taken as it was.
+    Accept,
+    /// A value other than the suggested one was settled.
+    Correct,
+    /// The suggestion was turned down and no value settled.
+    Reject,
+    /// The field's earlier settlement was undone.
+    Revert,
+    /// A saved value put back when a document is reopened.
+    Restore,
+    /// The values of a field that takes several were settled.
+    Set,
+    /// A person settled a value with no suggestion in view.
+    Enter,
+    /// The application settled the suggested value on its own: memory does not learn it, and choosing thresholds does
+    /// not ask about it.
+    Fill,
+    /// A value settled again by someone who did not see the answer, drawn at random with a known probability; choosing
+    /// thresholds counts it as one ÷ that probability decisions.
+    Check,
+}
+
+impl SettlementKind {
+    /// The kind named `name`, as the reference implementation spells it; `None` for any other name.
+    pub fn parse(name: &str) -> Option<Self> {
+        Some(match name {
+            "Accept" => Self::Accept,
+            "Correct" => Self::Correct,
+            "Reject" => Self::Reject,
+            "Revert" => Self::Revert,
+            "Restore" => Self::Restore,
+            "Set" => Self::Set,
+            "Enter" => Self::Enter,
+            "Fill" => Self::Fill,
+            "Check" => Self::Check,
+            _ => return None,
+        })
+    }
+}
+
 /// A document's values as last settled. `settled_at` is in 100-nanosecond ticks since the Unix epoch, UTC.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Document {
     pub id: String,
     pub values: BTreeMap<String, String>,
     pub sets: BTreeMap<String, Vec<String>>,
     pub settled_at: i64,
+    /// How each judged field was settled, where known.
+    pub settlements: BTreeMap<String, SettlementKind>,
+    /// For a field settled as a check, the probability it was drawn with.
+    pub probabilities: BTreeMap<String, f64>,
+    /// The fields with a value, in the order their current values arrived, oldest first; a field the list leaves out
+    /// counts as there from the start. `None` when the order is unknown: the observed values are then taken as there from
+    /// the start and the judged ones as settled in the form's order.
+    pub arrival: Option<Vec<String>>,
+}
+
+impl Document {
+    /// The document as memory remembers it: the values (and sets) the application filled ([`SettlementKind::Fill`]) are
+    /// left out, with their settlements.
+    pub fn remembered(&self) -> Document {
+        let filled: Vec<&String> = self
+            .settlements
+            .iter()
+            .filter(|(_, kind)| **kind == SettlementKind::Fill)
+            .map(|(field, _)| field)
+            .collect();
+        if filled.is_empty() {
+            return self.clone();
+        }
+
+        let kept = |field: &String| !filled.contains(&field);
+        Document {
+            values: self
+                .values
+                .iter()
+                .filter(|(f, _)| kept(f))
+                .map(|(f, v)| (f.clone(), v.clone()))
+                .collect(),
+            sets: self
+                .sets
+                .iter()
+                .filter(|(f, _)| kept(f))
+                .map(|(f, v)| (f.clone(), v.clone()))
+                .collect(),
+            settlements: self
+                .settlements
+                .iter()
+                .filter(|(f, _)| kept(f))
+                .map(|(f, k)| (f.clone(), *k))
+                .collect(),
+            ..self.clone()
+        }
+    }
 }

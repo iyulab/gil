@@ -13,6 +13,10 @@ with what to do.
   n-grams, reproducing the text golden, and the settled field memory, reproducing a new key layer golden
   (`tests/fixtures/core/keys.jsonl` — the field memory's ranking for each later record of the form path's golden) to
   the bit. CI checks its format, lints and tests.
+- The Rust rebuild replays the key layer to choose a key threshold for a field that takes one value, reproducing a new
+  golden (`tests/fixtures/core/replay.jsonl` — the chosen and most precise thresholds, their promises and the state under
+  each key, for each single-valued judged field of the form path's golden) to the bit. Fields that take several values,
+  values a field must not miss and typed thresholds are not replayed there yet.
 
 ## 0.22.0
 
