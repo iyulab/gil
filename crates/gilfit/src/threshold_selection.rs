@@ -259,6 +259,169 @@ fn fnv1a(text: &str) -> u64 {
 
 /// How many decisions the field's settlement in the document counts as: none when its kind is not counted (every kind is
 /// when none are named), one ÷ the draw probability for a check, one otherwise.
+/// The replays a single-valued field's typed key thresholds are chosen on, one per length typed, shortest first.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypedKeyThresholds {
+    pub by_length: Vec<ThresholdReplay>,
+}
+
+impl TypedKeyThresholds {
+    /// The thresholds to set as the field's typed key thresholds: each replay's chosen one, `None` where none was.
+    pub fn thresholds(&self) -> Vec<Option<f64>> {
+        self.by_length
+            .iter()
+            .map(|r| r.chosen.as_ref().map(|c| c.threshold))
+            .collect()
+    }
+}
+
+/// One document of a typed replay: its settled value, the key layer's best value with none of it typed and with each
+/// length typed, and what the thresholds chosen so far claimed for it.
+struct Asked {
+    settled: String,
+    best: Vec<Option<(f64, String)>>,
+    weight: f64,
+    order: usize,
+    right: bool,
+    wrong: Vec<String>,
+}
+
+impl Asked {
+    /// Records the claim a threshold makes on the best value, if its score reaches it.
+    fn claim(&mut self, length: usize, threshold: Option<f64>) {
+        let Some((score, value)) = &self.best[length] else {
+            return;
+        };
+        if !threshold.is_some_and(|t| *score >= t) {
+            return;
+        }
+
+        if *value == self.settled {
+            self.right = true;
+        } else {
+            self.wrong.push(value.clone());
+        }
+    }
+
+    /// Whether a wrong claim is still led to with `length` characters of the settled value typed.
+    fn holds(&self, length: usize) -> bool {
+        let typed = text::utf16_prefix(&self.settled, length);
+        self.wrong
+            .iter()
+            .any(|v| crate::field_memory::begins(v, Some(typed)))
+    }
+}
+
+/// Chooses a single-valued field's typed key thresholds — for one, two, … up to `longest` characters of its value
+/// typed. Replays the documents in settlement order as [`select_key_threshold`] does, asking the field memory for the
+/// best value that begins with each length of the settled value. A value trusted with fewer characters typed is one
+/// claim, kept while the typed text still leads to it: a document so answered rightly needs no more typing, one
+/// answered wrongly by a value the next characters still lead to is not among the documents a longer threshold is
+/// chosen on until the typing has left that value behind. Each length's threshold is chosen on the documents left.
+///
+/// # Panics
+/// When `target_precision` is outside (0, 1], `minimum_answered` or `longest` is 0, or the field is not judged or
+/// takes several values.
+#[allow(clippy::too_many_arguments)]
+pub fn select_typed_key_thresholds(
+    memory: &mut FieldMemory,
+    form: &Form,
+    field: &str,
+    documents: &[Document],
+    target_precision: f64,
+    minimum_answered: usize,
+    longest: usize,
+    counting: Option<&[SettlementKind]>,
+) -> TypedKeyThresholds {
+    assert!(
+        target_precision > 0.0 && target_precision <= 1.0,
+        "target_precision must be in (0, 1]"
+    );
+    assert!(minimum_answered >= 1, "minimum_answered must be at least 1");
+    assert!(longest >= 1, "longest must be at least 1");
+    let definition = form.field(field);
+    assert!(
+        definition.role == Role::Judged,
+        "'{field}' is not a judged field"
+    );
+    assert!(
+        !definition.multiple,
+        "'{field}' takes several values; typed key thresholds are for a field that takes one"
+    );
+
+    let mut ordered: Vec<Document> = documents.iter().map(Document::remembered).collect();
+    ordered.sort_by(|a, b| a.settled_at.cmp(&b.settled_at).then(a.id.cmp(&b.id)));
+    let mut asked: Vec<Asked> = Vec::new();
+    let mut order = 0;
+    for document in &ordered {
+        order += 1;
+        let Some(settled) = document.values.get(field) else {
+            continue;
+        };
+
+        memory.remove(&form.name, &document.id); // a document settled again is not its own evidence
+        let weight = weight(document, field, counting);
+        if memory.count(&form.name) > 0 && weight > 0.0 {
+            let before = arrived(form, document, field, &document.values);
+            let before_sets = arrived(form, document, field, &document.sets);
+            asked.push(Asked {
+                settled: settled.clone(),
+                best: memory.typed(form, field, &before, settled, longest, &before_sets),
+                weight,
+                order,
+                right: false,
+                wrong: Vec::new(),
+            });
+        }
+
+        memory.put(form, document);
+    }
+
+    for a in &mut asked {
+        a.claim(0, definition.key_threshold);
+    }
+
+    let mut by_length = Vec::new();
+    for length in 1..=longest {
+        let reaching: Vec<usize> = (0..asked.len())
+            .filter(|&i| {
+                let a = &asked[i];
+                !a.right && a.best.len() > length && !a.holds(length)
+            })
+            .collect();
+        let matches: Vec<Answer> = reaching
+            .iter()
+            .filter_map(|&i| {
+                let a = &asked[i];
+                a.best[length].as_ref().map(|(score, value)| Answer {
+                    score: *score,
+                    correct: *value == a.settled,
+                    weight: a.weight,
+                    order: a.order,
+                    key: None,
+                    caught: false,
+                })
+            })
+            .collect();
+        let replay = fit_recent(
+            &matches,
+            reaching.len(),
+            reaching.iter().fold(0.0, |sum, &i| sum + asked[i].weight),
+            order,
+            target_precision,
+            minimum_answered,
+        );
+        let chosen = replay.chosen.as_ref().map(|c| c.threshold);
+        for &i in &reaching {
+            asked[i].claim(length, chosen);
+        }
+
+        by_length.push(replay);
+    }
+
+    TypedKeyThresholds { by_length }
+}
+
 fn weight(document: &Document, field: &str, counting: Option<&[SettlementKind]>) -> f64 {
     let kind = document.settlements.get(field).copied();
     if let Some(counting) = counting

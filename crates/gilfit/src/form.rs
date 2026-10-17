@@ -38,6 +38,9 @@ pub struct Field {
     pub candidates: Option<Vec<String>>,
     /// Values the field must not miss: the key layer does not answer for a document whose keys have ever had one.
     pub must_catch: Option<Vec<String>>,
+    /// The score the first keyed value that begins with the typed text must reach, for one, two, … characters typed;
+    /// `None` (or a length beyond the list) trusts none.
+    pub typed_key_thresholds: Option<Vec<Option<f64>>>,
 }
 
 impl Field {
@@ -57,6 +60,7 @@ impl Field {
             coarse: None,
             candidates: None,
             must_catch: None,
+            typed_key_thresholds: None,
         }
     }
 
@@ -66,6 +70,18 @@ impl Field {
         self.candidates
             .as_ref()
             .is_none_or(|c| c.iter().any(|v| v == value))
+    }
+
+    /// The key threshold with `typed` characters typed into the field: the key threshold before typing, then the typed
+    /// thresholds.
+    pub fn key_threshold_for(&self, typed: usize) -> Option<f64> {
+        if typed == 0 {
+            return self.key_threshold;
+        }
+
+        self.typed_key_thresholds
+            .as_ref()
+            .and_then(|t| t.get(typed - 1).copied().flatten())
     }
 
     /// The concentration of `key_field`'s keys for this field — 1 unless set.
@@ -114,15 +130,7 @@ impl CoarseLevel {
                 .unwrap_or_else(|| value.to_owned());
         }
 
-        let mut units = 0;
-        let end = value
-            .char_indices()
-            .find(|(_, c)| {
-                units += c.len_utf16();
-                units > self.prefix
-            })
-            .map_or(value.len(), |(i, _)| i);
-        value[..end].to_owned()
+        crate::text::utf16_prefix(value, self.prefix).to_owned()
     }
 }
 

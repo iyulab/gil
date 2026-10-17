@@ -1,14 +1,13 @@
 //! The form resolver: suggests each open judged field of a document from the settled field memory and the similar
 //! document memory, and keeps both up to date as documents are settled.
 //!
-//! Not yet carried over from the reference: a model where neither memory had evidence, text typed into a field, a
-//! domain taken from another field's values, the field memory passing over the saved version of the
+//! Not yet carried over from the reference: a model where neither memory had evidence, a domain taken from another field's values, the field memory passing over the saved version of the
 //! document asked about (the similar document layer does), and telemetry.
 
 use std::collections::{BTreeMap, HashMap};
 
 use crate::coarse_groups;
-use crate::field_memory::FieldMemory;
+use crate::field_memory::{self, FieldMemory};
 use crate::form::{CoarseLevel, Document, Field, Form, Role};
 use crate::lexical_memory::{LexicalMemory, Match};
 use crate::{similar_vote, text};
@@ -232,12 +231,14 @@ impl FormResolver {
         form.fields
             .iter()
             .filter(|f| f.role == Role::Judged && (f.multiple || !values.contains_key(&f.name)))
-            .map(|f| self.suggest_field(form, document, values, sets, f))
+            .map(|f| self.suggest_field(form, document, values, sets, f, None))
             .collect()
     }
 
     /// Suggests one open judged field — without a value, unless it takes several — as [`FormResolver::suggest`] would
-    /// among the rest.
+    /// among the rest. `typed` is the text typed into the field so far: the suggestion then offers only values that
+    /// begin with it (ignoring case), only the key layer answers, held to the threshold for that many characters, a
+    /// similar document's value that fits is offered as a guess, and no coarse class is offered.
     ///
     /// # Panics
     /// When the field is not judged, or has a value and takes one.
@@ -248,6 +249,7 @@ impl FormResolver {
         field: &str,
         values: &BTreeMap<String, String>,
         sets: &BTreeMap<String, Vec<String>>,
+        typed: Option<&str>,
     ) -> Suggestion {
         let definition = form.field(field);
         assert!(
@@ -258,7 +260,7 @@ impl FormResolver {
             definition.multiple || !values.contains_key(field),
             "'{field}' already has a value"
         );
-        self.suggest_field(form, document, values, sets, definition)
+        self.suggest_field(form, document, values, sets, definition, typed)
     }
 
     /// One field's suggestion. Layers that answer come first — values under a key strong enough, a document similar
@@ -271,10 +273,12 @@ impl FormResolver {
         values: &BTreeMap<String, String>,
         sets: &BTreeMap<String, Vec<String>>,
         field: &Field,
+        typed: Option<&str>,
     ) -> Suggestion {
+        let typed = typed.filter(|t| !t.is_empty());
         let remembered: Vec<Candidate> = self
             .field_memory
-            .rank(form, &field.name, values, self.candidate_count, sets)
+            .rank(form, &field.name, values, self.candidate_count, sets, typed)
             .into_iter()
             .map(|c| Candidate {
                 value: c.value,
@@ -286,7 +290,7 @@ impl FormResolver {
             .collect();
         let (keyed, frequent): (Vec<&Candidate>, Vec<&Candidate>) =
             remembered.iter().partition(|c| c.evidence.is_some());
-        let (similar, admitted) = self.similar(form, document, values, sets, field);
+        let (similar, admitted) = self.similar(form, document, values, sets, field, typed);
 
         let mut candidates: Vec<Candidate> = Vec::new();
         let ordered = keyed
@@ -310,9 +314,9 @@ impl FormResolver {
 
         let source = candidates.first().map_or(Source::None, |c| c.source);
         let answered = candidates.first().is_some_and(|c| c.trusted);
-        // No layer answered the value: offer its class, as the same two layers back it.
+        // No layer answered the value: offer its class, as the same two layers back it. Not while a person is typing.
         let coarse = match &field.coarse {
-            Some(level) if !answered => coarse(
+            Some(level) if !answered && typed.is_none() => coarse(
                 level,
                 coarse_groups::keys(
                     &self
@@ -336,6 +340,7 @@ impl FormResolver {
     /// The value the most similar settled documents vote for — trusted when its score reaches the field's memory
     /// threshold and, with more than one voter, its nearest voter the floor — and the documents found other than the
     /// document itself: one more is asked for, and it is passed over. Nothing for a field that takes several values.
+    /// With typed text only documents whose value begins with it vote, and the vote is never trusted.
     fn similar(
         &self,
         form: &Form,
@@ -343,6 +348,7 @@ impl FormResolver {
         values: &BTreeMap<String, String>,
         sets: &BTreeMap<String, Vec<String>>,
         field: &Field,
+        typed: Option<&str>,
     ) -> (Vec<Candidate>, Vec<Match>) {
         let evidence = form.evidence(&field.name, values, sets);
         let Some(memory) = &self.document_memory else {
@@ -359,7 +365,11 @@ impl FormResolver {
         let admitted: Vec<Match> = memory
             .nearest(&Self::task(form, &field.name), &evidence, asked)
             .into_iter()
-            .filter(|m| m.source != document && field.admits(&m.answer))
+            .filter(|m| {
+                m.source != document
+                    && field.admits(&m.answer)
+                    && field_memory::begins(&m.answer, typed)
+            })
             .collect();
         let Some((winner, score)) = similar_vote::decide(&admitted, field.similar_document_votes)
         else {
@@ -370,7 +380,7 @@ impl FormResolver {
             similar_vote::voters(&admitted, field.similar_document_votes) > 1
                 && winner.similarity < floor
         });
-        let hit = field.memory_threshold.is_some_and(|t| score >= t) && !floored;
+        let hit = typed.is_none() && field.memory_threshold.is_some_and(|t| score >= t) && !floored;
         let candidate = Candidate {
             value: winner.answer.clone(),
             score,

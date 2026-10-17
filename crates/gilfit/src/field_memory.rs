@@ -8,7 +8,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 
 use crate::form::{Document, Field, Form, Role};
-use crate::text;
+use crate::{hangul, text};
 
 /// Another field's normalized value.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -212,7 +212,9 @@ impl FieldMemory {
 
     /// The `count` values most likely for `field` given the values known so far, best first: the values settled under
     /// the known keys by their score (with the key backing each most strongly), then the field's most frequently settled
-    /// values by their share. The keyed values are trusted when the first one's score reaches the field's key threshold;
+    /// values by their share — only values that begin with the text typed so far, if any. The keyed values are trusted
+    /// when the first one's score reaches the field's key threshold for that many characters typed, or the same value
+    /// was already trusted with fewer of them;
     /// for a field that takes several values, each value on its own score, and the values already chosen in
     /// `known_sets` are evidence and are not offered again.
     pub fn rank(
@@ -222,7 +224,9 @@ impl FieldMemory {
         known: &BTreeMap<String, String>,
         count: usize,
         known_sets: &BTreeMap<String, Vec<String>>,
+        typed: Option<&str>,
     ) -> Vec<Candidate> {
+        let typed = typed.filter(|t| !t.is_empty());
         let definition = form.field(field);
         let Some(index) = self.forms.get(&form.name) else {
             return Vec::new();
@@ -234,13 +238,24 @@ impl FieldMemory {
             Vec::new()
         };
         let ranked: Vec<(String, f64, Key)> = self
-            .keyed(index, form, definition, known, known_sets)
+            .keyed(index, form, definition, known, known_sets, typed)
             .into_iter()
             .filter(|(value, _, _)| !chosen.contains(&value))
             .collect();
-        let reaches = |score: f64| definition.key_threshold.is_some_and(|t| score >= t);
-        let layer_trusted = ranked.first().is_some_and(|(_, score, _)| reaches(*score))
-            && !self.caught(index, form, definition, known, known_sets);
+        let threshold = definition.key_threshold_for(typed.map_or(0, text::utf16_len));
+        let reaches = |score: f64| threshold.is_some_and(|t| score >= t);
+        let layer_trusted = ranked.first().is_some_and(|(best, score, _)| {
+            reaches(*score)
+                || typed.is_some_and(|typed| {
+                    !definition.multiple
+                        && claimed(
+                            &self.keyed(index, form, definition, known, known_sets, None),
+                            definition,
+                            typed,
+                            best,
+                        )
+                })
+        }) && !self.caught(index, form, definition, known, known_sets);
         let mut candidates: Vec<Candidate> = ranked
             .into_iter()
             .take(count)
@@ -262,6 +277,7 @@ impl FieldMemory {
         if let Some(settled) = index.values.get(&overall) {
             for share in self.shares(settled) {
                 if definition.admits(&share.value)
+                    && begins(&share.value, typed)
                     && !chosen.contains(&&share.value)
                     && !candidates.iter().any(|c| c.value == share.value)
                 {
@@ -293,13 +309,46 @@ impl FieldMemory {
         let index = self.forms.get(&form.name)?;
         let definition = form.field(field);
         let caught = self.caught(index, form, definition, known, known_sets);
-        let ranked = self.keyed(index, form, definition, known, known_sets);
+        let ranked = self.keyed(index, form, definition, known, known_sets, None);
         ranked.into_iter().next().map(|(best, score, key)| First {
             score,
             matches: best == value,
             key: format!("{}: {}", key.field, key.value),
             caught,
         })
+    }
+
+    /// As [`FieldMemory::first`], with none, one, … up to `longest` characters of `value` typed into the field: for each
+    /// length, the best-ranked value that begins with that much of it and its score — or `None` when no value under the
+    /// known keys does, or when a value the field must not miss holds the key layer back.
+    pub fn typed(
+        &self,
+        form: &Form,
+        field: &str,
+        known: &BTreeMap<String, String>,
+        value: &str,
+        longest: usize,
+        known_sets: &BTreeMap<String, Vec<String>>,
+    ) -> Vec<Option<(f64, String)>> {
+        let mut best = vec![None; longest.min(text::utf16_len(value)) + 1];
+        let Some(index) = self.forms.get(&form.name) else {
+            return best;
+        };
+        let definition = form.field(field);
+        if self.caught(index, form, definition, known, known_sets) {
+            return best; // the key layer does not answer here at any length
+        }
+
+        let ranked = self.keyed(index, form, definition, known, known_sets, None);
+        for (length, slot) in best.iter_mut().enumerate() {
+            let typed = (length > 0).then(|| text::utf16_prefix(value, length));
+            *slot = ranked
+                .iter()
+                .find(|(v, _, _)| begins(v, typed))
+                .map(|(v, score, _)| (*score, v.clone()));
+        }
+
+        best
     }
 
     /// Every value settled under the known keys, best first: its score and the key that backs it most strongly
@@ -319,7 +368,7 @@ impl FieldMemory {
             return Vec::new();
         }
 
-        self.keyed(index, form, definition, known, known_sets)
+        self.keyed(index, form, definition, known, known_sets, None)
             .into_iter()
             .map(|(value, score, key)| (value, score, format!("{}: {}", key.field, key.value)))
             .collect()
@@ -374,7 +423,7 @@ impl FieldMemory {
             return Vec::new();
         };
         let chosen = elements(known_sets, field);
-        self.keyed(index, form, form.field(field), known, known_sets)
+        self.keyed(index, form, form.field(field), known, known_sets, None)
             .into_iter()
             .filter(|(value, _, _)| !chosen.contains(&value))
             .map(|(value, score, _)| (value, score))
@@ -414,7 +463,8 @@ impl FieldMemory {
     }
 
     /// The values settled under the known keys, best first: by score, then latest settlement, then scalar order. Each
-    /// carries the key it is strongest under. Values outside the field's domain are left out.
+    /// carries the key it is strongest under. Values outside the field's domain, or not beginning with the typed text,
+    /// are left out.
     fn keyed(
         &self,
         index: &FormIndex,
@@ -422,6 +472,7 @@ impl FieldMemory {
         field: &Field,
         known: &BTreeMap<String, String>,
         known_sets: &BTreeMap<String, Vec<String>>,
+        typed: Option<&str>,
     ) -> Vec<(String, f64, Key)> {
         // value → (score, strongest, backing key, latest); summed in the order the keys come.
         let mut scores: Vec<(String, f64, f64, Key, i64)> = Vec::new();
@@ -446,11 +497,12 @@ impl FieldMemory {
                 continue;
             };
             let concentration = field.concentration(&key.field);
-            // A value outside the domain is not offered, but it still counts towards its key's total.
+            // A value outside the domain, or not beginning with the typed text, is not offered, but it still counts
+            // towards its key's total.
             for share in self
                 .shares(settled)
                 .into_iter()
-                .filter(|s| field.admits(&s.value))
+                .filter(|s| field.admits(&s.value) && begins(&s.value, typed))
             {
                 let strength = share.weight / (share.total + concentration);
                 match scores.iter_mut().find(|s| s.0 == share.value) {
@@ -601,6 +653,34 @@ impl FieldMemory {
 }
 
 /// A set field's values, once each and in scalar order — the order a set is listed in carries no meaning.
+/// Whether `value` begins with the text typed so far, ignoring case; always when none is. Korean is typed a letter at a
+/// time and the last syllable may still be composing, so text with Hangul begins a value when its keystrokes begin the
+/// value's.
+pub fn begins(value: &str, typed: Option<&str>) -> bool {
+    typed.is_none_or(|typed| {
+        text::starts_with_ignoring_case(value, typed)
+            || (hangul::has(typed)
+                && text::starts_with_ignoring_case(
+                    &hangul::keystrokes(value),
+                    &hangul::keystrokes(typed),
+                ))
+    })
+}
+
+/// Whether `value`, the best value that begins with `typed`, was already trusted with fewer of its characters typed —
+/// the best value there too, with a score that reached the threshold for that many. It is the same claim, not a new one.
+fn claimed(ranked: &[(String, f64, Key)], field: &Field, typed: &str, value: &str) -> bool {
+    (0..text::utf16_len(typed)).any(|length| {
+        let prefix = (length > 0).then(|| text::utf16_prefix(typed, length));
+        ranked
+            .iter()
+            .find(|(v, _, _)| begins(v, prefix))
+            .is_some_and(|(v, score, _)| {
+                v == value && field.key_threshold_for(length).is_some_and(|t| *score >= t)
+            })
+    })
+}
+
 fn elements<'a>(sets: &'a BTreeMap<String, Vec<String>>, field: &str) -> Vec<&'a String> {
     let mut elements: Vec<&String> = sets.get(field).into_iter().flatten().collect();
     elements.sort();

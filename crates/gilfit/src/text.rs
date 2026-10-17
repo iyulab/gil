@@ -79,9 +79,55 @@ pub fn grams(text: &str, min_gram: usize, max_gram: usize) -> Vec<(String, u32)>
     counts.into_iter().collect()
 }
 
+/// The first `units` UTF-16 code units of `text` — how the reference counts characters typed and prefixes — or all of
+/// it when shorter. A character beyond U+FFFF that the count would cut in half is left out.
+pub fn utf16_prefix(text: &str, units: usize) -> &str {
+    let mut counted = 0;
+    let end = text
+        .char_indices()
+        .find(|(_, c)| {
+            counted += c.len_utf16();
+            counted > units
+        })
+        .map_or(text.len(), |(i, _)| i);
+    &text[..end]
+}
+
+/// How many UTF-16 code units `text` takes — the reference's length of a string.
+pub fn utf16_len(text: &str) -> usize {
+    text.encode_utf16().count()
+}
+
+/// Whether `text` begins with `prefix`, ignoring case: each character compared by its simple uppercase mapping, as an
+/// ordinal case-insensitive comparison does.
+pub fn starts_with_ignoring_case(text: &str, prefix: &str) -> bool {
+    let upper = |c: char| {
+        let mut mapped = c.to_uppercase();
+        match (mapped.next(), mapped.next()) {
+            (Some(single), None) => single,
+            _ => c,
+        }
+    };
+    let mut chars = text.chars();
+    prefix
+        .chars()
+        .all(|p| chars.next().is_some_and(|c| upper(c) == upper(p)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn typed_text_is_counted_and_compared_as_the_reference_does() {
+        assert_eq!(utf16_len("a😀b"), 4);
+        assert_eq!(utf16_prefix("a😀b", 3), "a😀");
+        assert_eq!(utf16_prefix("a😀b", 2), "a");
+        assert!(starts_with_ignoring_case("Bora", "bO"));
+        assert!(starts_with_ignoring_case("Straße", "STRA"));
+        assert!(!starts_with_ignoring_case("ben", "bo"));
+        assert!(!starts_with_ignoring_case("b", "be"));
+    }
 
     #[test]
     fn dotted_capital_i_lowers_to_plain_i() {

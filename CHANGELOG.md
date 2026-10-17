@@ -50,7 +50,11 @@ with what to do.
   Records may now carry their arrival order. The Rust rebuild leaves values outside a field's candidates out of both
   layers, holds the key layer back where a value that must not be missed was settled under the document's keys, and
   reproduces the golden's settings and its decisions, with and without a set field's first value chosen, to the bit.
-  Typed text is not yet carried over there.
+- The Rust rebuild suggests while a person types into a field: only values that begin with the typed text (ignoring
+  case, Hangul by its keystrokes), held to the threshold for that many characters, a value trusted with fewer of them
+  staying trusted, and no similar document vote trusted nor coarse class offered. It chooses the typed key thresholds
+  as the reference does, and reproduces the note golden's typed thresholds and typed decisions to the bit. Characters
+  are counted in UTF-16 code units, as the reference counts them.
 
 ## 0.22.0
 

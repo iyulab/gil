@@ -2,8 +2,8 @@
 //! `note-records.jsonl`: a form whose long free text decides a judged field through the similar document layer, with a
 //! value that must not be missed, a value settled outside the field's candidates, a coarse level made from a table, a
 //! field that takes several values, values arriving in different orders, and documents settled again and copied while
-//! the resolver is asked. The settings it chose and its decisions must come out the same here, to the bit. Typed text
-//! is not yet carried over: the golden's typed lines are left aside.
+//! the resolver is asked. The settings it chose and its decisions — before typing, with a set field's first value
+//! chosen, and with the owner's first characters typed — must come out the same here, to the bit.
 
 mod common;
 
@@ -14,7 +14,9 @@ use gilfit::field_memory::FieldMemory;
 use gilfit::form::{CoarseLevel, Document, Field, Form, Role};
 use gilfit::form_resolver::{Candidate, FormResolver, Suggestion};
 use gilfit::lexical_memory::LexicalMemory;
-use gilfit::threshold_selection::{select_coarse, select_key_threshold, select_layers};
+use gilfit::threshold_selection::{
+    select_coarse, select_key_threshold, select_layers, select_typed_key_thresholds,
+};
 use serde_json::{Value, json};
 
 const CHOSEN: usize = 240;
@@ -78,6 +80,16 @@ fn note_form(golden: &str, stop: impl Fn(&Value) -> bool) -> Form {
                 level.memory_similarity_floor = chosen(&line["memory"], "similarity_floor");
             }
             Some("key") => target.key_threshold = chosen(&line["replay"], "threshold"),
+            Some("typed") => {
+                target.typed_key_thresholds = Some(
+                    line["replays"]
+                        .as_array()
+                        .expect("replays")
+                        .iter()
+                        .map(|r| chosen(r, "threshold"))
+                        .collect(),
+                );
+            }
             _ => {}
         }
     }
@@ -108,7 +120,7 @@ fn the_note_settings_reproduce_their_golden() {
     let golden = fixture("note-golden.jsonl");
     let counted = Some(&common::COUNTED[..]);
     for expected in lines(&golden)
-        .filter(|l| ["layers", "coarse", "key"].contains(&l["kind"].as_str().unwrap()))
+        .filter(|l| ["layers", "coarse", "key", "typed"].contains(&l["kind"].as_str().unwrap()))
     {
         let (kind, field) = (
             expected["kind"].as_str().unwrap().to_owned(),
@@ -134,6 +146,19 @@ fn the_note_settings_reproduce_their_golden() {
                     counted,
                 );
                 json!({ "kind": kind, "field": field, "key": replay(&layers.key), "memory": replay(&layers.memory) })
+            }
+            "typed" => {
+                let typed = select_typed_key_thresholds(
+                    &mut FieldMemory::default(),
+                    &form,
+                    field,
+                    early,
+                    0.8,
+                    10,
+                    2,
+                    counted,
+                );
+                json!({ "kind": kind, "field": field, "replays": typed.by_length.iter().map(replay).collect::<Vec<_>>() })
             }
             _ => {
                 let replay = select_key_threshold(
@@ -175,7 +200,7 @@ fn the_note_decisions_reproduce_their_golden() {
     let golden = fixture("note-golden.jsonl");
     let form = note_form(&golden, |_| false);
     let expected: Vec<Value> = lines(&golden)
-        .filter(|l| l["kind"] == "decision" || l["kind"] == "set_decision")
+        .filter(|l| l["kind"].as_str().unwrap().ends_with("decision"))
         .collect();
 
     let mut resolver = FormResolver::new(FieldMemory::default(), Some(LexicalMemory::default()));
@@ -196,9 +221,24 @@ fn the_note_decisions_reproduce_their_golden() {
 
         if let Some(first) = document.sets.get("labels").and_then(|l| l.first()) {
             let sets = BTreeMap::from([("labels".to_owned(), vec![first.clone()])]);
-            let s = resolver.suggest_one(&form, &document.id, "labels", &observed, &sets);
+            let s = resolver.suggest_one(&form, &document.id, "labels", &observed, &sets, None);
             let mut line = decision("set_decision", &document.id, &s);
             line["chosen"] = json!(first);
+            actual.push(line);
+        }
+
+        for length in [1, 2] {
+            let typed = &document.values["owner"][..length];
+            let s = resolver.suggest_one(
+                &form,
+                &document.id,
+                "owner",
+                &observed,
+                &BTreeMap::new(),
+                Some(typed),
+            );
+            let mut line = decision("typed_decision", &document.id, &s);
+            line["typed"] = json!(typed);
             actual.push(line);
         }
 
