@@ -24,6 +24,11 @@ with what to do.
   form path's golden, the documents the lexical memory finds most like each later record's observed values, as
   documents are remembered, forgotten and remembered again. The Rust rebuild's lexical memory (character n-gram
   TF-IDF cosine, weights retaken as the memory grows) and the evidence text it is asked with reproduce it to the bit.
+- The Rust rebuild chooses a field's key and memory thresholds together, as the reference does: one replay through
+  both memories, the similar document layer voting among the nearest documents, keeping one document per case of the
+  same evidence, and choosing its threshold and similarity floor on what the key threshold would not have answered. It
+  reproduces the form path's golden layer lines, and a new golden (`tests/fixtures/core/layers.jsonl` — the same
+  replays with documents settled again and copied under new ids), to the bit.
 
 ## 0.22.0
 

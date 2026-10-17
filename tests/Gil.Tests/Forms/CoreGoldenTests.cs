@@ -43,21 +43,23 @@ public sealed class CoreGoldenTests
         {
             Directory.CreateDirectory(target);
             await File.WriteAllLinesAsync(Path.Combine(target, "records.jsonl"), Generate().Select(Write), Ct);
-            var (written, keys, replays) = await RunAsync([.. (await File.ReadAllLinesAsync(Path.Combine(target, "records.jsonl"), Ct)).Select(Read)]);
+            var (written, keys, replays, layers) = await RunAsync([.. (await File.ReadAllLinesAsync(Path.Combine(target, "records.jsonl"), Ct)).Select(Read)]);
             await File.WriteAllLinesAsync(Path.Combine(target, "golden.jsonl"), written, Ct);
             await File.WriteAllLinesAsync(Path.Combine(target, "keys.jsonl"), keys, Ct);
             await File.WriteAllLinesAsync(Path.Combine(target, "replay.jsonl"), replays, Ct);
+            await File.WriteAllLinesAsync(Path.Combine(target, "layers.jsonl"), layers, Ct);
             await File.WriteAllLinesAsync(Path.Combine(target, "lexical.jsonl"), await LexicalAsync([.. (await File.ReadAllLinesAsync(Path.Combine(target, "records.jsonl"), Ct)).Select(Read)]), Ct);
             return;
         }
 
         var documents = (await File.ReadAllLinesAsync(records, Ct)).Select(Read).ToList();
 
-        var (lines, keyLines, replayLines) = await RunAsync(documents);
+        var (lines, keyLines, replayLines, layerLines) = await RunAsync(documents);
 
         lines.Should().Equal(await File.ReadAllLinesAsync(golden, Ct));
         keyLines.Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "keys.jsonl"), Ct));
         replayLines.Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "replay.jsonl"), Ct));
+        layerLines.Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "layers.jsonl"), Ct));
         (await LexicalAsync(documents)).Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "lexical.jsonl"), Ct));
     }
 
@@ -66,20 +68,33 @@ public sealed class CoreGoldenTests
     /// is put — and, apart, the key layer alone: what the settled field memory ranks for each single-valued judged field
     /// of every later record, with the same settings (keys.jsonl), so another implementation can match that layer first —
     /// and the key layer's threshold replay alone for each single-valued judged field, on the first records with the form
-    /// as it stands when that field's layers are chosen (replay.jsonl).
+    /// as it stands when that field's layers are chosen (replay.jsonl) — and both layers' replay, with that form, on the first
+    /// records followed by some of them settled again and some copied under new ids, so documents are passed over as their
+    /// own evidence and cases of the same evidence keep only the latest (layers.jsonl).
     /// </summary>
-    private static async Task<(List<string> Golden, List<string> Keys, List<string> Replays)> RunAsync(IReadOnlyList<SettledDocument> documents)
+    private static async Task<(List<string> Golden, List<string> Keys, List<string> Replays, List<string> Layers)> RunAsync(IReadOnlyList<SettledDocument> documents)
     {
         var form = Form();
         var early = documents.Take(Chosen).ToList();
         var lines = new List<string>();
         var replayLines = new List<string>();
-        void KeyThreshold(string field) => replayLines.Add(Line(new JsonObject
+        var layerLines = new List<string>();
+        var again = early.Concat(Enumerable.Range(0, 40).Select(i => early[i] with
         {
-            ["kind"] = "key_threshold",
-            ["field"] = field,
-            ["replay"] = Replay(ThresholdSelection.SelectKeyThreshold(new FieldMemory(), form, field, early, 0.8, 10, Counted)),
-        }));
+            DocumentId = i % 2 == 0 ? early[i].DocumentId : $"{early[i].DocumentId}-copy",
+            SettledAt = early[^1].SettledAt.AddMinutes(i + 1),
+        })).ToList();
+        async Task KeyThreshold(string field)
+        {
+            replayLines.Add(Line(new JsonObject
+            {
+                ["kind"] = "key_threshold",
+                ["field"] = field,
+                ["replay"] = Replay(ThresholdSelection.SelectKeyThreshold(new FieldMemory(), form, field, early, 0.8, 10, Counted)),
+            }));
+            var layers = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, field, again, 0.8, 10, Counted, Ct);
+            layerLines.Add(Line(new JsonObject { ["kind"] = "layers_again", ["field"] = field, ["key"] = Replay(layers.Key), ["memory"] = Replay(layers.Memory) }));
+        }
 
         var keyFields = ThresholdSelection.SelectKeyFields(() => new FieldMemory(), form, "team", early, 0.8, 10, counting: Counted);
         lines.Add(Line(new JsonObject { ["kind"] = "key_fields", ["field"] = "team", ["fields"] = Strings(keyFields.KeyFields), ["chosen"] = Replay(keyFields.Chosen) }));
@@ -94,7 +109,7 @@ public sealed class CoreGoldenTests
         }));
         form = With(form, form.Field("team") with { KeyConcentrations = concentrations });
 
-        KeyThreshold("team");
+        await KeyThreshold("team");
         var team = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "team", early, 0.8, 10, Counted, Ct);
         lines.Add(Line(new JsonObject { ["kind"] = "layers", ["field"] = "team", ["key"] = Replay(team.Key), ["memory"] = Replay(team.Memory) }));
         form = With(form, form.Field("team") with
@@ -104,7 +119,7 @@ public sealed class CoreGoldenTests
             MemorySimilarityFloor = team.Memory.Chosen?.SimilarityFloor,
         });
 
-        KeyThreshold("code");
+        await KeyThreshold("code");
         var code = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "code", early, 0.8, 10, Counted, Ct);
         lines.Add(Line(new JsonObject { ["kind"] = "layers", ["field"] = "code", ["key"] = Replay(code.Key), ["memory"] = Replay(code.Memory) }));
         form = With(form, form.Field("code") with
@@ -176,7 +191,7 @@ public sealed class CoreGoldenTests
             await resolver.RebuildAsync(form, [document], Ct);
         }
 
-        return (lines, keyLines, replayLines);
+        return (lines, keyLines, replayLines, layerLines);
     }
 
     private static string Line(JsonObject line) => line.ToJsonString(Json);

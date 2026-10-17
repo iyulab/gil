@@ -26,6 +26,8 @@ pub struct Field {
     pub key_concentrations: BTreeMap<String, f64>,
     /// The score the first keyed value must reach to be trusted; `None` trusts none.
     pub key_threshold: Option<f64>,
+    /// How many of the most similar documents vote on the field's value; at least 1.
+    pub similar_document_votes: usize,
 }
 
 impl Field {
@@ -39,6 +41,7 @@ impl Field {
             key_fields: None,
             key_concentrations: BTreeMap::new(),
             key_threshold: None,
+            similar_document_votes: 10,
         }
     }
 

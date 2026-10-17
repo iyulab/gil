@@ -8,10 +8,12 @@
 //! miss, typed thresholds and the similar document layer.
 
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
-use crate::field_memory::FieldMemory;
+use crate::field_memory::{FieldMemory, First};
 use crate::form::{Document, Form, Role, SettlementKind};
+use crate::lexical_memory::LexicalMemory;
+use crate::{similar_vote, text};
 
 /// How many of the latest documents replayed [`ThresholdChoice::promise`] is taken over — every document in settlement
 /// order counts, whether or not it was asked about.
@@ -518,6 +520,286 @@ fn fit(
         candidates: matches.len(),
         keys: None,
     }
+}
+
+/// The replays of a field's two memory layers, in the order a suggestion consults them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LayerThresholds {
+    /// For the key threshold, replayed on every lookup.
+    pub key: ThresholdReplay,
+    /// For the memory threshold, replayed on the lookups the chosen key threshold would not have answered.
+    pub memory: ThresholdReplay,
+}
+
+/// What the similar document layer made of one lookup: the vote's score, whether its value matched, the similarity of
+/// the nearest document voting for it, and whether more than one document voted.
+#[derive(Clone, Copy, Debug)]
+struct Vote {
+    score: f64,
+    correct: bool,
+    nearest: f64,
+    voted: bool,
+}
+
+/// One document of a layers replay: whether the key layer was asked and what its best value was, whether the similar
+/// document layer was asked and how it voted, the document's weight and its place in settlement order.
+#[derive(Clone, Debug)]
+struct Step {
+    key_looked: bool,
+    key: Option<First>,
+    looked: bool,
+    vote: Option<Vote>,
+    weight: f64,
+    order: usize,
+}
+
+/// The share of a threshold's answers whose nearest voter may fall below its similarity floor.
+const FLOOR_SHARE: f64 = 0.01;
+
+/// Chooses `field`'s key threshold and memory threshold together by replaying `documents` through both memories, which
+/// must be empty and configured as the ones in use. Each document, in settlement order, is asked about before it is put
+/// in: the key layer as [`select_key_threshold`] asks it, and the similar document layer with the evidence of the values
+/// that had arrived before the field, voting among the field's `similar_document_votes` nearest documents. The document
+/// memory keeps one document per case — evidence that reads the same after normalization — the latest settled. The key
+/// threshold is chosen on every lookup; the memory threshold on the lookups the chosen key threshold would not have
+/// answered, and with more than one voter each memory choice carries its similarity floor.
+///
+/// Values outside a field's candidate domain are not yet left out by this implementation: every document found votes.
+///
+/// # Panics
+/// When `target_precision` is outside (0, 1], `minimum_answered` is 0, the field is not judged, or it takes several
+/// values — the similar document layer does not suggest such a field.
+#[allow(clippy::too_many_arguments)]
+pub fn select_layers(
+    field_memory: &mut FieldMemory,
+    memory: &mut LexicalMemory,
+    form: &Form,
+    field: &str,
+    documents: &[Document],
+    target_precision: f64,
+    minimum_answered: usize,
+    counting: Option<&[SettlementKind]>,
+) -> LayerThresholds {
+    assert!(
+        target_precision > 0.0 && target_precision <= 1.0,
+        "target_precision must be in (0, 1]"
+    );
+    assert!(minimum_answered >= 1, "minimum_answered must be at least 1");
+    let definition = form.field(field);
+    assert!(
+        definition.role == Role::Judged,
+        "'{field}' is not a judged field"
+    );
+    assert!(
+        !definition.multiple,
+        "'{field}' takes several values; the similar document layer does not suggest it"
+    );
+
+    let (steps, latest) = replay(field_memory, memory, form, field, documents, counting);
+
+    let keyed: Vec<&Step> = steps.iter().filter(|s| s.key_looked).collect();
+    let answers: Vec<Answer> = keyed
+        .iter()
+        .filter_map(|s| {
+            s.key.as_ref().map(|first| Answer {
+                score: first.score,
+                correct: first.matches,
+                weight: s.weight,
+                order: s.order,
+                key: Some(first.key.clone()),
+                caught: first.caught,
+            })
+        })
+        .collect();
+    let uncaught: Vec<Answer> = answers.iter().filter(|a| !a.caught).cloned().collect();
+    let key = with_keys(
+        fit_recent(
+            &uncaught,
+            keyed.len(),
+            keyed.iter().fold(0.0, |sum, s| sum + s.weight),
+            latest,
+            target_precision,
+            minimum_answered,
+        ),
+        &answers,
+    );
+
+    let chosen = key.chosen.as_ref().map(|c| c.threshold);
+    let left: Vec<&Step> = steps
+        .iter()
+        .filter(|s| {
+            s.looked
+                && !chosen.is_some_and(|t| {
+                    s.key
+                        .as_ref()
+                        .is_some_and(|first| !first.caught && first.score >= t)
+                })
+        })
+        .collect();
+    let memory = similarity(
+        &left,
+        latest,
+        definition.similar_document_votes,
+        target_precision,
+        minimum_answered,
+    );
+    LayerThresholds { key, memory }
+}
+
+/// Replays the documents in settlement order, asking each memory about each document before putting it in — the
+/// document memory keeping one document per case.
+fn replay(
+    field_memory: &mut FieldMemory,
+    memory: &mut LexicalMemory,
+    form: &Form,
+    field: &str,
+    documents: &[Document],
+    counting: Option<&[SettlementKind]>,
+) -> (Vec<Step>, usize) {
+    let task = format!("{}/{field}", form.name);
+    let votes = form.field(field).similar_document_votes;
+    let mut ordered: Vec<Document> = documents.iter().map(Document::remembered).collect();
+    ordered.sort_by(|a, b| a.settled_at.cmp(&b.settled_at).then(a.id.cmp(&b.id)));
+
+    let mut steps = Vec::new();
+    let mut remembered = 0_usize;
+    let mut cases: HashMap<String, String> = HashMap::new(); // case → the document representing it
+    let mut case_of: HashMap<String, String> = HashMap::new(); // document → the case it represents
+    let mut order = 0;
+    for document in &ordered {
+        order += 1;
+        let Some(settled) = document.values.get(field) else {
+            continue;
+        };
+
+        // A document settled again is not its own evidence.
+        field_memory.remove(&form.name, &document.id);
+        if let Some(own) = case_of.remove(&document.id) {
+            memory.forget(&task, &document.id);
+            cases.remove(&own);
+            remembered -= 1;
+        }
+
+        // Asked with what the field's last suggestion saw; remembered, below, with everything.
+        let before = arrived(form, document, field, &document.values);
+        let before_sets = arrived(form, document, field, &document.sets);
+        let key_looked = field_memory.count(&form.name) > 0;
+        let first = if key_looked {
+            field_memory.first(form, field, &before, settled, &before_sets)
+        } else {
+            None
+        };
+        let evidence = form.evidence(field, &document.values, &document.sets);
+        let vote = if remembered > 0 {
+            let found = memory.nearest(&task, &form.evidence(field, &before, &before_sets), votes);
+            similar_vote::decide(&found, votes).map(|(winner, score)| Vote {
+                score,
+                correct: winner.answer == *settled,
+                nearest: winner.similarity,
+                voted: similar_vote::voters(&found, votes) > 1,
+            })
+        } else {
+            None
+        };
+
+        // A settlement not counted is replayed into memory like any other, but not asked about.
+        let weight = weight(document, field, counting);
+        let counted = weight > 0.0;
+        steps.push(Step {
+            key_looked: key_looked && counted,
+            key: first,
+            looked: remembered > 0 && counted,
+            vote,
+            weight,
+            order,
+        });
+        field_memory.put(form, document);
+
+        let case = text::normalize(&evidence);
+        if let Some(earlier) = cases.get(&case) {
+            memory.forget(&task, earlier);
+            case_of.remove(earlier);
+            remembered -= 1;
+        }
+
+        cases.insert(case.clone(), document.id.clone());
+        case_of.insert(document.id.clone(), case);
+        memory.remember(&task, &document.id, &evidence, settled);
+        remembered += 1;
+    }
+
+    (steps, order)
+}
+
+/// The similarity choice over the given lookups: every one counts, answered or not. With more than one voter each
+/// threshold carries the similarity floor of the answers it rests on.
+fn similarity(
+    looked: &[&Step],
+    latest: usize,
+    votes: usize,
+    target_precision: f64,
+    minimum_answered: usize,
+) -> ThresholdReplay {
+    let voting: Vec<(&Step, Vote)> = looked
+        .iter()
+        .filter_map(|s| s.vote.map(|v| (*s, v)))
+        .collect();
+    let answers: Vec<Answer> = voting
+        .iter()
+        .map(|(s, v)| Answer {
+            score: v.score,
+            correct: v.correct,
+            weight: s.weight,
+            order: s.order,
+            key: None,
+            caught: false,
+        })
+        .collect();
+    let replay = fit_recent(
+        &answers,
+        looked.len(),
+        looked.iter().fold(0.0, |sum, s| sum + s.weight),
+        latest,
+        target_precision,
+        minimum_answered,
+    );
+    if votes == 1 {
+        return replay;
+    }
+
+    // Only answers decided by a vote say how alike its voters were; a lone voter's score is its similarity already.
+    let voted: Vec<(f64, f64)> = voting
+        .iter()
+        .filter(|(_, v)| v.voted)
+        .map(|(_, v)| (v.score, v.nearest))
+        .collect();
+    let floored = |choice: Option<ThresholdChoice>| {
+        choice.map(|c| ThresholdChoice {
+            similarity_floor: similarity_floor(&voted, c.threshold),
+            ..c
+        })
+    };
+    ThresholdReplay {
+        chosen: floored(replay.chosen),
+        most_precise: floored(replay.most_precise),
+        ..replay
+    }
+}
+
+/// Of the answers decided by a vote at or above `threshold`, the nearest voter's similarity that only [`FLOOR_SHARE`]
+/// of them fall below; `None` when there are none.
+fn similarity_floor(answers: &[(f64, f64)], threshold: f64) -> Option<f64> {
+    let mut nearest: Vec<f64> = answers
+        .iter()
+        .filter(|(score, _)| *score >= threshold)
+        .map(|(_, nearest)| *nearest)
+        .collect();
+    if nearest.is_empty() {
+        return None;
+    }
+
+    nearest.sort_by(f64::total_cmp);
+    Some(nearest[(FLOOR_SHARE * (nearest.len() - 1) as f64) as usize])
 }
 
 #[cfg(test)]
