@@ -92,6 +92,35 @@ impl Form {
                 .as_ref()
                 .is_none_or(|k| k.iter().any(|n| n == evidence))
     }
+
+    /// The `name: value` lines of the fields that support `field`, in the form's order — what a similar document is
+    /// remembered and looked up by. A field that takes several values gives a line for each, once each and in scalar
+    /// order, so the same set reads the same; a field that takes several is supported by its own values chosen so far.
+    pub fn evidence(
+        &self,
+        field: &str,
+        values: &BTreeMap<String, String>,
+        sets: &BTreeMap<String, Vec<String>>,
+    ) -> String {
+        let target = self.field(field);
+        let mut lines: Vec<String> = Vec::new();
+        for f in self
+            .fields
+            .iter()
+            .filter(|f| self.supports(&f.name, field) || (f.name == field && target.multiple))
+        {
+            if f.multiple {
+                let mut elements: Vec<&String> = sets.get(&f.name).into_iter().flatten().collect();
+                elements.sort();
+                elements.dedup();
+                lines.extend(elements.into_iter().map(|e| format!("{}: {e}", f.name)));
+            } else if let Some(value) = values.get(&f.name) {
+                lines.push(format!("{}: {value}", f.name));
+            }
+        }
+
+        lines.join("\n")
+    }
 }
 
 /// What happened to a judged field when it was settled — the names the reference implementation uses.

@@ -20,6 +20,10 @@ with what to do.
 - The Rust settled field memory remembers fields that take several values — each value overall, under the document's
   keys and under each of its other values, weighing as one settlement — and the key threshold replay covers such a
   field, picking its values in the golden's fixed order, reproducing the golden's replay of one to the bit.
+- A similar document memory golden, `tests/fixtures/core/lexical.jsonl`: for each single-valued judged field of the
+  form path's golden, the documents the lexical memory finds most like each later record's observed values, as
+  documents are remembered, forgotten and remembered again. The Rust rebuild's lexical memory (character n-gram
+  TF-IDF cosine, weights retaken as the memory grows) and the evidence text it is asked with reproduce it to the bit.
 
 ## 0.22.0
 

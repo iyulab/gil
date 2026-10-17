@@ -47,6 +47,7 @@ public sealed class CoreGoldenTests
             await File.WriteAllLinesAsync(Path.Combine(target, "golden.jsonl"), written, Ct);
             await File.WriteAllLinesAsync(Path.Combine(target, "keys.jsonl"), keys, Ct);
             await File.WriteAllLinesAsync(Path.Combine(target, "replay.jsonl"), replays, Ct);
+            await File.WriteAllLinesAsync(Path.Combine(target, "lexical.jsonl"), await LexicalAsync([.. (await File.ReadAllLinesAsync(Path.Combine(target, "records.jsonl"), Ct)).Select(Read)]), Ct);
             return;
         }
 
@@ -57,6 +58,7 @@ public sealed class CoreGoldenTests
         lines.Should().Equal(await File.ReadAllLinesAsync(golden, Ct));
         keyLines.Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "keys.jsonl"), Ct));
         replayLines.Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "replay.jsonl"), Ct));
+        (await LexicalAsync(documents)).Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "lexical.jsonl"), Ct));
     }
 
     /// <summary>
@@ -207,6 +209,79 @@ public sealed class CoreGoldenTests
         ["promise"] = choice.Promise,
         ["promise_answered"] = choice.PromiseAnswered,
     };
+
+    /// <summary>How many similar documents a lookup asks for: the resolver's default of ten voters, and one more for the document itself.</summary>
+    private const int Asked = 11;
+
+    /// <summary>
+    /// The similar document memory alone (lexical.jsonl): for each single-valued judged field, the first records remembered
+    /// by their evidence as the resolver states it, then for every later record the documents most like its observed
+    /// values, before it is remembered. Along the way some documents are forgotten and some remembered again, so the
+    /// weights are retaken over changing frequencies and rows move.
+    /// </summary>
+    private static async Task<List<string>> LexicalAsync(List<SettledDocument> documents)
+    {
+        var form = Form();
+        var fields = form.Fields.Where(f => f.Role == FieldRole.Judged && !f.Multiple).Select(f => f.Name).ToList();
+        var memory = new LexicalMemory();
+
+        async Task PutAsync(SettledDocument settled)
+        {
+            var document = FormResolver.Remembered(settled);
+            foreach (var field in fields)
+            {
+                var task = FormResolver.TaskName(form, field);
+                if (document.Values.TryGetValue(field, out var value))
+                {
+                    await memory.RememberAsync(task, document.DocumentId, FormResolver.Evidence(form, field, document.Values, document.Sets), value, "golden", Ct);
+                }
+                else
+                {
+                    memory.Forget(task, document.DocumentId);
+                }
+            }
+        }
+
+        foreach (var document in documents.Take(Chosen))
+        {
+            await PutAsync(document);
+        }
+
+        var lines = new List<string>();
+        for (var i = Chosen; i < documents.Count; i++)
+        {
+            var document = documents[i];
+            var observed = document.Values.Where(v => form.Field(v.Key).Role == FieldRole.Observed).ToDictionary();
+            foreach (var field in fields)
+            {
+                var task = FormResolver.TaskName(form, field);
+                lines.Add(Line(new JsonObject
+                {
+                    ["kind"] = "nearest",
+                    ["doc"] = document.DocumentId,
+                    ["field"] = field,
+                    ["count"] = memory.Count(task),
+                    ["matches"] = new JsonArray([.. memory.Nearest(task, FormResolver.Evidence(form, field, observed), Asked).Select(m => (JsonNode)new JsonArray(m.Source, m.Similarity, m.Answer))]),
+                }));
+            }
+
+            await PutAsync(document);
+            if (i % 10 == 0)
+            {
+                foreach (var field in fields)
+                {
+                    memory.Forget(FormResolver.TaskName(form, field), documents[i - 150].DocumentId);
+                }
+            }
+
+            if (i % 7 == 0)
+            {
+                await PutAsync(documents[i - 1]); // remembered again: keeps its place among ties
+            }
+        }
+
+        return lines;
+    }
 
     // --- the records: a language-neutral line per settled document
 

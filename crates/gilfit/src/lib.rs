@@ -6,5 +6,6 @@
 
 pub mod field_memory;
 pub mod form;
+pub mod lexical_memory;
 pub mod text;
 pub mod threshold_selection;
