@@ -33,7 +33,7 @@ fn the_key_layer_reproduces_its_golden() {
             .collect();
         for field in ["team", "code"] {
             let candidates: Vec<Value> = memory
-                .rank(&form, field, &observed, 3)
+                .rank(&form, field, &observed, 3, &BTreeMap::new())
                 .into_iter()
                 .map(|c| json!([c.value, c.score, c.evidence, c.trusted]))
                 .collect();

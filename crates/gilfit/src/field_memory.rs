@@ -212,24 +212,34 @@ impl FieldMemory {
 
     /// The `count` values most likely for `field` given the values known so far, best first: the values settled under
     /// the known keys by their score (with the key backing each most strongly), then the field's most frequently settled
-    /// values by their share. The keyed values are trusted when the first one's score reaches the field's key threshold.
-    /// Ranking a field that takes several values is not yet supported by this implementation.
+    /// values by their share. The keyed values are trusted when the first one's score reaches the field's key threshold;
+    /// for a field that takes several values, each value on its own score, and the values already chosen in
+    /// `known_sets` are evidence and are not offered again.
     pub fn rank(
         &self,
         form: &Form,
         field: &str,
         known: &BTreeMap<String, String>,
         count: usize,
+        known_sets: &BTreeMap<String, Vec<String>>,
     ) -> Vec<Candidate> {
         let definition = form.field(field);
         let Some(index) = self.forms.get(&form.name) else {
             return Vec::new();
         };
 
-        let ranked = self.keyed(index, form, definition, known, &BTreeMap::new());
-        let trusted = definition
-            .key_threshold
-            .is_some_and(|t| ranked.first().is_some_and(|(_, score, _)| *score >= t));
+        let chosen: Vec<&String> = if definition.multiple {
+            elements(known_sets, field)
+        } else {
+            Vec::new()
+        };
+        let ranked: Vec<(String, f64, Key)> = self
+            .keyed(index, form, definition, known, known_sets)
+            .into_iter()
+            .filter(|(value, _, _)| !chosen.contains(&value))
+            .collect();
+        let reaches = |score: f64| definition.key_threshold.is_some_and(|t| score >= t);
+        let layer_trusted = ranked.first().is_some_and(|(_, score, _)| reaches(*score));
         let mut candidates: Vec<Candidate> = ranked
             .into_iter()
             .take(count)
@@ -237,7 +247,11 @@ impl FieldMemory {
                 value,
                 score,
                 evidence: Some(format!("{}: {}", key.field, key.value)),
-                trusted,
+                trusted: if definition.multiple {
+                    reaches(score)
+                } else {
+                    layer_trusted
+                },
             })
             .collect();
         let overall = Slot {
@@ -246,7 +260,9 @@ impl FieldMemory {
         };
         if let Some(settled) = index.values.get(&overall) {
             for share in self.shares(settled) {
-                if !candidates.iter().any(|c| c.value == share.value) {
+                if !chosen.contains(&&share.value)
+                    && !candidates.iter().any(|c| c.value == share.value)
+                {
                     candidates.push(Candidate {
                         value: share.value,
                         score: share.share,

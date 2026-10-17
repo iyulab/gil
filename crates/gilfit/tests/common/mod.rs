@@ -99,6 +99,7 @@ pub fn form(golden: &str, stop: impl Fn(&Value) -> bool) -> Form {
         let target = match line["field"].as_str() {
             Some("team") => &mut team,
             Some("code") => &mut code,
+            Some("tags") => &mut tags,
             _ => continue,
         };
         match line["kind"].as_str() {
@@ -123,6 +124,9 @@ pub fn form(golden: &str, stop: impl Fn(&Value) -> bool) -> Form {
                 target.memory_threshold = line["memory"]["chosen"]["threshold"].as_f64();
                 target.memory_similarity_floor =
                     line["memory"]["chosen"]["similarity_floor"].as_f64();
+            }
+            Some("key") => {
+                target.key_threshold = line["replay"]["chosen"]["threshold"].as_f64();
             }
             Some("coarse") => {
                 let level = target.coarse.as_mut().expect("a coarse level");

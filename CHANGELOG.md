@@ -38,6 +38,11 @@ with what to do.
   thresholds leave unanswered, the class the keys back (their values' scores added up by class), then on what that
   leaves the class the nearest documents vote for, with its similarity floor. A class by prefix counts UTF-16 code
   units, as the reference does. It reproduces the form path's golden coarse line to the bit.
+- The Rust rebuild has a form resolver: it keeps the settled field memory and the lexical memory up to date as
+  documents are settled (one document per case of the same evidence, the latest settled), and suggests each open
+  judged field — trusted values first, then guesses, three at most, and the coarse class when no layer answered. It
+  reproduces every decision line of the form path's golden to the bit. A model, typed text, values a field must not
+  miss, candidate domains and telemetry are not yet carried over.
 
 ## 0.22.0
 

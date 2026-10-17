@@ -7,6 +7,7 @@
 pub mod coarse_groups;
 pub mod field_memory;
 pub mod form;
+pub mod form_resolver;
 pub mod lexical_memory;
 pub mod similar_vote;
 pub mod text;
