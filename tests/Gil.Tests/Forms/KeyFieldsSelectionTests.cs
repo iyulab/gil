@@ -147,7 +147,49 @@ public sealed class KeyFieldsSelectionTests
     }
 
     [Fact]
-    public void Where_no_narrower_set_answers_more_often_KeyFields_stays_unset()
+    public void A_field_naming_what_the_field_describes_is_kept_though_a_broad_field_alone_answers_more_often()
+    {
+        // Each outlet keeps its own risk, and the kind of visit mostly follows it; an inspector says nothing. The kind
+        // alone answers about every visit, the outlet only the outlets that come again — but there rightly, where the kind
+        // alone is wrong. Answers alone would key the risk by the kind; the gain over the target keeps the outlet.
+        var random = new Random(3);
+        string[] kinds = ["routine", "complaint", "license"];
+        var risks = Enumerable.Range(0, 300).Select(_ => random.Next(3)).ToArray();
+        var documents = new List<SettledDocument>();
+        for (var i = 0; i < 800; i++)
+        {
+            var outlet = random.Next(risks.Length);
+            var kind = random.NextDouble() < 0.85 ? kinds[risks[outlet]] : kinds[random.Next(kinds.Length)];
+            documents.Add(new SettledDocument(
+                $"d{i}",
+                new Dictionary<string, string> { ["outlet"] = $"o{outlet}", ["kind"] = kind, ["inspector"] = $"i{random.Next(40)}", ["risk"] = $"r{risks[outlet]}" },
+                DateTimeOffset.UnixEpoch.AddMinutes(i)));
+        }
+
+        FormDefinition Inspection(IReadOnlyDictionary<string, double>? concentrations) => new(
+            "inspection",
+            [
+                new FieldDefinition("outlet", FieldRole.Observed),
+                new FieldDefinition("kind", FieldRole.Observed),
+                new FieldDefinition("inspector", FieldRole.Observed),
+                new FieldDefinition("risk", FieldRole.Judged) { KeyConcentrations = concentrations },
+            ],
+            PromptLanguage.English);
+        var form = Inspection(ThresholdSelection.SelectKeyConcentrations(new FieldMemory(), Inspection(null), "risk", documents));
+        static double Gain(ThresholdChoice c) => (c.Precision - 0.8) * c.AnsweredWeight;
+
+        var choice = ThresholdSelection.SelectKeyFields(() => new FieldMemory(), form, "risk", documents, 0.8, 10);
+
+        choice.KeyFields.Should().BeEquivalentTo(["outlet", "kind"]);
+        var kindAlone = choice.Trials.Single(t => t.KeyFields.SequenceEqual(["kind"])).Replay.Chosen!;
+        kindAlone.Answered.Should().BeGreaterThanOrEqualTo(choice.Chosen.Chosen!.Answered); // an addition answering no more stops answers alone
+        kindAlone.Answered.Should().BeGreaterThan(choice.AllFields.Chosen!.Answered);
+        Gain(choice.Chosen.Chosen).Should().BeGreaterThan(Gain(kindAlone));
+        Gain(choice.Chosen.Chosen).Should().BeGreaterThan(Gain(choice.AllFields.Chosen));
+    }
+
+    [Fact]
+    public void Where_no_narrower_set_gains_more_KeyFields_stays_unset()
     {
         // One field decides the code on its own and the other carries the same information: narrowing gains nothing.
         var form = new FormDefinition(

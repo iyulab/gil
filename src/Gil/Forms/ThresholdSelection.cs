@@ -114,7 +114,7 @@ public sealed record KeyFieldsTrial(IReadOnlyList<string> KeyFields, ThresholdRe
 /// by replaying its key layer, and the replays the choice was made from.
 /// </summary>
 /// <param name="KeyFields">
-/// The fields to name, in the order they were added; null when no narrower set answered more often than every field the
+/// The fields to name, in the order they were added; null when no narrower set gained more than every field the
 /// field rests on — leave <see cref="FieldDefinition.KeyFields"/> unset.
 /// </param>
 /// <param name="Chosen">The key layer's replay with the choice — keyed by every field it rests on when <paramref name="KeyFields"/> is null.</param>
@@ -716,14 +716,18 @@ public static class ThresholdSelection
 
     /// <summary>
     /// Chooses the fields that should key a judged field in the settled field memory (<see cref="FieldDefinition.KeyFields"/>)
-    /// by how often its key layer then answers at <paramref name="targetPrecision"/>. A key that rarely decides the field
-    /// still adds to every value's score, so where a few fields decide a field with many values and the rest only blur it,
-    /// keying it by those few answers more often at the same precision. Only the key layer narrows: the similar document
-    /// layer and a model keep every field the field rests on (<see cref="FieldDefinition.DependsOn"/>), which narrowing
-    /// would starve. Replays the key layer as <see cref="SelectKeyThreshold"/> does with each field the field rests on
-    /// alone, ranks them by the answers their chosen threshold gives, then adds them in that order while each addition
-    /// answers more often. The result names that set only if it answers more often than every such field
-    /// together; otherwise <see cref="KeyFieldsChoice.KeyFields"/> is null. It costs one replay per such field and one
+    /// by how much its key layer then gains at <paramref name="targetPrecision"/>: the right answers less the target times
+    /// the answers, each weighted by the decisions it stands for — what the threshold itself is chosen to make largest, as
+    /// an answer pays only by the share it is right beyond the target. A key that rarely decides the field still adds to
+    /// every value's score, so where a few fields decide a field with many values and the rest only blur it, keying it by
+    /// those few answers more often at the same precision. And a field that names the very thing the field describes
+    /// answers only where that thing comes again, but rightly: a broad field alone may answer more often, and wrongly on
+    /// exactly those, so answers alone would drop the field that decides them. Only the key layer narrows: the similar
+    /// document layer and a model keep every field the field rests on (<see cref="FieldDefinition.DependsOn"/>), which
+    /// narrowing would starve. Replays the key layer as <see cref="SelectKeyThreshold"/> does with each field the field
+    /// rests on alone, ranks them by the gain their chosen threshold gives, then adds them in that order while each
+    /// addition gains more. The result names that set only if it gains more than every such field together; otherwise
+    /// <see cref="KeyFieldsChoice.KeyFields"/> is null. It costs one replay per such field and one
     /// per addition tried. Choose the field's thresholds again with the fields chosen: a narrower set changes the scores.
     /// A field that is typed into answers questions with typed text too, and the fields that decide it before typing may
     /// blur it once a prefix has narrowed its values: give <paramref name="typedLongest"/>, and each set is counted by the
@@ -791,18 +795,20 @@ public static class ThresholdSelection
             return trial;
         }
 
-        static double Answers(KeyFieldsTrial trial) => // weighted: with checks, the decisions they stand for
-            (trial.Replay.Chosen?.AnsweredWeight ?? 0) + (trial.Typed?.ByLength.Sum(r => r.Chosen?.AnsweredWeight ?? 0) ?? 0);
+        double Gain(ThresholdChoice? chosen) => // weighted: with checks, the decisions they stand for
+            chosen is null ? 0 : (chosen.Precision - targetPrecision) * chosen.AnsweredWeight;
+        double Gains(KeyFieldsTrial trial) =>
+            Gain(trial.Replay.Chosen) + (trial.Typed?.ByLength.Sum(r => Gain(r.Chosen)) ?? 0);
 
         var all = Replay(null);
         var evidence = form.Fields.Where(f => form.Supports(f.Name, field)).Select(f => f.Name).ToList();
         var ranked = evidence
             .Select(name => Try([name]))
-            .OrderByDescending(Answers) // stable: on a tie, the form's order
+            .OrderByDescending(Gains) // stable: on a tie, the form's order
             .ToList();
         var best = ranked.FirstOrDefault();
         var everyField = new KeyFieldsChoice(null, all.Replay, all.Replay, trials) { Typed = all.Typed };
-        if (best is null || Answers(best) == 0)
+        if (best is null || Gains(best) == 0)
         {
             return everyField;
         }
@@ -815,7 +821,7 @@ public static class ThresholdSelection
             }
 
             var trial = Try([.. best.KeyFields, next.KeyFields[0]]);
-            if (Answers(trial) <= Answers(best))
+            if (Gains(trial) <= Gains(best))
             {
                 break;
             }
@@ -823,7 +829,7 @@ public static class ThresholdSelection
             best = trial;
         }
 
-        return Answers(best) > Answers(all)
+        return Gains(best) > Gains(all)
             ? new KeyFieldsChoice(best.KeyFields, best.Replay, all.Replay, trials) { Typed = best.Typed }
             : everyField;
     }

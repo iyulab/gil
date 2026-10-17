@@ -623,10 +623,14 @@ Which fields key a judged field matters most when the field has many values. A f
 adds to the score of the values settled alongside its own: a value drawn from many, each seen only a few times — a
 model number, say — lends a few wrong values most of their strength and pushes them above the right one. Name the
 fields that decide the field in `KeyFields`. To find them in the saved documents, replay the key layer with
-`ThresholdSelection.SelectKeyFields`. It tries each field the field rests on alone, adds them in order of how often
-their key layer answers at the target precision while each addition answers more often, and names a set only if it
-answers more often than every field together; otherwise `KeyFields` comes back null. Then choose the thresholds again
-with the fields it named, since a narrower set changes the scores:
+`ThresholdSelection.SelectKeyFields`. It weighs a set of fields by what its key layer gains at the target precision —
+the right answers less the target times the answers, the amount the threshold itself is chosen to make largest — so an
+answer counts only by how far it is right beyond the target. It tries each field the field rests on alone, adds them in
+order of that gain while each addition gains more, and names a set only if it gains more than every field together;
+otherwise `KeyFields` comes back null. Counting answers alone would drop a field that names the very thing the field
+describes (a customer, a site, a piece of equipment): alone it answers only where that thing comes again, so a broad
+field answers more often — and wrongly on exactly those. Then choose the thresholds again with the fields it named,
+since a narrower set changes the scores:
 
 ```csharp
 var narrowed = ThresholdSelection.SelectKeyFields(() => new FieldMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30);

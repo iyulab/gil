@@ -3,6 +3,20 @@
 Versions follow `0.x`: a minor release may change the public API. Each such change is listed under **Breaking**
 with what to do.
 
+## Unreleased
+
+### Breaking
+
+- **`SelectKeyFields` weighs a set of fields by its gain over the target, not by its answers.** A set's key layer is now
+  scored by its right answers less the target precision times its answers (weighted, typed lengths included) — what
+  the threshold itself is chosen to make largest. Counting answers let a broad field win over a field that names the
+  very thing judged: alone the latter answers only where that thing comes again, and the broad field's extra answers
+  near the target were the wrong ones there. On a small public form with such a reference field, keyed by the choice
+  after `SelectKeyConcentrations`, the wrong answers on things that came again went from 11 to 0 and the chosen fields
+  stopped switching between choices (8 switches to 0); over 23 fields of eight other small public forms the gain rose
+  on 13 and fell on 3, and three large public streams chose the same fields as before. A form may now be keyed by
+  different fields: choose its key fields and thresholds again.
+
 ## 0.21.0
 
 ### Breaking
