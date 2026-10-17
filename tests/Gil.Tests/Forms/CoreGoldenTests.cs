@@ -48,6 +48,13 @@ public sealed class CoreGoldenTests
             await File.WriteAllLinesAsync(Path.Combine(target, "keys.jsonl"), keys, Ct);
             await File.WriteAllLinesAsync(Path.Combine(target, "replay.jsonl"), replays, Ct);
             await File.WriteAllLinesAsync(Path.Combine(target, "layers.jsonl"), layers, Ct);
+            await File.WriteAllLinesAsync(Path.Combine(target, "inspection.jsonl"), Inspections().Select(Write), Ct);
+            await File.WriteAllLinesAsync(
+                Path.Combine(target, "key_fields.jsonl"),
+                KeyFieldLines(
+                    [.. (await File.ReadAllLinesAsync(Path.Combine(target, "records.jsonl"), Ct)).Select(Read)],
+                    [.. (await File.ReadAllLinesAsync(Path.Combine(target, "inspection.jsonl"), Ct)).Select(Read)]),
+                Ct);
             await File.WriteAllLinesAsync(Path.Combine(target, "lexical.jsonl"), await LexicalAsync([.. (await File.ReadAllLinesAsync(Path.Combine(target, "records.jsonl"), Ct)).Select(Read)]), Ct);
             return;
         }
@@ -60,6 +67,8 @@ public sealed class CoreGoldenTests
         keyLines.Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "keys.jsonl"), Ct));
         replayLines.Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "replay.jsonl"), Ct));
         layerLines.Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "layers.jsonl"), Ct));
+        var inspections = (await File.ReadAllLinesAsync(Path.Combine(directory, "inspection.jsonl"), Ct)).Select(Read).ToList();
+        KeyFieldLines(documents, inspections).Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "key_fields.jsonl"), Ct));
         (await LexicalAsync(documents)).Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "lexical.jsonl"), Ct));
     }
 
@@ -296,6 +305,68 @@ public sealed class CoreGoldenTests
         }
 
         return lines;
+    }
+
+    /// <summary>
+    /// Choosing key fields and concentrations, with every trial (key_fields.jsonl): the form path's choice for its team on
+    /// the first records, and on inspection.jsonl — where a broad field alone answers more often than the field naming what
+    /// the judged field describes, which the gain over the target keeps — the concentrations, then the key fields chosen
+    /// with them.
+    /// </summary>
+    private static List<string> KeyFieldLines(List<SettledDocument> documents, List<SettledDocument> inspections)
+    {
+        static JsonObject Choice(string world, string field, KeyFieldsChoice choice) => new()
+        {
+            ["kind"] = "key_fields",
+            ["world"] = world,
+            ["field"] = field,
+            ["fields"] = Strings(choice.KeyFields),
+            ["chosen"] = Replay(choice.Chosen),
+            ["all_fields"] = Replay(choice.AllFields),
+            ["trials"] = new JsonArray([.. choice.Trials.Select(t => (JsonNode)new JsonObject { ["fields"] = Strings(t.KeyFields), ["replay"] = Replay(t.Replay) })]),
+        };
+
+        var lines = new List<string>();
+        var ticket = ThresholdSelection.SelectKeyFields(() => new FieldMemory(), Form(), "team", documents.Take(Chosen), 0.8, 10, counting: Counted);
+        lines.Add(Line(Choice("ticket", "team", ticket)));
+
+        FormDefinition Inspection(IReadOnlyDictionary<string, double>? concentrations) => new(
+            "inspection",
+            [
+                new FieldDefinition("outlet", FieldRole.Observed),
+                new FieldDefinition("kind", FieldRole.Observed),
+                new FieldDefinition("inspector", FieldRole.Observed),
+                new FieldDefinition("risk", FieldRole.Judged) { KeyConcentrations = concentrations },
+            ],
+            PromptLanguage.English);
+        var concentrations = ThresholdSelection.SelectKeyConcentrations(new FieldMemory(), Inspection(null), "risk", inspections);
+        lines.Add(Line(new JsonObject
+        {
+            ["kind"] = "key_concentrations",
+            ["world"] = "inspection",
+            ["field"] = "risk",
+            ["concentrations"] = new JsonObject([.. concentrations.OrderBy(c => c.Key, StringComparer.Ordinal).Select(c => KeyValuePair.Create(c.Key, (JsonNode?)c.Value))]),
+        }));
+        var inspection = ThresholdSelection.SelectKeyFields(() => new FieldMemory(), Inspection(concentrations), "risk", inspections, 0.8, 10);
+        lines.Add(Line(Choice("inspection", "risk", inspection)));
+        return lines;
+    }
+
+    /// <summary>Made-up inspections: each outlet keeps its own risk, the kind of visit mostly follows it, an inspector says nothing.</summary>
+    private static IEnumerable<SettledDocument> Inspections()
+    {
+        var random = new Random(3);
+        string[] kinds = ["routine", "complaint", "license"];
+        var risks = Enumerable.Range(0, 300).Select(_ => random.Next(3)).ToArray();
+        for (var i = 0; i < 800; i++)
+        {
+            var outlet = random.Next(risks.Length);
+            var kind = random.NextDouble() < 0.85 ? kinds[risks[outlet]] : kinds[random.Next(kinds.Length)];
+            yield return new SettledDocument(
+                $"d{i}",
+                new Dictionary<string, string> { ["outlet"] = $"o{outlet}", ["kind"] = kind, ["inspector"] = $"i{random.Next(40)}", ["risk"] = $"r{risks[outlet]}" },
+                DateTimeOffset.UnixEpoch.AddMinutes(i));
+        }
     }
 
     // --- the records: a language-neutral line per settled document

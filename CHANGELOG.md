@@ -29,6 +29,11 @@ with what to do.
   same evidence, and choosing its threshold and similarity floor on what the key threshold would not have answered. It
   reproduces the form path's golden layer lines, and a new golden (`tests/fixtures/core/layers.jsonl` — the same
   replays with documents settled again and copied under new ids), to the bit.
+- The Rust rebuild chooses a field's key fields by the gain over the target and its key concentrations by the
+  likeliest Chinese restaurant process, as the reference does. It reproduces the form path's golden lines for both, and
+  a new golden (`tests/fixtures/core/key_fields.jsonl` — every trial of that choice, and the choice on made-up
+  inspections in `tests/fixtures/core/inspection.jsonl`, where the field naming what is judged gains more than a broad
+  field that answers more often), to the bit. Counting typed text in the choice is not yet supported there.
 
 ## 0.22.0
 

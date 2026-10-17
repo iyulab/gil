@@ -282,6 +282,42 @@ impl FieldMemory {
         })
     }
 
+    /// For each key the known values give `field` and that was seen before: the key's field, its weighted total and the
+    /// weight `value` has under it (0 when the key has not had it) — what the next settlement under each key is predicted
+    /// from.
+    pub fn key_totals(
+        &self,
+        form: &Form,
+        field: &str,
+        known: &BTreeMap<String, String>,
+        value: &str,
+    ) -> Vec<(String, f64, f64)> {
+        let Some(index) = self.forms.get(&form.name) else {
+            return Vec::new();
+        };
+
+        let mut found = Vec::new();
+        for key in self.keys(form, form.field(field), known, &BTreeMap::new()) {
+            let slot = Slot {
+                field: field.to_owned(),
+                key: Some(key.clone()),
+            };
+            let Some(settled) = index.values.get(&slot) else {
+                continue;
+            };
+            let shares = self.shares(settled);
+            if let Some(first) = shares.first() {
+                let own = shares
+                    .iter()
+                    .find(|s| s.value == value)
+                    .map_or(0.0, |s| s.weight);
+                found.push((key.field, first.total, own));
+            }
+        }
+
+        found
+    }
+
     /// Every value of a field that takes several settled under the known keys, best first, with the score each is compared
     /// with the field's key threshold on — the values already chosen (`known_sets[field]`) left out.
     pub fn scored(

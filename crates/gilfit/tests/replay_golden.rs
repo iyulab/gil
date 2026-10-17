@@ -6,64 +6,12 @@
 
 mod common;
 
-use common::{CHOSEN, document, fixture, form, lines};
+use common::{CHOSEN, COUNTED, document, doubles, fixture, form, lines, replay};
 use gilfit::field_memory::FieldMemory;
-use gilfit::form::{Document, SettlementKind};
+use gilfit::form::Document;
 use gilfit::lexical_memory::LexicalMemory;
-use gilfit::threshold_selection::{
-    ThresholdChoice, ThresholdReplay, select_key_threshold, select_layers,
-};
-use serde_json::{Number, Value, json};
-
-const COUNTED: [SettlementKind; 4] = [
-    SettlementKind::Enter,
-    SettlementKind::Accept,
-    SettlementKind::Correct,
-    SettlementKind::Check,
-];
-
-/// The replay in the golden's shape.
-fn replay(replay: &ThresholdReplay) -> Value {
-    json!({
-        "lookups": replay.lookups,
-        "candidates": replay.candidates,
-        "chosen": replay.chosen.as_ref().map(choice),
-        "most_precise": replay.most_precise.as_ref().map(choice),
-        "keys": replay.keys.as_ref().map(|keys| keys
-            .iter()
-            .map(|k| json!([k.key, k.lookups, k.answered, k.precision, k.answering]))
-            .collect::<Vec<_>>()),
-    })
-}
-
-fn choice(choice: &ThresholdChoice) -> Value {
-    json!({
-        "threshold": choice.threshold,
-        "precision": choice.precision,
-        "answered": choice.answered,
-        "lookups": choice.lookups,
-        "answered_weight": choice.answered_weight,
-        "effective_answered": choice.effective_answered,
-        "similarity_floor": choice.similarity_floor,
-        "promise": choice.promise,
-        "promise_answered": choice.promise_answered,
-    })
-}
-
-/// Every number as the double it denotes: the reference writes a whole double without a fraction (`160`), which reads
-/// back as an integer, so both sides compare as doubles — exactly.
-fn doubles(value: Value) -> Value {
-    match value {
-        Value::Number(n) => {
-            Value::Number(Number::from_f64(n.as_f64().expect("a number")).expect("a finite number"))
-        }
-        Value::Array(items) => Value::Array(items.into_iter().map(doubles).collect()),
-        Value::Object(fields) => {
-            Value::Object(fields.into_iter().map(|(k, v)| (k, doubles(v))).collect())
-        }
-        other => other,
-    }
-}
+use gilfit::threshold_selection::{select_key_threshold, select_layers};
+use serde_json::{Value, json};
 
 #[test]
 fn the_key_threshold_replay_reproduces_its_golden() {

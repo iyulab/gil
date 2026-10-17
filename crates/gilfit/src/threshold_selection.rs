@@ -802,6 +802,217 @@ fn similarity_floor(answers: &[(f64, f64)], threshold: f64) -> Option<f64> {
     Some(nearest[(FLOOR_SHARE * (nearest.len() - 1) as f64) as usize])
 }
 
+/// One set of fields tried for a judged field's key fields, and how its key layer replayed.
+#[derive(Clone, Debug, PartialEq)]
+pub struct KeyFieldsTrial {
+    /// The fields that keyed the judged field in this replay; empty for every field it rests on.
+    pub key_fields: Vec<String>,
+    /// The key layer's replay with them, as [`select_key_threshold`] makes it.
+    pub replay: ThresholdReplay,
+}
+
+/// The fields that should key a judged field in the settled field memory, chosen by replaying its key layer, and the
+/// replays the choice was made from.
+#[derive(Clone, Debug, PartialEq)]
+pub struct KeyFieldsChoice {
+    /// The fields to name, in the order they were added; `None` when no narrower set gained more than every field the
+    /// field rests on — leave the key fields unset.
+    pub key_fields: Option<Vec<String>>,
+    /// The key layer's replay with the choice.
+    pub chosen: ThresholdReplay,
+    /// The key layer's replay keyed by every field the field rests on.
+    pub all_fields: ThresholdReplay,
+    /// Every set tried: each field it rests on alone, in the form's order, then each set the greedy additions tried.
+    pub trials: Vec<KeyFieldsTrial>,
+}
+
+/// The form with `field` keyed by `key_fields` (every field it rests on when `None`).
+fn keyed_by(form: &Form, field: &str, key_fields: Option<Vec<String>>) -> Form {
+    let mut form = form.clone();
+    for f in form.fields.iter_mut().filter(|f| f.name == field) {
+        f.key_fields = key_fields.clone();
+    }
+    form
+}
+
+/// Chooses the fields that should key `field` by the gain their chosen key threshold gives over the target precision —
+/// the precision above the target times the answers' weight. Replays the key layer as [`select_key_threshold`] does with
+/// each field the field rests on alone, ranks them by gain (a tie keeps the form's order), then adds them in that order
+/// while each addition gains more. The result names that set only if it gains more than every such field together.
+/// A fresh default field memory serves each replay.
+///
+/// Counting typed text as well is not yet supported by this implementation.
+///
+/// # Panics
+/// As [`select_key_threshold`].
+pub fn select_key_fields(
+    form: &Form,
+    field: &str,
+    documents: &[Document],
+    target_precision: f64,
+    minimum_answered: usize,
+    counting: Option<&[SettlementKind]>,
+) -> KeyFieldsChoice {
+    let replay = |key_fields: Option<Vec<String>>| KeyFieldsTrial {
+        replay: select_key_threshold(
+            &mut FieldMemory::default(),
+            &keyed_by(form, field, key_fields.clone()),
+            field,
+            documents,
+            target_precision,
+            minimum_answered,
+            counting,
+        ),
+        key_fields: key_fields.unwrap_or_default(),
+    };
+    let gains = |trial: &KeyFieldsTrial| {
+        trial.replay.chosen.as_ref().map_or(0.0, |c| {
+            (c.precision - target_precision) * c.answered_weight
+        })
+    };
+
+    let mut trials: Vec<KeyFieldsTrial> = Vec::new();
+    let all = replay(None);
+    let evidence: Vec<String> = form
+        .fields
+        .iter()
+        .filter(|f| form.supports(&f.name, field))
+        .map(|f| f.name.clone())
+        .collect();
+    let mut ranked: Vec<KeyFieldsTrial> = evidence
+        .iter()
+        .map(|name| {
+            let trial = replay(Some(vec![name.clone()]));
+            trials.push(trial.clone());
+            trial
+        })
+        .collect();
+    ranked.sort_by(|a, b| gains(b).partial_cmp(&gains(a)).unwrap_or(Ordering::Equal));
+
+    let every_field = |trials: Vec<KeyFieldsTrial>| KeyFieldsChoice {
+        key_fields: None,
+        chosen: all.replay.clone(),
+        all_fields: all.replay.clone(),
+        trials,
+    };
+    let Some(mut best) = ranked.first().cloned() else {
+        return every_field(trials);
+    };
+    if gains(&best) == 0.0 {
+        return every_field(trials);
+    }
+
+    for next in &ranked[1..] {
+        if best.key_fields.len() + 1 == evidence.len() {
+            break; // every field it rests on: the replay without key fields
+        }
+
+        let mut fields = best.key_fields.clone();
+        fields.push(next.key_fields[0].clone());
+        let trial = replay(Some(fields));
+        trials.push(trial.clone());
+        if gains(&trial) <= gains(&best) {
+            break;
+        }
+
+        best = trial;
+    }
+
+    if gains(&best) > gains(&all) {
+        KeyFieldsChoice {
+            key_fields: Some(best.key_fields),
+            chosen: best.replay,
+            all_fields: all.replay,
+            trials,
+        }
+    } else {
+        every_field(trials)
+    }
+}
+
+/// Chooses, for each field that keys `field`, how readily its keys are believed after only a few settlements. Replays
+/// the documents in the order the field memory weighs them; before each is remembered, every key its values give the
+/// field that was seen before predicts the field's value as a Chinese restaurant process does — a value of weight w
+/// under a key of weighted total W by w ÷ (W + α), a value not yet seen under the key by α ÷ (W + α) — and each key
+/// field takes the α under which its keys' predictions are likeliest, with two anchoring predictions from a key seen
+/// once. The keys are those the form gives the field, from the values known when its suggestion would have been made;
+/// the field's own concentrations are ignored. `memory` must be empty and configured as the one in use.
+///
+/// Returns a concentration for each key field whose keys were seen again; empty for a field that takes several values.
+///
+/// # Panics
+/// When the field is not judged.
+pub fn select_key_concentrations(
+    memory: &mut FieldMemory,
+    form: &Form,
+    field: &str,
+    documents: &[Document],
+) -> BTreeMap<String, f64> {
+    assert!(
+        form.field(field).role == Role::Judged,
+        "'{field}' is not a judged field"
+    );
+    let mut concentrations = BTreeMap::new();
+    if form.field(field).multiple {
+        return concentrations;
+    }
+
+    let mut form = form.clone();
+    for f in form.fields.iter_mut().filter(|f| f.name == field) {
+        f.key_concentrations.clear();
+    }
+    let mut ordered: Vec<Document> = documents.iter().map(Document::remembered).collect();
+    ordered.sort_by(|a, b| a.settled_at.cmp(&b.settled_at).then(a.id.cmp(&b.id)));
+
+    // key field → (predictions of a new value, the totals predicted from), in document order.
+    let mut predictions: BTreeMap<String, (u64, Vec<f64>)> = BTreeMap::new();
+    for document in &ordered {
+        let Some(settled) = document.values.get(field) else {
+            continue;
+        };
+
+        memory.remove(&form.name, &document.id); // a document settled again is not its own evidence
+        let before = arrived(&form, document, field, &document.values);
+        for (key_field, total, weight) in memory.key_totals(&form, field, &before, settled) {
+            let (unseen, totals) = predictions.entry(key_field).or_default();
+            totals.push(total);
+            if weight == 0.0 {
+                *unseen += 1;
+            }
+        }
+
+        memory.put(&form, document);
+    }
+
+    for (key_field, (unseen, totals)) in predictions {
+        concentrations.insert(key_field, likeliest(unseen, &totals));
+    }
+
+    concentrations
+}
+
+/// The concentration α under which `unseen` new values among predictions from keys of weighted totals `totals`, with the
+/// two anchoring predictions from a key seen once, are likeliest: the root of (unseen + 1) ÷ α = Σ 1 ÷ (W + α) +
+/// 2 ÷ (1 + α), found by halving on a log scale, 200 times.
+fn likeliest(unseen: u64, totals: &[f64]) -> f64 {
+    let (mut low, mut high) = (1e-9_f64, 1e9_f64);
+    for _ in 0..200 {
+        let mid = (low * high).sqrt();
+        let mut sum = 2.0 / (1.0 + mid);
+        for total in totals {
+            sum += 1.0 / (total + mid);
+        }
+
+        if (unseen + 1) as f64 > mid * sum {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+
+    (low * high).sqrt()
+}
+
 #[cfg(test)]
 mod tests {
     use super::fnv1a;
