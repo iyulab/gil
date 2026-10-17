@@ -34,6 +34,10 @@ with what to do.
   a new golden (`tests/fixtures/core/key_fields.jsonl` — every trial of that choice, and the choice on made-up
   inspections in `tests/fixtures/core/inspection.jsonl`, where the field naming what is judged gains more than a broad
   field that answers more often), to the bit. Counting typed text in the choice is not yet supported there.
+- The Rust rebuild chooses a field's coarse level thresholds, as the reference does: on the lookups the field's own
+  thresholds leave unanswered, the class the keys back (their values' scores added up by class), then on what that
+  leaves the class the nearest documents vote for, with its similarity floor. A class by prefix counts UTF-16 code
+  units, as the reference does. It reproduces the form path's golden coarse line to the bit.
 
 ## 0.22.0
 

@@ -282,6 +282,24 @@ impl FieldMemory {
         })
     }
 
+    /// Every value settled under the known keys, best first: its score and the key that backs it most strongly
+    /// (`field: value`) — what a field's coarse level adds up by class. Empty when no known key was seen.
+    pub fn keyed_values(
+        &self,
+        form: &Form,
+        field: &str,
+        known: &BTreeMap<String, String>,
+        known_sets: &BTreeMap<String, Vec<String>>,
+    ) -> Vec<(String, f64, String)> {
+        let Some(index) = self.forms.get(&form.name) else {
+            return Vec::new();
+        };
+        self.keyed(index, form, form.field(field), known, known_sets)
+            .into_iter()
+            .map(|(value, score, key)| (value, score, format!("{}: {}", key.field, key.value)))
+            .collect()
+    }
+
     /// For each key the known values give `field` and that was seen before: the key's field, its weighted total and the
     /// weight `value` has under it (0 when the key has not had it) — what the next settlement under each key is predicted
     /// from.

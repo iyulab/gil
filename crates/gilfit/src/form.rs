@@ -28,6 +28,12 @@ pub struct Field {
     pub key_threshold: Option<f64>,
     /// How many of the most similar documents vote on the field's value; at least 1.
     pub similar_document_votes: usize,
+    /// The vote's score at or above which the similar document layer is trusted; `None` trusts none.
+    pub memory_threshold: Option<f64>,
+    /// The similarity the nearest document voting for the value must also reach when more than one voted.
+    pub memory_similarity_floor: Option<f64>,
+    /// The field's coarse level, offered when neither layer answers the value.
+    pub coarse: Option<CoarseLevel>,
 }
 
 impl Field {
@@ -42,6 +48,9 @@ impl Field {
             key_concentrations: BTreeMap::new(),
             key_threshold: None,
             similar_document_votes: 10,
+            memory_threshold: None,
+            memory_similarity_floor: None,
+            coarse: None,
         }
     }
 
@@ -51,6 +60,55 @@ impl Field {
             .get(key_field)
             .copied()
             .unwrap_or(1.0)
+    }
+}
+
+/// The coarse level of a judged field: the class of each of its values — its first `prefix` characters, or what a
+/// table of `classes` says — and the thresholds at which the class the two layers back is trusted.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CoarseLevel {
+    /// How many leading characters of a value name its class, counted in UTF-16 code units as the reference counts
+    /// them; 0 for a level made from a table.
+    pub prefix: usize,
+    /// Value to class, for a level made from a table; a value it does not list is a class of its own.
+    pub classes: Option<BTreeMap<String, String>>,
+    /// The summed key scores of a class's values at or above which the keys' class is trusted; `None` trusts none.
+    pub key_threshold: Option<f64>,
+    /// The vote's margin over classes at or above which the similar documents' class is trusted; `None` trusts none.
+    pub memory_threshold: Option<f64>,
+    /// The similarity the nearest document voting for the class must also reach when more than one voted.
+    pub memory_similarity_floor: Option<f64>,
+}
+
+impl CoarseLevel {
+    /// A level whose classes are the values' first `prefix` characters.
+    pub fn by_prefix(prefix: usize) -> Self {
+        Self {
+            prefix,
+            ..Self::default()
+        }
+    }
+
+    /// The class of `value`: what the table says, the value itself when it does not list it; without a table, its
+    /// first `prefix` UTF-16 code units, or all of it when shorter. A character beyond U+FFFF that the prefix would cut
+    /// in half is left out — the reference keeps its first half, which is not text.
+    pub fn of(&self, value: &str) -> String {
+        if let Some(table) = &self.classes {
+            return table
+                .get(value)
+                .cloned()
+                .unwrap_or_else(|| value.to_owned());
+        }
+
+        let mut units = 0;
+        let end = value
+            .char_indices()
+            .find(|(_, c)| {
+                units += c.len_utf16();
+                units > self.prefix
+            })
+            .map_or(value.len(), |(i, _)| i);
+        value[..end].to_owned()
     }
 }
 
@@ -222,5 +280,30 @@ impl Document {
                 .collect(),
             ..self.clone()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_class_by_prefix_counts_utf16_code_units() {
+        let level = |prefix| CoarseLevel::by_prefix(prefix);
+        assert_eq!(level(2).of("25-40"), "25");
+        assert_eq!(level(2).of("가나다"), "가나");
+        assert_eq!(level(9).of("short"), "short");
+        assert_eq!(level(2).of("😀a"), "😀"); // one character, two code units
+        assert_eq!(level(1).of("😀a"), ""); // the reference would keep half a character
+    }
+
+    #[test]
+    fn a_class_by_table_is_the_value_itself_when_not_listed() {
+        let level = CoarseLevel {
+            classes: Some(BTreeMap::from([("K123".to_owned(), "panel".to_owned())])),
+            ..CoarseLevel::default()
+        };
+        assert_eq!(level.of("K123"), "panel");
+        assert_eq!(level.of("K999"), "K999");
     }
 }

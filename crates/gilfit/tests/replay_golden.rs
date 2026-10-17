@@ -10,7 +10,7 @@ use common::{CHOSEN, COUNTED, document, doubles, fixture, form, lines, replay};
 use gilfit::field_memory::FieldMemory;
 use gilfit::form::Document;
 use gilfit::lexical_memory::LexicalMemory;
-use gilfit::threshold_selection::{select_key_threshold, select_layers};
+use gilfit::threshold_selection::{select_coarse, select_key_threshold, select_layers};
 use serde_json::{Value, json};
 
 #[test]
@@ -103,6 +103,38 @@ fn the_layers_replay_reproduces_its_golden() {
         });
         assert_eq!(doubles(actual), doubles(expected), "field {field}");
     }
+}
+
+/// The golden's own line for the coarse level of the field that has one (`golden.jsonl`, kind `coarse`): the class the
+/// keys back on the lookups the field's value layers leave at their chosen thresholds, then the class the similar
+/// documents vote for on what that leaves — the form as configured when the level was chosen.
+#[test]
+fn the_coarse_replay_reproduces_its_golden() {
+    let early: Vec<Document> = lines(&fixture("records.jsonl"))
+        .take(CHOSEN)
+        .map(|r| document(&r))
+        .collect();
+    let golden = fixture("golden.jsonl");
+    let is_coarse = |l: &Value| l["kind"] == "coarse" && l["field"] == "code";
+    let expected = lines(&golden).find(is_coarse).expect("the coarse line");
+    let form = form(&golden, is_coarse);
+    let coarse = select_coarse(
+        &mut FieldMemory::default(),
+        &mut LexicalMemory::default(),
+        &form,
+        "code",
+        &early,
+        0.8,
+        10,
+        Some(&COUNTED),
+    );
+    let actual = json!({
+        "kind": "coarse",
+        "field": "code",
+        "key": replay(&coarse.key),
+        "memory": replay(&coarse.memory),
+    });
+    assert_eq!(doubles(actual), doubles(expected));
 }
 
 /// The finer layers golden (`tests/fixtures/core/layers.jsonl`): both layers replayed with the same forms on the first

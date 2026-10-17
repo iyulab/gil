@@ -1,7 +1,7 @@
 //! What the golden tests share: reading the core fixtures, their records as documents, and the golden's form.
 #![allow(dead_code)] // each test binary uses its own part
 
-use gilfit::form::{Document, Field, Form, Role, SettlementKind};
+use gilfit::form::{CoarseLevel, Document, Field, Form, Role, SettlementKind};
 use gilfit::threshold_selection::{ThresholdChoice, ThresholdReplay};
 use serde_json::{Number, Value, json};
 
@@ -92,6 +92,7 @@ pub fn document(record: &Value) -> Document {
 pub fn form(golden: &str, stop: impl Fn(&Value) -> bool) -> Form {
     let mut team = Field::new("team", Role::Judged);
     let mut code = Field::new("code", Role::Judged);
+    code.coarse = Some(CoarseLevel::by_prefix(2));
     let mut tags = Field::new("tags", Role::Judged);
     tags.multiple = true;
     for line in lines(golden).take_while(|l| l["kind"] != "decision" && !stop(l)) {
@@ -119,6 +120,16 @@ pub fn form(golden: &str, stop: impl Fn(&Value) -> bool) -> Form {
             }
             Some("layers") => {
                 target.key_threshold = line["key"]["chosen"]["threshold"].as_f64();
+                target.memory_threshold = line["memory"]["chosen"]["threshold"].as_f64();
+                target.memory_similarity_floor =
+                    line["memory"]["chosen"]["similarity_floor"].as_f64();
+            }
+            Some("coarse") => {
+                let level = target.coarse.as_mut().expect("a coarse level");
+                level.key_threshold = line["key"]["chosen"]["threshold"].as_f64();
+                level.memory_threshold = line["memory"]["chosen"]["threshold"].as_f64();
+                level.memory_similarity_floor =
+                    line["memory"]["chosen"]["similarity_floor"].as_f64();
             }
             _ => {}
         }

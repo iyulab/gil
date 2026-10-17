@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, HashMap};
 use crate::field_memory::{FieldMemory, First};
 use crate::form::{Document, Form, Role, SettlementKind};
 use crate::lexical_memory::LexicalMemory;
-use crate::{similar_vote, text};
+use crate::{coarse_groups, similar_vote, text};
 
 /// How many of the latest documents replayed [`ThresholdChoice::promise`] is taken over — every document in settlement
 /// order counts, whether or not it was asked about.
@@ -551,6 +551,18 @@ struct Step {
     vote: Option<Vote>,
     weight: f64,
     order: usize,
+    /// For a coarse replay: the level as the keys and the vote back it, and whether the field's value layers answered.
+    coarse: Option<CoarseStep>,
+}
+
+/// What a field's coarse level made of one lookup: whether the field's own layers answered the value at its thresholds,
+/// the score of the class the keys back and whether it was the settled value's, and how the similar documents voted
+/// for a class.
+#[derive(Clone, Copy, Debug)]
+struct CoarseStep {
+    value_answered: bool,
+    keys: Option<(f64, bool)>,
+    vote: Option<Vote>,
 }
 
 /// The share of a threshold's answers whose nearest voter may fall below its similarity floor.
@@ -595,7 +607,15 @@ pub fn select_layers(
         "'{field}' takes several values; the similar document layer does not suggest it"
     );
 
-    let (steps, latest) = replay(field_memory, memory, form, field, documents, counting);
+    let (steps, latest) = replay(
+        field_memory,
+        memory,
+        form,
+        field,
+        documents,
+        counting,
+        false,
+    );
 
     let keyed: Vec<&Step> = steps.iter().filter(|s| s.key_looked).collect();
     let answers: Vec<Answer> = keyed
@@ -646,6 +666,101 @@ pub fn select_layers(
     LayerThresholds { key, memory }
 }
 
+/// Chooses the thresholds of `field`'s coarse level in the order a suggestion offers it: on the lookups the field's
+/// value layers leave unanswered at the thresholds it has (its key threshold, its memory threshold with its floor —
+/// choose those first), the class the keys back, as [`select_key_threshold`] chooses for a value; on the lookups that
+/// leaves, the class the similar documents vote for, as [`select_layers`] chooses the memory threshold, with its
+/// similarity floor. A class is right when it is the settled value's ([`CoarseLevel::of`]). Each document is asked
+/// about in memories holding only the documents settled before it, then put into both, as for the value. Each replay's
+/// lookups count only the lookups left to it.
+///
+/// [`CoarseLevel::of`]: crate::form::CoarseLevel::of
+///
+/// # Panics
+/// As [`select_layers`], and when the field has no coarse level.
+#[allow(clippy::too_many_arguments)]
+pub fn select_coarse(
+    field_memory: &mut FieldMemory,
+    memory: &mut LexicalMemory,
+    form: &Form,
+    field: &str,
+    documents: &[Document],
+    target_precision: f64,
+    minimum_answered: usize,
+    counting: Option<&[SettlementKind]>,
+) -> LayerThresholds {
+    assert!(
+        target_precision > 0.0 && target_precision <= 1.0,
+        "target_precision must be in (0, 1]"
+    );
+    assert!(minimum_answered >= 1, "minimum_answered must be at least 1");
+    let definition = form.field(field);
+    assert!(
+        definition.role == Role::Judged,
+        "'{field}' is not a judged field"
+    );
+    assert!(
+        !definition.multiple,
+        "'{field}' takes several values; the similar document layer does not suggest it"
+    );
+    assert!(
+        definition.coarse.is_some(),
+        "'{field}' has no coarse level to choose thresholds for"
+    );
+
+    let (steps, latest) = replay(field_memory, memory, form, field, documents, counting, true);
+    // What the level made of each lookup the value layers left, as a step whose vote is the class's.
+    let left: Vec<(Step, Option<(f64, bool)>)> = steps
+        .iter()
+        .filter_map(|s| {
+            let coarse = s.coarse.expect("a coarse replay's step");
+            ((s.key_looked || s.looked) && !coarse.value_answered).then(|| {
+                let step = Step {
+                    vote: coarse.vote,
+                    ..s.clone()
+                };
+                (step, coarse.keys)
+            })
+        })
+        .collect();
+    let answers: Vec<Answer> = left
+        .iter()
+        .filter_map(|(s, keys)| {
+            keys.map(|(score, correct)| Answer {
+                score,
+                correct,
+                weight: s.weight,
+                order: s.order,
+                key: None,
+                caught: false,
+            })
+        })
+        .collect();
+    let key = fit_recent(
+        &answers,
+        left.len(),
+        left.iter().fold(0.0, |sum, (s, _)| sum + s.weight),
+        latest,
+        target_precision,
+        minimum_answered,
+    );
+
+    let chosen = key.chosen.as_ref().map(|c| c.threshold);
+    let rest: Vec<&Step> = left
+        .iter()
+        .filter(|(_, keys)| !chosen.is_some_and(|t| keys.is_some_and(|(score, _)| score >= t)))
+        .map(|(s, _)| s)
+        .collect();
+    let memory = similarity(
+        &rest,
+        latest,
+        definition.similar_document_votes,
+        target_precision,
+        minimum_answered,
+    );
+    LayerThresholds { key, memory }
+}
+
 /// Replays the documents in settlement order, asking each memory about each document before putting it in — the
 /// document memory keeping one document per case.
 fn replay(
@@ -655,9 +770,11 @@ fn replay(
     field: &str,
     documents: &[Document],
     counting: Option<&[SettlementKind]>,
+    coarse: bool,
 ) -> (Vec<Step>, usize) {
     let task = format!("{}/{field}", form.name);
-    let votes = form.field(field).similar_document_votes;
+    let definition = form.field(field);
+    let votes = definition.similar_document_votes;
     let mut ordered: Vec<Document> = documents.iter().map(Document::remembered).collect();
     ordered.sort_by(|a, b| a.settled_at.cmp(&b.settled_at).then(a.id.cmp(&b.id)));
 
@@ -690,16 +807,53 @@ fn replay(
             None
         };
         let evidence = form.evidence(field, &document.values, &document.sets);
-        let vote = if remembered > 0 {
-            let found = memory.nearest(&task, &form.evidence(field, &before, &before_sets), votes);
-            similar_vote::decide(&found, votes).map(|(winner, score)| Vote {
-                score,
-                correct: winner.answer == *settled,
-                nearest: winner.similarity,
-                voted: similar_vote::voters(&found, votes) > 1,
-            })
+        let found = if remembered > 0 {
+            memory.nearest(&task, &form.evidence(field, &before, &before_sets), votes)
         } else {
-            None
+            Vec::new()
+        };
+        let vote = similar_vote::decide(&found, votes).map(|(winner, score)| Vote {
+            score,
+            correct: winner.answer == *settled,
+            nearest: winner.similarity,
+            voted: similar_vote::voters(&found, votes) > 1,
+        });
+        let coarse = match &definition.coarse {
+            Some(level) if coarse => {
+                // As a suggestion: the value layers answer at the field's own thresholds; only where they do not is
+                // the level offered.
+                let value_answered = first.as_ref().is_some_and(|f| {
+                    !f.caught && definition.key_threshold.is_some_and(|t| f.score >= t)
+                }) || vote.is_some_and(|v| {
+                    definition.memory_threshold.is_some_and(|t| v.score >= t)
+                        && !(v.voted
+                            && definition
+                                .memory_similarity_floor
+                                .is_some_and(|floor| v.nearest < floor))
+                });
+                let class = level.of(settled);
+                let keys = if key_looked {
+                    coarse_groups::keys(
+                        &field_memory.keyed_values(form, field, &before, &before_sets),
+                        level,
+                    )
+                } else {
+                    None
+                };
+                Some(CoarseStep {
+                    value_answered,
+                    keys: keys.map(|(c, score, _)| (score, c == class)),
+                    vote: coarse_groups::vote(&found, votes, level).map(
+                        |(c, score, nearest, voted)| Vote {
+                            score,
+                            correct: c == class,
+                            nearest: nearest.similarity,
+                            voted,
+                        },
+                    ),
+                })
+            }
+            _ => None,
         };
 
         // A settlement not counted is replayed into memory like any other, but not asked about.
@@ -712,6 +866,7 @@ fn replay(
             vote,
             weight,
             order,
+            coarse,
         });
         field_memory.put(form, document);
 

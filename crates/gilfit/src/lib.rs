@@ -4,6 +4,7 @@
 //! This crate is being built up to the .NET implementation, step by step, against the language-neutral goldens in
 //! `tests/fixtures/core`. It is not published yet.
 
+pub mod coarse_groups;
 pub mod field_memory;
 pub mod form;
 pub mod lexical_memory;
