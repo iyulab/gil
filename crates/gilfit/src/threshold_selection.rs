@@ -1000,7 +1000,7 @@ fn replay(
                 let class = level.of(settled);
                 let keys = if key_looked {
                     coarse_groups::keys(
-                        &field_memory.keyed_values(form, field, &before, &before_sets),
+                        &field_memory.keyed_values(form, field, &before, &before_sets, None),
                         level,
                     )
                 } else {

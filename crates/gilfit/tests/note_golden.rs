@@ -3,7 +3,8 @@
 //! value that must not be missed, a value settled outside the field's candidates, a coarse level made from a table, a
 //! field that takes several values, values arriving in different orders, and documents settled again and copied while
 //! the resolver is asked. The settings it chose and its decisions — before typing, with a set field's first value
-//! chosen, and with the owner's first characters typed — must come out the same here, to the bit.
+//! chosen, with the owner's first characters typed, and asked again once saved — must come out the same here, to
+//! the bit.
 
 mod common;
 
@@ -243,6 +244,12 @@ fn the_note_decisions_reproduce_their_golden() {
         }
 
         resolver.rebuild(&form, std::slice::from_ref(document));
+        if j % 4 == 0 {
+            for s in resolver.suggest(&form, &document.id, &observed, &BTreeMap::new()) {
+                actual.push(decision("saved_decision", &document.id, &s));
+            }
+        }
+
         if j % 6 == 5 {
             let mut again = early[j].clone();
             let at = TOPICS

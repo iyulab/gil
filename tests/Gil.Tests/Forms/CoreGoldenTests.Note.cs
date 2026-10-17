@@ -59,7 +59,8 @@ public sealed partial class CoreGoldenTests
     /// <summary>
     /// The settings chosen on the first notes, each as a line, then for every later note: a suggestion for every judged
     /// field from its observed values, the set field again with its first value chosen, and the owner while its first one
-    /// and two characters are typed — before the note is put. Every sixth note also settles an early note again with
+    /// and two characters are typed — before the note is put; every fourth note is asked about again once put, as a saved
+    /// document is. Every sixth note also settles an early note again with
     /// another topic, every tenth copies one under a new id, each later than all before.
     /// </summary>
     private static async Task<List<string>> NoteAsync(IReadOnlyList<SettledDocument> documents)
@@ -145,6 +146,16 @@ public sealed partial class CoreGoldenTests
             }
 
             await resolver.RebuildAsync(form, [document], Ct);
+
+            // Asked again once saved, as an editor asks about a document it reopens: its own settlement is no evidence.
+            if (j % 4 == 0)
+            {
+                foreach (var suggestion in await resolver.SuggestAsync(form, document.DocumentId, observed, Ct))
+                {
+                    lines.Add(Line(Decision("saved_decision", document.DocumentId, suggestion)));
+                }
+            }
+
             if (j % 6 == 5)
             {
                 var again = early[j];

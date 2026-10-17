@@ -1,8 +1,8 @@
 //! The form resolver: suggests each open judged field of a document from the settled field memory and the similar
 //! document memory, and keeps both up to date as documents are settled.
 //!
-//! Not yet carried over from the reference: a model where neither memory had evidence, a domain taken from another field's values, the field memory passing over the saved version of the
-//! document asked about (the similar document layer does), and telemetry.
+//! Not yet carried over from the reference: a model where neither memory had evidence, a domain taken from another
+//! field's values, and telemetry.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -220,7 +220,8 @@ impl FormResolver {
     }
 
     /// Suggests every open judged field — without a value, unless it takes several — from the values given, writing
-    /// nothing to memory. A similar document lookup that finds the saved version of `document` passes it over.
+    /// nothing to memory. The saved version of `document`, if memory holds one, is not evidence for itself: its
+    /// settlements are left out of the field memory, and a similar document lookup that finds it passes it over.
     pub fn suggest(
         &self,
         form: &Form,
@@ -278,7 +279,15 @@ impl FormResolver {
         let typed = typed.filter(|t| !t.is_empty());
         let remembered: Vec<Candidate> = self
             .field_memory
-            .rank(form, &field.name, values, self.candidate_count, sets, typed)
+            .rank(
+                form,
+                &field.name,
+                values,
+                self.candidate_count,
+                sets,
+                typed,
+                Some(document),
+            )
             .into_iter()
             .map(|c| Candidate {
                 value: c.value,
@@ -319,9 +328,13 @@ impl FormResolver {
             Some(level) if !answered && typed.is_none() => coarse(
                 level,
                 coarse_groups::keys(
-                    &self
-                        .field_memory
-                        .keyed_values(form, &field.name, values, sets),
+                    &self.field_memory.keyed_values(
+                        form,
+                        &field.name,
+                        values,
+                        sets,
+                        Some(document),
+                    ),
                     level,
                 ),
                 coarse_groups::vote(&admitted, field.similar_document_votes, level),

@@ -214,9 +214,11 @@ impl FieldMemory {
     /// the known keys by their score (with the key backing each most strongly), then the field's most frequently settled
     /// values by their share — only values that begin with the text typed so far, if any. The keyed values are trusted
     /// when the first one's score reaches the field's key threshold for that many characters typed, or the same value
-    /// was already trusted with fewer of them;
+    /// was already trusted with fewer of them. The settlements of `excluding`, a document asked about again once saved,
+    /// are no evidence for it;
     /// for a field that takes several values, each value on its own score, and the values already chosen in
     /// `known_sets` are evidence and are not offered again.
+    #[allow(clippy::too_many_arguments)]
     pub fn rank(
         &self,
         form: &Form,
@@ -225,6 +227,7 @@ impl FieldMemory {
         count: usize,
         known_sets: &BTreeMap<String, Vec<String>>,
         typed: Option<&str>,
+        excluding: Option<&str>,
     ) -> Vec<Candidate> {
         let typed = typed.filter(|t| !t.is_empty());
         let definition = form.field(field);
@@ -238,7 +241,7 @@ impl FieldMemory {
             Vec::new()
         };
         let ranked: Vec<(String, f64, Key)> = self
-            .keyed(index, form, definition, known, known_sets, typed)
+            .keyed(index, form, definition, known, known_sets, typed, excluding)
             .into_iter()
             .filter(|(value, _, _)| !chosen.contains(&value))
             .collect();
@@ -249,13 +252,15 @@ impl FieldMemory {
                 || typed.is_some_and(|typed| {
                     !definition.multiple
                         && claimed(
-                            &self.keyed(index, form, definition, known, known_sets, None),
+                            &self
+                                .keyed(index, form, definition, known, known_sets, None, excluding),
                             definition,
                             typed,
                             best,
                         )
                 })
-        }) && !self.caught(index, form, definition, known, known_sets);
+        }) && !self
+            .caught(index, form, definition, known, known_sets, excluding);
         let mut candidates: Vec<Candidate> = ranked
             .into_iter()
             .take(count)
@@ -275,7 +280,7 @@ impl FieldMemory {
             key: None,
         };
         if let Some(settled) = index.values.get(&overall) {
-            for share in self.shares(settled) {
+            for share in self.shares(settled, excluding) {
                 if definition.admits(&share.value)
                     && begins(&share.value, typed)
                     && !chosen.contains(&&share.value)
@@ -308,8 +313,8 @@ impl FieldMemory {
     ) -> Option<First> {
         let index = self.forms.get(&form.name)?;
         let definition = form.field(field);
-        let caught = self.caught(index, form, definition, known, known_sets);
-        let ranked = self.keyed(index, form, definition, known, known_sets, None);
+        let caught = self.caught(index, form, definition, known, known_sets, None);
+        let ranked = self.keyed(index, form, definition, known, known_sets, None, None);
         ranked.into_iter().next().map(|(best, score, key)| First {
             score,
             matches: best == value,
@@ -335,11 +340,11 @@ impl FieldMemory {
             return best;
         };
         let definition = form.field(field);
-        if self.caught(index, form, definition, known, known_sets) {
+        if self.caught(index, form, definition, known, known_sets, None) {
             return best; // the key layer does not answer here at any length
         }
 
-        let ranked = self.keyed(index, form, definition, known, known_sets, None);
+        let ranked = self.keyed(index, form, definition, known, known_sets, None, None);
         for (length, slot) in best.iter_mut().enumerate() {
             let typed = (length > 0).then(|| text::utf16_prefix(value, length));
             *slot = ranked
@@ -352,23 +357,25 @@ impl FieldMemory {
     }
 
     /// Every value settled under the known keys, best first: its score and the key that backs it most strongly
-    /// (`field: value`) — what a field's coarse level adds up by class. Empty when no known key was seen.
+    /// (`field: value`) — what a field's coarse level adds up by class. Empty when no known key was seen. The
+    /// settlements of `excluding`, a document asked about again, are left out.
     pub fn keyed_values(
         &self,
         form: &Form,
         field: &str,
         known: &BTreeMap<String, String>,
         known_sets: &BTreeMap<String, Vec<String>>,
+        excluding: Option<&str>,
     ) -> Vec<(String, f64, String)> {
         let Some(index) = self.forms.get(&form.name) else {
             return Vec::new();
         };
         let definition = form.field(field);
-        if self.caught(index, form, definition, known, known_sets) {
+        if self.caught(index, form, definition, known, known_sets, excluding) {
             return Vec::new();
         }
 
-        self.keyed(index, form, definition, known, known_sets, None)
+        self.keyed(index, form, definition, known, known_sets, None, excluding)
             .into_iter()
             .map(|(value, score, key)| (value, score, format!("{}: {}", key.field, key.value)))
             .collect()
@@ -397,7 +404,7 @@ impl FieldMemory {
             let Some(settled) = index.values.get(&slot) else {
                 continue;
             };
-            let shares = self.shares(settled);
+            let shares = self.shares(settled, None);
             if let Some(first) = shares.first() {
                 let own = shares
                     .iter()
@@ -423,11 +430,19 @@ impl FieldMemory {
             return Vec::new();
         };
         let chosen = elements(known_sets, field);
-        self.keyed(index, form, form.field(field), known, known_sets, None)
-            .into_iter()
-            .filter(|(value, _, _)| !chosen.contains(&value))
-            .map(|(value, score, _)| (value, score))
-            .collect()
+        self.keyed(
+            index,
+            form,
+            form.field(field),
+            known,
+            known_sets,
+            None,
+            None,
+        )
+        .into_iter()
+        .filter(|(value, _, _)| !chosen.contains(&value))
+        .map(|(value, score, _)| (value, score))
+        .collect()
     }
 
     /// Whether a value the field must not miss was ever settled under a key the document has — then the key layer does
@@ -439,6 +454,7 @@ impl FieldMemory {
         field: &Field,
         known: &BTreeMap<String, String>,
         known_sets: &BTreeMap<String, Vec<String>>,
+        excluding: Option<&str>,
     ) -> bool {
         let Some(must_catch) = field.must_catch.as_ref().filter(|m| !m.is_empty()) else {
             return false;
@@ -455,7 +471,7 @@ impl FieldMemory {
                     key: Some(key),
                 };
                 index.values.get(&slot).is_some_and(|settled| {
-                    self.shares(settled)
+                    self.shares(settled, excluding)
                         .iter()
                         .any(|s| must_catch.contains(&s.value))
                 })
@@ -465,6 +481,7 @@ impl FieldMemory {
     /// The values settled under the known keys, best first: by score, then latest settlement, then scalar order. Each
     /// carries the key it is strongest under. Values outside the field's domain, or not beginning with the typed text,
     /// are left out.
+    #[allow(clippy::too_many_arguments)]
     fn keyed(
         &self,
         index: &FormIndex,
@@ -473,6 +490,7 @@ impl FieldMemory {
         known: &BTreeMap<String, String>,
         known_sets: &BTreeMap<String, Vec<String>>,
         typed: Option<&str>,
+        excluding: Option<&str>,
     ) -> Vec<(String, f64, Key)> {
         // value → (score, strongest, backing key, latest); summed in the order the keys come.
         let mut scores: Vec<(String, f64, f64, Key, i64)> = Vec::new();
@@ -500,7 +518,7 @@ impl FieldMemory {
             // A value outside the domain, or not beginning with the typed text, is not offered, but it still counts
             // towards its key's total.
             for share in self
-                .shares(settled)
+                .shares(settled, excluding)
                 .into_iter()
                 .filter(|s| field.admits(&s.value) && begins(&s.value, typed))
             {
@@ -577,8 +595,11 @@ impl FieldMemory {
     /// Each value's share of the weighted total, largest first; ties to the one settled most recently, then to the
     /// smaller value in scalar order. Settlements are folded from the earliest: each one leaves every earlier weight one
     /// step lighter and adds its own at 1 — the same operations, in the same order, as the reference implementation.
-    fn shares(&self, settled: &[Settled]) -> Vec<Share> {
-        let mut ordered: Vec<&Settled> = settled.iter().collect();
+    fn shares(&self, settled: &[Settled], excluding: Option<&str>) -> Vec<Share> {
+        let mut ordered: Vec<&Settled> = settled
+            .iter()
+            .filter(|s| excluding != Some(s.document.as_str()))
+            .collect();
         ordered.sort_by(|a, b| a.at.cmp(&b.at).then(a.document.cmp(&b.document)));
 
         let mut raw: BTreeMap<String, (f64, i64)> = BTreeMap::new();

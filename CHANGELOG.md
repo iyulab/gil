@@ -55,6 +55,9 @@ with what to do.
   staying trusted, and no similar document vote trusted nor coarse class offered. It chooses the typed key thresholds
   as the reference does, and reproduces the note golden's typed thresholds and typed decisions to the bit. Characters
   are counted in UTF-16 code units, as the reference counts them.
+- The note golden also asks about every fourth note again once it is saved. The Rust rebuild's field memory leaves the
+  saved document's own settlements out when it is asked about again, as the reference does, and reproduces those lines
+  to the bit.
 
 ## 0.22.0
 
