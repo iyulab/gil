@@ -15,8 +15,11 @@ with what to do.
   the bit. CI checks its format, lints and tests.
 - The Rust rebuild replays the key layer to choose a key threshold for a field that takes one value, reproducing a new
   golden (`tests/fixtures/core/replay.jsonl` — the chosen and most precise thresholds, their promises and the state under
-  each key, for each single-valued judged field of the form path's golden) to the bit. Fields that take several values,
-  values a field must not miss and typed thresholds are not replayed there yet.
+  each key, for each single-valued judged field of the form path's golden) to the bit. Values a field must not miss and
+  typed thresholds are not replayed there yet.
+- The Rust settled field memory remembers fields that take several values — each value overall, under the document's
+  keys and under each of its other values, weighing as one settlement — and the key threshold replay covers such a
+  field, picking its values in the golden's fixed order, reproducing the golden's replay of one to the bit.
 
 ## 0.22.0
 

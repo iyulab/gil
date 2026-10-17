@@ -103,16 +103,51 @@ impl FieldMemory {
             .map_or(0, |index| index.documents.len())
     }
 
-    /// Replaces what the document contributed with what its current values imply. Fields that take several values are
-    /// not yet remembered by this implementation.
+    /// Replaces what the document contributed with what its current values imply. A field that takes several values
+    /// settles each of them: overall, under the document's keys, and under each of its other values — the values of one
+    /// document weigh alike, as one settlement, whatever order they are listed in.
     pub fn put(&mut self, form: &Form, document: &Document) {
         self.remove(&form.name, &document.id);
         let mut tallies = Vec::new();
-        for field in form
-            .fields
-            .iter()
-            .filter(|f| f.role == Role::Judged && !f.multiple)
-        {
+        for field in form.fields.iter().filter(|f| f.role == Role::Judged) {
+            if field.multiple {
+                let elements = elements(&document.sets, &field.name);
+                let keys = self.keys(form, field, &document.values, &document.sets);
+                for element in &elements {
+                    let settled = Settled {
+                        value: (*element).clone(),
+                        at: document.settled_at,
+                        document: document.id.clone(),
+                    };
+                    tallies.push((
+                        Slot {
+                            field: field.name.clone(),
+                            key: None,
+                        },
+                        settled.clone(),
+                    ));
+                    let mut under = keys.clone();
+                    for other in elements.iter().filter(|e| *e != element) {
+                        if let Some(key) = self.key_of(&field.name, other)
+                            && !under.contains(&key)
+                        {
+                            under.push(key);
+                        }
+                    }
+                    for key in under {
+                        tallies.push((
+                            Slot {
+                                field: field.name.clone(),
+                                key: Some(key),
+                            },
+                            settled.clone(),
+                        ));
+                    }
+                }
+
+                continue;
+            }
+
             let Some(value) = document.values.get(&field.name) else {
                 continue;
             };
@@ -178,6 +213,7 @@ impl FieldMemory {
     /// The `count` values most likely for `field` given the values known so far, best first: the values settled under
     /// the known keys by their score (with the key backing each most strongly), then the field's most frequently settled
     /// values by their share. The keyed values are trusted when the first one's score reaches the field's key threshold.
+    /// Ranking a field that takes several values is not yet supported by this implementation.
     pub fn rank(
         &self,
         form: &Form,
@@ -246,6 +282,26 @@ impl FieldMemory {
         })
     }
 
+    /// Every value of a field that takes several settled under the known keys, best first, with the score each is compared
+    /// with the field's key threshold on — the values already chosen (`known_sets[field]`) left out.
+    pub fn scored(
+        &self,
+        form: &Form,
+        field: &str,
+        known: &BTreeMap<String, String>,
+        known_sets: &BTreeMap<String, Vec<String>>,
+    ) -> Vec<(String, f64)> {
+        let Some(index) = self.forms.get(&form.name) else {
+            return Vec::new();
+        };
+        let chosen = elements(known_sets, field);
+        self.keyed(index, form, form.field(field), known, known_sets)
+            .into_iter()
+            .filter(|(value, _, _)| !chosen.contains(&value))
+            .map(|(value, score, _)| (value, score))
+            .collect()
+    }
+
     /// The values settled under the known keys, best first: by score, then latest settlement, then scalar order. Each
     /// carries the key it is strongest under.
     fn keyed(
@@ -258,7 +314,19 @@ impl FieldMemory {
     ) -> Vec<(String, f64, Key)> {
         // value → (score, strongest, backing key, latest); summed in the order the keys come.
         let mut scores: Vec<(String, f64, f64, Key, i64)> = Vec::new();
-        for key in self.keys(form, field, known, known_sets) {
+        let mut keys = self.keys(form, field, known, known_sets);
+        if field.multiple {
+            // A field that takes several values: its chosen values are keys for the rest.
+            for element in elements(known_sets, &field.name) {
+                if let Some(key) = self.key_of(&field.name, element)
+                    && !keys.contains(&key)
+                {
+                    keys.push(key);
+                }
+            }
+        }
+
+        for key in keys {
             let slot = Slot {
                 field: field.name.clone(),
                 key: Some(key.clone()),
@@ -320,11 +388,7 @@ impl FieldMemory {
             .filter(|e| form.keys(&e.name, &field.name))
         {
             if evidence.multiple {
-                let mut elements: Vec<&String> =
-                    sets.get(&evidence.name).into_iter().flatten().collect();
-                elements.sort();
-                elements.dedup();
-                for element in elements {
+                for element in elements(sets, &evidence.name) {
                     add(self.key_of(&evidence.name, element));
                 }
             } else if let Some(raw) = values.get(&evidence.name) {
@@ -418,4 +482,12 @@ impl FieldMemory {
         });
         shares
     }
+}
+
+/// A set field's values, once each and in scalar order — the order a set is listed in carries no meaning.
+fn elements<'a>(sets: &'a BTreeMap<String, Vec<String>>, field: &str) -> Vec<&'a String> {
+    let mut elements: Vec<&String> = sets.get(field).into_iter().flatten().collect();
+    elements.sort();
+    elements.dedup();
+    elements
 }

@@ -1,7 +1,7 @@
 //! The key threshold golden (`tests/fixtures/core/replay.jsonl`), written by the .NET implementation: the key layer's
 //! threshold replay for each single-valued judged field on the first 200 records, with the form as the golden had
 //! configured it when that field's layers were chosen, must come out the same here — every count, every number to the
-//! bit, and the state under each key.
+//! bit, and the state under each key — and the golden's own replay of the field that takes several values.
 
 mod common;
 
@@ -90,17 +90,29 @@ fn the_key_threshold_replay_reproduces_its_golden() {
     }
 }
 
+/// The golden's own line for the field that takes several values (`golden.jsonl`, kind `key`): chosen after every other
+/// field's layers, counting every settlement.
 #[test]
-#[should_panic(expected = "takes several values")]
-fn a_field_that_takes_several_values_is_not_yet_replayed() {
-    let form = form(&fixture("golden.jsonl"), |_| false);
-    select_key_threshold(
+fn the_set_field_replay_reproduces_its_golden() {
+    let early: Vec<Document> = lines(&fixture("records.jsonl"))
+        .take(CHOSEN)
+        .map(|r| document(&r))
+        .collect();
+    let golden = fixture("golden.jsonl");
+    let expected = lines(&golden)
+        .find(|l| l["kind"] == "key" && l["field"] == "tags")
+        .expect("the set field's line");
+
+    let form = form(&golden, |l| l["kind"] == "key" && l["field"] == "tags");
+    let replay = select_key_threshold(
         &mut FieldMemory::default(),
         &form,
         "tags",
-        &[],
+        &early,
         0.8,
         10,
         None,
     );
+    let actual = json!({ "kind": "key", "field": "tags", "replay": self::replay(&replay) });
+    assert_eq!(doubles(actual), doubles(expected));
 }

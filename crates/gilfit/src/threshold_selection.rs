@@ -4,8 +4,8 @@
 //! score down to which every fitted band of answers meets the target precision.
 //!
 //! Every sum here is taken in the order the reference implementation takes it — the same operations on the same operands
-//! — so the numbers come out the same to the bit. Not yet supported by this implementation: fields that take several
-//! values, values a field must not miss, typed thresholds and the similar document layer.
+//! — so the numbers come out the same to the bit. Not yet supported by this implementation: values a field must not
+//! miss, typed thresholds and the similar document layer.
 
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -118,9 +118,14 @@ impl Block {
 /// as evidence; a value the application filled is neither asked about nor remembered. `counting` names the kinds of
 /// settlement whose lookups are counted — `None` counts every settlement, including those not known.
 ///
+/// A field that takes several values trusts each value on its own score, so every value offered under the keys counts,
+/// right when it is one of the settled values not yet chosen. A person picks such values one after another, and those
+/// chosen are evidence for the rest, so each document is asked about once with none of its values chosen, then again
+/// after each but the last is chosen, in [`pick_order`]. `lookups` then counts the values sought, and the replay carries
+/// no state under each key.
+///
 /// # Panics
-/// When `target_precision` is outside (0, 1], `minimum_answered` is 0, the field is not judged, or the field takes several
-/// values — not yet supported by this implementation.
+/// When `target_precision` is outside (0, 1], `minimum_answered` is 0, or the field is not judged.
 pub fn select_key_threshold(
     memory: &mut FieldMemory,
     form: &Form,
@@ -140,10 +145,7 @@ pub fn select_key_threshold(
         definition.role == Role::Judged,
         "'{field}' is not a judged field"
     );
-    assert!(
-        !definition.multiple,
-        "'{field}' takes several values; its key threshold is not yet supported by this implementation"
-    );
+    let multiple = definition.multiple;
 
     let mut ordered: Vec<Document> = documents.iter().map(Document::remembered).collect();
     ordered.sort_by(|a, b| a.settled_at.cmp(&b.settled_at).then(a.id.cmp(&b.id)));
@@ -152,26 +154,59 @@ pub fn select_key_threshold(
     let (mut lookups, mut lookup_weight, mut order) = (0_usize, 0.0_f64, 0_usize);
     for document in &ordered {
         order += 1;
-        let Some(settled) = document.values.get(field) else {
-            continue;
+        let settled_set = if multiple {
+            pick_order(document, field)
+        } else {
+            Vec::new()
         };
+        let settled = document.values.get(field);
+        let nothing_settled = if multiple {
+            settled_set.is_empty()
+        } else {
+            settled.is_none()
+        };
+        if nothing_settled {
+            continue;
+        }
 
         memory.remove(&form.name, &document.id); // a document settled again is not its own evidence
         let weight = weight(document, field, counting);
         if memory.count(&form.name) > 0 && weight > 0.0 {
             let before = arrived(form, document, field, &document.values);
             let before_sets = arrived(form, document, field, &document.sets);
-            lookups += 1;
-            lookup_weight += weight;
-            if let Some(first) = memory.first(form, field, &before, settled, &before_sets) {
-                matches.push(Answer {
-                    score: first.score,
-                    correct: first.matches,
-                    weight,
-                    order,
-                    key: Some(first.key),
-                    caught: first.caught,
-                });
+            if let Some(settled) = settled.filter(|_| !multiple) {
+                lookups += 1;
+                lookup_weight += weight;
+                if let Some(first) = memory.first(form, field, &before, settled, &before_sets) {
+                    matches.push(Answer {
+                        score: first.score,
+                        correct: first.matches,
+                        weight,
+                        order,
+                        key: Some(first.key),
+                        caught: first.caught,
+                    });
+                }
+            } else {
+                for chosen in 0..settled_set.len() {
+                    let mut sets = before_sets.clone();
+                    sets.insert(field.to_owned(), settled_set[..chosen].to_vec());
+                    let mut sought: Vec<&String> = settled_set[chosen..].iter().collect();
+                    sought.sort();
+                    sought.dedup();
+                    lookups += sought.len();
+                    lookup_weight += sought.len() as f64 * weight;
+                    for (value, score) in memory.scored(form, field, &before, &sets) {
+                        matches.push(Answer {
+                            score,
+                            correct: sought.contains(&&value),
+                            weight,
+                            order,
+                            key: None,
+                            caught: false,
+                        });
+                    }
+                }
             }
         }
 
@@ -187,7 +222,37 @@ pub fn select_key_threshold(
         target_precision,
         minimum_answered,
     );
-    with_keys(replay, &matches)
+    if multiple {
+        replay
+    } else {
+        with_keys(replay, &matches)
+    }
+}
+
+/// A set field's settled values, once each, in the order a replay supposes they were picked: by the 64-bit FNV-1a hash
+/// of the UTF-8 of the document id, U+001F and the value, then in scalar order — so it depends neither on the order the
+/// values are listed in nor on their scalar order.
+pub fn pick_order(document: &Document, field: &str) -> Vec<String> {
+    let mut values: Vec<&String> = Vec::new();
+    for value in document.sets.get(field).into_iter().flatten() {
+        if !values.contains(&value) {
+            values.push(value);
+        }
+    }
+    let mut keyed: Vec<(u64, &String)> = values
+        .into_iter()
+        .map(|v| (fnv1a(&format!("{}\u{1f}{v}", document.id)), v))
+        .collect();
+    keyed.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(b.1)));
+    keyed.into_iter().map(|(_, v)| v.clone()).collect()
+}
+
+/// A stable 64-bit FNV-1a hash of the text's UTF-8 bytes.
+fn fnv1a(text: &str) -> u64 {
+    text.bytes()
+        .fold(14_695_981_039_346_656_037_u64, |hash, b| {
+            (hash ^ u64::from(b)).wrapping_mul(1_099_511_628_211)
+        })
 }
 
 /// How many decisions the field's settlement in the document counts as: none when its kind is not counted (every kind is
@@ -452,5 +517,17 @@ fn fit(
         lookups,
         candidates: matches.len(),
         keys: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fnv1a;
+
+    #[test]
+    fn fnv1a_matches_the_published_vectors() {
+        assert_eq!(fnv1a(""), 0xcbf2_9ce4_8422_2325);
+        assert_eq!(fnv1a("a"), 0xaf63_dc4c_8601_ec8c);
+        assert_eq!(fnv1a("foobar"), 0x85944171f73967e8);
     }
 }
