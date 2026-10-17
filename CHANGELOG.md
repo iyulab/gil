@@ -58,6 +58,9 @@ with what to do.
 - The note golden also asks about every fourth note again once it is saved. The Rust rebuild's field memory leaves the
   saved document's own settlements out when it is asked about again, as the reference does, and reproduces those lines
   to the bit.
+- The key fields golden (`tests/fixtures/core/key_fields.jsonl`) also chooses the ticket's team counting the answers
+  while its first two characters are typed. The Rust rebuild's key field choice counts typing the same way, with the
+  typed thresholds of every trial, and reproduces it to the bit.
 
 ## 0.22.0
 

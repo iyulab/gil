@@ -1130,6 +1130,9 @@ pub struct KeyFieldsTrial {
     pub key_fields: Vec<String>,
     /// The key layer's replay with them, as [`select_key_threshold`] makes it.
     pub replay: ThresholdReplay,
+    /// When typing was counted, the typed thresholds with these fields and their key threshold, as
+    /// [`select_typed_key_thresholds`] makes them.
+    pub typed: Option<TypedKeyThresholds>,
 }
 
 /// The fields that should key a judged field in the settled field memory, chosen by replaying its key layer, and the
@@ -1145,6 +1148,8 @@ pub struct KeyFieldsChoice {
     pub all_fields: ThresholdReplay,
     /// Every set tried: each field it rests on alone, in the form's order, then each set the greedy additions tried.
     pub trials: Vec<KeyFieldsTrial>,
+    /// When typing was counted, the typed thresholds that go with the choice.
+    pub typed: Option<TypedKeyThresholds>,
 }
 
 /// The form with `field` keyed by `key_fields` (every field it rests on when `None`).
@@ -1160,36 +1165,70 @@ fn keyed_by(form: &Form, field: &str, key_fields: Option<Vec<String>>) -> Form {
 /// the precision above the target times the answers' weight. Replays the key layer as [`select_key_threshold`] does with
 /// each field the field rests on alone, ranks them by gain (a tie keeps the form's order), then adds them in that order
 /// while each addition gains more. The result names that set only if it gains more than every such field together.
-/// A fresh default field memory serves each replay.
-///
-/// Counting typed text as well is not yet supported by this implementation.
+/// A fresh default field memory serves each replay. With `typed_longest` above 0, each set is counted by its answers
+/// before typing and while typing up to that many characters together ([`select_typed_key_thresholds`], with the set's
+/// key threshold), and the typed thresholds for the choice come with it.
 ///
 /// # Panics
-/// As [`select_key_threshold`].
+/// As [`select_key_threshold`], and when typing is counted for a field that takes several values.
 pub fn select_key_fields(
     form: &Form,
     field: &str,
     documents: &[Document],
     target_precision: f64,
     minimum_answered: usize,
+    typed_longest: usize,
     counting: Option<&[SettlementKind]>,
 ) -> KeyFieldsChoice {
-    let replay = |key_fields: Option<Vec<String>>| KeyFieldsTrial {
-        replay: select_key_threshold(
+    assert!(
+        typed_longest == 0 || !form.field(field).multiple,
+        "'{field}' takes several values; typing is not counted for it"
+    );
+    let replay = |key_fields: Option<Vec<String>>| {
+        let mut resting = keyed_by(form, field, key_fields.clone());
+        let replay = select_key_threshold(
             &mut FieldMemory::default(),
-            &keyed_by(form, field, key_fields.clone()),
+            &resting,
             field,
             documents,
             target_precision,
             minimum_answered,
             counting,
-        ),
-        key_fields: key_fields.unwrap_or_default(),
+        );
+        let typed = (typed_longest > 0).then(|| {
+            for f in resting.fields.iter_mut().filter(|f| f.name == field) {
+                f.key_threshold = replay.chosen.as_ref().map(|c| c.threshold);
+            }
+            select_typed_key_thresholds(
+                &mut FieldMemory::default(),
+                &resting,
+                field,
+                documents,
+                target_precision,
+                minimum_answered,
+                typed_longest,
+                counting,
+            )
+        });
+        KeyFieldsTrial {
+            replay,
+            key_fields: key_fields.unwrap_or_default(),
+            typed,
+        }
     };
-    let gains = |trial: &KeyFieldsTrial| {
-        trial.replay.chosen.as_ref().map_or(0.0, |c| {
+    // Weighted: with checks, the decisions they stand for.
+    let gain = |chosen: Option<&ThresholdChoice>| {
+        chosen.map_or(0.0, |c| {
             (c.precision - target_precision) * c.answered_weight
         })
+    };
+    let gains = |trial: &KeyFieldsTrial| {
+        gain(trial.replay.chosen.as_ref())
+            + trial.typed.as_ref().map_or(0.0, |t| {
+                t.by_length
+                    .iter()
+                    .fold(0.0, |sum, r| sum + gain(r.chosen.as_ref()))
+            })
     };
 
     let mut trials: Vec<KeyFieldsTrial> = Vec::new();
@@ -1215,6 +1254,7 @@ pub fn select_key_fields(
         chosen: all.replay.clone(),
         all_fields: all.replay.clone(),
         trials,
+        typed: all.typed.clone(),
     };
     let Some(mut best) = ranked.first().cloned() else {
         return every_field(trials);
@@ -1245,6 +1285,7 @@ pub fn select_key_fields(
             chosen: best.replay,
             all_fields: all.replay,
             trials,
+            typed: best.typed,
         }
     } else {
         every_field(trials)

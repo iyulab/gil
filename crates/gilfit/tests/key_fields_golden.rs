@@ -11,7 +11,9 @@ use std::collections::BTreeMap;
 use common::{CHOSEN, COUNTED, document, doubles, fixture, form, lines, replay};
 use gilfit::field_memory::FieldMemory;
 use gilfit::form::{Document, Field, Form, Role};
-use gilfit::threshold_selection::{KeyFieldsChoice, select_key_concentrations, select_key_fields};
+use gilfit::threshold_selection::{
+    KeyFieldsChoice, TypedKeyThresholds, select_key_concentrations, select_key_fields,
+};
 use serde_json::{Map, Value, json};
 
 fn early() -> Vec<Document> {
@@ -30,16 +32,37 @@ fn concentrations(values: &BTreeMap<String, f64>) -> Value {
     Value::Object(map)
 }
 
+/// The line with the typed replays added where typing was counted, as the reference writes them.
+fn with_typed(mut line: Value, typed: &Option<TypedKeyThresholds>) -> Value {
+    if let Some(typed) = typed {
+        line["typed"] = json!(typed.by_length.iter().map(replay).collect::<Vec<_>>());
+    }
+    line
+}
+
 fn choice(world: &str, field: &str, choice: &KeyFieldsChoice) -> Value {
-    json!({
-        "kind": "key_fields",
-        "world": world,
-        "field": field,
-        "fields": strings(&choice.key_fields),
-        "chosen": replay(&choice.chosen),
-        "all_fields": replay(&choice.all_fields),
-        "trials": choice.trials.iter().map(|t| json!({ "fields": t.key_fields, "replay": replay(&t.replay) })).collect::<Vec<_>>(),
-    })
+    let trials: Vec<Value> = choice
+        .trials
+        .iter()
+        .map(|t| {
+            with_typed(
+                json!({ "fields": t.key_fields, "replay": replay(&t.replay) }),
+                &t.typed,
+            )
+        })
+        .collect();
+    with_typed(
+        json!({
+            "kind": "key_fields",
+            "world": world,
+            "field": field,
+            "fields": strings(&choice.key_fields),
+            "chosen": replay(&choice.chosen),
+            "all_fields": replay(&choice.all_fields),
+            "trials": trials,
+        }),
+        &choice.typed,
+    )
 }
 
 fn inspection(concentrations: BTreeMap<String, f64>) -> Form {
@@ -63,7 +86,7 @@ fn the_form_paths_key_fields_and_concentrations_reproduce_its_golden() {
     let mut form = form(&golden, |_| true); // the form as declared
     let expected: Vec<Value> = lines(&golden).take(2).collect();
 
-    let chosen = select_key_fields(&form, "team", &early, 0.8, 10, Some(&COUNTED));
+    let chosen = select_key_fields(&form, "team", &early, 0.8, 10, 0, Some(&COUNTED));
     let actual = json!({
         "kind": "key_fields",
         "field": "team",
@@ -87,7 +110,7 @@ fn the_form_paths_key_fields_and_concentrations_reproduce_its_golden() {
 #[test]
 fn key_fields_with_every_trial_reproduce_their_golden() {
     let expected: Vec<Value> = lines(&fixture("key_fields.jsonl")).collect();
-    assert_eq!(expected.len(), 3);
+    assert_eq!(expected.len(), 4);
 
     let ticket = select_key_fields(
         &form(&fixture("golden.jsonl"), |_| true),
@@ -95,6 +118,7 @@ fn key_fields_with_every_trial_reproduce_their_golden() {
         &early(),
         0.8,
         10,
+        0,
         Some(&COUNTED),
     );
     assert_eq!(
@@ -119,9 +143,24 @@ fn key_fields_with_every_trial_reproduce_their_golden() {
     });
     assert_eq!(doubles(actual), doubles(expected[1].clone()));
 
-    let chosen = select_key_fields(&inspection(found), "risk", &inspections, 0.8, 10, None);
+    let chosen = select_key_fields(&inspection(found), "risk", &inspections, 0.8, 10, 0, None);
     assert_eq!(
         doubles(choice("inspection", "risk", &chosen)),
         doubles(expected[2].clone())
+    );
+
+    // The ticket's team again, counting the answers while its first two characters are typed as well.
+    let typed = select_key_fields(
+        &form(&fixture("golden.jsonl"), |_| true),
+        "team",
+        &early(),
+        0.8,
+        10,
+        2,
+        Some(&COUNTED),
+    );
+    assert_eq!(
+        doubles(choice("ticket-typed", "team", &typed)),
+        doubles(expected[3].clone())
     );
 }

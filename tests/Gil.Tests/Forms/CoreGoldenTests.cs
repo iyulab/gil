@@ -315,7 +315,18 @@ public sealed partial class CoreGoldenTests
     /// </summary>
     private static List<string> KeyFieldLines(List<SettledDocument> documents, List<SettledDocument> inspections)
     {
-        static JsonObject Choice(string world, string field, KeyFieldsChoice choice) => new()
+        // The typed replays only where typing was counted, so the lines of a choice without it read as before.
+        static JsonObject Typed(JsonObject line, TypedKeyThresholds? typed)
+        {
+            if (typed is not null)
+            {
+                line["typed"] = new JsonArray([.. typed.ByLength.Select(r => (JsonNode)Replay(r))]);
+            }
+
+            return line;
+        }
+
+        static JsonObject Choice(string world, string field, KeyFieldsChoice choice) => Typed(new JsonObject
         {
             ["kind"] = "key_fields",
             ["world"] = world,
@@ -323,8 +334,8 @@ public sealed partial class CoreGoldenTests
             ["fields"] = Strings(choice.KeyFields),
             ["chosen"] = Replay(choice.Chosen),
             ["all_fields"] = Replay(choice.AllFields),
-            ["trials"] = new JsonArray([.. choice.Trials.Select(t => (JsonNode)new JsonObject { ["fields"] = Strings(t.KeyFields), ["replay"] = Replay(t.Replay) })]),
-        };
+            ["trials"] = new JsonArray([.. choice.Trials.Select(t => (JsonNode)Typed(new JsonObject { ["fields"] = Strings(t.KeyFields), ["replay"] = Replay(t.Replay) }, t.Typed))]),
+        }, choice.Typed);
 
         var lines = new List<string>();
         var ticket = ThresholdSelection.SelectKeyFields(() => new FieldMemory(), Form(), "team", documents.Take(Chosen), 0.8, 10, counting: Counted);
@@ -349,6 +360,10 @@ public sealed partial class CoreGoldenTests
         }));
         var inspection = ThresholdSelection.SelectKeyFields(() => new FieldMemory(), Inspection(concentrations), "risk", inspections, 0.8, 10);
         lines.Add(Line(Choice("inspection", "risk", inspection)));
+
+        // The ticket's team again, counting the answers while its first two characters are typed as well.
+        var typed = ThresholdSelection.SelectKeyFields(() => new FieldMemory(), Form(), "team", documents.Take(Chosen), 0.8, 10, typedLongest: 2, counting: Counted);
+        lines.Add(Line(Choice("ticket-typed", "team", typed)));
         return lines;
     }
 
