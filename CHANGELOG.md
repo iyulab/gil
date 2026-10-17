@@ -41,8 +41,16 @@ with what to do.
 - The Rust rebuild has a form resolver: it keeps the settled field memory and the lexical memory up to date as
   documents are settled (one document per case of the same evidence, the latest settled), and suggests each open
   judged field — trusted values first, then guesses, three at most, and the coarse class when no layer answered. It
-  reproduces every decision line of the form path's golden to the bit. A model, typed text, values a field must not
-  miss, candidate domains and telemetry are not yet carried over.
+  reproduces every decision line of the form path's golden to the bit. A model, typed text and telemetry are not yet
+  carried over.
+- A second core golden, `tests/fixtures/core/note-records.jsonl` and `note-golden.jsonl`: made-up notes whose long
+  free text decides a judged field through the similar document layer, with a value that must not be missed, a value
+  settled outside the field's candidates, a coarse level made from a table, a field that takes several values, typed
+  thresholds, values arriving in three orders, and documents settled again and copied while the resolver is asked.
+  Records may now carry their arrival order. The Rust rebuild leaves values outside a field's candidates out of both
+  layers, holds the key layer back where a value that must not be missed was settled under the document's keys, and
+  reproduces the golden's settings and its decisions, with and without a set field's first value chosen, to the bit.
+  Typed text is not yet carried over there.
 
 ## 0.22.0
 

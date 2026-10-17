@@ -34,6 +34,10 @@ pub struct Field {
     pub memory_similarity_floor: Option<f64>,
     /// The field's coarse level, offered when neither layer answers the value.
     pub coarse: Option<CoarseLevel>,
+    /// The values the field may take; `None` is any. A value settled outside them is remembered but never offered.
+    pub candidates: Option<Vec<String>>,
+    /// Values the field must not miss: the key layer does not answer for a document whose keys have ever had one.
+    pub must_catch: Option<Vec<String>>,
 }
 
 impl Field {
@@ -51,7 +55,17 @@ impl Field {
             memory_threshold: None,
             memory_similarity_floor: None,
             coarse: None,
+            candidates: None,
+            must_catch: None,
         }
+    }
+
+    /// Whether `value` lies in the field's domain: among its candidates when it has them. Domains taken from another
+    /// field's values are not yet supported by this implementation.
+    pub fn admits(&self, value: &str) -> bool {
+        self.candidates
+            .as_ref()
+            .is_none_or(|c| c.iter().any(|v| v == value))
     }
 
     /// The concentration of `key_field`'s keys for this field — 1 unless set.

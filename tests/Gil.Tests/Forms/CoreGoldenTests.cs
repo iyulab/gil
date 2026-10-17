@@ -13,7 +13,7 @@ namespace Gil.Tests.Forms;
 /// specification turns on (docs/text-normalization.md) — Hangul, Greek, Turkish, full-width forms, characters beyond
 /// U+FFFF. Set GIL_WRITE_CORE_GOLDEN to rewrite the files from this implementation.
 /// </summary>
-public sealed class CoreGoldenTests
+public sealed partial class CoreGoldenTests
 {
     private const int Chosen = 200; // settings are chosen on the first records, decisions made on the rest
 
@@ -371,15 +371,25 @@ public sealed class CoreGoldenTests
 
     // --- the records: a language-neutral line per settled document
 
-    private static string Write(SettledDocument d) => new JsonObject
+    /// <summary>A record as a JSON line; the arrival order only when the document has one, so records without it read as before.</summary>
+    private static string Write(SettledDocument d)
     {
-        ["id"] = d.DocumentId,
-        ["settled_at"] = d.SettledAt.ToString("O"),
-        ["values"] = new JsonObject([.. d.Values.OrderBy(v => v.Key, StringComparer.Ordinal).Select(v => KeyValuePair.Create(v.Key, (JsonNode?)v.Value))]),
-        ["sets"] = new JsonObject([.. d.Sets.OrderBy(v => v.Key, StringComparer.Ordinal).Select(v => KeyValuePair.Create(v.Key, (JsonNode?)new JsonArray([.. v.Value.Select(e => (JsonNode)e)])))]),
-        ["settlements"] = new JsonObject([.. d.Settlements.OrderBy(v => v.Key, StringComparer.Ordinal).Select(v => KeyValuePair.Create(v.Key, (JsonNode?)v.Value.ToString()))]),
-        ["probabilities"] = new JsonObject([.. d.Probabilities.OrderBy(v => v.Key, StringComparer.Ordinal).Select(v => KeyValuePair.Create(v.Key, (JsonNode?)v.Value))]),
-    }.ToJsonString(Json);
+        var line = new JsonObject
+        {
+            ["id"] = d.DocumentId,
+            ["settled_at"] = d.SettledAt.ToString("O"),
+            ["values"] = new JsonObject([.. d.Values.OrderBy(v => v.Key, StringComparer.Ordinal).Select(v => KeyValuePair.Create(v.Key, (JsonNode?)v.Value))]),
+            ["sets"] = new JsonObject([.. d.Sets.OrderBy(v => v.Key, StringComparer.Ordinal).Select(v => KeyValuePair.Create(v.Key, (JsonNode?)new JsonArray([.. v.Value.Select(e => (JsonNode)e)])))]),
+            ["settlements"] = new JsonObject([.. d.Settlements.OrderBy(v => v.Key, StringComparer.Ordinal).Select(v => KeyValuePair.Create(v.Key, (JsonNode?)v.Value.ToString()))]),
+            ["probabilities"] = new JsonObject([.. d.Probabilities.OrderBy(v => v.Key, StringComparer.Ordinal).Select(v => KeyValuePair.Create(v.Key, (JsonNode?)v.Value))]),
+        };
+        if (d.Arrival is { } arrival)
+        {
+            line["arrival"] = new JsonArray([.. arrival.Select(f => (JsonNode)f)]);
+        }
+
+        return line.ToJsonString(Json);
+    }
 
     private static SettledDocument Read(string line)
     {
@@ -387,7 +397,8 @@ public sealed class CoreGoldenTests
         return new SettledDocument(
             o["id"]!.GetValue<string>(),
             o["values"]!.AsObject().ToDictionary(v => v.Key, v => v.Value!.GetValue<string>()),
-            DateTimeOffset.Parse(o["settled_at"]!.GetValue<string>(), System.Globalization.CultureInfo.InvariantCulture))
+            DateTimeOffset.Parse(o["settled_at"]!.GetValue<string>(), System.Globalization.CultureInfo.InvariantCulture),
+            o["arrival"]?.AsArray().Select(f => f!.GetValue<string>()).ToList())
         {
             Sets = o["sets"]!.AsObject().ToDictionary(v => v.Key, v => (IReadOnlyList<string>)[.. v.Value!.AsArray().Select(e => e!.GetValue<string>())]),
             Settlements = o["settlements"]!.AsObject().ToDictionary(v => v.Key, v => Enum.Parse<SettlementKind>(v.Value!.GetValue<string>())),

@@ -59,7 +59,7 @@ pub struct First {
     pub score: f64,
     pub matches: bool,
     pub key: String,
-    /// Always false here: values a field must not miss are not yet supported by this implementation.
+    /// Whether a value the field must not miss was settled under the known keys — then the key layer does not answer.
     pub caught: bool,
 }
 
@@ -239,7 +239,8 @@ impl FieldMemory {
             .filter(|(value, _, _)| !chosen.contains(&value))
             .collect();
         let reaches = |score: f64| definition.key_threshold.is_some_and(|t| score >= t);
-        let layer_trusted = ranked.first().is_some_and(|(_, score, _)| reaches(*score));
+        let layer_trusted = ranked.first().is_some_and(|(_, score, _)| reaches(*score))
+            && !self.caught(index, form, definition, known, known_sets);
         let mut candidates: Vec<Candidate> = ranked
             .into_iter()
             .take(count)
@@ -260,7 +261,8 @@ impl FieldMemory {
         };
         if let Some(settled) = index.values.get(&overall) {
             for share in self.shares(settled) {
-                if !chosen.contains(&&share.value)
+                if definition.admits(&share.value)
+                    && !chosen.contains(&&share.value)
                     && !candidates.iter().any(|c| c.value == share.value)
                 {
                     candidates.push(Candidate {
@@ -278,8 +280,8 @@ impl FieldMemory {
     }
 
     /// The score of the best-ranked value settled under the known keys, whether it is `value`, and the key that backs it
-    /// most strongly — what the field's key threshold is compared with. `None` when no known key was seen. Values a field
-    /// must not miss are not yet supported, so [`First::caught`] is always false.
+    /// most strongly — what the field's key threshold is compared with unless a value the field must not miss was settled
+    /// under the known keys ([`First::caught`]). `None` when no known key was seen.
     pub fn first(
         &self,
         form: &Form,
@@ -289,12 +291,14 @@ impl FieldMemory {
         known_sets: &BTreeMap<String, Vec<String>>,
     ) -> Option<First> {
         let index = self.forms.get(&form.name)?;
-        let ranked = self.keyed(index, form, form.field(field), known, known_sets);
+        let definition = form.field(field);
+        let caught = self.caught(index, form, definition, known, known_sets);
+        let ranked = self.keyed(index, form, definition, known, known_sets);
         ranked.into_iter().next().map(|(best, score, key)| First {
             score,
             matches: best == value,
             key: format!("{}: {}", key.field, key.value),
-            caught: false,
+            caught,
         })
     }
 
@@ -310,7 +314,12 @@ impl FieldMemory {
         let Some(index) = self.forms.get(&form.name) else {
             return Vec::new();
         };
-        self.keyed(index, form, form.field(field), known, known_sets)
+        let definition = form.field(field);
+        if self.caught(index, form, definition, known, known_sets) {
+            return Vec::new();
+        }
+
+        self.keyed(index, form, definition, known, known_sets)
             .into_iter()
             .map(|(value, score, key)| (value, score, format!("{}: {}", key.field, key.value)))
             .collect()
@@ -372,8 +381,40 @@ impl FieldMemory {
             .collect()
     }
 
+    /// Whether a value the field must not miss was ever settled under a key the document has — then the key layer does
+    /// not answer the field for it.
+    fn caught(
+        &self,
+        index: &FormIndex,
+        form: &Form,
+        field: &Field,
+        known: &BTreeMap<String, String>,
+        known_sets: &BTreeMap<String, Vec<String>>,
+    ) -> bool {
+        let Some(must_catch) = field.must_catch.as_ref().filter(|m| !m.is_empty()) else {
+            return false;
+        };
+        if field.multiple {
+            return false;
+        }
+
+        self.keys(form, field, known, known_sets)
+            .into_iter()
+            .any(|key| {
+                let slot = Slot {
+                    field: field.name.clone(),
+                    key: Some(key),
+                };
+                index.values.get(&slot).is_some_and(|settled| {
+                    self.shares(settled)
+                        .iter()
+                        .any(|s| must_catch.contains(&s.value))
+                })
+            })
+    }
+
     /// The values settled under the known keys, best first: by score, then latest settlement, then scalar order. Each
-    /// carries the key it is strongest under.
+    /// carries the key it is strongest under. Values outside the field's domain are left out.
     fn keyed(
         &self,
         index: &FormIndex,
@@ -405,7 +446,12 @@ impl FieldMemory {
                 continue;
             };
             let concentration = field.concentration(&key.field);
-            for share in self.shares(settled) {
+            // A value outside the domain is not offered, but it still counts towards its key's total.
+            for share in self
+                .shares(settled)
+                .into_iter()
+                .filter(|s| field.admits(&s.value))
+            {
                 let strength = share.weight / (share.total + concentration);
                 match scores.iter_mut().find(|s| s.0 == share.value) {
                     Some(entry) => {

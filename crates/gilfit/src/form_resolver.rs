@@ -1,8 +1,8 @@
 //! The form resolver: suggests each open judged field of a document from the settled field memory and the similar
 //! document memory, and keeps both up to date as documents are settled.
 //!
-//! Not yet carried over from the reference: a model where neither memory had evidence, text typed into a field, the
-//! values a field must not miss, a field's candidate domain, the field memory passing over the saved version of the
+//! Not yet carried over from the reference: a model where neither memory had evidence, text typed into a field, a
+//! domain taken from another field's values, the field memory passing over the saved version of the
 //! document asked about (the similar document layer does), and telemetry.
 
 use std::collections::{BTreeMap, HashMap};
@@ -236,6 +236,31 @@ impl FormResolver {
             .collect()
     }
 
+    /// Suggests one open judged field — without a value, unless it takes several — as [`FormResolver::suggest`] would
+    /// among the rest.
+    ///
+    /// # Panics
+    /// When the field is not judged, or has a value and takes one.
+    pub fn suggest_one(
+        &self,
+        form: &Form,
+        document: &str,
+        field: &str,
+        values: &BTreeMap<String, String>,
+        sets: &BTreeMap<String, Vec<String>>,
+    ) -> Suggestion {
+        let definition = form.field(field);
+        assert!(
+            definition.role == Role::Judged,
+            "'{field}' is not a judged field"
+        );
+        assert!(
+            definition.multiple || !values.contains_key(field),
+            "'{field}' already has a value"
+        );
+        self.suggest_field(form, document, values, sets, definition)
+    }
+
     /// One field's suggestion. Layers that answer come first — values under a key strong enough, a document similar
     /// enough — then guesses: values under weaker keys, the field's most frequent value, the nearest document below the
     /// threshold, the field's other values.
@@ -334,7 +359,7 @@ impl FormResolver {
         let admitted: Vec<Match> = memory
             .nearest(&Self::task(form, &field.name), &evidence, asked)
             .into_iter()
-            .filter(|m| m.source != document)
+            .filter(|m| m.source != document && field.admits(&m.answer))
             .collect();
         let Some((winner, score)) = similar_vote::decide(&admitted, field.similar_document_votes)
         else {

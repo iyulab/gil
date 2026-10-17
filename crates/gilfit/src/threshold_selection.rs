@@ -576,8 +576,6 @@ const FLOOR_SHARE: f64 = 0.01;
 /// threshold is chosen on every lookup; the memory threshold on the lookups the chosen key threshold would not have
 /// answered, and with more than one voter each memory choice carries its similarity floor.
 ///
-/// Values outside a field's candidate domain are not yet left out by this implementation: every document found votes.
-///
 /// # Panics
 /// When `target_precision` is outside (0, 1], `minimum_answered` is 0, the field is not judged, or it takes several
 /// values — the similar document layer does not suggest such a field.
@@ -807,8 +805,13 @@ fn replay(
             None
         };
         let evidence = form.evidence(field, &document.values, &document.sets);
-        let found = if remembered > 0 {
-            memory.nearest(&task, &form.evidence(field, &before, &before_sets), votes)
+        // As a suggestion does: only documents whose value lies in the field's domain vote.
+        let found: Vec<_> = if remembered > 0 {
+            memory
+                .nearest(&task, &form.evidence(field, &before, &before_sets), votes)
+                .into_iter()
+                .filter(|m| definition.admits(&m.answer))
+                .collect()
         } else {
             Vec::new()
         };

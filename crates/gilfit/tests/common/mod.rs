@@ -48,7 +48,7 @@ pub fn ticks(text: &str) -> i64 {
     seconds * 10_000_000 + fraction
 }
 
-/// A record as settled: its values, sets, settlements and draw probabilities. The records carry no arrival order.
+/// A record as settled: its values, sets, settlements, draw probabilities and, where it has one, its arrival order.
 pub fn document(record: &Value) -> Document {
     let object = |name: &str| record[name].as_object().expect(name);
     Document {
@@ -83,7 +83,15 @@ pub fn document(record: &Value) -> Document {
             .iter()
             .map(|(field, p)| (field.clone(), p.as_f64().expect("a probability")))
             .collect(),
-        arrival: None,
+        arrival: record
+            .get("arrival")
+            .and_then(Value::as_array)
+            .map(|fields| {
+                fields
+                    .iter()
+                    .map(|f| f.as_str().expect("a field").to_owned())
+                    .collect()
+            }),
     }
 }
 
