@@ -35,6 +35,14 @@ with what to do.
   value under each value of a broad field (a host) holds back the whole field — in the same stream answers fell from
   1,948 to 532; keyed by the field that decides it, they stayed at 1,911.
 
+### Dependencies
+
+- `IronHive.Providers.OpenAI.Compatible` 0.57.0 → 0.66.1. None of its breaking changes touches the calls Gil makes; an
+  HTTP 402 from the server now surfaces as IronHive's `BillingException`. Its packages now pin one another to the same
+  version, so an application that also references another IronHive package moves it to 0.66.1 too.
+- `Microsoft.Data.Sqlite` 10.0.12 → 10.0.13 · `Microsoft.Extensions.AI.Abstractions` and `Microsoft.Extensions.AI.OpenAI`
+  10.10.1 → 10.11.0.
+
 ## 0.22.0
 
 ### Breaking
