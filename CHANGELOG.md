@@ -5,6 +5,23 @@ with what to do.
 
 ## Unreleased
 
+### Breaking
+
+- **A field that takes one value has at most one trusted candidate from the key layer.** When the key layer answered,
+  every value it ranked under the document's keys was marked `Trusted`, so one suggestion could carry three trusted
+  values that disagree. Now only the value it answers with is trusted; the values after it are guesses, as
+  `FieldCandidate.Trusted` says a guess is. `FieldSuggestion.Answered` and the first candidate are unchanged. An
+  application that listed every trusted candidate as a suggestion now lists the answer, and a trusted value from the
+  similar document layer, if any, comes right after it. Fields that take several values still trust each value on its
+  own score.
+
+### Documentation
+
+- The README says how long the recent window behind `ThresholdChoice.Promise` is (5,000 documents), that a shorter
+  replay is read whole so its promise trails a change, and that the state under each key shows the change sooner. A
+  window of half the replay was measured and kept out: on a short synthetic stream it traded 2.2 points of optimism
+  after a change for 6.8 points of pessimism after the next choice.
+
 ### Fixed
 
 - **A value to catch (`FieldDefinition.MustCatch`) is no longer answered by a similar document.** Once such a value

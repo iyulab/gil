@@ -155,7 +155,9 @@ public static class ThresholdSelection
     /// <summary>
     /// How many of the latest documents replayed <see cref="ThresholdChoice.Promise"/> is taken over — every document in
     /// settlement order counts, whether or not it was asked about. Long enough that a field answered on a few percent of its
-    /// documents still has answers to rest on, short enough to leave behind a stretch the layer did better in.
+    /// documents still has answers to rest on, short enough to leave behind a stretch the layer did better in. A replay
+    /// shorter than this is read whole, so its promise trails a change; the state under each key
+    /// (<see cref="ThresholdReplay.Keys"/>) shows one sooner.
     /// </summary>
     public const int RecentDocuments = 5_000;
 

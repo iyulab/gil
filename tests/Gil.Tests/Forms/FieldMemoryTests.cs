@@ -59,6 +59,27 @@ public sealed class FieldMemoryTests
     }
 
     [Fact]
+    public void A_field_with_one_value_trusts_only_the_value_its_key_layer_answers_with()
+    {
+        var form = new FormDefinition(
+            "ticket",
+            [
+                new FieldDefinition("component", FieldRole.Observed),
+                new FieldDefinition("team", FieldRole.Judged) { KeyThreshold = 0.5 },
+            ],
+            PromptLanguage.English);
+        var memory = new FieldMemory(recencyDecay: 1);
+        memory.Put(form, Doc("d1", ("component", "vpn"), ("team", "network")));
+        memory.Put(form, Doc("d2", ("component", "vpn"), ("team", "network")));
+        memory.Put(form, Doc("d3", ("component", "vpn"), ("team", "network")));
+        memory.Put(form, Doc("d4", ("component", "vpn"), ("team", "security")));
+
+        // The layer answers network; security, under the same key, is still offered, but as a guess: one answer, one value.
+        memory.Rank(form, "team", Known(("component", "vpn")), 3)
+            .Select(c => (c.Value, c.Trusted)).Should().StartWith([("network", true), ("security", false)]);
+    }
+
+    [Fact]
     public void Keys_that_agree_are_trusted_where_each_alone_is_not()
     {
         var form = new FormDefinition(
