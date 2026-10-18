@@ -109,8 +109,9 @@ public sealed class FieldMemory
     /// first: the values settled under the known keys by their score (with the key that backs each most strongly as its
     /// evidence), then, in the places left, the field's most frequently settled values by their share (without evidence).
     /// Ties go to the value settled most recently, then to the ordinally smaller value, in both parts, so the order
-    /// documents arrived in never matters. The keyed values are trusted when the first one's score reaches the field's
-    /// <see cref="FieldDefinition.KeyThreshold"/>; the most frequent values never are. Only values in the field's domain
+    /// documents arrived in never matters. The first keyed value is trusted when its score reaches the field's
+    /// <see cref="FieldDefinition.KeyThreshold"/> — the layer's one answer; the values after it are guesses, and so are the
+    /// most frequent values. Only values in the field's domain
     /// for this document (<see cref="FieldDefinition.Candidates"/>, narrowed by <see cref="FieldDefinition.CandidatesFrom"/>)
     /// are ranked. Empty when nothing was settled.
     /// </summary>
@@ -156,9 +157,9 @@ public sealed class FieldMemory
             Keyed(index, form, definition, known, sets, excluding), definition, typed, ranked[0].Value)));
         var keyed = ranked
             .Take(count)
-            .Select(s => new FieldCandidate(
+            .Select((s, i) => new FieldCandidate(
                 s.Value, s.Score, FieldSource.SettledFieldMemory, $"{s.Key.Field}: {s.Key.Value}",
-                definition.Multiple ? s.Score >= threshold : layerTrusted));
+                definition.Multiple ? s.Score >= threshold : i == 0 && layerTrusted));
         var overall = index.Values.TryGetValue(new Slot(field, null), out var totals)
             ? totals.Shares(excluding)
                 .Where(s => definition.Admits(s.Value, known, sets) && Begins(s.Value, typed) && !chosen.Contains(s.Value))

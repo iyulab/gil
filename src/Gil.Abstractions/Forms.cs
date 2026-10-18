@@ -548,9 +548,10 @@ public enum FieldSource
 /// similar document; null when there is nothing specific.
 /// </param>
 /// <param name="Trusted">
-/// Whether the layer answered: its threshold was met (<see cref="FieldDefinition.KeyThreshold"/>,
-/// <see cref="FieldDefinition.MemoryThreshold"/>) or it is a model's choice. False marks a guess — values under a key too
-/// weak to decide, the field's most frequent value, the value similar documents vote for below the threshold (or with
+/// Whether the value is its layer's answer: the layer's threshold was met (<see cref="FieldDefinition.KeyThreshold"/>,
+/// <see cref="FieldDefinition.MemoryThreshold"/>) or it is a model's choice. A layer answers a field that takes one value
+/// with one value; a field that takes several, with each value whose own score meets the threshold. False marks a guess —
+/// the key layer's values after its answer, values under a key too weak to decide, the field's most frequent value, the value similar documents vote for below the threshold (or with
 /// none set), the field's other values, in that order — which an application may still list but should not present as a
 /// suggestion.
 /// </param>
