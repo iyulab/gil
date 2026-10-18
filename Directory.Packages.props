@@ -3,19 +3,19 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup Label="Storage">
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.13" />
   </ItemGroup>
   <ItemGroup Label="Models">
-    <PackageVersion Include="IronHive.Providers.OpenAI.Compatible" Version="0.57.0" />
-    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.10.1" />
-    <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.10.1" />
+    <PackageVersion Include="IronHive.Providers.OpenAI.Compatible" Version="0.66.1" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.11.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.11.0" />
   </ItemGroup>
   <ItemGroup Label="Serialization">
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
   <ItemGroup Label="Testing">
-    <PackageVersion Include="xunit.v3" Version="4.0.1" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
+    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
     <PackageVersion Include="AwesomeAssertions" Version="9.6.0" />
   </ItemGroup>
 </Project>
