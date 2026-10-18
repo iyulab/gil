@@ -20,6 +20,8 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # A publish run takes about a minute (restore, build, test, pack, push).
+    timeout-minutes: 15
     env:
       # Keeps first-run notices out of the output the version step captures.
       DOTNET_NOLOGO: true
