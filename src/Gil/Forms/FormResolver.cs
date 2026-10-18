@@ -318,10 +318,13 @@ public sealed class FormResolver
         var chosen = field.Multiple && sets.TryGetValue(field.Name, out var picked) ? new HashSet<string>(picked, StringComparer.Ordinal) : [];
         var remembered = FieldMemory.Rank(form, field.Name, values, CandidateCount, excluding: documentId, knownSets: sets, typed: typed);
         var keyed = remembered.Where(c => c.Evidence is not null).ToList();
-        var (similar, neighbours, admitted, recall, energy) = await SimilarAsync(field, documentId, task, lines, values, sets, typed, traceId, cancellationToken).ConfigureAwait(false);
+        // A value the field must not miss was settled under the document's keys: no layer answers it (FieldDefinition.MustCatch).
+        var caught = FieldMemory.Catches(form, field.Name, values, documentId, sets);
+        var (similar, neighbours, admitted, recall, energy) = await SimilarAsync(field, documentId, task, lines, values, sets, typed, caught, traceId, cancellationToken).ConfigureAwait(false);
 
         // A model only where neither memory had evidence: a value backed by what the document says — even by a key too
-        // weak to answer — beats a model's guess. Not while a person is typing: they ask again with every pause.
+        // weak to answer — beats a model's guess. Not while a person is typing: they ask again with every pause. A caught
+        // field has a key's values, so no model is asked for it.
         FieldModelResult? modelled = null;
         if (Model is IFieldModel model && typed is null && keyed.Count == 0 && !similar.Any(c => c.Trusted))
         {
@@ -347,8 +350,9 @@ public sealed class FormResolver
         var answered = candidates.Count > 0 && candidates[0].Trusted;
         var confidence = source == FieldSource.Model ? modelled?.Confidence : null;
 
-        // No layer answered the value: offer its class, as the same two layers back it. Not while a person is typing.
-        var coarse = field.Coarse is { } level && typed is null && !answered
+        // No layer answered the value: offer its class, as the same two layers back it. Not while a person is typing, and not
+        // where no layer may answer: a class can miss the value to catch as a value can.
+        var coarse = field.Coarse is { } level && typed is null && !answered && !caught
             ? CoarseGroups.Candidate(
                 level,
                 CoarseGroups.Keys(FieldMemory.KeyedValues(form, field.Name, values, documentId, sets), level),
@@ -393,6 +397,7 @@ public sealed class FormResolver
         IReadOnlyDictionary<string, string> values,
         IReadOnlyDictionary<string, IReadOnlyList<string>> sets,
         string? typed,
+        bool caught,
         string traceId,
         CancellationToken cancellationToken)
     {
@@ -421,10 +426,11 @@ public sealed class FormResolver
                 return ([], neighbours, admitted, new Recall(others[0].Source, others[0].Similarity, threshold, false), energy);
             }
 
-            // Typed text: only the key layer answers. The floor keeps a vote among documents less like the draft than those the
-            // threshold was measured on from being trusted on their agreement alone; a lone voter's score is its similarity.
+            // Typed text: only the key layer answers. Caught: none does. The floor keeps a vote among documents less like the
+            // draft than those the threshold was measured on from being trusted on their agreement alone; a lone voter's score
+            // is its similarity.
             var floored = field.MemorySimilarityFloor is { } floor && SimilarVote.Voters(admitted, field.SimilarDocumentVotes) > 1 && match.Similarity < floor;
-            var hit = typed is null && score >= threshold && !floored;
+            var hit = typed is null && !caught && score >= threshold && !floored;
             var recall = new Recall(match.Source, score, threshold, hit);
             return ([new FieldCandidate(match.Answer, score, FieldSource.SimilarDocument, match.Source, hit)], neighbours, admitted, recall, energy);
         }

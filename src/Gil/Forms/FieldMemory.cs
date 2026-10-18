@@ -366,7 +366,15 @@ public sealed class FieldMemory
 
     /// <summary>
     /// Whether a value the field must not miss (<see cref="FieldDefinition.MustCatch"/>) was ever settled under a key the
-    /// document has — then the key layer does not answer the field for it.
+    /// document has — then no layer answers the field for it.
+    /// </summary>
+    internal bool Catches(
+        FormDefinition form, string field, IReadOnlyDictionary<string, string> known, string? excluding = null, IReadOnlyDictionary<string, IReadOnlyList<string>>? knownSets = null) =>
+        _forms.TryGetValue(form.Name, out var index) && Caught(index, form, form.Field(field), known, knownSets ?? NoSets, excluding);
+
+    /// <summary>
+    /// Whether a value the field must not miss (<see cref="FieldDefinition.MustCatch"/>) was ever settled under a key the
+    /// document has — then no layer answers the field for it.
     /// </summary>
     private bool Caught(
         FormIndex index,

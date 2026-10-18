@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Gil.Forms;
+using Gil.Memory;
 
 namespace Gil.Tests.Forms;
 
@@ -64,6 +65,67 @@ public sealed class MustCatchTests
         watched.Lookups.Should().Be(plain.Lookups); // every line is still asked about
         // the 20 t1 lines after the 3 are not the key layer's to answer any more
         (plain.Candidates - watched.Candidates).Should().Be(20);
+    }
+
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    // As Log, with the text each line says: lines under one template read alike, so the similar document layer, trusted at
+    // any score, answers wherever the key layer does not.
+    private static FormDefinition Written(IReadOnlyList<string>? mustCatch) => new(
+        "log",
+        [
+            new FieldDefinition("template", FieldRole.Observed),
+            new FieldDefinition("message", FieldRole.Observed),
+            new FieldDefinition("risk", FieldRole.Judged)
+            {
+                KeyFields = ["template"],
+                KeyThreshold = 0.5,
+                MemoryThreshold = 0,
+                MustCatch = mustCatch,
+                Coarse = new CoarseLevel(new Dictionary<string, string> { ["1"] = "low", ["3"] = "high" }) { KeyThreshold = 0, MemoryThreshold = 0 },
+            },
+        ],
+        PromptLanguage.English);
+
+    private static readonly SettledDocument[] WrittenLines =
+    [
+        .. Lines.Select(l => l with
+        {
+            Values = new Dictionary<string, string>(l.Values) { ["message"] = $"disk check {l.Values["template"]} finished" },
+        }),
+    ];
+
+    private static async Task<FieldSuggestion> SuggestedAsync(FormDefinition form, string template)
+    {
+        var resolver = new FormResolver(new FieldMemory(), new LexicalMemory());
+        await resolver.RebuildAsync(form, WrittenLines, Ct);
+        var asked = new Dictionary<string, string> { ["template"] = template, ["message"] = $"disk check {template} finished" };
+        return (await resolver.SuggestAsync(form, "l99", asked, Ct)).Single(s => s.Field == "risk");
+    }
+
+    [Fact]
+    public async Task A_document_under_a_key_that_settled_a_value_to_catch_is_not_answered_by_a_similar_document_either()
+    {
+        var caught = await SuggestedAsync(Written(["3"]), "t1");
+        caught.Answered.Should().BeFalse(); // the similar documents, nearly all saying 1, do not answer where the key may not
+        caught.Candidates.Should().OnlyContain(c => !c.Trusted);
+        caught.Candidates.Select(c => c.Value).Should().Contain("3");
+        caught.Coarse.Should().BeNull();
+
+        (await SuggestedAsync(Written(["3"]), "t2")).Answered.Should().BeTrue();
+        var plain = await SuggestedAsync(Written(null), "t1");
+        plain.Answered.Should().BeTrue();
+        plain.Candidates[0].Value.Should().Be("1");
+    }
+
+    [Fact]
+    public async Task Choosing_the_similar_document_threshold_does_not_count_lookups_no_layer_would_answer()
+    {
+        var plain = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), Written(null), "risk", WrittenLines, 0.5, 1, Ct);
+        var watched = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), Written(["3"]), "risk", WrittenLines, 0.5, 1, Ct);
+
+        // the t1 lines after the 3 are no layer's to answer: they are not left to the similar document layer either
+        watched.Memory.Lookups.Should().Be(plain.Memory.Lookups);
     }
 
     [Fact]
