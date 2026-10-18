@@ -435,7 +435,12 @@ above. On the first 5,000 records of two larger public streams, where the unlowe
 the lowered one came out 2.4 and 4.5 points below. Over long replays the recent window is what matters: on two public
 streams of 80,000 records, the recent-window promise stayed within half a point of what its answers delivered where the
 key layer's whole-replay precision ran 2.5 points high, and on a stretch where that precision had drifted 9.6 points
-above the answers it was 2.7 points above. Neither mends a threshold chosen on the wrong lookups: a similar document
+above the answers it was 2.7 points above. The window is 5,000 documents, so on a stream shorter than that the
+promise is read on the whole replay and trails a change: in a synthetic log stream of 3,000 records where one
+template's grade changed at the 2,000th, the key layer promised 2.2 points more than the next 500 answers kept.
+Reading it on the latter half of the replay instead turned that into 6.8 points too few on the 500 after, so the
+window stays as it is; what moved first was the state under the changed key (below), whose precision there fell to
+0.69 while the field's promise still read 0.91. Neither mends a threshold chosen on the wrong lookups: a similar document
 threshold chosen apart from the key layer (`SelectAsync` on a field that also has a `KeyThreshold`) promised 2.4–2.6
 points more than it kept. For the key layer, `ThresholdReplay.Keys` says, under each key that backed a best
 value, how many lookups it had, how many the chosen threshold answered and how precise those were (weighted, as

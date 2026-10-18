@@ -5,6 +5,13 @@ with what to do.
 
 ## Unreleased
 
+### Documentation
+
+- The README says how long the recent window behind `ThresholdChoice.Promise` is (5,000 documents), that a shorter
+  replay is read whole so its promise trails a change, and that the state under each key shows the change sooner. A
+  window of half the replay was measured and kept out: on a short synthetic stream it traded 2.2 points of optimism
+  after a change for 6.8 points of pessimism after the next choice.
+
 ### Fixed
 
 - **A value to catch (`FieldDefinition.MustCatch`) is no longer answered by a similar document.** Once such a value
