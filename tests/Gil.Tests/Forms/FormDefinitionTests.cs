@@ -23,6 +23,25 @@ public sealed class FormDefinitionTests
     }
 
     [Fact]
+    public void A_field_put_back_with_new_settings_replaces_the_one_of_its_name_and_is_checked_as_a_new_form_is()
+    {
+        var component = new FieldDefinition("component", FieldRole.Observed);
+        var team = new FieldDefinition("team", FieldRole.Judged);
+        var form = Form(component, team);
+
+        var tuned = form.WithField(form.Field("team") with { KeyThreshold = 0.7 });
+
+        tuned.Field("team").KeyThreshold.Should().Be(0.7);
+        tuned.Fields.Select(f => f.Name).Should().Equal("component", "team"); // the form's order is kept
+        (tuned.Name, tuned.Language).Should().Be((form.Name, form.Language));
+        form.Field("team").KeyThreshold.Should().BeNull(); // the form itself is unchanged
+        FluentActions.Invoking(() => form.WithField(new FieldDefinition("owner", FieldRole.Judged)))
+            .Should().Throw<ArgumentException>().WithMessage("*no field 'owner'*");
+        FluentActions.Invoking(() => form.WithField(team with { DependsOn = ["team"] }))
+            .Should().Throw<ArgumentException>().WithMessage("*not another field*");
+    }
+
+    [Fact]
     public void A_field_is_supported_by_other_evidence_fields_limited_to_its_declared_dependencies()
     {
         var reporter = new FieldDefinition("reporter", FieldRole.Observed) { UseAsEvidence = false };

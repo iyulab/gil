@@ -433,6 +433,19 @@ public sealed record FormDefinition
         _byName.TryGetValue(name, out var field) ? field : throw new ArgumentException($"Form '{Name}' has no field '{name}'.", nameof(name));
 
     /// <summary>
+    /// This form with <paramref name="field"/> in place of its field of the same name, in the same place — how thresholds
+    /// and keys chosen for a field are put back: <c>form.WithField(form.Field("team") with { KeyThreshold = … })</c>. The
+    /// form itself is unchanged, and the new one is checked as any form is.
+    /// </summary>
+    /// <exception cref="ArgumentException">The form has no field of that name, or the form with it would be refused.</exception>
+    public FormDefinition WithField(FieldDefinition field)
+    {
+        ArgumentNullException.ThrowIfNull(field);
+        _ = Field(field.Name);
+        return new FormDefinition(Name, [.. Fields.Select(f => f.Name == field.Name ? field : f)], Language);
+    }
+
+    /// <summary>
     /// Whether the value of the field named <paramref name="evidence"/> may support suggestions for the field named
     /// <paramref name="field"/>: another field that is evidence and, when the field declares its dependencies, one of them.
     /// </summary>

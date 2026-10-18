@@ -61,7 +61,11 @@ public sealed record ThresholdChoice(double Threshold, double Precision, double 
 /// most strongly, and how the chosen threshold treated them. A consumer that checks some answered decisions reads it to
 /// see which keys answer, and how well, before deciding how often to check each.
 /// </summary>
-/// <param name="Key">The key, as a suggestion's evidence names it — <c>field: value</c>.</param>
+/// <param name="Key">
+/// The key, as a suggestion's evidence names it — <c>field: value</c>, the value as keys compare it: in Unicode
+/// normalization form KC, lower case, with each run of white space one space (docs/text-normalization.md). Match it
+/// against a value normalized the same way, not against the value as it was settled.
+/// </param>
 /// <param name="Lookups">How many lookups this key backed the best value of.</param>
 /// <param name="Answered">How many of them the chosen threshold answered; 0 when none was chosen.</param>
 /// <param name="Precision">The share of those answers that matched, weighted as <see cref="ThresholdChoice.Precision"/> is; null when none was answered.</param>
