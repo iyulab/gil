@@ -305,7 +305,7 @@ impl Asked {
 
     /// Whether a wrong claim is still led to with `length` characters of the settled value typed.
     fn holds(&self, length: usize) -> bool {
-        let typed = text::utf16_prefix(&self.settled, length);
+        let typed = text::prefix(&self.settled, length);
         self.wrong
             .iter()
             .any(|v| crate::field_memory::begins(v, Some(typed)))

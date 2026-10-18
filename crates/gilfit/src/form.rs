@@ -97,8 +97,7 @@ impl Field {
 /// table of `classes` says — and the thresholds at which the class the two layers back is trusted.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CoarseLevel {
-    /// How many leading characters of a value name its class, counted in UTF-16 code units as the reference counts
-    /// them; 0 for a level made from a table.
+    /// How many leading characters (Unicode scalar values) of a value name its class; 0 for a level made from a table.
     pub prefix: usize,
     /// Value to class, for a level made from a table; a value it does not list is a class of its own.
     pub classes: Option<BTreeMap<String, String>>,
@@ -120,8 +119,7 @@ impl CoarseLevel {
     }
 
     /// The class of `value`: what the table says, the value itself when it does not list it; without a table, its
-    /// first `prefix` UTF-16 code units, or all of it when shorter. A character beyond U+FFFF that the prefix would cut
-    /// in half is left out — the reference keeps its first half, which is not text.
+    /// first `prefix` Unicode scalar values, or all of it when shorter.
     pub fn of(&self, value: &str) -> String {
         if let Some(table) = &self.classes {
             return table
@@ -130,7 +128,7 @@ impl CoarseLevel {
                 .unwrap_or_else(|| value.to_owned());
         }
 
-        crate::text::utf16_prefix(value, self.prefix).to_owned()
+        crate::text::prefix(value, self.prefix).to_owned()
     }
 }
 
@@ -310,13 +308,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_class_by_prefix_counts_utf16_code_units() {
+    fn a_class_by_prefix_counts_scalars() {
         let level = |prefix| CoarseLevel::by_prefix(prefix);
         assert_eq!(level(2).of("25-40"), "25");
         assert_eq!(level(2).of("가나다"), "가나");
         assert_eq!(level(9).of("short"), "short");
-        assert_eq!(level(2).of("😀a"), "😀"); // one character, two code units
-        assert_eq!(level(1).of("😀a"), ""); // the reference would keep half a character
+        assert_eq!(level(1).of("😀a"), "😀"); // one character beyond U+FFFF is one scalar
+        assert_eq!(level(2).of("a😀b"), "a😀");
     }
 
     #[test]

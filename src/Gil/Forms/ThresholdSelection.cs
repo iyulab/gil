@@ -999,7 +999,7 @@ public static class ThresholdSelection
         }
 
         /// <summary>Whether a wrong claim is still led to with <paramref name="length"/> characters of the settled value typed.</summary>
-        public bool Holds(int length) => _wrong.Any(v => FieldMemory.Begins(v, Settled[..length]));
+        public bool Holds(int length) => _wrong.Any(v => FieldMemory.Begins(v, TextNormal.Prefix(Settled, length)));
     }
 
     /// <summary>

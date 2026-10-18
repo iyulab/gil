@@ -245,7 +245,7 @@ impl FieldMemory {
             .into_iter()
             .filter(|(value, _, _)| !chosen.contains(&value))
             .collect();
-        let threshold = definition.key_threshold_for(typed.map_or(0, text::utf16_len));
+        let threshold = definition.key_threshold_for(typed.map_or(0, text::scalars));
         let reaches = |score: f64| threshold.is_some_and(|t| score >= t);
         let layer_trusted = ranked.first().is_some_and(|(best, score, _)| {
             reaches(*score)
@@ -337,7 +337,7 @@ impl FieldMemory {
         longest: usize,
         known_sets: &BTreeMap<String, Vec<String>>,
     ) -> Vec<Option<(f64, String)>> {
-        let mut best = vec![None; longest.min(text::utf16_len(value)) + 1];
+        let mut best = vec![None; longest.min(text::scalars(value)) + 1];
         let Some(index) = self.forms.get(&form.name) else {
             return best;
         };
@@ -348,7 +348,7 @@ impl FieldMemory {
 
         let ranked = self.keyed(index, form, definition, known, known_sets, None, None);
         for (length, slot) in best.iter_mut().enumerate() {
-            let typed = (length > 0).then(|| text::utf16_prefix(value, length));
+            let typed = (length > 0).then(|| text::prefix(value, length));
             *slot = ranked
                 .iter()
                 .find(|(v, _, _)| begins(v, typed))
@@ -708,8 +708,8 @@ pub fn begins(value: &str, typed: Option<&str>) -> bool {
 /// Whether `value`, the best value that begins with `typed`, was already trusted with fewer of its characters typed —
 /// the best value there too, with a score that reached the threshold for that many. It is the same claim, not a new one.
 fn claimed(ranked: &[(String, f64, Key)], field: &Field, typed: &str, value: &str) -> bool {
-    (0..text::utf16_len(typed)).any(|length| {
-        let prefix = (length > 0).then(|| text::utf16_prefix(typed, length));
+    (0..text::scalars(typed)).any(|length| {
+        let prefix = (length > 0).then(|| text::prefix(typed, length));
         ranked
             .iter()
             .find(|(v, _, _)| begins(v, prefix))

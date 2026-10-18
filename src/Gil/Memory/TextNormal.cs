@@ -47,6 +47,41 @@ internal static class TextNormal
         return count;
     }
 
+    /// <summary>The first <paramref name="scalars"/> Unicode scalar values of <paramref name="text"/>, or all of it when shorter.</summary>
+    public static string Prefix(string text, int scalars)
+    {
+        var end = 0;
+        foreach (var rune in text.EnumerateRunes())
+        {
+            if (scalars-- <= 0)
+            {
+                break;
+            }
+
+            end += rune.Utf16SequenceLength;
+        }
+
+        return end == text.Length ? text : text[..end];
+    }
+
+    /// <summary>
+    /// Whether <paramref name="text"/> begins with <paramref name="prefix"/> ignoring case — scalar by scalar, each taken to
+    /// its simple lowercase mapping as normalized text is (docs/text-normalization.md, "Typed text and prefixes").
+    /// </summary>
+    public static bool StartsWithIgnoringCase(string text, string prefix)
+    {
+        var runes = text.EnumerateRunes();
+        foreach (var expected in prefix.EnumerateRunes())
+        {
+            if (!runes.MoveNext() || Lower(runes.Current) != Lower(expected))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /// <summary>
     /// The simple lowercase mapping of one scalar. .NET's invariant casing follows it except for U+0130, which it leaves
     /// alone so that casing round-trips; the mapping takes it to U+0069.
