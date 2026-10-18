@@ -363,7 +363,9 @@ public static class ThresholdSelection
         var keyed = steps.Where(s => s.KeyLooked).ToList();
         var answers = keyed.Where(s => s.Key is not null).Select(s => new Answer(s.Key!.Value.Score, s.Key!.Value.Matches, s.Weight, s.Order, s.Key!.Value.Key, s.Key!.Value.Caught)).ToList();
         var key = WithKeys(Fit([.. answers.Where(a => !a.Caught)], keyed, latest, targetPrecision, minimumAnswered), answers);
-        var left = steps.Where(s => s.Looked && !(key.Chosen is { } chosen && s.Key is { Caught: false } first && first.Score >= chosen.Threshold));
+        // Left to the similar document layer: what the chosen key threshold does not answer — but not a lookup under a key
+        // that settled a value to catch, which no layer answers.
+        var left = steps.Where(s => s.Looked && s.Key is not { Caught: true } && !(key.Chosen is { } chosen && s.Key is { } first && first.Score >= chosen.Threshold));
         return new LayerThresholds(key, Similarity(left, latest, form.Field(field), targetPrecision, minimumAnswered));
     }
 
@@ -478,7 +480,8 @@ public static class ThresholdSelection
         }
 
         var (steps, latest) = await ReplayAsync(fieldMemory, memory, form, field, documents, counting, cancellationToken, coarse: true).ConfigureAwait(false);
-        var left = steps.Where(s => (s.KeyLooked || s.Looked) && !s.Coarse!.ValueAnswered).ToList();
+        // As a suggestion: the level is offered where the value layers do not answer — and not where none may (a value to catch).
+        var left = steps.Where(s => (s.KeyLooked || s.Looked) && !s.Coarse!.ValueAnswered && s.Key is not { Caught: true }).ToList();
         var key = Fit([.. left.Where(s => s.Coarse!.Keys is not null).Select(s => new Answer(s.Coarse!.Keys!.Value.Score, s.Coarse!.Keys!.Value.Correct, s.Weight, s.Order))], left, latest, targetPrecision, minimumAnswered);
         var rest = left.Where(s => !(key.Chosen is { } chosen && s.Coarse!.Keys is { } k && k.Score >= chosen.Threshold)).ToList();
         var votes = rest.Where(s => s.Coarse!.Vote is not null).Select(s => (Vote: s.Coarse!.Vote!.Value, s.Weight, s.Order)).ToList();
@@ -1060,7 +1063,7 @@ public static class ThresholdSelection
             {
                 // As a suggestion: the value layers answer at the field's own thresholds; only where they do not is the level offered.
                 var valueAnswered = first is { Caught: false } f && f.Score >= definition.KeyThreshold
-                    || match is { } m && m.Item1 >= definition.MemoryThreshold && !(m.Item4 && definition.MemorySimilarityFloor is { } floor && m.Item3 < floor);
+                    || first is not { Caught: true } && match is { } m && m.Item1 >= definition.MemoryThreshold && !(m.Item4 && definition.MemorySimilarityFloor is { } floor && m.Item3 < floor);
                 var cls = level.Of(settled);
                 var keys = keyLooked ? CoarseGroups.Keys(fieldMemory!.KeyedValues(form, field, before, knownSets: beforeSets), level) : null;
                 var vote = CoarseGroups.Vote(admitted, definition.SimilarDocumentVotes, level);

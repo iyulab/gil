@@ -408,7 +408,11 @@ worse than promised, thresholds rose and about 8% fewer answers were right; wher
 Some values must not be missed: answering a dangerous grade as a harmless one costs far more than asking. A threshold
 cannot hold such a value back where it is rare — a key under which it was settled once among hundreds of other values
 still scores its usual value high. Name those values in `FieldDefinition.MustCatch`, and once one of them has been
-settled under a key the document has, the key layer does not answer the field for that document. Replaying public
+settled under a key the document has, no layer answers the field for that document — neither the key layer nor a
+similar document, whose neighbours rarely include the value that is rare under the key — and its coarse level is not
+offered. Its values under such a key are still offered, as guesses. Keyed by a field drawn from many unrelated values
+(a host, a user), one such value settled under each soon holds back every document, so key the field by what decides
+it (`FieldDefinition.KeyFields`). Replaying public
 system logs whose risk grade a model had judged, naming grades 3 and above cut the lines graded 3 or more that were
 answered below 3 from 2 to 1 of 1,425, while keeping 81% of the lines the key layer answered. It reaches only keys where
 such a value was already settled: the first one under a key is caught only if someone checks the answer, so it does not

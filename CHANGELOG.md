@@ -3,6 +3,21 @@
 Versions follow `0.x`: a minor release may change the public API. Each such change is listed under **Breaking**
 with what to do.
 
+## Unreleased
+
+### Fixed
+
+- **A value to catch (`FieldDefinition.MustCatch`) is no longer answered by a similar document.** Once such a value
+  had been settled under a key the document has, the key layer held back, but the similar document layer then answered
+  in its place — and the neighbours that agree on a field's usual value rarely include the value that is rare under the
+  key. Now no layer answers the field for such a document and its coarse level is not offered; its values are still
+  offered as guesses. In a synthetic log stream filled automatically with 5% re-checked, the dangerous value was answered
+  as another value 7 times out of 8 before and 0 times after, all 8 held for a person. `SelectLayersAsync` and
+  `SelectCoarseAsync` no longer leave such lookups to the similar document layer or the coarse level: choose those
+  thresholds again where `MustCatch` is set. A field keyed by every other field catches under each of them, so one such
+  value under each value of a broad field (a host) holds back the whole field — in the same stream answers fell from
+  1,948 to 532; keyed by the field that decides it, they stayed at 1,911.
+
 ## 0.22.0
 
 ### Breaking
