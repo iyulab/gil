@@ -264,14 +264,16 @@ impl FieldMemory {
         let mut candidates: Vec<Candidate> = ranked
             .into_iter()
             .take(count)
-            .map(|(value, score, key)| Candidate {
+            .enumerate()
+            .map(|(i, (value, score, key))| Candidate {
                 value,
                 score,
                 evidence: Some(format!("{}: {}", key.field, key.value)),
+                // One value answers a field that takes one value; each value whose own score reaches the threshold, a set.
                 trusted: if definition.multiple {
                     reaches(score)
                 } else {
-                    layer_trusted
+                    i == 0 && layer_trusted
                 },
             })
             .collect();

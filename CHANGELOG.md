@@ -15,13 +15,6 @@ with what to do.
   similar document layer, if any, comes right after it. Fields that take several values still trust each value on its
   own score.
 
-### Documentation
-
-- The README says how long the recent window behind `ThresholdChoice.Promise` is (5,000 documents), that a shorter
-  replay is read whole so its promise trails a change, and that the state under each key shows the change sooner. A
-  window of half the replay was measured and kept out: on a short synthetic stream it traded 2.2 points of optimism
-  after a change for 6.8 points of pessimism after the next choice.
-
 ### Fixed
 
 - **A value to catch (`FieldDefinition.MustCatch`) is no longer answered by a similar document.** Once such a value
@@ -37,6 +30,10 @@ with what to do.
 
 ### Documentation
 
+- The README says how long the recent window behind `ThresholdChoice.Promise` is (5,000 documents), that a shorter
+  replay is read whole so its promise trails a change, and that the state under each key shows the change sooner. A
+  window of half the replay was measured and kept out: on a short synthetic stream it traded 2.2 points of optimism
+  after a change for 6.8 points of pessimism after the next choice.
 - A text golden, `tests/fixtures/core/text.jsonl`: texts that exercise each step of docs/text-normalization.md with
   the normalized text, key and n-grams each makes.
 - The decision core's Rust rebuild starts under `crates/gilfit` (not published): text normalization, keys and
@@ -95,6 +92,8 @@ with what to do.
   missed was settled under the document's keys, and leaves such lookups out of the memory and coarse threshold replays,
   as the reference now does. The note golden's decisions were written again by the reference and it reproduces them to
   the bit.
+- The Rust rebuild trusts only the key layer's answer among a single-valued field's candidates, as the reference now
+  does; the key layer, form path and note goldens were written again by the reference and it reproduces them to the bit.
 
 ## 0.22.0
 
