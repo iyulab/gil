@@ -42,6 +42,19 @@ UTF-16 code units. Text with fewer scalars than `minGram` is one n-gram, itself.
 - **A hash that orders the values of a set** is 64-bit FNV-1a over the UTF-8 bytes of the document id, U+001F, and
   the value.
 
+## Typed text and prefixes
+
+Text typed into a field and the prefixes cut from values are counted in **Unicode scalar values**, as n-grams are:
+
+- **How much is typed** — the length that picks an entry of `FieldDefinition.TypedKeyThresholds` — is the number of
+  scalars typed. A character beyond U+FFFF is one.
+- **A prefix of a value** — the first *n* characters, as a coarse level's `Prefix` names a class and as replaying
+  typed text cuts the settled value — is its first *n* scalars, or all of it when shorter. A prefix never ends inside
+  a character.
+- **A value begins with typed text, ignoring case,** when the typed text's scalars match the value's first scalars one
+  for one, each compared by the simple lowercase mapping of [Normalized text](#normalized-text) step 2 (U+0130 to
+  U+0069 included). Nothing else of normalization applies: no NFKC, and spaces count as typed.
+
 ## Hangul
 
 A prefix typed partway through a Hangul syllable is matched by its keystrokes: each precomposed syllable (U+AC00 to

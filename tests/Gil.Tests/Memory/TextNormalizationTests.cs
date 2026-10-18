@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Gil.Forms;
 using Gil.Memory;
 
 namespace Gil.Tests.Memory;
@@ -29,6 +30,37 @@ public sealed class TextNormalizationTests
         var (match, _) = await memory.LookupAsync("task", "😃", "t2", Ct);
 
         match!.Similarity.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData("a😀b", 2, "a😀")] // a character beyond U+FFFF is one scalar, never cut in half
+    [InlineData("a😀b", 1, "a")]
+    [InlineData("ab", 5, "ab")]
+    public void A_prefix_is_counted_in_scalars(string text, int scalars, string prefix)
+    {
+        TextNormal.Prefix(text, scalars).Should().Be(prefix);
+        new CoarseLevel(scalars).Of(text).Should().Be(prefix);
+    }
+
+    [Theory]
+    [InlineData("network", "NET", true)]
+    [InlineData("İstanbul", "i", true)] // the simple lowercase mapping takes U+0130 to U+0069
+    [InlineData("𐐨x", "𐐀", true)] // a scalar beyond U+FFFF is compared as one
+    [InlineData("a b", "a b", true)] // typed text is not normalized: spaces count as typed
+    [InlineData("ab", "abc", false)]
+    [InlineData("😃", "😀", false)] // shared high surrogate, different characters
+    public void Typed_text_begins_a_value_scalar_by_scalar_ignoring_case(string value, string typed, bool begins)
+    {
+        FieldMemory.Begins(value, typed).Should().Be(begins);
+    }
+
+    [Fact]
+    public void A_character_beyond_the_basic_plane_typed_is_one_character_typed()
+    {
+        var field = new FieldDefinition("f", FieldRole.Judged) { KeyThreshold = 9, TypedKeyThresholds = [0.1, 0.2] };
+
+        FieldMemory.TypedLength("😀").Should().Be(1);
+        field.KeyThresholdFor(FieldMemory.TypedLength("😀")).Should().Be(0.1);
     }
 
     [Fact]

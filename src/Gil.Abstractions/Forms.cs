@@ -134,8 +134,9 @@ public sealed record FieldDefinition(string Name, FieldRole Role)
     /// <summary>
     /// Thresholds for the key layer while a person types into the field, by how many characters are typed: the first
     /// entry applies once one character is typed, the second at two, and so on. Typed text narrows the candidates to the
-    /// values that begin with it (ignoring case); a value under the keys is then trusted when its score reaches the entry
-    /// for that length. A value already trusted with fewer characters typed — or none, under <see cref="KeyThreshold"/> —
+    /// values that begin with it (ignoring case: each Unicode scalar value compared by its simple lowercase mapping); a
+    /// value under the keys is then trusted when its score reaches the entry for that length, characters counted as
+    /// scalar values — a character beyond U+FFFF is one. A value already trusted with fewer characters typed — or none, under <see cref="KeyThreshold"/> —
     /// stays trusted while the typed text still leads to it: narrowing leaves its score and its lead unchanged, so it is
     /// the same suggestion, not a new one to judge again. Past the list, or where an entry is null, other narrowed values
     /// are offered as guesses only. A person types into a field only when the suggestion before did not do, so each entry
@@ -240,7 +241,7 @@ public sealed record FieldDefinition(string Name, FieldRole Role)
 /// they were settled: the classes are read off them, so a table can change without settling anything again. Choose the
 /// thresholds with <c>ThresholdSelection.SelectCoarseAsync</c>, after the field's own.
 /// </summary>
-/// <param name="Prefix">How many leading characters of a value name its class; at least 1. 0 for a level made from a table of <see cref="Classes"/>.</param>
+/// <param name="Prefix">How many leading characters (Unicode scalar values) of a value name its class; at least 1. 0 for a level made from a table of <see cref="Classes"/>.</param>
 public sealed record CoarseLevel(int Prefix)
 {
     /// <summary>
@@ -291,7 +292,8 @@ public sealed record CoarseLevel(int Prefix)
 
     /// <summary>
     /// The class of <paramref name="value"/>: what <see cref="Classes"/> says, the value itself when it does not list it;
-    /// without a table, its first <see cref="Prefix"/> characters, or all of it when shorter.
+    /// without a table, its first <see cref="Prefix"/> Unicode scalar values, or all of it when shorter — a character beyond
+    /// U+FFFF is one, not two UTF-16 code units.
     /// </summary>
     public string Of(string value)
     {
@@ -301,7 +303,19 @@ public sealed record CoarseLevel(int Prefix)
             return table.TryGetValue(value, out var named) ? named : value;
         }
 
-        return value.Length <= Prefix ? value : value[..Prefix];
+        var end = 0;
+        var left = Prefix;
+        foreach (var rune in value.EnumerateRunes())
+        {
+            if (left-- <= 0)
+            {
+                return value[..end];
+            }
+
+            end += rune.Utf16SequenceLength;
+        }
+
+        return value;
     }
 }
 

@@ -3,6 +3,19 @@
 Versions follow `0.x`: a minor release may change the public API. Each such change is listed under **Breaking**
 with what to do.
 
+## Unreleased
+
+### Breaking
+
+- **Typed text and prefixes count Unicode scalar values, and case is compared by the simple lowercase mapping.** How
+  much is typed (the entry of `FieldDefinition.TypedKeyThresholds`), a coarse level's `Prefix`, and the cut of a value
+  replayed as typed were counted in UTF-16 code units, so a character beyond U+FFFF counted twice and a prefix could
+  end inside one; whether a value begins with typed text was an ordinal case-insensitive comparison. Now each counts
+  scalar values and compares them one for one by the lowercase mapping keys already use (U+0130 meets `i`), as
+  `docs/text-normalization.md` now specifies under "Typed text and prefixes". Text inside the Basic Multilingual Plane
+  without such case pairs is unchanged; choose typed thresholds and coarse thresholds again where values hold
+  characters beyond it.
+
 ## 0.23.0
 
 ### Breaking

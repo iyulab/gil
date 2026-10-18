@@ -152,7 +152,7 @@ public sealed class FieldMemory
         var chosen = definition.Multiple ? new HashSet<string>(Elements(sets, field), StringComparer.Ordinal) : [];
         typed = string.IsNullOrEmpty(typed) ? null : typed;
         var ranked = Keyed(index, form, definition, known, sets, excluding, typed).Where(s => !chosen.Contains(s.Value)).ToList();
-        var threshold = definition.KeyThresholdFor(typed?.Length ?? 0);
+        var threshold = definition.KeyThresholdFor(TypedLength(typed));
         var layerTrusted = ranked.Count > 0 && !Caught(index, form, definition, known, sets, excluding) && (ranked[0].Score >= threshold || (typed is not null && !definition.Multiple && Claimed(
             Keyed(index, form, definition, known, sets, excluding), definition, typed, ranked[0].Value)));
         var keyed = ranked
@@ -215,7 +215,7 @@ public sealed class FieldMemory
     internal (double Score, string Value)?[] Typed(
         FormDefinition form, string field, IReadOnlyDictionary<string, string> known, string value, int longest, IReadOnlyDictionary<string, IReadOnlyList<string>>? knownSets = null)
     {
-        var best = new (double Score, string Value)?[Math.Min(longest, value.Length) + 1];
+        var best = new (double Score, string Value)?[Math.Min(longest, TextNormal.Scalars(value)) + 1];
         if (!_forms.TryGetValue(form.Name, out var index))
         {
             return best;
@@ -230,7 +230,7 @@ public sealed class FieldMemory
         var ranked = Keyed(index, form, definition, known, knownSets ?? NoSets, excluding: null);
         for (var length = 0; length < best.Length; length++)
         {
-            var typed = length == 0 ? null : value[..length];
+            var typed = length == 0 ? null : TextNormal.Prefix(value, length);
             var found = ranked.FindIndex(s => Begins(s.Value, typed));
             best[length] = found < 0 ? null : (ranked[found].Score, ranked[found].Value);
         }
@@ -247,9 +247,10 @@ public sealed class FieldMemory
     /// </summary>
     private static bool Claimed(List<(string Value, double Score, Key Key)> ranked, FieldDefinition field, string typed, string value)
     {
-        for (var length = 0; length < typed.Length; length++)
+        var typedLength = TextNormal.Scalars(typed);
+        for (var length = 0; length < typedLength; length++)
         {
-            var prefix = length == 0 ? null : typed[..length];
+            var prefix = length == 0 ? null : TextNormal.Prefix(typed, length);
             var best = ranked.FindIndex(s => Begins(s.Value, prefix));
             if (best >= 0 && ranked[best].Value == value && ranked[best].Score >= field.KeyThresholdFor(length))
             {
@@ -260,6 +261,9 @@ public sealed class FieldMemory
         return false;
     }
 
+    /// <summary>How many characters are typed — Unicode scalar values, so a character beyond U+FFFF is one; 0 when none.</summary>
+    internal static int TypedLength(string? typed) => typed is null ? 0 : TextNormal.Scalars(typed);
+
     /// <summary>
     /// Whether <paramref name="value"/> begins with the text typed so far (ignoring case); always when none is. Korean is
     /// typed a letter at a time and the last syllable may still be composing — "ㅂ", then "바", then "박" on the way to
@@ -269,8 +273,8 @@ public sealed class FieldMemory
     /// </summary>
     internal static bool Begins(string value, string? typed) =>
         typed is null
-        || value.StartsWith(typed, StringComparison.OrdinalIgnoreCase)
-        || (Hangul.Has(typed) && Hangul.Keystrokes(value).StartsWith(Hangul.Keystrokes(typed), StringComparison.OrdinalIgnoreCase));
+        || TextNormal.StartsWithIgnoringCase(value, typed)
+        || (Hangul.Has(typed) && TextNormal.StartsWithIgnoringCase(Hangul.Keystrokes(value), Hangul.Keystrokes(typed)));
 
     /// <summary>
     /// Every value of a field that takes several settled under the known keys, with the score each is compared with
