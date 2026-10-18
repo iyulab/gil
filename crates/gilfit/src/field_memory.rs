@@ -445,8 +445,23 @@ impl FieldMemory {
         .collect()
     }
 
-    /// Whether a value the field must not miss was ever settled under a key the document has — then the key layer does
-    /// not answer the field for it.
+    /// Whether a value the field must not miss was ever settled under a key the document has — then no layer answers the
+    /// field for it.
+    pub fn catches(
+        &self,
+        form: &Form,
+        field: &str,
+        known: &BTreeMap<String, String>,
+        known_sets: &BTreeMap<String, Vec<String>>,
+        excluding: Option<&str>,
+    ) -> bool {
+        self.forms.get(&form.name).is_some_and(|index| {
+            self.caught(index, form, form.field(field), known, known_sets, excluding)
+        })
+    }
+
+    /// Whether a value the field must not miss was ever settled under a key the document has — then no layer answers the
+    /// field for it.
     fn caught(
         &self,
         index: &FormIndex,

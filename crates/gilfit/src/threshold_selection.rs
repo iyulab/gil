@@ -806,10 +806,13 @@ pub fn select_layers(
     );
 
     let chosen = key.chosen.as_ref().map(|c| c.threshold);
+    // Left to the similar document layer: what the chosen key threshold does not answer — but not a lookup under a key
+    // that settled a value to catch, which no layer answers.
     let left: Vec<&Step> = steps
         .iter()
         .filter(|s| {
             s.looked
+                && !s.key.as_ref().is_some_and(|first| first.caught)
                 && !chosen.is_some_and(|t| {
                     s.key
                         .as_ref()
@@ -870,12 +873,14 @@ pub fn select_coarse(
     );
 
     let (steps, latest) = replay(field_memory, memory, form, field, documents, counting, true);
-    // What the level made of each lookup the value layers left, as a step whose vote is the class's.
+    // What the level made of each lookup the value layers left, as a step whose vote is the class's — not one under a
+    // key that settled a value to catch, where the level is not offered either.
     let left: Vec<(Step, Option<(f64, bool)>)> = steps
         .iter()
         .filter_map(|s| {
             let coarse = s.coarse.expect("a coarse replay's step");
-            ((s.key_looked || s.looked) && !coarse.value_answered).then(|| {
+            let caught = s.key.as_ref().is_some_and(|first| first.caught);
+            ((s.key_looked || s.looked) && !coarse.value_answered && !caught).then(|| {
                 let step = Step {
                     vote: coarse.vote,
                     ..s.clone()
@@ -990,13 +995,14 @@ fn replay(
                 // the level offered.
                 let value_answered = first.as_ref().is_some_and(|f| {
                     !f.caught && definition.key_threshold.is_some_and(|t| f.score >= t)
-                }) || vote.is_some_and(|v| {
-                    definition.memory_threshold.is_some_and(|t| v.score >= t)
-                        && !(v.voted
-                            && definition
-                                .memory_similarity_floor
-                                .is_some_and(|floor| v.nearest < floor))
-                });
+                }) || !first.as_ref().is_some_and(|f| f.caught)
+                    && vote.is_some_and(|v| {
+                        definition.memory_threshold.is_some_and(|t| v.score >= t)
+                            && !(v.voted
+                                && definition
+                                    .memory_similarity_floor
+                                    .is_some_and(|floor| v.nearest < floor))
+                    });
                 let class = level.of(settled);
                 let keys = if key_looked {
                     coarse_groups::keys(

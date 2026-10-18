@@ -299,7 +299,11 @@ impl FormResolver {
             .collect();
         let (keyed, frequent): (Vec<&Candidate>, Vec<&Candidate>) =
             remembered.iter().partition(|c| c.evidence.is_some());
-        let (similar, admitted) = self.similar(form, document, values, sets, field, typed);
+        // A value the field must not miss was settled under the document's keys: no layer answers it.
+        let caught = self
+            .field_memory
+            .catches(form, &field.name, values, sets, Some(document));
+        let (similar, admitted) = self.similar(form, document, values, sets, field, typed, caught);
 
         let mut candidates: Vec<Candidate> = Vec::new();
         let ordered = keyed
@@ -323,9 +327,10 @@ impl FormResolver {
 
         let source = candidates.first().map_or(Source::None, |c| c.source);
         let answered = candidates.first().is_some_and(|c| c.trusted);
-        // No layer answered the value: offer its class, as the same two layers back it. Not while a person is typing.
+        // No layer answered the value: offer its class, as the same two layers back it. Not while a person is typing, and
+        // not where no layer may answer: a class can miss the value to catch as a value can.
         let coarse = match &field.coarse {
-            Some(level) if !answered && typed.is_none() => coarse(
+            Some(level) if !answered && typed.is_none() && !caught => coarse(
                 level,
                 coarse_groups::keys(
                     &self.field_memory.keyed_values(
@@ -353,7 +358,9 @@ impl FormResolver {
     /// The value the most similar settled documents vote for — trusted when its score reaches the field's memory
     /// threshold and, with more than one voter, its nearest voter the floor — and the documents found other than the
     /// document itself: one more is asked for, and it is passed over. Nothing for a field that takes several values.
-    /// With typed text only documents whose value begins with it vote, and the vote is never trusted.
+    /// With typed text only documents whose value begins with it vote, and the vote is never trusted; nor is it where a
+    /// value to catch was settled under the document's keys.
+    #[allow(clippy::too_many_arguments)]
     fn similar(
         &self,
         form: &Form,
@@ -362,6 +369,7 @@ impl FormResolver {
         sets: &BTreeMap<String, Vec<String>>,
         field: &Field,
         typed: Option<&str>,
+        caught: bool,
     ) -> (Vec<Candidate>, Vec<Match>) {
         let evidence = form.evidence(&field.name, values, sets);
         let Some(memory) = &self.document_memory else {
@@ -393,7 +401,10 @@ impl FormResolver {
             similar_vote::voters(&admitted, field.similar_document_votes) > 1
                 && winner.similarity < floor
         });
-        let hit = typed.is_none() && field.memory_threshold.is_some_and(|t| score >= t) && !floored;
+        let hit = typed.is_none()
+            && !caught
+            && field.memory_threshold.is_some_and(|t| score >= t)
+            && !floored;
         let candidate = Candidate {
             value: winner.answer.clone(),
             score,

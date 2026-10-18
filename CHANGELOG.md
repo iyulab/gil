@@ -74,6 +74,10 @@ with what to do.
 - The key fields golden (`tests/fixtures/core/key_fields.jsonl`) also chooses the ticket's team counting the answers
   while its first two characters are typed. The Rust rebuild's key field choice counts typing the same way, with the
   typed thresholds of every trial, and reproduces it to the bit.
+- The Rust rebuild holds back the similar document layer and the coarse level too where a value that must not be
+  missed was settled under the document's keys, and leaves such lookups out of the memory and coarse threshold replays,
+  as the reference now does. The note golden's decisions were written again by the reference and it reproduces them to
+  the bit.
 
 ## 0.22.0
 
