@@ -15,16 +15,6 @@ with what to do.
   similar document layer, if any, comes right after it. Fields that take several values still trust each value on its
   own score.
 
-### Documentation
-
-- The README shows the path of an application that fills values on its own: fill a trusted answer, check a share drawn
-  with a fixed probability by settling the field again in the same session, and count the checks when choosing
-  thresholds. It also says how `KeyState.Key` reads (the value normalized as keys compare it).
-- The README says how long the recent window behind `ThresholdChoice.Promise` is (5,000 documents), that a shorter
-  replay is read whole so its promise trails a change, and that the state under each key shows the change sooner. A
-  window of half the replay was measured and kept out: on a short synthetic stream it traded 2.2 points of optimism
-  after a change for 6.8 points of pessimism after the next choice.
-
 ### Added
 
 - `FormDefinition.WithField` puts a field with new settings back into its form, in the same place, checked as a new form
@@ -50,6 +40,16 @@ with what to do.
   version, so an application that also references another IronHive package moves it to 0.66.1 too.
 - `Microsoft.Data.Sqlite` 10.0.12 → 10.0.13 · `Microsoft.Extensions.AI.Abstractions` and `Microsoft.Extensions.AI.OpenAI`
   10.10.1 → 10.11.0.
+
+### Documentation
+
+- The README shows the path of an application that fills values on its own: fill a trusted answer, check a share drawn
+  with a fixed probability by settling the field again in the same session, and count the checks when choosing
+  thresholds. It also says how `KeyState.Key` reads (the value normalized as keys compare it).
+- The README says how long the recent window behind `ThresholdChoice.Promise` is (5,000 documents), that a shorter
+  replay is read whole so its promise trails a change, and that the state under each key shows the change sooner. A
+  window of half the replay was measured and kept out: on a short synthetic stream it traded 2.2 points of optimism
+  after a change for 6.8 points of pessimism after the next choice.
 
 ## 0.22.0
 
