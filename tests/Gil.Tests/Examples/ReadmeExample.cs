@@ -110,6 +110,21 @@ internal static class ReadmeExample
         var updated = await session.SettleAsync("team", Settlement.Accept("network"));
         var document = session.Snapshot();
 
+        var checkedByPerson = "network"; // what a person settles when asked again, without the filled value in view
+        var filled = forms.Open(form, "tickets/0413");
+        await filled.ObserveAsync("summary", "VPN drops again");
+        var answer = await filled.SuggestAsync("team");
+        if (answer.Answered)
+        {
+            await filled.SettleAsync("team", Settlement.Fill(answer.Candidates[0].Value));
+            if (Random.Shared.NextDouble() < 0.05) // the probability is fixed before the draw
+            {
+                await filled.SettleAsync("team", Settlement.Check(checkedByPerson, 0.05));
+            }
+        }
+
+        var checkedLayers = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30, counting: [SettlementKind.Enter, SettlementKind.Check]);
+
         Dictionary<string, string> valuesOnScreen = new() { ["summary"] = "VPN drops every ten minutes" };
         var savedDocument = document;
         var onScreen = await forms.SuggestAsync(form, "tickets/0412", valuesOnScreen);
@@ -126,6 +141,7 @@ internal static class ReadmeExample
             MemoryThreshold = layers.Memory.Chosen?.Threshold,
             MemorySimilarityFloor = layers.Memory.Chosen?.SimilarityFloor,
         };
+        var tuned = form.WithField(team);
         var unprompted = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30, counting: [SettlementKind.Enter]);
 
         var gilVersion = typeof(FormResolver).Assembly

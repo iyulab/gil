@@ -400,10 +400,31 @@ keys more often does not tilt the promise toward them. Name `SettlementKind.Chec
 person settles. A decision picked because it looked doubtful has no such probability and is not a check: counted as one,
 it would lean the promise toward the doubtful ones. Few checks weigh much but say little, so
 the fewest answers a threshold must rest on is held to their effective number (`ThresholdChoice.EffectiveAnswered`).
+
 Replaying two public streams with nine in ten trusted answers filled and the tenth checked, counting the checks by their
 weight kept the promise within two points of what was right in both, where counting them once had promised more than two points
 less than was right in one. Weighting makes the promise honest rather than generous: where the answers had been doing
 worse than promised, thresholds rose and about 8% fewer answers were right; where better, slightly more were.
+
+```csharp
+var filled = forms.Open(form, "tickets/0413");
+await filled.ObserveAsync("summary", "VPN drops again");
+var answer = await filled.SuggestAsync("team");
+if (answer.Answered)
+{
+    await filled.SettleAsync("team", Settlement.Fill(answer.Candidates[0].Value));
+    if (Random.Shared.NextDouble() < 0.05) // the probability is fixed before the draw
+    {
+        await filled.SettleAsync("team", Settlement.Check(checkedByPerson, 0.05));
+    }
+}
+
+var checkedLayers = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30, counting: [SettlementKind.Enter, SettlementKind.Check]);
+```
+
+The check is a second settlement of the same field in the same session, after the fill; the snapshot then keeps the
+checked value, its kind and its probability. In a public bug tracker, values a machine filled were changed by a person
+within 30 days 26% of the time, values a person chose 7% — filled values need the checking.
 
 Some values must not be missed: answering a dangerous grade as a harmless one costs far more than asking. A threshold
 cannot hold such a value back where it is rare — a key under which it was settled once among hundreds of other values
@@ -445,7 +466,8 @@ threshold chosen apart from the key layer (`SelectAsync` on a field that also ha
 points more than it kept. For the key layer, `ThresholdReplay.Keys` says, under each key that backed a best
 value, how many lookups it had, how many the chosen threshold answered and how precise those were (weighted, as
 checks are), and whether it answers under that key now — what an application checking its answers reads to decide how
-often to check each key. That policy stays the application's: a key answered rightly many times may be checked less
+often to check each key. A key reads as keys compare values — `template: t07` for a value settled as `T07` (see
+docs/text-normalization.md). That policy stays the application's: a key answered rightly many times may be checked less
 often, as long as the probability of each draw is still fixed before it.
 
 Each field is tried in a fixed order, and `FieldSuggestion.Source` says which layer the first candidate came from:
@@ -557,7 +579,11 @@ var team = form.Field("team") with
     MemoryThreshold = layers.Memory.Chosen?.Threshold,
     MemorySimilarityFloor = layers.Memory.Chosen?.SimilarityFloor,
 };
+var tuned = form.WithField(team);
 ```
+
+Put the field back with `WithField`; the form is a record whose fields are checked together, so it is not changed in
+place.
 
 A value a person accepted with the suggestion in view may be right because it was suggested. A value the application
 filled was never checked. To know how right a layer is on its own, count only the settlements that saw no suggestion.

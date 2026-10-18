@@ -5,44 +5,12 @@ with what to do.
 
 ## Unreleased
 
-### Breaking
-
-- **A field that takes one value has at most one trusted candidate from the key layer.** When the key layer answered,
-  every value it ranked under the document's keys was marked `Trusted`, so one suggestion could carry three trusted
-  values that disagree. Now only the value it answers with is trusted; the values after it are guesses, as
-  `FieldCandidate.Trusted` says a guess is. `FieldSuggestion.Answered` and the first candidate are unchanged. An
-  application that listed every trusted candidate as a suggestion now lists the answer, and a trusted value from the
-  similar document layer, if any, comes right after it. Fields that take several values still trust each value on its
-  own score.
-
-### Fixed
-
-- **A value to catch (`FieldDefinition.MustCatch`) is no longer answered by a similar document.** Once such a value
-  had been settled under a key the document has, the key layer held back, but the similar document layer then answered
-  in its place — and the neighbours that agree on a field's usual value rarely include the value that is rare under the
-  key. Now no layer answers the field for such a document and its coarse level is not offered; its values are still
-  offered as guesses. In a synthetic log stream filled automatically with 5% re-checked, the dangerous value was answered
-  as another value 7 times out of 8 before and 0 times after, all 8 held for a person. `SelectLayersAsync` and
-  `SelectCoarseAsync` no longer leave such lookups to the similar document layer or the coarse level: choose those
-  thresholds again where `MustCatch` is set. A field keyed by every other field catches under each of them, so one such
-  value under each value of a broad field (a host) holds back the whole field — in the same stream answers fell from
-  1,948 to 532; keyed by the field that decides it, they stayed at 1,911.
-
 ### Dependencies
 
-- `IronHive.Providers.OpenAI.Compatible` 0.57.0 → 0.66.1. None of its breaking changes touches the calls Gil makes; an
-  HTTP 402 from the server now surfaces as IronHive's `BillingException`. Its packages now pin one another to the same
-  version, so an application that also references another IronHive package moves it to 0.66.1 too.
-- `Microsoft.Data.Sqlite` 10.0.12 → 10.0.13 · `Microsoft.Extensions.AI.Abstractions` and `Microsoft.Extensions.AI.OpenAI`
-  10.10.1 → 10.11.0.
 - The Rust rebuild's `unicode-normalization` 0.1.25 → 0.1.26; it reproduces the text golden as before.
 
 ### Documentation
 
-- The README says how long the recent window behind `ThresholdChoice.Promise` is (5,000 documents), that a shorter
-  replay is read whole so its promise trails a change, and that the state under each key shows the change sooner. A
-  window of half the replay was measured and kept out: on a short synthetic stream it traded 2.2 points of optimism
-  after a change for 6.8 points of pessimism after the next choice.
 - A text golden, `tests/fixtures/core/text.jsonl`: texts that exercise each step of docs/text-normalization.md with
   the normalized text, key and n-grams each makes.
 - The decision core's Rust rebuild starts under `crates/gilfit` (not published): text normalization, keys and
@@ -103,6 +71,54 @@ with what to do.
   the bit.
 - The Rust rebuild trusts only the key layer's answer among a single-valued field's candidates, as the reference now
   does; the key layer, form path and note goldens were written again by the reference and it reproduces them to the bit.
+
+## 0.23.0
+
+### Breaking
+
+- **A field that takes one value has at most one trusted candidate from the key layer.** When the key layer answered,
+  every value it ranked under the document's keys was marked `Trusted`, so one suggestion could carry three trusted
+  values that disagree. Now only the value it answers with is trusted; the values after it are guesses, as
+  `FieldCandidate.Trusted` says a guess is. `FieldSuggestion.Answered` and the first candidate are unchanged. An
+  application that listed every trusted candidate as a suggestion now lists the answer, and a trusted value from the
+  similar document layer, if any, comes right after it. Fields that take several values still trust each value on its
+  own score.
+
+### Added
+
+- `FormDefinition.WithField` puts a field with new settings back into its form, in the same place, checked as a new form
+  is — the step after choosing a field's thresholds or keys, which the README showed only up to `form.Field(...) with`.
+
+### Fixed
+
+- **A value to catch (`FieldDefinition.MustCatch`) is no longer answered by a similar document.** Once such a value
+  had been settled under a key the document has, the key layer held back, but the similar document layer then answered
+  in its place — and the neighbours that agree on a field's usual value rarely include the value that is rare under the
+  key. Now no layer answers the field for such a document and its coarse level is not offered; its values are still
+  offered as guesses. In a synthetic log stream filled automatically with 5% re-checked, the dangerous value was answered
+  as another value 7 times out of 8 before and 0 times after, all 8 held for a person. `SelectLayersAsync` and
+  `SelectCoarseAsync` no longer leave such lookups to the similar document layer or the coarse level: choose those
+  thresholds again where `MustCatch` is set. A field keyed by every other field catches under each of them, so one such
+  value under each value of a broad field (a host) holds back the whole field — in the same stream answers fell from
+  1,948 to 532; keyed by the field that decides it, they stayed at 1,911.
+
+### Dependencies
+
+- `IronHive.Providers.OpenAI.Compatible` 0.57.0 → 0.66.1. None of its breaking changes touches the calls Gil makes; an
+  HTTP 402 from the server now surfaces as IronHive's `BillingException`. Its packages now pin one another to the same
+  version, so an application that also references another IronHive package moves it to 0.66.1 too.
+- `Microsoft.Data.Sqlite` 10.0.12 → 10.0.13 · `Microsoft.Extensions.AI.Abstractions` and `Microsoft.Extensions.AI.OpenAI`
+  10.10.1 → 10.11.0.
+
+### Documentation
+
+- The README shows the path of an application that fills values on its own: fill a trusted answer, check a share drawn
+  with a fixed probability by settling the field again in the same session, and count the checks when choosing
+  thresholds. It also says how `KeyState.Key` reads (the value normalized as keys compare it).
+- The README says how long the recent window behind `ThresholdChoice.Promise` is (5,000 documents), that a shorter
+  replay is read whole so its promise trails a change, and that the state under each key shows the change sooner. A
+  window of half the replay was measured and kept out: on a short synthetic stream it traded 2.2 points of optimism
+  after a change for 6.8 points of pessimism after the next choice.
 
 ## 0.22.0
 
