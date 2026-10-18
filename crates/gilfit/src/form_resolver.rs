@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::coarse_groups;
-use crate::field_memory::{self, FieldMemory};
+use crate::field_memory::{self, FieldMemory, Lookup};
 use crate::form::{CoarseLevel, Document, Field, Form, Role};
 use crate::lexical_memory::{LexicalMemory, Match};
 use crate::{similar_vote, text};
@@ -276,18 +276,14 @@ impl FormResolver {
         field: &Field,
         typed: Option<&str>,
     ) -> Suggestion {
-        let typed = typed.filter(|t| !t.is_empty());
+        let q = Lookup::new(form, &field.name, values)
+            .sets(sets)
+            .typed(typed)
+            .excluding(Some(document));
+        let typed = q.typed;
         let remembered: Vec<Candidate> = self
             .field_memory
-            .rank(
-                form,
-                &field.name,
-                values,
-                self.candidate_count,
-                sets,
-                typed,
-                Some(document),
-            )
+            .rank(&q, self.candidate_count)
             .into_iter()
             .map(|c| Candidate {
                 value: c.value,
@@ -300,10 +296,8 @@ impl FormResolver {
         let (keyed, frequent): (Vec<&Candidate>, Vec<&Candidate>) =
             remembered.iter().partition(|c| c.evidence.is_some());
         // A value the field must not miss was settled under the document's keys: no layer answers it.
-        let caught = self
-            .field_memory
-            .catches(form, &field.name, values, sets, Some(document));
-        let (similar, admitted) = self.similar(form, document, values, sets, field, typed, caught);
+        let caught = self.field_memory.catches(&q);
+        let (similar, admitted) = self.similar(&q, field, caught);
 
         let mut candidates: Vec<Candidate> = Vec::new();
         let ordered = keyed
@@ -332,16 +326,7 @@ impl FormResolver {
         let coarse = match &field.coarse {
             Some(level) if !answered && typed.is_none() && !caught => coarse(
                 level,
-                coarse_groups::keys(
-                    &self.field_memory.keyed_values(
-                        form,
-                        &field.name,
-                        values,
-                        sets,
-                        Some(document),
-                    ),
-                    level,
-                ),
+                coarse_groups::keys(&self.field_memory.keyed_values(&q), level),
                 coarse_groups::vote(&admitted, field.similar_document_votes, level),
             ),
             _ => None,
@@ -357,21 +342,13 @@ impl FormResolver {
 
     /// The value the most similar settled documents vote for — trusted when its score reaches the field's memory
     /// threshold and, with more than one voter, its nearest voter the floor — and the documents found other than the
-    /// document itself: one more is asked for, and it is passed over. Nothing for a field that takes several values.
-    /// With typed text only documents whose value begins with it vote, and the vote is never trusted; nor is it where a
-    /// value to catch was settled under the document's keys.
-    #[allow(clippy::too_many_arguments)]
-    fn similar(
-        &self,
-        form: &Form,
-        document: &str,
-        values: &BTreeMap<String, String>,
-        sets: &BTreeMap<String, Vec<String>>,
-        field: &Field,
-        typed: Option<&str>,
-        caught: bool,
-    ) -> (Vec<Candidate>, Vec<Match>) {
-        let evidence = form.evidence(&field.name, values, sets);
+    /// document itself (the one the lookup excludes): one more is asked for, and it is passed over. Nothing for a field
+    /// that takes several values. With typed text only documents whose value begins with it vote, and the vote is never
+    /// trusted; nor is it where a value to catch was settled under the document's keys. `field` is the looked-up
+    /// field's definition.
+    fn similar(&self, q: &Lookup, field: &Field, caught: bool) -> (Vec<Candidate>, Vec<Match>) {
+        let (form, typed) = (q.form, q.typed);
+        let evidence = form.evidence(&field.name, q.known, q.known_sets);
         let Some(memory) = &self.document_memory else {
             return (Vec::new(), Vec::new());
         };
@@ -387,7 +364,7 @@ impl FormResolver {
             .nearest(&Self::task(form, &field.name), &evidence, asked)
             .into_iter()
             .filter(|m| {
-                m.source != document
+                q.excluding != Some(m.source.as_str())
                     && field.admits(&m.answer)
                     && field_memory::begins(&m.answer, typed)
             })

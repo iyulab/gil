@@ -7,7 +7,7 @@ mod common;
 use std::collections::BTreeMap;
 
 use common::{CHOSEN, document, fixture, form, lines, ticks};
-use gilfit::field_memory::FieldMemory;
+use gilfit::field_memory::{FieldMemory, Lookup};
 use gilfit::form::Role;
 use serde_json::{Value, json};
 
@@ -33,7 +33,7 @@ fn the_key_layer_reproduces_its_golden() {
             .collect();
         for field in ["team", "code"] {
             let candidates: Vec<Value> = memory
-                .rank(&form, field, &observed, 3, &BTreeMap::new(), None, None)
+                .rank(&Lookup::new(&form, field, &observed), 3)
                 .into_iter()
                 .map(|c| json!([c.value, c.score, c.evidence, c.trusted]))
                 .collect();

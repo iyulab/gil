@@ -63,6 +63,65 @@ pub struct First {
     pub caught: bool,
 }
 
+/// The sets a lookup without any carries.
+static NO_SETS: BTreeMap<String, Vec<String>> = BTreeMap::new();
+
+/// What one field is looked up with — the key layer, the similar document layer and the replays take the same shape.
+#[derive(Clone, Copy, Debug)]
+pub struct Lookup<'a> {
+    pub form: &'a Form,
+    /// The field looked up.
+    pub field: &'a str,
+    /// The values known so far.
+    pub known: &'a BTreeMap<String, String>,
+    /// The values known so far of the fields that take several.
+    pub known_sets: &'a BTreeMap<String, Vec<String>>,
+    /// The text typed into the field so far; empty text reads as none.
+    pub typed: Option<&'a str>,
+    /// The saved document asked about again, whose settlements are no evidence for it.
+    pub excluding: Option<&'a str>,
+}
+
+impl<'a> Lookup<'a> {
+    /// A lookup of `field` from the values known so far: no sets known, nothing typed, no document left out.
+    pub fn new(form: &'a Form, field: &'a str, known: &'a BTreeMap<String, String>) -> Self {
+        Self {
+            form,
+            field,
+            known,
+            known_sets: &NO_SETS,
+            typed: None,
+            excluding: None,
+        }
+    }
+
+    /// The lookup with the values known so far of the fields that take several.
+    pub fn sets(self, known_sets: &'a BTreeMap<String, Vec<String>>) -> Self {
+        Self { known_sets, ..self }
+    }
+
+    /// The lookup with the text typed into the field so far; empty text reads as none.
+    pub fn typed(self, typed: Option<&'a str>) -> Self {
+        Self {
+            typed: typed.filter(|t| !t.is_empty()),
+            ..self
+        }
+    }
+
+    /// The lookup leaving out the settlements of `document`, a saved document asked about again.
+    pub fn excluding(self, document: Option<&'a str>) -> Self {
+        Self {
+            excluding: document,
+            ..self
+        }
+    }
+
+    /// The field looked up.
+    fn definition(&self) -> &'a Field {
+        self.form.field(self.field)
+    }
+}
+
 /// The settled field memory. Not thread-safe.
 pub struct FieldMemory {
     max_key_length: usize,
@@ -210,38 +269,28 @@ impl FieldMemory {
         }
     }
 
-    /// The `count` values most likely for `field` given the values known so far, best first: the values settled under
-    /// the known keys by their score (with the key backing each most strongly), then the field's most frequently settled
-    /// values by their share — only values that begin with the text typed so far, if any. The keyed values are trusted
-    /// when the first one's score reaches the field's key threshold for that many characters typed, or the same value
-    /// was already trusted with fewer of them. The settlements of `excluding`, a document asked about again once saved,
-    /// are no evidence for it;
-    /// for a field that takes several values, each value on its own score, and the values already chosen in
-    /// `known_sets` are evidence and are not offered again.
-    #[allow(clippy::too_many_arguments)]
-    pub fn rank(
-        &self,
-        form: &Form,
-        field: &str,
-        known: &BTreeMap<String, String>,
-        count: usize,
-        known_sets: &BTreeMap<String, Vec<String>>,
-        typed: Option<&str>,
-        excluding: Option<&str>,
-    ) -> Vec<Candidate> {
-        let typed = typed.filter(|t| !t.is_empty());
-        let definition = form.field(field);
-        let Some(index) = self.forms.get(&form.name) else {
+    /// The `count` values most likely for the looked-up field given the values known so far, best first: the values
+    /// settled under the known keys by their score (with the key backing each most strongly), then the field's most
+    /// frequently settled values by their share — only values that begin with the text typed so far, if any. The keyed
+    /// values are trusted when the first one's score reaches the field's key threshold for that many characters typed,
+    /// or the same value was already trusted with fewer of them. The settlements of the document the lookup excludes,
+    /// one asked about again once saved, are no evidence for it; for a field that takes several values, each value on
+    /// its own score, and the values already chosen in the known sets are evidence and are not offered again.
+    pub fn rank(&self, q: &Lookup, count: usize) -> Vec<Candidate> {
+        let q = q.typed(q.typed);
+        let (typed, excluding) = (q.typed, q.excluding);
+        let definition = q.definition();
+        let Some(index) = self.forms.get(&q.form.name) else {
             return Vec::new();
         };
 
         let chosen: Vec<&String> = if definition.multiple {
-            elements(known_sets, field)
+            elements(q.known_sets, q.field)
         } else {
             Vec::new()
         };
         let ranked: Vec<(String, f64, Key)> = self
-            .keyed(index, form, definition, known, known_sets, typed, excluding)
+            .keyed(index, &q)
             .into_iter()
             .filter(|(value, _, _)| !chosen.contains(&value))
             .collect();
@@ -251,16 +300,9 @@ impl FieldMemory {
             reaches(*score)
                 || typed.is_some_and(|typed| {
                     !definition.multiple
-                        && claimed(
-                            &self
-                                .keyed(index, form, definition, known, known_sets, None, excluding),
-                            definition,
-                            typed,
-                            best,
-                        )
+                        && claimed(&self.keyed(index, &q.typed(None)), definition, typed, best)
                 })
-        }) && !self
-            .caught(index, form, definition, known, known_sets, excluding);
+        }) && !self.caught(index, &q);
         let mut candidates: Vec<Candidate> = ranked
             .into_iter()
             .take(count)
@@ -278,7 +320,7 @@ impl FieldMemory {
             })
             .collect();
         let overall = Slot {
-            field: field.to_owned(),
+            field: q.field.to_owned(),
             key: None,
         };
         if let Some(settled) = index.values.get(&overall) {
@@ -304,19 +346,13 @@ impl FieldMemory {
 
     /// The score of the best-ranked value settled under the known keys, whether it is `value`, and the key that backs it
     /// most strongly — what the field's key threshold is compared with unless a value the field must not miss was settled
-    /// under the known keys ([`First::caught`]). `None` when no known key was seen.
-    pub fn first(
-        &self,
-        form: &Form,
-        field: &str,
-        known: &BTreeMap<String, String>,
-        value: &str,
-        known_sets: &BTreeMap<String, Vec<String>>,
-    ) -> Option<First> {
-        let index = self.forms.get(&form.name)?;
-        let definition = form.field(field);
-        let caught = self.caught(index, form, definition, known, known_sets, None);
-        let ranked = self.keyed(index, form, definition, known, known_sets, None, None);
+    /// under the known keys ([`First::caught`]). `None` when no known key was seen. Reads the lookup's form, field, known
+    /// values and sets; its typed text and excluded document are not taken into account.
+    pub fn first(&self, q: &Lookup, value: &str) -> Option<First> {
+        let index = self.forms.get(&q.form.name)?;
+        let q = q.typed(None).excluding(None);
+        let caught = self.caught(index, &q);
+        let ranked = self.keyed(index, &q);
         ranked.into_iter().next().map(|(best, score, key)| First {
             score,
             matches: best == value,
@@ -327,26 +363,19 @@ impl FieldMemory {
 
     /// As [`FieldMemory::first`], with none, one, … up to `longest` characters of `value` typed into the field: for each
     /// length, the best-ranked value that begins with that much of it and its score — or `None` when no value under the
-    /// known keys does, or when a value the field must not miss holds the key layer back.
-    pub fn typed(
-        &self,
-        form: &Form,
-        field: &str,
-        known: &BTreeMap<String, String>,
-        value: &str,
-        longest: usize,
-        known_sets: &BTreeMap<String, Vec<String>>,
-    ) -> Vec<Option<(f64, String)>> {
+    /// known keys does, or when a value the field must not miss holds the key layer back. Reads the lookup's form, field,
+    /// known values and sets; its own typed text and excluded document are not taken into account.
+    pub fn typed(&self, q: &Lookup, value: &str, longest: usize) -> Vec<Option<(f64, String)>> {
         let mut best = vec![None; longest.min(text::scalars(value)) + 1];
-        let Some(index) = self.forms.get(&form.name) else {
+        let Some(index) = self.forms.get(&q.form.name) else {
             return best;
         };
-        let definition = form.field(field);
-        if self.caught(index, form, definition, known, known_sets, None) {
+        let q = q.typed(None).excluding(None);
+        if self.caught(index, &q) {
             return best; // the key layer does not answer here at any length
         }
 
-        let ranked = self.keyed(index, form, definition, known, known_sets, None, None);
+        let ranked = self.keyed(index, &q);
         for (length, slot) in best.iter_mut().enumerate() {
             let typed = (length > 0).then(|| text::prefix(value, length));
             *slot = ranked
@@ -360,47 +389,36 @@ impl FieldMemory {
 
     /// Every value settled under the known keys, best first: its score and the key that backs it most strongly
     /// (`field: value`) — what a field's coarse level adds up by class. Empty when no known key was seen. The
-    /// settlements of `excluding`, a document asked about again, are left out.
-    pub fn keyed_values(
-        &self,
-        form: &Form,
-        field: &str,
-        known: &BTreeMap<String, String>,
-        known_sets: &BTreeMap<String, Vec<String>>,
-        excluding: Option<&str>,
-    ) -> Vec<(String, f64, String)> {
-        let Some(index) = self.forms.get(&form.name) else {
+    /// settlements of the document the lookup excludes, one asked about again, are left out; its typed text is not
+    /// taken into account.
+    pub fn keyed_values(&self, q: &Lookup) -> Vec<(String, f64, String)> {
+        let Some(index) = self.forms.get(&q.form.name) else {
             return Vec::new();
         };
-        let definition = form.field(field);
-        if self.caught(index, form, definition, known, known_sets, excluding) {
+        let q = q.typed(None);
+        if self.caught(index, &q) {
             return Vec::new();
         }
 
-        self.keyed(index, form, definition, known, known_sets, None, excluding)
+        self.keyed(index, &q)
             .into_iter()
             .map(|(value, score, key)| (value, score, format!("{}: {}", key.field, key.value)))
             .collect()
     }
 
-    /// For each key the known values give `field` and that was seen before: the key's field, its weighted total and the
-    /// weight `value` has under it (0 when the key has not had it) — what the next settlement under each key is predicted
-    /// from.
-    pub fn key_totals(
-        &self,
-        form: &Form,
-        field: &str,
-        known: &BTreeMap<String, String>,
-        value: &str,
-    ) -> Vec<(String, f64, f64)> {
-        let Some(index) = self.forms.get(&form.name) else {
+    /// For each key the known values give the looked-up field and that was seen before: the key's field, its weighted
+    /// total and the weight `value` has under it (0 when the key has not had it) — what the next settlement under each
+    /// key is predicted from. Reads the lookup's form, field and known values only: its sets, typed text and excluded
+    /// document are not taken into account.
+    pub fn key_totals(&self, q: &Lookup, value: &str) -> Vec<(String, f64, f64)> {
+        let Some(index) = self.forms.get(&q.form.name) else {
             return Vec::new();
         };
 
         let mut found = Vec::new();
-        for key in self.keys(form, form.field(field), known, &BTreeMap::new()) {
+        for key in self.keys(q.form, q.definition(), q.known, &NO_SETS) {
             let slot = Slot {
-                field: field.to_owned(),
+                field: q.field.to_owned(),
                 key: Some(key.clone()),
             };
             let Some(settled) = index.values.get(&slot) else {
@@ -420,59 +438,34 @@ impl FieldMemory {
     }
 
     /// Every value of a field that takes several settled under the known keys, best first, with the score each is compared
-    /// with the field's key threshold on — the values already chosen (`known_sets[field]`) left out.
-    pub fn scored(
-        &self,
-        form: &Form,
-        field: &str,
-        known: &BTreeMap<String, String>,
-        known_sets: &BTreeMap<String, Vec<String>>,
-    ) -> Vec<(String, f64)> {
-        let Some(index) = self.forms.get(&form.name) else {
+    /// with the field's key threshold on — the values already chosen (the field's own entry in the known sets) left out.
+    /// Reads the lookup's form, field, known values and sets; its typed text and excluded document are not taken into
+    /// account.
+    pub fn scored(&self, q: &Lookup) -> Vec<(String, f64)> {
+        let Some(index) = self.forms.get(&q.form.name) else {
             return Vec::new();
         };
-        let chosen = elements(known_sets, field);
-        self.keyed(
-            index,
-            form,
-            form.field(field),
-            known,
-            known_sets,
-            None,
-            None,
-        )
-        .into_iter()
-        .filter(|(value, _, _)| !chosen.contains(&value))
-        .map(|(value, score, _)| (value, score))
-        .collect()
+        let chosen = elements(q.known_sets, q.field);
+        self.keyed(index, &q.typed(None).excluding(None))
+            .into_iter()
+            .filter(|(value, _, _)| !chosen.contains(&value))
+            .map(|(value, score, _)| (value, score))
+            .collect()
     }
 
     /// Whether a value the field must not miss was ever settled under a key the document has — then no layer answers the
-    /// field for it.
-    pub fn catches(
-        &self,
-        form: &Form,
-        field: &str,
-        known: &BTreeMap<String, String>,
-        known_sets: &BTreeMap<String, Vec<String>>,
-        excluding: Option<&str>,
-    ) -> bool {
-        self.forms.get(&form.name).is_some_and(|index| {
-            self.caught(index, form, form.field(field), known, known_sets, excluding)
-        })
+    /// field for it. The settlements of the document the lookup excludes are left out; its typed text is not taken into
+    /// account.
+    pub fn catches(&self, q: &Lookup) -> bool {
+        self.forms
+            .get(&q.form.name)
+            .is_some_and(|index| self.caught(index, q))
     }
 
     /// Whether a value the field must not miss was ever settled under a key the document has — then no layer answers the
-    /// field for it.
-    fn caught(
-        &self,
-        index: &FormIndex,
-        form: &Form,
-        field: &Field,
-        known: &BTreeMap<String, String>,
-        known_sets: &BTreeMap<String, Vec<String>>,
-        excluding: Option<&str>,
-    ) -> bool {
+    /// field for it. The lookup's typed text is not read.
+    fn caught(&self, index: &FormIndex, q: &Lookup) -> bool {
+        let field = q.definition();
         let Some(must_catch) = field.must_catch.as_ref().filter(|m| !m.is_empty()) else {
             return false;
         };
@@ -480,7 +473,7 @@ impl FieldMemory {
             return false;
         }
 
-        self.keys(form, field, known, known_sets)
+        self.keys(q.form, field, q.known, q.known_sets)
             .into_iter()
             .any(|key| {
                 let slot = Slot {
@@ -488,7 +481,7 @@ impl FieldMemory {
                     key: Some(key),
                 };
                 index.values.get(&slot).is_some_and(|settled| {
-                    self.shares(settled, excluding)
+                    self.shares(settled, q.excluding)
                         .iter()
                         .any(|s| must_catch.contains(&s.value))
                 })
@@ -497,24 +490,16 @@ impl FieldMemory {
 
     /// The values settled under the known keys, best first: by score, then latest settlement, then scalar order. Each
     /// carries the key it is strongest under. Values outside the field's domain, or not beginning with the typed text,
-    /// are left out.
-    #[allow(clippy::too_many_arguments)]
-    fn keyed(
-        &self,
-        index: &FormIndex,
-        form: &Form,
-        field: &Field,
-        known: &BTreeMap<String, String>,
-        known_sets: &BTreeMap<String, Vec<String>>,
-        typed: Option<&str>,
-        excluding: Option<&str>,
-    ) -> Vec<(String, f64, Key)> {
+    /// are left out, and so are the settlements of the document the lookup excludes.
+    fn keyed(&self, index: &FormIndex, q: &Lookup) -> Vec<(String, f64, Key)> {
+        let field = q.definition();
+        let (typed, excluding) = (q.typed, q.excluding);
         // value → (score, strongest, backing key, latest); summed in the order the keys come.
         let mut scores: Vec<(String, f64, f64, Key, i64)> = Vec::new();
-        let mut keys = self.keys(form, field, known, known_sets);
+        let mut keys = self.keys(q.form, field, q.known, q.known_sets);
         if field.multiple {
             // A field that takes several values: its chosen values are keys for the rest.
-            for element in elements(known_sets, &field.name) {
+            for element in elements(q.known_sets, &field.name) {
                 if let Some(key) = self.key_of(&field.name, element)
                     && !keys.contains(&key)
                 {

@@ -10,7 +10,7 @@ use common::{CHOSEN, COUNTED, document, doubles, fixture, form, lines, replay};
 use gilfit::field_memory::FieldMemory;
 use gilfit::form::Document;
 use gilfit::lexical_memory::LexicalMemory;
-use gilfit::threshold_selection::{select_coarse, select_key_threshold, select_layers};
+use gilfit::threshold_selection::{Choice, select_coarse, select_key_threshold, select_layers};
 use serde_json::{Value, json};
 
 #[test]
@@ -32,9 +32,11 @@ fn the_key_threshold_replay_reproduces_its_golden() {
             &form,
             field,
             &early,
-            0.8,
-            10,
-            Some(&COUNTED),
+            Choice {
+                target_precision: 0.8,
+                minimum_answered: 10,
+                counting: Some(&COUNTED),
+            },
         );
         let actual =
             json!({ "kind": "key_threshold", "field": field, "replay": self::replay(&replay) });
@@ -61,9 +63,11 @@ fn the_set_field_replay_reproduces_its_golden() {
         &form,
         "tags",
         &early,
-        0.8,
-        10,
-        None,
+        Choice {
+            target_precision: 0.8,
+            minimum_answered: 10,
+            counting: None,
+        },
     );
     let actual = json!({ "kind": "key", "field": "tags", "replay": self::replay(&replay) });
     assert_eq!(doubles(actual), doubles(expected));
@@ -91,9 +95,11 @@ fn the_layers_replay_reproduces_its_golden() {
             &form,
             field,
             &early,
-            0.8,
-            10,
-            Some(&COUNTED),
+            Choice {
+                target_precision: 0.8,
+                minimum_answered: 10,
+                counting: Some(&COUNTED),
+            },
         );
         let actual = json!({
             "kind": "layers",
@@ -124,9 +130,11 @@ fn the_coarse_replay_reproduces_its_golden() {
         &form,
         "code",
         &early,
-        0.8,
-        10,
-        Some(&COUNTED),
+        Choice {
+            target_precision: 0.8,
+            minimum_answered: 10,
+            counting: Some(&COUNTED),
+        },
     );
     let actual = json!({
         "kind": "coarse",
@@ -168,9 +176,11 @@ fn the_layers_replay_with_documents_settled_again_reproduces_its_golden() {
             &form,
             field,
             &again,
-            0.8,
-            10,
-            Some(&COUNTED),
+            Choice {
+                target_precision: 0.8,
+                minimum_answered: 10,
+                counting: Some(&COUNTED),
+            },
         );
         let actual = json!({
             "kind": "layers_again",

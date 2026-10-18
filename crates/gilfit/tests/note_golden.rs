@@ -16,7 +16,7 @@ use gilfit::form::{CoarseLevel, Document, Field, Form, Role};
 use gilfit::form_resolver::{Candidate, FormResolver, Suggestion};
 use gilfit::lexical_memory::LexicalMemory;
 use gilfit::threshold_selection::{
-    select_coarse, select_key_threshold, select_layers, select_typed_key_thresholds,
+    Choice, select_coarse, select_key_threshold, select_layers, select_typed_key_thresholds,
 };
 use serde_json::{Value, json};
 
@@ -142,9 +142,11 @@ fn the_note_settings_reproduce_their_golden() {
                     &form,
                     field,
                     early,
-                    0.8,
-                    10,
-                    counted,
+                    Choice {
+                        target_precision: 0.8,
+                        minimum_answered: 10,
+                        counting: counted,
+                    },
                 );
                 json!({ "kind": kind, "field": field, "key": replay(&layers.key), "memory": replay(&layers.memory) })
             }
@@ -154,10 +156,12 @@ fn the_note_settings_reproduce_their_golden() {
                     &form,
                     field,
                     early,
-                    0.8,
-                    10,
+                    Choice {
+                        target_precision: 0.8,
+                        minimum_answered: 10,
+                        counting: counted,
+                    },
                     2,
-                    counted,
                 );
                 json!({ "kind": kind, "field": field, "replays": typed.by_length.iter().map(replay).collect::<Vec<_>>() })
             }
@@ -167,9 +171,11 @@ fn the_note_settings_reproduce_their_golden() {
                     &form,
                     field,
                     early,
-                    0.8,
-                    10,
-                    None,
+                    Choice {
+                        target_precision: 0.8,
+                        minimum_answered: 10,
+                        counting: None,
+                    },
                 );
                 json!({ "kind": kind, "field": field, "replay": self::replay(&replay) })
             }

@@ -12,7 +12,7 @@ use common::{CHOSEN, COUNTED, document, doubles, fixture, form, lines, replay};
 use gilfit::field_memory::FieldMemory;
 use gilfit::form::{Document, Field, Form, Role};
 use gilfit::threshold_selection::{
-    KeyFieldsChoice, TypedKeyThresholds, select_key_concentrations, select_key_fields,
+    Choice, KeyFieldsChoice, TypedKeyThresholds, select_key_concentrations, select_key_fields,
 };
 use serde_json::{Map, Value, json};
 
@@ -86,7 +86,17 @@ fn the_form_paths_key_fields_and_concentrations_reproduce_its_golden() {
     let mut form = form(&golden, |_| true); // the form as declared
     let expected: Vec<Value> = lines(&golden).take(2).collect();
 
-    let chosen = select_key_fields(&form, "team", &early, 0.8, 10, 0, Some(&COUNTED));
+    let chosen = select_key_fields(
+        &form,
+        "team",
+        &early,
+        Choice {
+            target_precision: 0.8,
+            minimum_answered: 10,
+            counting: Some(&COUNTED),
+        },
+        0,
+    );
     let actual = json!({
         "kind": "key_fields",
         "field": "team",
@@ -116,10 +126,12 @@ fn key_fields_with_every_trial_reproduce_their_golden() {
         &form(&fixture("golden.jsonl"), |_| true),
         "team",
         &early(),
-        0.8,
-        10,
+        Choice {
+            target_precision: 0.8,
+            minimum_answered: 10,
+            counting: Some(&COUNTED),
+        },
         0,
-        Some(&COUNTED),
     );
     assert_eq!(
         doubles(choice("ticket", "team", &ticket)),
@@ -143,7 +155,17 @@ fn key_fields_with_every_trial_reproduce_their_golden() {
     });
     assert_eq!(doubles(actual), doubles(expected[1].clone()));
 
-    let chosen = select_key_fields(&inspection(found), "risk", &inspections, 0.8, 10, 0, None);
+    let chosen = select_key_fields(
+        &inspection(found),
+        "risk",
+        &inspections,
+        Choice {
+            target_precision: 0.8,
+            minimum_answered: 10,
+            counting: None,
+        },
+        0,
+    );
     assert_eq!(
         doubles(choice("inspection", "risk", &chosen)),
         doubles(expected[2].clone())
@@ -154,10 +176,12 @@ fn key_fields_with_every_trial_reproduce_their_golden() {
         &form(&fixture("golden.jsonl"), |_| true),
         "team",
         &early(),
-        0.8,
-        10,
+        Choice {
+            target_precision: 0.8,
+            minimum_answered: 10,
+            counting: Some(&COUNTED),
+        },
         2,
-        Some(&COUNTED),
     );
     assert_eq!(
         doubles(choice("ticket-typed", "team", &typed)),

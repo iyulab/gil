@@ -10,7 +10,7 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 
-use crate::field_memory::{FieldMemory, First};
+use crate::field_memory::{FieldMemory, First, Lookup};
 use crate::form::{Document, Form, Role, SettlementKind};
 use crate::lexical_memory::LexicalMemory;
 use crate::{coarse_groups, similar_vote, text};
@@ -18,6 +18,34 @@ use crate::{coarse_groups, similar_vote, text};
 /// How many of the latest documents replayed [`ThresholdChoice::promise`] is taken over — every document in settlement
 /// order counts, whether or not it was asked about.
 pub const RECENT_DOCUMENTS: usize = 5_000;
+
+/// What a threshold is chosen for — the target precision, the fewest answers it may rest on, and which settlements count.
+#[derive(Clone, Copy, Debug)]
+pub struct Choice<'a> {
+    /// The precision every band of answers down to the threshold must meet, in (0, 1].
+    pub target_precision: f64,
+    /// The fewest independent answers a threshold may rest on, at least 1.
+    pub minimum_answered: usize,
+    /// The kinds of settlement whose lookups are counted — `None` counts every settlement, including those not known.
+    pub counting: Option<&'a [SettlementKind]>,
+}
+
+impl Choice<'_> {
+    /// Asserts that a threshold can be chosen for this.
+    ///
+    /// # Panics
+    /// When `target_precision` is outside (0, 1] or `minimum_answered` is 0.
+    fn check(&self) {
+        assert!(
+            self.target_precision > 0.0 && self.target_precision <= 1.0,
+            "target_precision must be in (0, 1]"
+        );
+        assert!(
+            self.minimum_answered >= 1,
+            "minimum_answered must be at least 1"
+        );
+    }
+}
 
 /// A threshold chosen for one memory layer of a field, and how it did on the replay it was chosen on. A checked value
 /// ([`SettlementKind::Check`]) counts as one ÷ its draw probability lookups, so `precision` and `answer_rate` are
@@ -133,15 +161,9 @@ pub fn select_key_threshold(
     form: &Form,
     field: &str,
     documents: &[Document],
-    target_precision: f64,
-    minimum_answered: usize,
-    counting: Option<&[SettlementKind]>,
+    choice: Choice,
 ) -> ThresholdReplay {
-    assert!(
-        target_precision > 0.0 && target_precision <= 1.0,
-        "target_precision must be in (0, 1]"
-    );
-    assert!(minimum_answered >= 1, "minimum_answered must be at least 1");
+    choice.check();
     let definition = form.field(field);
     assert!(
         definition.role == Role::Judged,
@@ -172,14 +194,15 @@ pub fn select_key_threshold(
         }
 
         memory.remove(&form.name, &document.id); // a document settled again is not its own evidence
-        let weight = weight(document, field, counting);
+        let weight = weight(document, field, choice.counting);
         if memory.count(&form.name) > 0 && weight > 0.0 {
             let before = arrived(form, document, field, &document.values);
             let before_sets = arrived(form, document, field, &document.sets);
+            let asked = Lookup::new(form, field, &before).sets(&before_sets);
             if let Some(settled) = settled.filter(|_| !multiple) {
                 lookups += 1;
                 lookup_weight += weight;
-                if let Some(first) = memory.first(form, field, &before, settled, &before_sets) {
+                if let Some(first) = memory.first(&asked, settled) {
                     matches.push(Answer {
                         score: first.score,
                         correct: first.matches,
@@ -198,7 +221,7 @@ pub fn select_key_threshold(
                     sought.dedup();
                     lookups += sought.len();
                     lookup_weight += sought.len() as f64 * weight;
-                    for (value, score) in memory.scored(form, field, &before, &sets) {
+                    for (value, score) in memory.scored(&asked.sets(&sets)) {
                         matches.push(Answer {
                             score,
                             correct: sought.contains(&&value),
@@ -221,8 +244,8 @@ pub fn select_key_threshold(
         lookups,
         lookup_weight,
         order,
-        target_precision,
-        minimum_answered,
+        choice.target_precision,
+        choice.minimum_answered,
     );
     if multiple {
         replay
@@ -322,22 +345,15 @@ impl Asked {
 /// # Panics
 /// When `target_precision` is outside (0, 1], `minimum_answered` or `longest` is 0, or the field is not judged or
 /// takes several values.
-#[allow(clippy::too_many_arguments)]
 pub fn select_typed_key_thresholds(
     memory: &mut FieldMemory,
     form: &Form,
     field: &str,
     documents: &[Document],
-    target_precision: f64,
-    minimum_answered: usize,
+    choice: Choice,
     longest: usize,
-    counting: Option<&[SettlementKind]>,
 ) -> TypedKeyThresholds {
-    assert!(
-        target_precision > 0.0 && target_precision <= 1.0,
-        "target_precision must be in (0, 1]"
-    );
-    assert!(minimum_answered >= 1, "minimum_answered must be at least 1");
+    choice.check();
     assert!(longest >= 1, "longest must be at least 1");
     let definition = form.field(field);
     assert!(
@@ -360,13 +376,17 @@ pub fn select_typed_key_thresholds(
         };
 
         memory.remove(&form.name, &document.id); // a document settled again is not its own evidence
-        let weight = weight(document, field, counting);
+        let weight = weight(document, field, choice.counting);
         if memory.count(&form.name) > 0 && weight > 0.0 {
             let before = arrived(form, document, field, &document.values);
             let before_sets = arrived(form, document, field, &document.sets);
             asked.push(Asked {
                 settled: settled.clone(),
-                best: memory.typed(form, field, &before, settled, longest, &before_sets),
+                best: memory.typed(
+                    &Lookup::new(form, field, &before).sets(&before_sets),
+                    settled,
+                    longest,
+                ),
                 weight,
                 order,
                 right: false,
@@ -408,8 +428,8 @@ pub fn select_typed_key_thresholds(
             reaching.len(),
             reaching.iter().fold(0.0, |sum, &i| sum + asked[i].weight),
             order,
-            target_precision,
-            minimum_answered,
+            choice.target_precision,
+            choice.minimum_answered,
         );
         let chosen = replay.chosen.as_ref().map(|c| c.threshold);
         for &i in &reaching {
@@ -742,22 +762,15 @@ const FLOOR_SHARE: f64 = 0.01;
 /// # Panics
 /// When `target_precision` is outside (0, 1], `minimum_answered` is 0, the field is not judged, or it takes several
 /// values — the similar document layer does not suggest such a field.
-#[allow(clippy::too_many_arguments)]
 pub fn select_layers(
     field_memory: &mut FieldMemory,
     memory: &mut LexicalMemory,
     form: &Form,
     field: &str,
     documents: &[Document],
-    target_precision: f64,
-    minimum_answered: usize,
-    counting: Option<&[SettlementKind]>,
+    choice: Choice,
 ) -> LayerThresholds {
-    assert!(
-        target_precision > 0.0 && target_precision <= 1.0,
-        "target_precision must be in (0, 1]"
-    );
-    assert!(minimum_answered >= 1, "minimum_answered must be at least 1");
+    choice.check();
     let definition = form.field(field);
     assert!(
         definition.role == Role::Judged,
@@ -774,7 +787,7 @@ pub fn select_layers(
         form,
         field,
         documents,
-        counting,
+        choice.counting,
         false,
     );
 
@@ -799,8 +812,8 @@ pub fn select_layers(
             keyed.len(),
             keyed.iter().fold(0.0, |sum, s| sum + s.weight),
             latest,
-            target_precision,
-            minimum_answered,
+            choice.target_precision,
+            choice.minimum_answered,
         ),
         &answers,
     );
@@ -824,8 +837,8 @@ pub fn select_layers(
         &left,
         latest,
         definition.similar_document_votes,
-        target_precision,
-        minimum_answered,
+        choice.target_precision,
+        choice.minimum_answered,
     );
     LayerThresholds { key, memory }
 }
@@ -842,22 +855,15 @@ pub fn select_layers(
 ///
 /// # Panics
 /// As [`select_layers`], and when the field has no coarse level.
-#[allow(clippy::too_many_arguments)]
 pub fn select_coarse(
     field_memory: &mut FieldMemory,
     memory: &mut LexicalMemory,
     form: &Form,
     field: &str,
     documents: &[Document],
-    target_precision: f64,
-    minimum_answered: usize,
-    counting: Option<&[SettlementKind]>,
+    choice: Choice,
 ) -> LayerThresholds {
-    assert!(
-        target_precision > 0.0 && target_precision <= 1.0,
-        "target_precision must be in (0, 1]"
-    );
-    assert!(minimum_answered >= 1, "minimum_answered must be at least 1");
+    choice.check();
     let definition = form.field(field);
     assert!(
         definition.role == Role::Judged,
@@ -872,7 +878,15 @@ pub fn select_coarse(
         "'{field}' has no coarse level to choose thresholds for"
     );
 
-    let (steps, latest) = replay(field_memory, memory, form, field, documents, counting, true);
+    let (steps, latest) = replay(
+        field_memory,
+        memory,
+        form,
+        field,
+        documents,
+        choice.counting,
+        true,
+    );
     // What the level made of each lookup the value layers left, as a step whose vote is the class's — not one under a
     // key that settled a value to catch, where the level is not offered either.
     let left: Vec<(Step, Option<(f64, bool)>)> = steps
@@ -907,8 +921,8 @@ pub fn select_coarse(
         left.len(),
         left.iter().fold(0.0, |sum, (s, _)| sum + s.weight),
         latest,
-        target_precision,
-        minimum_answered,
+        choice.target_precision,
+        choice.minimum_answered,
     );
 
     let chosen = key.chosen.as_ref().map(|c| c.threshold);
@@ -921,8 +935,8 @@ pub fn select_coarse(
         &rest,
         latest,
         definition.similar_document_votes,
-        target_precision,
-        minimum_answered,
+        choice.target_precision,
+        choice.minimum_answered,
     );
     LayerThresholds { key, memory }
 }
@@ -967,8 +981,9 @@ fn replay(
         let before = arrived(form, document, field, &document.values);
         let before_sets = arrived(form, document, field, &document.sets);
         let key_looked = field_memory.count(&form.name) > 0;
+        let asked = Lookup::new(form, field, &before).sets(&before_sets);
         let first = if key_looked {
-            field_memory.first(form, field, &before, settled, &before_sets)
+            field_memory.first(&asked, settled)
         } else {
             None
         };
@@ -1005,10 +1020,7 @@ fn replay(
                     });
                 let class = level.of(settled);
                 let keys = if key_looked {
-                    coarse_groups::keys(
-                        &field_memory.keyed_values(form, field, &before, &before_sets, None),
-                        level,
-                    )
+                    coarse_groups::keys(&field_memory.keyed_values(&asked), level)
                 } else {
                     None
                 };
@@ -1181,10 +1193,8 @@ pub fn select_key_fields(
     form: &Form,
     field: &str,
     documents: &[Document],
-    target_precision: f64,
-    minimum_answered: usize,
+    choice: Choice,
     typed_longest: usize,
-    counting: Option<&[SettlementKind]>,
 ) -> KeyFieldsChoice {
     assert!(
         typed_longest == 0 || !form.field(field).multiple,
@@ -1197,9 +1207,7 @@ pub fn select_key_fields(
             &resting,
             field,
             documents,
-            target_precision,
-            minimum_answered,
-            counting,
+            choice,
         );
         let typed = (typed_longest > 0).then(|| {
             for f in resting.fields.iter_mut().filter(|f| f.name == field) {
@@ -1210,10 +1218,8 @@ pub fn select_key_fields(
                 &resting,
                 field,
                 documents,
-                target_precision,
-                minimum_answered,
+                choice,
                 typed_longest,
-                counting,
             )
         });
         KeyFieldsTrial {
@@ -1225,7 +1231,7 @@ pub fn select_key_fields(
     // Weighted: with checks, the decisions they stand for.
     let gain = |chosen: Option<&ThresholdChoice>| {
         chosen.map_or(0.0, |c| {
-            (c.precision - target_precision) * c.answered_weight
+            (c.precision - choice.target_precision) * c.answered_weight
         })
     };
     let gains = |trial: &KeyFieldsTrial| {
@@ -1341,7 +1347,9 @@ pub fn select_key_concentrations(
 
         memory.remove(&form.name, &document.id); // a document settled again is not its own evidence
         let before = arrived(&form, document, field, &document.values);
-        for (key_field, total, weight) in memory.key_totals(&form, field, &before, settled) {
+        for (key_field, total, weight) in
+            memory.key_totals(&Lookup::new(&form, field, &before), settled)
+        {
             let (unseen, totals) = predictions.entry(key_field).or_default();
             totals.push(total);
             if weight == 0.0 {
