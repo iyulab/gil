@@ -91,6 +91,9 @@ with what to do.
 - The Rust rebuild's form resolver hands the same record for a suggestion (`suggest_one_with`): what the key layer and
   the similar document vote found, the winning document, and what was answered at which threshold, leaving open whether
   it was right until the document is settled.
+- The decision record golden also holds the coarse level replay of the ticket's code: each lookup's class the keys
+  back and class the similar documents vote for, whatever the level's thresholds, and whether the value layers
+  answered. The Rust rebuild writes these records too (`select_coarse_with`) and reproduces them to the bit.
 
 ## 0.23.0
 

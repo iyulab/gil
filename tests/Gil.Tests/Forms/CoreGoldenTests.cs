@@ -147,6 +147,7 @@ public sealed partial class CoreGoldenTests
 
         var coarse = await ThresholdSelection.SelectCoarseAsync(new FieldMemory(), new LexicalMemory(), form, "code", early, 0.8, 10, Counted, Ct);
         lines.Add(Line(new JsonObject { ["kind"] = "coarse", ["field"] = "code", ["key"] = Replay(coarse.Key), ["memory"] = Replay(coarse.Memory) }));
+        recordLines.AddRange(await RecordLinesAsync(form, "code", early, coarse: true));
         form = With(form, form.Field("code") with
         {
             Coarse = form.Field("code").Coarse! with
@@ -216,10 +217,10 @@ public sealed partial class CoreGoldenTests
     /// the layer back) and the similar document vote (score, whether it is the settled one, the nearest voter's similarity,
     /// whether more than one voted), whatever the thresholds — read off the replay the thresholds are chosen from.
     /// </summary>
-    private static async Task<List<string>> RecordLinesAsync(FormDefinition form, string field, IReadOnlyList<SettledDocument> documents)
+    private static async Task<List<string>> RecordLinesAsync(FormDefinition form, string field, IReadOnlyList<SettledDocument> documents, bool coarse = false)
     {
         var replay = typeof(ThresholdSelection).GetMethod("ReplayAsync", BindingFlags.NonPublic | BindingFlags.Static)!;
-        var task = (Task)replay.Invoke(null, [new FieldMemory(), new LexicalMemory(), form, field, documents, Counted, Ct, false])!;
+        var task = (Task)replay.Invoke(null, [new FieldMemory(), new LexicalMemory(), form, field, documents, Counted, Ct, coarse])!;
         await task;
         var result = task.GetType().GetProperty("Result")!.GetValue(task)!;
         var steps = (IList)result.GetType().GetField("Item1")!.GetValue(result)!;
@@ -240,9 +241,14 @@ public sealed partial class CoreGoldenTests
             var document = ordered[order - 1];
             var key = Read(step!, "Key");
             var match = Read(step!, "Match");
+            var level = Read(step!, "Coarse");
+            // The class the keys back (score, right) or the similar documents vote for (score, right, nearest, voted).
+            JsonNode? Class(object? look) => look is null ? null : look.GetType().GetField("Item3") is null
+                ? new JsonArray((double)Item(look, 1)!, (bool)Item(look, 2)!)
+                : new JsonArray((double)Item(look, 1)!, (bool)Item(look, 2)!, (double)Item(look, 3)!, (bool)Item(look, 4)!);
             lines.Add(Line(new JsonObject
             {
-                ["kind"] = "record",
+                ["kind"] = coarse ? "coarse_record" : "record",
                 ["field"] = field,
                 ["record"] = document.DocumentId,
                 ["order"] = order,
@@ -252,6 +258,10 @@ public sealed partial class CoreGoldenTests
                 ["settled"] = document.Values[field],
                 ["settlement"] = document.Settlements.TryGetValue(field, out var kind) ? kind.ToString() : null,
                 ["probability"] = document.Probabilities.TryGetValue(field, out var p) ? p : null,
+                ["coarse"] = level is null ? null : new JsonArray(
+                    (bool)level.GetType().GetProperty("ValueAnswered")!.GetValue(level)!,
+                    Class(level.GetType().GetProperty("Keys")!.GetValue(level)),
+                    Class(level.GetType().GetProperty("Vote")!.GetValue(level))),
             }));
         }
 

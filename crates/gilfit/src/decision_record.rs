@@ -38,6 +38,19 @@ pub struct SimilarLook {
     pub voted: bool,
 }
 
+/// What a field's coarse level made of one lookup, whatever its thresholds: the class the keys back and the class the
+/// similar documents vote for, and whether the field's value layers answered at their own thresholds — the level is
+/// offered only where they did not.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CoarseLook {
+    /// Whether the value layers answered at the field's thresholds.
+    pub value_answered: bool,
+    /// The class the keys back: its summed strength as `strength`, the class as `value`, the key backing it most strongly.
+    pub keys: Option<KeyLook>,
+    /// The class the similar documents vote for, as `value`.
+    pub vote: Option<SimilarLook>,
+}
+
 /// What a suggestion answered: the first candidate, when a layer trusted it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Answered {
@@ -68,6 +81,8 @@ pub struct DecisionRecord {
     pub key: Option<KeyLook>,
     /// The similar document layer's vote, when the document memory held documents and one in the field's domain voted.
     pub similar: Option<SimilarLook>,
+    /// On a coarse replay, what the field's coarse level made of the lookup.
+    pub coarse: Option<CoarseLook>,
     /// What the suggestion answered — on a suggestion; `None` when no layer trusted its first candidate, and on a replay,
     /// which answers nothing (its records hold whatever the layers found, whatever the thresholds).
     pub answered: Option<Answered>,

@@ -11,7 +11,9 @@ use gilfit::decision_record::DecisionRecord;
 use gilfit::field_memory::FieldMemory;
 use gilfit::form::Document;
 use gilfit::lexical_memory::LexicalMemory;
-use gilfit::threshold_selection::{Choice, select_layers, select_layers_with};
+use gilfit::threshold_selection::{
+    Choice, select_coarse, select_coarse_with, select_layers, select_layers_with,
+};
 use serde_json::{Value, json};
 
 fn line(r: &DecisionRecord) -> Value {
@@ -26,6 +28,11 @@ fn line(r: &DecisionRecord) -> Value {
         "settled": r.settled,
         "settlement": r.settlement.map(|k| format!("{k:?}")),
         "probability": r.probability,
+        "coarse": r.coarse.as_ref().map(|c| json!([
+            c.value_answered,
+            c.keys.as_ref().map(|k| json!([k.strength, k.correct])),
+            c.vote.as_ref().map(|v| json!([v.score, v.correct, v.nearest, v.voted])),
+        ])),
     })
 }
 
@@ -47,7 +54,9 @@ fn the_layers_replay_writes_the_golden_decision_records() {
     }
 
     let golden = fixture("golden.jsonl");
-    let expected: Vec<Value> = lines(&fixture("records-out.jsonl")).collect();
+    let expected: Vec<Value> = lines(&fixture("records-out.jsonl"))
+        .filter(|l| l["kind"] == "record")
+        .collect();
     let choice = Choice {
         target_precision: 0.8,
         minimum_answered: 10,
@@ -209,4 +218,70 @@ fn suggestions_hand_over_records_that_agree_with_them() {
         asked > 0 && answered > 0 && keyed > 0 && voted > 0,
         "{asked} {answered} {keyed} {voted}"
     );
+}
+
+/// The coarse replay's records (kind `coarse_record`): the golden's coarse level replay of the ticket's code on the first
+/// records, with the form as configured when the level was chosen — each lookup with the class the keys back and the class
+/// the similar documents vote for, whatever the level's thresholds, and whether the value layers answered.
+#[test]
+fn the_coarse_replay_writes_the_golden_decision_records() {
+    let early: Vec<Document> = lines(&fixture("records.jsonl"))
+        .take(CHOSEN)
+        .map(|r| common::document(&r))
+        .collect();
+    let golden = fixture("golden.jsonl");
+    let is_coarse = |l: &Value| l["kind"] == "coarse" && l["field"] == "code";
+    let form = form(&golden, is_coarse);
+    let expected: Vec<Value> = lines(&fixture("records-out.jsonl"))
+        .filter(|l| l["kind"] == "coarse_record")
+        .collect();
+    let choice = Choice {
+        target_precision: 0.8,
+        minimum_answered: 10,
+        counting: Some(&COUNTED),
+    };
+    let mut records = Vec::new();
+    let coarse = select_coarse_with(
+        &mut FieldMemory::default(),
+        &mut LexicalMemory::default(),
+        &form,
+        "code",
+        &early,
+        choice,
+        &mut |r| records.push(r.clone()),
+    );
+    assert_eq!(
+        coarse,
+        select_coarse(
+            &mut FieldMemory::default(),
+            &mut LexicalMemory::default(),
+            &form,
+            "code",
+            &early,
+            choice,
+        )
+    );
+    assert_eq!(records.len(), expected.len());
+    let level = form.field("code").coarse.as_ref().expect("a coarse level");
+    for (at, (record, expected)) in records.iter().zip(expected).enumerate() {
+        let mut actual = line(record);
+        actual["kind"] = json!("coarse_record");
+        assert_eq!(
+            doubles(actual),
+            doubles(expected),
+            "coarse record line {}",
+            at + 1
+        );
+        // The reference keeps no class names; a class it calls right is the settled value's.
+        let look = record.coarse.as_ref().expect("a coarse replay's record");
+        let class = level.of(record.settled.as_deref().expect("settled"));
+        for (value, correct) in look
+            .keys
+            .iter()
+            .map(|k| (&k.value, k.correct))
+            .chain(look.vote.iter().map(|v| (&v.value, v.correct)))
+        {
+            assert_eq!(correct == Some(true), *value == class);
+        }
+    }
 }
