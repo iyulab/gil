@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Gil.Forms;
@@ -47,13 +48,16 @@ public sealed partial class CoreGoldenTests
         {
             Directory.CreateDirectory(target);
             await File.WriteAllLinesAsync(Path.Combine(target, "note-records.jsonl"), Notes().Select(Write), Ct);
-            var written = await NoteAsync([.. (await File.ReadAllLinesAsync(Path.Combine(target, "note-records.jsonl"), Ct)).Select(Read)]);
+            var (written, typedRecords) = await NoteAsync([.. (await File.ReadAllLinesAsync(Path.Combine(target, "note-records.jsonl"), Ct)).Select(Read)]);
             await File.WriteAllLinesAsync(Path.Combine(target, "note-golden.jsonl"), written, Ct);
+            await File.WriteAllLinesAsync(Path.Combine(target, "note-records-out.jsonl"), typedRecords, Ct);
             return;
         }
 
         var documents = (await File.ReadAllLinesAsync(Path.Combine(directory, "note-records.jsonl"), Ct)).Select(Read).ToList();
-        (await NoteAsync(documents)).Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "note-golden.jsonl"), Ct));
+        var (lines, typed) = await NoteAsync(documents);
+        lines.Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "note-golden.jsonl"), Ct));
+        typed.Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "note-records-out.jsonl"), Ct));
     }
 
     /// <summary>
@@ -63,7 +67,7 @@ public sealed partial class CoreGoldenTests
     /// document is. Every sixth note also settles an early note again with
     /// another topic, every tenth copies one under a new id, each later than all before.
     /// </summary>
-    private static async Task<List<string>> NoteAsync(IReadOnlyList<SettledDocument> documents)
+    private static async Task<(List<string> Lines, List<string> TypedRecords)> NoteAsync(IReadOnlyList<SettledDocument> documents)
     {
         var form = NoteForm();
         var early = documents.Take(NoteChosen).ToList();
@@ -105,6 +109,7 @@ public sealed partial class CoreGoldenTests
 
         var typed = ThresholdSelection.SelectTypedKeyThresholds(new FieldMemory(), form, "owner", early, 0.8, 10, longest: 2, counting: Counted);
         lines.Add(Line(new JsonObject { ["kind"] = "typed", ["field"] = "owner", ["replays"] = new JsonArray([.. typed.ByLength.Select(r => (JsonNode)Replay(r))]) }));
+        var typedRecords = TypedRecordLines(form, "owner", early, 2);
         form = With(form, form.Field("owner") with { TypedKeyThresholds = typed.Thresholds });
 
         JsonObject Decision(string kind, string id, FieldSuggestion suggestion) => new()
@@ -169,6 +174,52 @@ public sealed partial class CoreGoldenTests
                 latest = latest.AddMinutes(1);
                 await resolver.RebuildAsync(form, [early[j * 2] with { DocumentId = $"{early[j * 2].DocumentId}-copy", SettledAt = latest }], Ct);
             }
+        }
+
+        return (lines, typedRecords);
+    }
+
+    /// <summary>
+    /// The decision record of every document the typed key threshold replay of <paramref name="field"/> asks about, in
+    /// settlement order (note-records-out.jsonl): the key layer's best value with none of the settled value typed, then
+    /// with each length of it up to <paramref name="longest"/> — score, value, whether it is the settled one. The replay
+    /// keeps these in a local list, so they are asked here the way it asks them: in settlement order, each document's own
+    /// settlements left out, counted settlements only, before the document is put.
+    /// </summary>
+    private static List<string> TypedRecordLines(FormDefinition form, string field, IReadOnlyList<SettledDocument> documents, int longest)
+    {
+        var scalarOrdinal = (IComparer<string>)typeof(ThresholdSelection).Assembly.GetType("Gil.ScalarOrdinal")!
+            .GetField("Instance", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
+        var weightOf = typeof(ThresholdSelection).GetMethod("Weight", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var memory = new FieldMemory();
+        var lines = new List<string>();
+        var order = 0;
+        foreach (var document in documents.Select(FormResolver.Remembered).OrderBy(d => d.SettledAt).ThenBy(d => d.DocumentId, scalarOrdinal))
+        {
+            order++;
+            if (!document.Values.TryGetValue(field, out var settled))
+            {
+                continue;
+            }
+
+            memory.Remove(form.Name, document.DocumentId);
+            var weight = (double)weightOf.Invoke(null, [document, field, Counted])!;
+            if (memory.Count(form.Name) > 0 && weight > 0)
+            {
+                var best = memory.Typed(form, field, ThresholdSelection.Before(form, document, field), settled, longest, ThresholdSelection.BeforeSets(form, document, field));
+                lines.Add(Line(new JsonObject
+                {
+                    ["kind"] = "typed_record",
+                    ["field"] = field,
+                    ["record"] = document.DocumentId,
+                    ["order"] = order,
+                    ["weight"] = weight,
+                    ["typed"] = new JsonArray([.. best.Select(b => b is { } v ? (JsonNode)new JsonArray(v.Score, v.Value, v.Value == settled) : null)]),
+                    ["settled"] = settled,
+                }));
+            }
+
+            memory.Put(form, document);
         }
 
         return lines;

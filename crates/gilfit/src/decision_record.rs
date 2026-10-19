@@ -51,6 +51,17 @@ pub struct CoarseLook {
     pub vote: Option<SimilarLook>,
 }
 
+/// The key layer's best value with some of the settled value typed — on a typed replay.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypedLook {
+    /// The best value's score.
+    pub strength: f64,
+    /// The best value that begins with the typed text.
+    pub value: String,
+    /// Whether it is the settled value.
+    pub correct: bool,
+}
+
 /// What a suggestion answered: the first candidate, when a layer trusted it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Answered {
@@ -83,6 +94,9 @@ pub struct DecisionRecord {
     pub similar: Option<SimilarLook>,
     /// On a coarse replay, what the field's coarse level made of the lookup.
     pub coarse: Option<CoarseLook>,
+    /// On a typed replay, the key layer's best value with none, one, … characters of the settled value typed — `None`
+    /// at a length no value under the known keys begins with.
+    pub typed: Option<Vec<Option<TypedLook>>>,
     /// What the suggestion answered — on a suggestion; `None` when no layer trusted its first candidate, and on a replay,
     /// which answers nothing (its records hold whatever the layers found, whatever the thresholds).
     pub answered: Option<Answered>,

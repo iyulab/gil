@@ -94,6 +94,10 @@ with what to do.
 - The decision record golden also holds the coarse level replay of the ticket's code: each lookup's class the keys
   back and class the similar documents vote for, whatever the level's thresholds, and whether the value layers
   answered. The Rust rebuild writes these records too (`select_coarse_with`) and reproduces them to the bit.
+- A typed decision record golden (`tests/fixtures/core/note-records-out.jsonl`): for the note golden's typed key
+  thresholds, every note asked about with the key layer's best value with none, one and two characters of the settled
+  value typed. The Rust rebuild writes these records while it chooses typed thresholds
+  (`select_typed_key_thresholds_with`) and reproduces them to the bit.
 
 ## 0.23.0
 

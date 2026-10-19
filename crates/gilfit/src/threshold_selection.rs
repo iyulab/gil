@@ -10,7 +10,7 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 
-use crate::decision_record::{CoarseLook, DecisionRecord, KeyLook, SimilarLook};
+use crate::decision_record::{CoarseLook, DecisionRecord, KeyLook, SimilarLook, TypedLook};
 use crate::field_memory::{FieldMemory, First, Lookup};
 use crate::form::{Document, Form, Role, SettlementKind};
 use crate::lexical_memory::LexicalMemory;
@@ -354,6 +354,23 @@ pub fn select_typed_key_thresholds(
     choice: Choice,
     longest: usize,
 ) -> TypedKeyThresholds {
+    select_typed_key_thresholds_with(memory, form, field, documents, choice, longest, &mut |_| {})
+}
+
+/// As [`select_typed_key_thresholds`], handing `sink` the decision record of every document the replay asks about, in
+/// settlement order — the key layer's best value at each typed length ([`DecisionRecord::typed`]).
+///
+/// # Panics
+/// As [`select_typed_key_thresholds`].
+pub fn select_typed_key_thresholds_with(
+    memory: &mut FieldMemory,
+    form: &Form,
+    field: &str,
+    documents: &[Document],
+    choice: Choice,
+    longest: usize,
+    sink: &mut dyn FnMut(&DecisionRecord),
+) -> TypedKeyThresholds {
     choice.check();
     assert!(longest >= 1, "longest must be at least 1");
     let definition = form.field(field);
@@ -381,13 +398,38 @@ pub fn select_typed_key_thresholds(
         if memory.count(&form.name) > 0 && weight > 0.0 {
             let before = arrived(form, document, field, &document.values);
             let before_sets = arrived(form, document, field, &document.sets);
+            let best = memory.typed(
+                &Lookup::new(form, field, &before).sets(&before_sets),
+                settled,
+                longest,
+            );
+            sink(&DecisionRecord {
+                record: document.id.clone(),
+                field: field.to_owned(),
+                order: Some(order as u64),
+                weight,
+                key: None,
+                similar: None,
+                coarse: None,
+                typed: Some(
+                    best.iter()
+                        .map(|b| {
+                            b.as_ref().map(|(strength, value)| TypedLook {
+                                strength: *strength,
+                                value: value.clone(),
+                                correct: value == settled,
+                            })
+                        })
+                        .collect(),
+                ),
+                answered: None,
+                settled: Some(settled.clone()),
+                settlement: document.settlements.get(field).copied(),
+                probability: document.probabilities.get(field).copied(),
+            });
             asked.push(Asked {
                 settled: settled.clone(),
-                best: memory.typed(
-                    &Lookup::new(form, field, &before).sets(&before_sets),
-                    settled,
-                    longest,
-                ),
+                best,
                 weight,
                 order,
                 right: false,
@@ -1148,6 +1190,7 @@ fn replay(
                     voted: v.voted,
                 }),
             coarse: coarse_look,
+            typed: None,
             answered: None,
             settled: Some(settled.clone()),
             settlement: document.settlements.get(field).copied(),

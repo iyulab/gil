@@ -365,6 +365,7 @@ impl FormResolver {
             }),
             similar: vote,
             coarse: None,
+            typed: None,
             answered: candidates.first().filter(|c| c.trusted).map(|c| Answered {
                 layer: c.source,
                 value: c.value.clone(),

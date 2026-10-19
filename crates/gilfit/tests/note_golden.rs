@@ -290,3 +290,60 @@ fn the_note_decisions_reproduce_their_golden() {
         );
     }
 }
+
+/// The typed replay's decision records (`note-records-out.jsonl`, written by the .NET implementation): for the owner's
+/// typed key thresholds on the first notes, every note asked about in settlement order with the key layer's best value
+/// with none, one and two characters of its owner typed — score, value, whether it is the owner — to the bit.
+#[test]
+fn the_typed_replay_writes_the_golden_decision_records() {
+    let documents = notes();
+    let golden = fixture("note-golden.jsonl");
+    let form = note_form(&golden, |l| l["kind"] == "typed" && l["field"] == "owner");
+    let choice = Choice {
+        target_precision: 0.8,
+        minimum_answered: 10,
+        counting: Some(&common::COUNTED[..]),
+    };
+    let mut records = Vec::new();
+    let typed = gilfit::threshold_selection::select_typed_key_thresholds_with(
+        &mut FieldMemory::default(),
+        &form,
+        "owner",
+        &documents[..CHOSEN],
+        choice,
+        2,
+        &mut |r| records.push(r.clone()),
+    );
+    assert_eq!(
+        typed.thresholds(),
+        select_typed_key_thresholds(
+            &mut FieldMemory::default(),
+            &form,
+            "owner",
+            &documents[..CHOSEN],
+            choice,
+            2,
+        )
+        .thresholds()
+    );
+
+    let expected: Vec<Value> = lines(&fixture("note-records-out.jsonl")).collect();
+    assert_eq!(records.len(), expected.len());
+    for (at, (r, expected)) in records.iter().zip(expected).enumerate() {
+        let actual = json!({
+            "kind": "typed_record",
+            "field": r.field,
+            "record": r.record,
+            "order": r.order,
+            "weight": r.weight,
+            "typed": r.typed.as_ref().expect("a typed replay's record").iter().map(|t| t.as_ref().map(|t| json!([t.strength, t.value, t.correct]))).collect::<Vec<_>>(),
+            "settled": r.settled,
+        });
+        assert_eq!(
+            doubles(actual),
+            doubles(expected),
+            "typed record line {}",
+            at + 1
+        );
+    }
+}
