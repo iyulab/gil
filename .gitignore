@@ -9,3 +9,8 @@ obj/
 
 # Rust build output
 target/
+
+# Python build output (bindings/python)
+__pycache__/
+.pytest_cache/
+/dist/

@@ -22,6 +22,10 @@ with what to do.
 
 ### Documentation
 
+- Python bindings for the Rust rebuild start under `bindings/python` (built with maturin, not published):
+  `gilfit.select_layers` replays settled documents and returns the key and memory threshold replays with the decision
+  records they rest on, as dictionaries; forms and documents are read from JSON. They reproduce the decision record
+  golden (`tests/fixtures/core/records-out.jsonl`) to the bit, and CI builds and tests them.
 - A text golden, `tests/fixtures/core/text.jsonl`: texts that exercise each step of docs/text-normalization.md with
   the normalized text, key and n-grams each makes.
 - The decision core's Rust rebuild starts under `crates/gilfit` (not published): text normalization, keys and
