@@ -120,9 +120,34 @@ fn the_layers_replay_writes_the_golden_decision_records() {
 /// The answer side: asked about every judged field of each later record of the form path's golden, as the decision golden
 /// asks, `suggest_one_with` makes the very suggestion `suggest` makes and hands over one record that agrees with it — what
 /// it answered is its first candidate when trusted, at the field's threshold; the similar document look is the similar
-/// document candidate; the key look is the key layer's best value, the first value it offers.
+/// document candidate; the key look is the key layer's best value, the first value it offers; the coarse look, for the
+/// field with a coarse level, is where the class offered comes from — the keys' class or the vote's — and when no class
+/// is offered though no layer answered, neither backed one or a value to catch was settled under the keys.
 #[test]
 fn suggestions_hand_over_records_that_agree_with_them() {
+    let configured = form(&fixture("golden.jsonl"), |_| false);
+    let [asked, answered, keyed, voted, looked, offered, withheld] = suggest_and_check(&configured);
+    assert!(
+        asked > 0 && answered > 0 && keyed > 0 && voted > 0 && looked > 0 && offered > 0,
+        "{asked} {answered} {keyed} {voted} {looked} {offered} {withheld}"
+    );
+    // As configured the code's value layers never answer; let its key layer answer every key it finds, and the class is
+    // withheld wherever a value is answered.
+    let mut eager = configured.clone();
+    let code = eager
+        .fields
+        .iter_mut()
+        .find(|f| f.name == "code")
+        .expect("code");
+    code.key_threshold = Some(0.0);
+    let [.., withheld] = suggest_and_check(&eager);
+    assert!(withheld > 0, "{withheld}");
+}
+
+/// Asks every judged field of each later record as the answer-side test describes and checks each record against its
+/// suggestion — the counts of lookups asked, answered, with a key look, with a vote, with a coarse look, with a class
+/// offered, and with a class withheld because a value was answered.
+fn suggest_and_check(form: &gilfit::form::Form) -> [usize; 7] {
     use gilfit::field_memory::Lookup;
     use gilfit::form::Role;
     use gilfit::form_resolver::{FormResolver, Source};
@@ -131,10 +156,10 @@ fn suggestions_hand_over_records_that_agree_with_them() {
     let documents: Vec<Document> = lines(&fixture("records.jsonl"))
         .map(|r| common::document(&r))
         .collect();
-    let form = form(&fixture("golden.jsonl"), |_| false);
     let mut resolver = FormResolver::new(FieldMemory::default(), Some(LexicalMemory::default()));
-    resolver.rebuild(&form, &documents[..CHOSEN]);
+    resolver.rebuild(form, &documents[..CHOSEN]);
     let (mut asked, mut answered, mut keyed, mut voted) = (0, 0, 0, 0);
+    let (mut looked, mut offered, mut withheld) = (0, 0, 0);
     for document in &documents[CHOSEN..] {
         let observed: BTreeMap<String, String> = document
             .values
@@ -143,8 +168,8 @@ fn suggestions_hand_over_records_that_agree_with_them() {
             .map(|(field, value)| (field.clone(), value.clone()))
             .collect();
         let none = BTreeMap::new();
-        for expected in resolver.suggest(&form, &document.id, &observed, &none) {
-            let q = Lookup::new(&form, &expected.field, &observed)
+        for expected in resolver.suggest(form, &document.id, &observed, &none) {
+            let q = Lookup::new(form, &expected.field, &observed)
                 .sets(&none)
                 .excluding(Some(&document.id));
             let mut records = Vec::new();
@@ -208,16 +233,52 @@ fn suggestions_hand_over_records_that_agree_with_them() {
                 }
                 keyed += 1;
             }
+            match (&definition.coarse, &record.coarse) {
+                (None, None) => {}
+                (Some(_), Some(look)) => {
+                    assert_eq!(look.value_answered, first.is_some());
+                    let keys = look.keys.as_ref();
+                    let vote = look.vote.as_ref();
+                    assert!(keys.is_none_or(|k| k.correct.is_none()));
+                    assert!(vote.is_none_or(|v| v.correct.is_none()));
+                    match &expected.coarse {
+                        Some(c) if c.source == Source::SettledFieldMemory => {
+                            let k = keys.expect("the keys' class");
+                            assert_eq!(
+                                (c.value.as_str(), c.score, c.evidence.as_deref()),
+                                (k.value.as_str(), k.strength, Some(k.key.as_str()))
+                            );
+                            offered += 1;
+                        }
+                        Some(c) => {
+                            assert_eq!(c.source, Source::SimilarDocument);
+                            let v = vote.expect("the vote's class");
+                            assert_eq!(
+                                (c.value.as_str(), c.score, c.evidence.as_deref()),
+                                (v.value.as_str(), v.score, Some(v.document.as_str()))
+                            );
+                            offered += 1;
+                        }
+                        None if look.value_answered => withheld += 1,
+                        None => assert!(
+                            keys.is_some_and(|k| k.caught) || keys.is_none() && vote.is_none()
+                        ),
+                    }
+                    looked += 1;
+                }
+                (level, look) => panic!(
+                    "coarse look {:?} for a field with a coarse level {:?}",
+                    look.is_some(),
+                    level.is_some()
+                ),
+            }
             asked += 1;
         }
 
-        resolver.rebuild(&form, std::slice::from_ref(document));
+        resolver.rebuild(form, std::slice::from_ref(document));
     }
 
-    assert!(
-        asked > 0 && answered > 0 && keyed > 0 && voted > 0,
-        "{asked} {answered} {keyed} {voted}"
-    );
+    [asked, answered, keyed, voted, looked, offered, withheld]
 }
 
 /// The coarse replay's records (kind `coarse_record`): the golden's coarse level replay of the ticket's code on the first

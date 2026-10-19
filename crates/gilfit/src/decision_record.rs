@@ -92,7 +92,8 @@ pub struct DecisionRecord {
     pub key: Option<KeyLook>,
     /// The similar document layer's vote, when the document memory held documents and one in the field's domain voted.
     pub similar: Option<SimilarLook>,
-    /// On a coarse replay, what the field's coarse level made of the lookup.
+    /// On a coarse replay, and on a suggestion for a field with a coarse level when nothing is typed, what the field's
+    /// coarse level made of the lookup.
     pub coarse: Option<CoarseLook>,
     /// On a typed replay, the key layer's best value with none, one, … characters of the settled value typed — `None`
     /// at a length no value under the known keys begins with.

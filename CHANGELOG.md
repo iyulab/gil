@@ -98,6 +98,9 @@ with what to do.
   thresholds, every note asked about with the key layer's best value with none, one and two characters of the settled
   value typed. The Rust rebuild writes these records while it chooses typed thresholds
   (`select_typed_key_thresholds_with`) and reproduces them to the bit.
+- The Rust rebuild's suggestion record (`suggest_one_with`) carries the coarse look for a field with a coarse level
+  when nothing is typed: the class the keys back and the class the similar documents vote for, whatever the level's
+  thresholds, and whether the value layers answered. The class a suggestion offers is the one the look names.
 
 ## 0.23.0
 

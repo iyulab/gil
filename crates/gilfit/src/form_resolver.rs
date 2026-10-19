@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::coarse_groups;
-use crate::decision_record::{Answered, DecisionRecord, KeyLook, SimilarLook};
+use crate::decision_record::{Answered, CoarseLook, DecisionRecord, KeyLook, SimilarLook};
 use crate::field_memory::{self, FieldMemory, Lookup};
 use crate::form::{CoarseLevel, Document, Field, Form, Role};
 use crate::lexical_memory::{LexicalMemory, Match};
@@ -267,8 +267,8 @@ impl FormResolver {
 
     /// As [`FormResolver::suggest_one`] for the lookup `q` — its form, field, known values and sets, typed text and the
     /// document asked about (the one it excludes) — handing `sink` the decision record of the lookup: what the key layer
-    /// and the similar document layer found whatever the thresholds, and what was answered. Whether the answer was right
-    /// is known only when the document is settled; the record leaves it open.
+    /// and the similar document layer found whatever the thresholds, what the field's coarse level made of it, and what
+    /// was answered. Whether the answer was right is known only when the document is settled; the record leaves it open.
     ///
     /// # Panics
     /// As [`FormResolver::suggest_one`].
@@ -340,14 +340,25 @@ impl FormResolver {
 
         let source = candidates.first().map_or(Source::None, |c| c.source);
         let answered = candidates.first().is_some_and(|c| c.trusted);
-        // No layer answered the value: offer its class, as the same two layers back it. Not while a person is typing, and
-        // not where no layer may answer: a class can miss the value to catch as a value can.
-        let coarse = match &field.coarse {
-            Some(level) if !answered && typed.is_none() && !caught => coarse(
-                level,
-                coarse_groups::keys(&self.field_memory.keyed_values(&q), level),
-                coarse_groups::vote(&admitted, field.similar_document_votes, level),
-            ),
+        // What the field's coarse level makes of the lookup, whatever its thresholds — the class the keys back and the class
+        // the similar documents vote for. Not while a person is typing: a class is no answer to typed text.
+        let classes = field
+            .coarse
+            .as_ref()
+            .filter(|_| typed.is_none())
+            .map(|level| {
+                (
+                    level,
+                    coarse_groups::keys(&self.field_memory.keyed_values(&q), level),
+                    coarse_groups::vote(&admitted, field.similar_document_votes, level),
+                )
+            });
+        // No layer answered the value: offer its class, as the same two layers back it. Not where no layer may answer: a
+        // class can miss the value to catch as a value can.
+        let coarse = match &classes {
+            Some((level, keys, vote)) if !answered && !caught => {
+                coarse(level, keys.clone(), vote.clone())
+            }
             _ => None,
         };
 
@@ -364,7 +375,24 @@ impl FormResolver {
                 caught,
             }),
             similar: vote,
-            coarse: None,
+            coarse: classes.map(|(_, keys, vote)| CoarseLook {
+                value_answered: answered,
+                keys: keys.map(|(class, strength, key)| KeyLook {
+                    strength,
+                    value: class,
+                    correct: None,
+                    key,
+                    caught,
+                }),
+                vote: vote.map(|(class, score, nearest, voted)| SimilarLook {
+                    score,
+                    value: class,
+                    document: nearest.source,
+                    correct: None,
+                    nearest: nearest.similarity,
+                    voted,
+                }),
+            }),
             typed: None,
             answered: candidates.first().filter(|c| c.trusted).map(|c| Answered {
                 layer: c.source,
