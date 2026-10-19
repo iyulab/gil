@@ -57,6 +57,8 @@ pub struct Candidate {
 #[derive(Clone, Debug, PartialEq)]
 pub struct First {
     pub score: f64,
+    /// The best value.
+    pub value: String,
     pub matches: bool,
     pub key: String,
     /// Whether a value the field must not miss was settled under the known keys — then the key layer does not answer.
@@ -356,6 +358,7 @@ impl FieldMemory {
         ranked.into_iter().next().map(|(best, score, key)| First {
             score,
             matches: best == value,
+            value: best,
             key: format!("{}: {}", key.field, key.value),
             caught,
         })

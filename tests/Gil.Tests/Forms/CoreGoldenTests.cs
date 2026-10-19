@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Reflection;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -43,11 +45,12 @@ public sealed partial class CoreGoldenTests
         {
             Directory.CreateDirectory(target);
             await File.WriteAllLinesAsync(Path.Combine(target, "records.jsonl"), Generate().Select(Write), Ct);
-            var (written, keys, replays, layers) = await RunAsync([.. (await File.ReadAllLinesAsync(Path.Combine(target, "records.jsonl"), Ct)).Select(Read)]);
+            var (written, keys, replays, layers, decisionRecords) = await RunAsync([.. (await File.ReadAllLinesAsync(Path.Combine(target, "records.jsonl"), Ct)).Select(Read)]);
             await File.WriteAllLinesAsync(Path.Combine(target, "golden.jsonl"), written, Ct);
             await File.WriteAllLinesAsync(Path.Combine(target, "keys.jsonl"), keys, Ct);
             await File.WriteAllLinesAsync(Path.Combine(target, "replay.jsonl"), replays, Ct);
             await File.WriteAllLinesAsync(Path.Combine(target, "layers.jsonl"), layers, Ct);
+            await File.WriteAllLinesAsync(Path.Combine(target, "records-out.jsonl"), decisionRecords, Ct);
             await File.WriteAllLinesAsync(Path.Combine(target, "inspection.jsonl"), Inspections().Select(Write), Ct);
             await File.WriteAllLinesAsync(
                 Path.Combine(target, "key_fields.jsonl"),
@@ -61,12 +64,13 @@ public sealed partial class CoreGoldenTests
 
         var documents = (await File.ReadAllLinesAsync(records, Ct)).Select(Read).ToList();
 
-        var (lines, keyLines, replayLines, layerLines) = await RunAsync(documents);
+        var (lines, keyLines, replayLines, layerLines, recordLines) = await RunAsync(documents);
 
         lines.Should().Equal(await File.ReadAllLinesAsync(golden, Ct));
         keyLines.Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "keys.jsonl"), Ct));
         replayLines.Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "replay.jsonl"), Ct));
         layerLines.Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "layers.jsonl"), Ct));
+        recordLines.Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "records-out.jsonl"), Ct));
         var inspections = (await File.ReadAllLinesAsync(Path.Combine(directory, "inspection.jsonl"), Ct)).Select(Read).ToList();
         KeyFieldLines(documents, inspections).Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "key_fields.jsonl"), Ct));
         (await LexicalAsync(documents)).Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "lexical.jsonl"), Ct));
@@ -79,15 +83,17 @@ public sealed partial class CoreGoldenTests
     /// and the key layer's threshold replay alone for each single-valued judged field, on the first records with the form
     /// as it stands when that field's layers are chosen (replay.jsonl) — and both layers' replay, with that form, on the first
     /// records followed by some of them settled again and some copied under new ids, so documents are passed over as their
-    /// own evidence and cases of the same evidence keep only the latest (layers.jsonl).
+    /// own evidence and cases of the same evidence keep only the latest (layers.jsonl) — with the decision record of every
+    /// document that replay asks about (records-out.jsonl).
     /// </summary>
-    private static async Task<(List<string> Golden, List<string> Keys, List<string> Replays, List<string> Layers)> RunAsync(IReadOnlyList<SettledDocument> documents)
+    private static async Task<(List<string> Golden, List<string> Keys, List<string> Replays, List<string> Layers, List<string> Records)> RunAsync(IReadOnlyList<SettledDocument> documents)
     {
         var form = Form();
         var early = documents.Take(Chosen).ToList();
         var lines = new List<string>();
         var replayLines = new List<string>();
         var layerLines = new List<string>();
+        var recordLines = new List<string>();
         var again = early.Concat(Enumerable.Range(0, 40).Select(i => early[i] with
         {
             DocumentId = i % 2 == 0 ? early[i].DocumentId : $"{early[i].DocumentId}-copy",
@@ -103,6 +109,7 @@ public sealed partial class CoreGoldenTests
             }));
             var layers = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, field, again, 0.8, 10, Counted, Ct);
             layerLines.Add(Line(new JsonObject { ["kind"] = "layers_again", ["field"] = field, ["key"] = Replay(layers.Key), ["memory"] = Replay(layers.Memory) }));
+            recordLines.AddRange(await RecordLinesAsync(form, field, again));
         }
 
         var keyFields = ThresholdSelection.SelectKeyFields(() => new FieldMemory(), form, "team", early, 0.8, 10, counting: Counted);
@@ -200,7 +207,55 @@ public sealed partial class CoreGoldenTests
             await resolver.RebuildAsync(form, [document], Ct);
         }
 
-        return (lines, keyLines, replayLines, layerLines);
+        return (lines, keyLines, replayLines, layerLines, recordLines);
+    }
+
+    /// <summary>
+    /// The decision record of every document the layers replay of <paramref name="field"/> asks about, in settlement order:
+    /// the key layer's best value (strength, whether it is the settled one, the key behind it, whether a value to catch held
+    /// the layer back) and the similar document vote (score, whether it is the settled one, the nearest voter's similarity,
+    /// whether more than one voted), whatever the thresholds — read off the replay the thresholds are chosen from.
+    /// </summary>
+    private static async Task<List<string>> RecordLinesAsync(FormDefinition form, string field, IReadOnlyList<SettledDocument> documents)
+    {
+        var replay = typeof(ThresholdSelection).GetMethod("ReplayAsync", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var task = (Task)replay.Invoke(null, [new FieldMemory(), new LexicalMemory(), form, field, documents, Counted, Ct, false])!;
+        await task;
+        var result = task.GetType().GetProperty("Result")!.GetValue(task)!;
+        var steps = (IList)result.GetType().GetField("Item1")!.GetValue(result)!;
+        // The replay's own order (the scalar ordinal comparer is linked into several assemblies — take the core's).
+        var scalarOrdinal = (IComparer<string>)typeof(ThresholdSelection).Assembly.GetType("Gil.ScalarOrdinal")!
+            .GetField("Instance", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
+        var ordered = documents
+            .Select(FormResolver.Remembered)
+            .OrderBy(d => d.SettledAt)
+            .ThenBy(d => d.DocumentId, scalarOrdinal)
+            .ToList();
+        static object? Read(object step, string name) => step.GetType().GetProperty(name)!.GetValue(step);
+        static object? Item(object tuple, int i) => tuple.GetType().GetField($"Item{i}")!.GetValue(tuple);
+        var lines = new List<string>();
+        foreach (var step in steps)
+        {
+            var order = (int)Read(step!, "Order")!;
+            var document = ordered[order - 1];
+            var key = Read(step!, "Key");
+            var match = Read(step!, "Match");
+            lines.Add(Line(new JsonObject
+            {
+                ["kind"] = "record",
+                ["field"] = field,
+                ["record"] = document.DocumentId,
+                ["order"] = order,
+                ["weight"] = (double)Read(step!, "Weight")!,
+                ["key"] = key is null ? null : new JsonArray((double)Item(key, 1)!, (bool)Item(key, 2)!, (string)Item(key, 3)!, (bool)Item(key, 4)!),
+                ["similar"] = match is null ? null : new JsonArray((double)Item(match, 1)!, (bool)Item(match, 2)!, (double)Item(match, 3)!, (bool)Item(match, 4)!),
+                ["settled"] = document.Values[field],
+                ["settlement"] = document.Settlements.TryGetValue(field, out var kind) ? kind.ToString() : null,
+                ["probability"] = document.Probabilities.TryGetValue(field, out var p) ? p : null,
+            }));
+        }
+
+        return lines;
     }
 
     private static string Line(JsonObject line) => line.ToJsonString(Json);

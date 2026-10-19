@@ -82,6 +82,12 @@ with what to do.
   the bit.
 - The Rust rebuild trusts only the key layer's answer among a single-valued field's candidates, as the reference now
   does; the key layer, form path and note goldens were written again by the reference and it reproduces them to the bit.
+- A decision record golden (`tests/fixtures/core/records-out.jsonl`): for the layers replay with documents settled
+  again, every document asked about in settlement order, with the key layer's best value (strength, whether it is the
+  settled one, the key behind it, whether it was held back) and the similar document vote (score, whether it is the
+  settled one, the nearest voter's similarity, whether more than one voted) whatever the thresholds, and how it was
+  settled. The Rust rebuild hands these records to a caller's sink while it chooses the layers' thresholds
+  (`select_layers_with`), adds the best value and the winning value, and reproduces the golden to the bit.
 
 ## 0.23.0
 

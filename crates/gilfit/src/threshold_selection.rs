@@ -10,6 +10,7 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 
+use crate::decision_record::{DecisionRecord, KeyLook, SimilarLook};
 use crate::field_memory::{FieldMemory, First, Lookup};
 use crate::form::{Document, Form, Role, SettlementKind};
 use crate::lexical_memory::LexicalMemory;
@@ -770,6 +771,32 @@ pub fn select_layers(
     documents: &[Document],
     choice: Choice,
 ) -> LayerThresholds {
+    select_layers_with(
+        field_memory,
+        memory,
+        form,
+        field,
+        documents,
+        choice,
+        &mut |_| {},
+    )
+}
+
+/// As [`select_layers`], handing `sink` the decision record of every document the replay asks about, in settlement
+/// order: what the key layer and the similar document layer made of it whatever the thresholds, and what it was settled
+/// as. The thresholds are chosen from exactly these records.
+///
+/// # Panics
+/// As [`select_layers`].
+pub fn select_layers_with(
+    field_memory: &mut FieldMemory,
+    memory: &mut LexicalMemory,
+    form: &Form,
+    field: &str,
+    documents: &[Document],
+    choice: Choice,
+    sink: &mut dyn FnMut(&DecisionRecord),
+) -> LayerThresholds {
     choice.check();
     let definition = form.field(field);
     assert!(
@@ -788,7 +815,7 @@ pub fn select_layers(
         field,
         documents,
         choice.counting,
-        false,
+        Replaying::Values(sink),
     );
 
     let keyed: Vec<&Step> = steps.iter().filter(|s| s.key_looked).collect();
@@ -885,7 +912,7 @@ pub fn select_coarse(
         field,
         documents,
         choice.counting,
-        true,
+        Replaying::Coarse,
     );
     // What the level made of each lookup the value layers left, as a step whose vote is the class's — not one under a
     // key that settled a value to catch, where the level is not offered either.
@@ -941,6 +968,13 @@ pub fn select_coarse(
     LayerThresholds { key, memory }
 }
 
+/// What a replay is for: the value layers, handing each lookup's decision record to a sink, or the coarse level as well
+/// (whose records are not written yet).
+enum Replaying<'s> {
+    Values(&'s mut dyn FnMut(&DecisionRecord)),
+    Coarse,
+}
+
 /// Replays the documents in settlement order, asking each memory about each document before putting it in — the
 /// document memory keeping one document per case.
 fn replay(
@@ -950,8 +984,9 @@ fn replay(
     field: &str,
     documents: &[Document],
     counting: Option<&[SettlementKind]>,
-    coarse: bool,
+    mut replaying: Replaying,
 ) -> (Vec<Step>, usize) {
+    let coarse = matches!(replaying, Replaying::Coarse);
     let task = format!("{}/{field}", form.name);
     let definition = form.field(field);
     let votes = definition.similar_document_votes;
@@ -998,8 +1033,9 @@ fn replay(
         } else {
             Vec::new()
         };
-        let vote = similar_vote::decide(&found, votes).map(|(winner, score)| Vote {
-            score,
+        let decided = similar_vote::decide(&found, votes);
+        let vote = decided.as_ref().map(|(winner, score)| Vote {
+            score: *score,
             correct: winner.answer == *settled,
             nearest: winner.similarity,
             voted: similar_vote::voters(&found, votes) > 1,
@@ -1043,6 +1079,34 @@ fn replay(
         // A settlement not counted is replayed into memory like any other, but not asked about.
         let weight = weight(document, field, counting);
         let counted = weight > 0.0;
+        if let Replaying::Values(sink) = &mut replaying {
+            sink(&DecisionRecord {
+                record: document.id.clone(),
+                field: field.to_owned(),
+                order: order as u64,
+                weight,
+                key: first.as_ref().map(|f| KeyLook {
+                    strength: f.score,
+                    value: f.value.clone(),
+                    correct: Some(f.matches),
+                    key: f.key.clone(),
+                    caught: f.caught,
+                }),
+                similar: decided
+                    .as_ref()
+                    .zip(vote)
+                    .map(|((winner, _), v)| SimilarLook {
+                        score: v.score,
+                        value: winner.answer.clone(),
+                        correct: Some(v.correct),
+                        nearest: v.nearest,
+                        voted: v.voted,
+                    }),
+                settled: Some(settled.clone()),
+                settlement: document.settlements.get(field).copied(),
+                probability: document.probabilities.get(field).copied(),
+            });
+        }
         steps.push(Step {
             key_looked: key_looked && counted,
             key: first,
