@@ -7,6 +7,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::coarse_groups;
+use crate::decision_record::{Answered, DecisionRecord, KeyLook, SimilarLook};
 use crate::field_memory::{self, FieldMemory, Lookup};
 use crate::form::{CoarseLevel, Document, Field, Form, Role};
 use crate::lexical_memory::{LexicalMemory, Match};
@@ -232,7 +233,12 @@ impl FormResolver {
         form.fields
             .iter()
             .filter(|f| f.role == Role::Judged && (f.multiple || !values.contains_key(&f.name)))
-            .map(|f| self.suggest_field(form, document, values, sets, f, None))
+            .map(|f| {
+                let q = Lookup::new(form, &f.name, values)
+                    .sets(sets)
+                    .excluding(Some(document));
+                self.suggest_field(&q, f, &mut |_| {})
+            })
             .collect()
     }
 
@@ -252,16 +258,35 @@ impl FormResolver {
         sets: &BTreeMap<String, Vec<String>>,
         typed: Option<&str>,
     ) -> Suggestion {
-        let definition = form.field(field);
+        let q = Lookup::new(form, field, values)
+            .sets(sets)
+            .typed(typed)
+            .excluding(Some(document));
+        self.suggest_one_with(&q, &mut |_| {})
+    }
+
+    /// As [`FormResolver::suggest_one`] for the lookup `q` — its form, field, known values and sets, typed text and the
+    /// document asked about (the one it excludes) — handing `sink` the decision record of the lookup: what the key layer
+    /// and the similar document layer found whatever the thresholds, and what was answered. Whether the answer was right
+    /// is known only when the document is settled; the record leaves it open.
+    ///
+    /// # Panics
+    /// As [`FormResolver::suggest_one`].
+    pub fn suggest_one_with(
+        &self,
+        q: &Lookup,
+        sink: &mut dyn FnMut(&DecisionRecord),
+    ) -> Suggestion {
+        let (field, definition) = (q.field, q.form.field(q.field));
         assert!(
             definition.role == Role::Judged,
             "'{field}' is not a judged field"
         );
         assert!(
-            definition.multiple || !values.contains_key(field),
+            definition.multiple || !q.known.contains_key(field),
             "'{field}' already has a value"
         );
-        self.suggest_field(form, document, values, sets, definition, typed)
+        self.suggest_field(q, definition, sink)
     }
 
     /// One field's suggestion. Layers that answer come first — values under a key strong enough, a document similar
@@ -269,17 +294,11 @@ impl FormResolver {
     /// threshold, the field's other values.
     fn suggest_field(
         &self,
-        form: &Form,
-        document: &str,
-        values: &BTreeMap<String, String>,
-        sets: &BTreeMap<String, Vec<String>>,
+        q: &Lookup,
         field: &Field,
-        typed: Option<&str>,
+        sink: &mut dyn FnMut(&DecisionRecord),
     ) -> Suggestion {
-        let q = Lookup::new(form, &field.name, values)
-            .sets(sets)
-            .typed(typed)
-            .excluding(Some(document));
+        let q = *q;
         let typed = q.typed;
         let remembered: Vec<Candidate> = self
             .field_memory
@@ -297,7 +316,7 @@ impl FormResolver {
             remembered.iter().partition(|c| c.evidence.is_some());
         // A value the field must not miss was settled under the document's keys: no layer answers it.
         let caught = self.field_memory.catches(&q);
-        let (similar, admitted) = self.similar(&q, field, caught);
+        let (similar, admitted, vote) = self.similar(&q, field, caught);
 
         let mut candidates: Vec<Candidate> = Vec::new();
         let ordered = keyed
@@ -332,6 +351,33 @@ impl FormResolver {
             _ => None,
         };
 
+        sink(&DecisionRecord {
+            record: q.excluding.unwrap_or_default().to_owned(),
+            field: field.name.clone(),
+            order: None,
+            weight: 1.0,
+            key: keyed.first().map(|best| KeyLook {
+                strength: best.score,
+                value: best.value.clone(),
+                correct: None,
+                key: best.evidence.clone().unwrap_or_default(),
+                caught,
+            }),
+            similar: vote,
+            answered: candidates.first().filter(|c| c.trusted).map(|c| Answered {
+                layer: c.source,
+                value: c.value.clone(),
+                threshold: match c.source {
+                    Source::SettledFieldMemory if typed.is_none() => field.key_threshold,
+                    Source::SimilarDocument => field.memory_threshold,
+                    _ => None,
+                },
+            }),
+            settled: None,
+            settlement: None,
+            probability: None,
+        });
+
         Suggestion {
             field: field.name.clone(),
             candidates,
@@ -346,14 +392,19 @@ impl FormResolver {
     /// that takes several values. With typed text only documents whose value begins with it vote, and the vote is never
     /// trusted; nor is it where a value to catch was settled under the document's keys. `field` is the looked-up
     /// field's definition.
-    fn similar(&self, q: &Lookup, field: &Field, caught: bool) -> (Vec<Candidate>, Vec<Match>) {
+    fn similar(
+        &self,
+        q: &Lookup,
+        field: &Field,
+        caught: bool,
+    ) -> (Vec<Candidate>, Vec<Match>, Option<SimilarLook>) {
         let (form, typed) = (q.form, q.typed);
         let evidence = form.evidence(&field.name, q.known, q.known_sets);
         let Some(memory) = &self.document_memory else {
-            return (Vec::new(), Vec::new());
+            return (Vec::new(), Vec::new(), None);
         };
         if evidence.is_empty() || field.multiple {
-            return (Vec::new(), Vec::new());
+            return (Vec::new(), Vec::new(), None);
         }
 
         let asked = self
@@ -371,13 +422,13 @@ impl FormResolver {
             .collect();
         let Some((winner, score)) = similar_vote::decide(&admitted, field.similar_document_votes)
         else {
-            return (Vec::new(), admitted);
+            return (Vec::new(), admitted, None);
         };
 
-        let floored = field.memory_similarity_floor.is_some_and(|floor| {
-            similar_vote::voters(&admitted, field.similar_document_votes) > 1
-                && winner.similarity < floor
-        });
+        let voted = similar_vote::voters(&admitted, field.similar_document_votes) > 1;
+        let floored = field
+            .memory_similarity_floor
+            .is_some_and(|floor| voted && winner.similarity < floor);
         let hit = typed.is_none()
             && !caught
             && field.memory_threshold.is_some_and(|t| score >= t)
@@ -389,7 +440,15 @@ impl FormResolver {
             evidence: Some(winner.source.clone()),
             trusted: hit,
         };
-        (vec![candidate], admitted)
+        let look = SimilarLook {
+            score,
+            value: winner.answer.clone(),
+            document: winner.source.clone(),
+            correct: None,
+            nearest: winner.similarity,
+            voted,
+        };
+        (vec![candidate], admitted, Some(look))
     }
 }
 

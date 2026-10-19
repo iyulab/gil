@@ -1083,7 +1083,7 @@ fn replay(
             sink(&DecisionRecord {
                 record: document.id.clone(),
                 field: field.to_owned(),
-                order: order as u64,
+                order: Some(order as u64),
                 weight,
                 key: first.as_ref().map(|f| KeyLook {
                     strength: f.score,
@@ -1098,10 +1098,12 @@ fn replay(
                     .map(|((winner, _), v)| SimilarLook {
                         score: v.score,
                         value: winner.answer.clone(),
+                        document: winner.source.clone(),
                         correct: Some(v.correct),
                         nearest: v.nearest,
                         voted: v.voted,
                     }),
+                answered: None,
                 settled: Some(settled.clone()),
                 settlement: document.settlements.get(field).copied(),
                 probability: document.probabilities.get(field).copied(),

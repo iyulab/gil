@@ -88,6 +88,9 @@ with what to do.
   settled one, the nearest voter's similarity, whether more than one voted) whatever the thresholds, and how it was
   settled. The Rust rebuild hands these records to a caller's sink while it chooses the layers' thresholds
   (`select_layers_with`), adds the best value and the winning value, and reproduces the golden to the bit.
+- The Rust rebuild's form resolver hands the same record for a suggestion (`suggest_one_with`): what the key layer and
+  the similar document vote found, the winning document, and what was answered at which threshold, leaving open whether
+  it was right until the document is settled.
 
 ## 0.23.0
 
