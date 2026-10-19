@@ -261,14 +261,17 @@ public sealed class LexicalMemory : IMemory
                 }
                 else
                 {
-                    squares += Math.Pow(count * Smoothed(0), 2);
+                    // Squares by multiplication: Math.Pow(x, 2) is not correctly rounded on every platform.
+                    var weight = count * Smoothed(0);
+                    squares += weight * weight;
                 }
             }
 
             known.Sort();
             var ids = known.Select(k => k.Id).ToArray();
             var weights = new double[ids.Length];
-            var queryNorm = Math.Sqrt(squares + Math.Pow(Weigh(ids, [.. known.Select(k => k.Count)], weights), 2));
+            var knownNorm = Weigh(ids, [.. known.Select(k => k.Count)], weights);
+            var queryNorm = Math.Sqrt(squares + (knownNorm * knownNorm));
 
             var similarities = new double[_rows.Count];
             if (queryNorm == 0)

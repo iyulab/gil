@@ -16,6 +16,13 @@ with what to do.
   without such case pairs is unchanged; choose typed thresholds and coarse thresholds again where values hold
   characters beyond it.
 
+### Fixed
+
+- `LexicalMemory` squares the weights of a query's norm by multiplying rather than with `Math.Pow(x, 2)`, which is not
+  correctly rounded on every platform: the same documents could score a similarity one or a few units in the last
+  place apart from one operating system to another. Similarities are now the same everywhere; where they moved, they
+  moved by that much.
+
 ## 0.23.0
 
 ### Breaking
