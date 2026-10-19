@@ -181,7 +181,12 @@ impl Index {
         for (gram, count) in query {
             match self.ids.get(gram) {
                 Some(&id) => known.push((id, *count)),
-                None => squares += (f64::from(*count) * self.smoothed(0)).powf(2.0),
+                // Squares by multiplication: `powf(2.0)` is a library `pow` (not correctly rounded on every platform)
+                // unless the optimizer folds it, so it would differ between builds and from other implementations.
+                None => {
+                    let weight = f64::from(*count) * self.smoothed(0);
+                    squares += weight * weight;
+                }
             }
         }
 
@@ -189,7 +194,8 @@ impl Index {
         let ids: Vec<usize> = known.iter().map(|k| k.0).collect();
         let counts: Vec<u32> = known.iter().map(|k| k.1).collect();
         let mut weights = vec![0.0; ids.len()];
-        let query_norm = (squares + self.weigh(&ids, &counts, &mut weights).powf(2.0)).sqrt();
+        let known_norm = self.weigh(&ids, &counts, &mut weights);
+        let query_norm = (squares + known_norm * known_norm).sqrt();
 
         let mut similarities = vec![0.0; self.rows.len()];
         if query_norm == 0.0 {
