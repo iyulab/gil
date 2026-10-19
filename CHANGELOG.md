@@ -30,6 +30,9 @@ with what to do.
 
 ### Documentation
 
+- The Rust crate and the Python bindings carry their own README and LICENSE and the metadata a registry shows
+  (keywords, categories, readme); the packaged crate leaves out the golden tests, which read fixtures at the repository
+  root. CI checks the declared minimum Rust version (1.90) builds and passes the core's tests.
 - Python bindings for the Rust rebuild start under `bindings/python` (built with maturin, not published):
   `gilfit.select_layers` replays settled documents and returns the key and memory threshold replays with the decision
   records they rest on, as dictionaries; forms and documents are read from JSON. They reproduce the decision record

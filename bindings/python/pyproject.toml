@@ -8,6 +8,7 @@ version = "0.0.0"
 description = "Suggests and decides form field values from how settled documents were filled."
 requires-python = ">=3.11"
 license = "Apache-2.0"
+readme = "README.md"
 
 [tool.maturin]
 python-source = "python"

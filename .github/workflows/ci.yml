@@ -57,6 +57,11 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
+      # The declared minimum Rust version (workspace rust-version) builds and passes the core's tests.
+      - run: |
+          msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)
+          rustup toolchain install "$msrv" --profile minimal
+          cargo +"$msrv" test --locked
 
       # The Python bindings (bindings/python): built as a wheel and tested against the same goldens. Nothing is published.
       - uses: actions/setup-python@v6

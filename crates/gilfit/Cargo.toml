@@ -6,6 +6,12 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+readme = "README.md"
+keywords = ["forms", "suggestion", "precision", "replay", "classification"]
+categories = ["algorithms", "text-processing"]
+# The golden tests read the shared fixtures at the repository root, which a packaged crate does not carry.
+exclude = ["tests/"]
+# Published only on a release decision; until then this keeps it from being uploaded by accident.
 publish = false
 
 [dependencies]
