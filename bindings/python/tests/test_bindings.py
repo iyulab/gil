@@ -159,3 +159,26 @@ def test_bad_input_is_a_value_error() -> None:
     )
     with pytest.raises(ValueError, match="not judged"):
         gilfit.select_layers(form, "a", gilfit.documents([]))
+
+
+def test_results_carry_exactly_the_typed_keys() -> None:
+    # The TypedDicts are the documented shape; a field added or dropped on the Rust side must show up here.
+    form = gilfit.Form.from_dict(golden_form("team"))
+    thresholds, records = gilfit.select_layers(
+        form, "team", gilfit.documents(settled_again()), 0.8, 10, counting=COUNTED
+    )
+    assert set(thresholds) == set(gilfit.LayerThresholds.__annotations__)
+    for layer in thresholds.values():
+        assert set(layer) == set(gilfit.ThresholdReplay.__annotations__)
+        for choice in (layer["chosen"], layer["most_precise"]):
+            if choice is not None:
+                assert set(choice) == set(gilfit.ThresholdChoice.__annotations__)
+        for state in layer["keys"] or []:
+            assert set(state) == set(gilfit.KeyState.__annotations__)
+    assert records
+    for record in records:
+        assert set(record) == set(gilfit.DecisionRecord.__annotations__)
+        if record["key"] is not None:
+            assert set(record["key"]) == set(gilfit.KeyLook.__annotations__)
+        if record["similar"] is not None:
+            assert set(record["similar"]) == set(gilfit.SimilarLook.__annotations__)

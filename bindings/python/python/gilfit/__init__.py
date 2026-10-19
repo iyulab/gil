@@ -15,11 +15,103 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, cast
 
 from gilfit._gilfit import Documents, check_form, select_layers_json
 
-__all__ = ["Documents", "Form", "documents", "read_records", "select_layers"]
+__all__ = [
+    "DecisionRecord",
+    "Documents",
+    "Form",
+    "KeyLook",
+    "KeyState",
+    "LayerThresholds",
+    "SimilarLook",
+    "ThresholdChoice",
+    "ThresholdReplay",
+    "documents",
+    "read_records",
+    "select_layers",
+]
+
+
+class ThresholdChoice(TypedDict):
+    """A threshold a replay chose, with the precision and promise of the answers down to it."""
+
+    threshold: float
+    precision: float
+    answer_rate: float
+    answered: int
+    lookups: int
+    answered_weight: float
+    effective_answered: float
+    similarity_floor: float | None
+    promise: float
+    promise_answered: float
+
+
+class KeyState(TypedDict):
+    """The state under one key that backed a best value: its lookups, answers and precision."""
+
+    key: str
+    lookups: int
+    answered: int
+    precision: float | None
+    answering: bool
+    answered_weight: float
+    effective_answered: float
+
+
+class ThresholdReplay(TypedDict):
+    """One layer's replay: the chosen and most precise thresholds, and for a key layer the state under each key."""
+
+    chosen: ThresholdChoice | None
+    most_precise: ThresholdChoice | None
+    lookups: int
+    candidates: int
+    keys: list[KeyState] | None
+
+
+class LayerThresholds(TypedDict):
+    """The key layer's replay and the memory layer's, chosen on what the key threshold would not have answered."""
+
+    key: ThresholdReplay
+    memory: ThresholdReplay
+
+
+class KeyLook(TypedDict):
+    """What the key layer found for one lookup, whatever the threshold."""
+
+    strength: float
+    value: str
+    correct: bool | None
+    key: str
+    caught: bool
+
+
+class SimilarLook(TypedDict):
+    """What the similar document vote came to for one lookup, whatever the threshold."""
+
+    score: float
+    value: str
+    document: str
+    correct: bool | None
+    nearest: float
+    voted: bool
+
+
+class DecisionRecord(TypedDict):
+    """One document asked about on a replay: what each layer made of it and what it was settled as."""
+
+    record: str
+    field: str
+    order: int | None
+    weight: float
+    key: KeyLook | None
+    similar: SimilarLook | None
+    settled: str | None
+    settlement: str | None
+    probability: float | None
 
 
 class Form:
@@ -72,7 +164,7 @@ def select_layers(
     minimum_answered: int = 10,
     counting: Iterable[str] | None = None,
     records: bool = True,
-) -> tuple[dict[str, Any], list[dict[str, Any]] | None]:
+) -> tuple[LayerThresholds, list[DecisionRecord] | None]:
     """Replays ``documents`` and chooses ``field``'s key and memory thresholds.
 
     Returns the two replays (``{"key": ..., "memory": ...}``, each with its ``chosen`` threshold) and, unless
@@ -88,5 +180,9 @@ def select_layers(
         None if counting is None else list(counting),
         records,
     )
-    out = None if lines is None else [json.loads(line) for line in lines.splitlines()]
-    return json.loads(thresholds), out
+    out = (
+        None
+        if lines is None
+        else [cast(DecisionRecord, json.loads(line)) for line in lines.splitlines()]
+    )
+    return cast(LayerThresholds, json.loads(thresholds)), out
