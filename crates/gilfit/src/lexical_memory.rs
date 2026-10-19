@@ -78,12 +78,19 @@ impl LexicalMemory {
 
         let similarities = index.similarities(&text::grams(state, self.min_gram, self.max_gram));
         let mut ranked: Vec<usize> = (0..similarities.len()).collect();
-        ranked.sort_by(|&a, &b| {
-            similarities[b]
-                .partial_cmp(&similarities[a])
+        // A total order (similarity, then first remembered), so selecting the first `count` and sorting them gives the
+        // same leaders as sorting every row.
+        let by = |a: &usize, b: &usize| {
+            similarities[*b]
+                .partial_cmp(&similarities[*a])
                 .unwrap_or(Ordering::Equal)
-                .then(index.rows[a].order.cmp(&index.rows[b].order))
-        });
+                .then(index.rows[*a].order.cmp(&index.rows[*b].order))
+        };
+        if count < ranked.len() {
+            ranked.select_nth_unstable_by(count, by);
+            ranked.truncate(count);
+        }
+        ranked.sort_by(by);
         ranked
             .into_iter()
             .take(count)
@@ -116,6 +123,9 @@ struct Index {
     ids: HashMap<String, usize>,
     /// How many rows hold each id.
     frequency: Vec<i64>,
+    /// The rows holding each id with the id's weight in that row, in no particular order — a lookup visits only the
+    /// rows that share an n-gram with it, and reads each weight where it walks. Rebuilt whenever the weights are retaken.
+    postings: Vec<Vec<(usize, f64)>>,
     /// The inverse document frequency of every id known when there were `taken_at` rows; later ids had none.
     idf: Vec<f64>,
     taken_at: usize,
@@ -147,6 +157,9 @@ impl Index {
             Some(at) => {
                 let old = std::mem::replace(&mut self.rows[at], row);
                 tally(&mut self.frequency, &old.ids, -1);
+                for &id in &old.ids {
+                    unpost(&mut self.postings[id], at);
+                }
             }
             None => {
                 self.position.insert(key.to_owned(), self.rows.len());
@@ -156,6 +169,10 @@ impl Index {
 
         let at = existing.unwrap_or(self.rows.len() - 1);
         tally(&mut self.frequency, &self.rows[at].ids, 1);
+        let row = &self.rows[at];
+        for (&id, &weight) in row.ids.iter().zip(&row.weights) {
+            self.postings[id].push((at, weight));
+        }
         self.refresh();
     }
 
@@ -166,8 +183,20 @@ impl Index {
 
         let row = self.rows.swap_remove(at);
         tally(&mut self.frequency, &row.ids, -1);
+        for &id in &row.ids {
+            unpost(&mut self.postings[id], at);
+        }
         if at < self.rows.len() {
+            // The last row moved into the gap: its postings point at its old place.
+            let moved_from = self.rows.len();
             self.position.insert(self.rows[at].key.clone(), at);
+            for &id in &self.rows[at].ids {
+                let entry = self.postings[id]
+                    .iter_mut()
+                    .find(|p| p.0 == moved_from)
+                    .expect("a moved row is posted under each of its ids");
+                entry.0 = at;
+            }
         }
 
         self.refresh();
@@ -202,18 +231,19 @@ impl Index {
             return similarities;
         }
 
-        for (similarity, row) in similarities.iter_mut().zip(&self.rows) {
-            // The products of the shared ids, added in ascending id order: a walk along both sorted lists.
-            let (mut sum, mut j) = (0.0_f64, 0);
-            for (i, &id) in ids.iter().enumerate() {
-                while j < row.ids.len() && row.ids[j] < id {
-                    j += 1;
-                }
-                if j < row.ids.len() && row.ids[j] == id {
-                    sum += weights[i] * row.weights[j];
-                }
+        // The products of the shared ids, added to each row in ascending id order (the order of `ids`) — the same
+        // additions, in the same order, as walking each row against the query, but only over the rows that share one.
+        let mut sums = vec![0.0_f64; self.rows.len()];
+        for (i, &id) in ids.iter().enumerate() {
+            let Some(rows) = self.postings.get(id) else {
+                continue;
+            };
+            for &(r, weight) in rows {
+                sums[r] += weights[i] * weight;
             }
+        }
 
+        for ((similarity, row), sum) in similarities.iter_mut().zip(&self.rows).zip(sums) {
             *similarity = if row.norm > 0.0 {
                 sum / (query_norm * row.norm)
             } else {
@@ -235,6 +265,7 @@ impl Index {
                     let id = self.ids.len();
                     self.ids.insert(gram.clone(), id);
                     self.frequency.push(0);
+                    self.postings.push(Vec::new());
                     id
                 }
             };
@@ -259,6 +290,14 @@ impl Index {
             row.norm = self.weigh(&row.ids, &row.counts, &mut row.weights);
         }
         self.rows = rows;
+        for postings in &mut self.postings {
+            postings.clear();
+        }
+        for (r, row) in self.rows.iter().enumerate() {
+            for (&id, &weight) in row.ids.iter().zip(&row.weights) {
+                self.postings[id].push((r, weight));
+            }
+        }
     }
 
     /// Fills `weights` with count × idf and returns their norm.
@@ -281,6 +320,15 @@ impl Index {
     fn smoothed(&self, frequency: i64) -> f64 {
         ((1.0 + self.taken_at as f64) / (1.0 + frequency as f64)).ln() + 1.0
     }
+}
+
+/// Takes `row` out of one id's postings.
+fn unpost(postings: &mut Vec<(usize, f64)>, row: usize) {
+    let at = postings
+        .iter()
+        .position(|p| p.0 == row)
+        .expect("a row is posted under each of its ids");
+    postings.swap_remove(at);
 }
 
 /// Adds `delta` to the frequency of each id.

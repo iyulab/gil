@@ -24,6 +24,13 @@ with what to do.
   moved by that much. The Rust rebuild squares the same way, so a release build no longer folds
   `powf(2.0)` into a product where the reference called the platform's `pow`.
 
+### Performance
+
+- The Rust rebuild's lexical memory looks a request up through an index of which remembered texts hold each n-gram,
+  with the n-gram's weight kept beside each entry, rather than comparing the request with every remembered text, and
+  ranks only the nearest it was asked for. The sums are taken in the same order, so similarities and goldens are
+  unchanged to the bit; a layers replay over 8,000 documents took 37 s and now takes under 2 s.
+
 ### Dependencies
 
 - The Rust rebuild's `unicode-normalization` 0.1.25 → 0.1.26; it reproduces the text golden as before.
