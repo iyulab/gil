@@ -68,6 +68,8 @@ jobs:
         with:
           python-version: "3.11"
       - run: cargo clippy -p gilfit-py --all-targets --locked -- -D warnings
-      - run: pip install maturin==1.15.0 pytest
+      - run: pip install maturin==1.15.0 pytest mypy==2.4.0
       - run: maturin build --release --locked -m bindings/python/Cargo.toml -o dist
       - run: pip install dist/*.whl && pytest -q bindings/python/tests
+      # The extension module's type stubs match what it exports.
+      - run: python -m mypy.stubtest gilfit

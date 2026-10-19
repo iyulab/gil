@@ -6,16 +6,22 @@ far each layer's suggestions for a form field can be trusted, and get back the d
 ```python
 import gilfit
 
-form = gilfit.Form.from_dict({
-    "name": "ticket",
-    "fields": [
-        {"name": "product", "role": "observed"},
-        {"name": "summary", "role": "observed"},
-        {"name": "team", "role": "judged"},
-    ],
-})
-documents = gilfit.read_records("settled.jsonl")  # one JSON object per line, in settlement order
-thresholds, records = gilfit.select_layers(form, "team", documents, target_precision=0.8)
+form = gilfit.Form.from_dict(
+    {
+        "name": "ticket",
+        "fields": [
+            {"name": "product", "role": "observed"},
+            {"name": "summary", "role": "observed"},
+            {"name": "team", "role": "judged"},
+        ],
+    }
+)
+documents = gilfit.read_records(
+    "settled.jsonl"
+)  # one JSON object per line, in settlement order
+thresholds, records = gilfit.select_layers(
+    form, "team", documents, target_precision=0.8
+)
 print(thresholds["key"]["chosen"], len(records))
 ```
 

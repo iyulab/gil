@@ -6,9 +6,8 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import pytest
-
 import gilfit
+import pytest
 
 CORE = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "core"
 CHOSEN = 200
@@ -87,7 +86,12 @@ def as_golden(record: dict) -> dict:
         else [key["strength"], key["correct"], key["key"], key["caught"]],
         "similar": None
         if similar is None
-        else [similar["score"], similar["correct"], similar["nearest"], similar["voted"]],
+        else [
+            similar["score"],
+            similar["correct"],
+            similar["nearest"],
+            similar["voted"],
+        ],
         "settled": record["settled"],
         "settlement": record["settlement"],
         "probability": record["probability"],
