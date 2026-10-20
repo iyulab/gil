@@ -24,6 +24,10 @@ pub const RECENT_DOCUMENTS: usize = 5_000;
 #[derive(Clone, Copy, Debug)]
 pub struct Choice<'a> {
     /// The precision every band of answers down to the threshold must meet, in (0, 1].
+    ///
+    /// It follows from what a wrong answer costs: where a wrong answer costs ρ times a value entered with no
+    /// suggestion, answering pays only above a precision of `1 - 1/ρ` (0.9 when a wrong value costs ten entries) —
+    /// a lower target lets a threshold keep its promise and still cost more than asking.
     pub target_precision: f64,
     /// The fewest independent answers a threshold may rest on, at least 1.
     pub minimum_answered: usize,

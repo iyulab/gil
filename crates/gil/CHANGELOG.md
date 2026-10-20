@@ -4,6 +4,13 @@ The Rust crate (crates.io) and the Python package (PyPI), both published as `iyu
 Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the repository's root `CHANGELOG.md`.
 
+## Unreleased
+
+### Documentation
+
+- How to choose `replay::Choice::target_precision` from what a wrong answer costs: answering pays only above
+  `1 − 1/ρ` when a wrong value costs ρ entries (README, rustdoc).
+
 ## 0.5.0
 
 ### Breaking

@@ -47,6 +47,17 @@ not read.
 Python bindings are published on PyPI as `iyulab-gil` (`pip install iyulab-gil`, then `import gil`; Python 3.11 or
 later).
 
+## Choosing the target precision
+
+`replay::Choice::target_precision` is yours to set, and it follows from what a wrong answer costs. Count a value a
+person enters with no suggestion as 1, a right answer as nothing, and a wrong one — noticed, undone and entered again —
+as ρ. An answer right with probability p then costs ρ(1 − p) against the 1 of asking, so answering pays only above a
+precision of 1 − 1/ρ: 0.5 where a wrong value costs two entries, 0.8 at five, 0.9 at ten, 0.95 at twenty. Below that
+line a threshold that keeps its promise still loses — each answer it adds costs more than it saves. Replaying a public
+stream of biological sample records with costs counted this way, thresholds chosen for 0.8 answered right 0.88 of the
+time — a loss once a wrong value costs ten entries; chosen for a target at or above 1 − 1/ρ, they cost less than asking
+at every ρ from 2 to 20. When you do not know ρ, time how long undoing a wrong value takes against entering one.
+
 ## License
 
 Apache-2.0 — see `LICENSE`.
