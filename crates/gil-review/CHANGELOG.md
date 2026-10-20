@@ -17,5 +17,8 @@ with what to do.
 - **`unobserved_variation_bound` in plain arithmetic**: `0.025^(1/n)` by `NEWTON_STEPS` (16) Newton steps from 1,
   then the lower value of the cycle the iteration ends in — in the last bits it can alternate between two
   neighbours. Every n from 1 to 10⁶ enters that cycle within 10 steps, and the root is within two ulps of `powf`.
+- **Agreement**: `agreement` over (item, candidate) pairs judged exactly twice — observed agreement, Cohen's κ (NaN when
+  both reviewers used one outcome), Gwet's AC1, the agreement specific to each outcome and `prevalence_max`; the
+  first reviewer is the one whose id comes first.
 - **The generator**: SplitMix64 into xoshiro256\*\*, integers by Lemire's method — the same sample from the same seed
   on every target.

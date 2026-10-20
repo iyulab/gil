@@ -7,11 +7,13 @@
 //! does not hold is reported in `caveats`, and an input that would estimate another population is an error. No
 //! dependencies, no I/O.
 
+pub mod agreement;
 mod error;
 pub mod estimate;
 mod rng;
 pub mod sample;
 
+pub use agreement::{Agreement, Verdict, agreement};
 pub use error::ReviewError;
 pub use estimate::{
     BOOTSTRAP_DRAWS, ESTIMATE_NO_VARIATION_IN_STRATUM, ESTIMATE_STRATUM_IS_CENSUS,
