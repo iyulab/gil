@@ -10,6 +10,7 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 - How to choose `replay::Choice::target_precision` from what a wrong answer costs: answering pays only above
   `1 − 1/ρ` when a wrong value costs ρ entries (README, rustdoc).
+- `replay::select_key_concentrations`: a concentration under 0.01 can mean an attribute written from the decided value.
 
 ## 0.5.0
 

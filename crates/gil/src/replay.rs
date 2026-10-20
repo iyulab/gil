@@ -1494,6 +1494,11 @@ pub fn select_key_fields(
 ///
 /// Returns a concentration for each key attribute whose keys were seen again; empty for an attribute that takes several values.
 ///
+/// A concentration under 0.01 means each key points at one value: a reference to the very thing decided, or an attribute
+/// written from the decided value itself (a copy, an identifier per value), which may be missing while the record is still
+/// open. Check that such an attribute is there when an answer is asked for, or keep the record's arrival order so a replay
+/// looks it up without it.
+///
 /// # Panics
 /// When the attribute is not decided.
 pub fn select_key_concentrations(
