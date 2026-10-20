@@ -10,6 +10,9 @@ readme = "README.md"
 keywords = ["sampling", "survey", "stratified", "bootstrap", "agreement"]
 categories = ["mathematics", "science"]
 
+# The golden test reads the shared fixtures at the repository root, which a packaged crate does not carry.
+exclude = ["tests/"]
+
 [lib]
 # Published as iyulab-gil-review; imported as gil_review.
 name = "gil_review"

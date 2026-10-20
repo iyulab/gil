@@ -20,5 +20,9 @@ with what to do.
 - **Agreement**: `agreement` over (item, candidate) pairs judged exactly twice — observed agreement, Cohen's κ (NaN when
   both reviewers used one outcome), Gwet's AC1, the agreement specific to each outcome and `prevalence_max`; the
   first reviewer is the one whose id comes first.
+- **A language-neutral golden** (`tests/fixtures/review/golden.jsonl`): fixed inputs through the draw, the allocation,
+  the bound, the estimate (plain and weighted, with and without a bootstrap), a band and agreement — each double in its
+  shortest round-trip form — for a binding to reproduce, and a coverage test: over 100 seeded pilots of a population
+  with a known census, the normal interval contains it at least 90 times.
 - **The generator**: SplitMix64 into xoshiro256\*\*, integers by Lemire's method — the same sample from the same seed
   on every target.
