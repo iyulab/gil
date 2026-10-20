@@ -40,6 +40,11 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   text), `snapshot` (the record to save, with the order its values arrived in and how each was settled) and `reopen`
   (a saved record as its snapshot left it). Rejected attributes stay closed until reverted or settled; an attribute
   that takes several values stays open once settled.
+- **`Attribute::candidates_from`** — another attribute whose value in the same record bounds this one's domain (for an
+  attribute that takes several values, the values chosen in it): every layer, an external judgement and every replay
+  offer only values inside it once it has a value; while it is empty the domain is not narrowed. `Attribute::admits_in`
+  answers for a record; `admits` keeps answering for `candidates` alone. Python reads it as `"candidates_from"`; a
+  schema whose attribute takes its candidates from itself or from an unknown attribute is rejected.
 - **`schema::Settlement`** — `accept` · `correct` · `enter` · `fill` · `check(value, probability)` · `restore` · `set`
   · `restore_set` · `reject` · `revert`.
 - **`schema::AttributePolicy`** (`Suggest` · `ConfirmRequired` · `Off`) on `Attribute::policy`: an attribute that is

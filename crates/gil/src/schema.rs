@@ -49,6 +49,12 @@ pub struct Attribute {
     pub coarse: Option<CoarseLevel>,
     /// The values the attribute may take; `None` is any. A value settled outside them is remembered but never offered.
     pub candidates: Option<Vec<String>>,
+    /// Another attribute of the schema whose value in the same record bounds this attribute's domain — for an attribute
+    /// that takes several values, the values chosen in it: the main topic among a record's topics, a subcategory within
+    /// its category. Once that attribute has a value, no layer offers this one a value outside it, as with `candidates`,
+    /// which still applies; while it is empty, the domain is not narrowed. A value settled outside it is still remembered,
+    /// and offered for records whose domain admits it.
+    pub candidates_from: Option<String>,
     /// Values the attribute must not miss: the key layer does not answer for a record whose keys have ever had one.
     pub must_catch: Option<Vec<String>>,
     /// The score the first keyed value that begins with the typed text must reach, for one, two, … characters typed;
@@ -74,18 +80,42 @@ impl Attribute {
             memory_floor: None,
             coarse: None,
             candidates: None,
+            candidates_from: None,
             must_catch: None,
             typed_key_thresholds: None,
             policy: AttributePolicy::Suggest,
         }
     }
 
-    /// Whether `value` lies in the attribute's domain: among its candidates when it has them. Domains taken from another
-    /// attribute's values are not yet supported by this implementation.
+    /// Whether `value` lies in the attribute's domain whatever the record: among its candidates when it has them.
     pub fn admits(&self, value: &str) -> bool {
         self.candidates
             .as_ref()
             .is_none_or(|c| c.iter().any(|v| v == value))
+    }
+
+    /// Whether `value` lies in the attribute's domain for a record with `values` and `sets` so far: among its candidates
+    /// when it has them, and among the values of [`Attribute::candidates_from`] when that attribute has any (ordinally).
+    pub fn admits_in(
+        &self,
+        value: &str,
+        values: &BTreeMap<String, String>,
+        sets: &BTreeMap<String, Vec<String>>,
+    ) -> bool {
+        if !self.admits(value) {
+            return false;
+        }
+
+        let Some(from) = &self.candidates_from else {
+            return true;
+        };
+        if let Some(chosen) = sets.get(from).filter(|c| !c.is_empty()) {
+            return chosen.iter().any(|c| c == value);
+        }
+
+        values
+            .get(from)
+            .is_none_or(|given| given.is_empty() || given == value)
     }
 
     /// The key threshold with `typed` characters typed into the attribute: the key threshold before typing, then the typed

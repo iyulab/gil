@@ -1109,7 +1109,7 @@ fn replay(
                     votes,
                 )
                 .into_iter()
-                .filter(|m| definition.admits(&m.answer))
+                .filter(|m| definition.admits_in(&m.answer, &before, &before_sets))
                 .collect()
         } else {
             Vec::new()

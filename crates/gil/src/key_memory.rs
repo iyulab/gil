@@ -344,7 +344,7 @@ impl KeyMemory {
         };
         if let Some(settled) = index.values.get(&overall) {
             for share in self.shares(settled, excluding) {
-                if definition.admits(&share.value)
+                if definition.admits_in(&share.value, q.known, q.known_sets)
                     && begins(&share.value, typed)
                     && !chosen.contains(&&share.value)
                     && !candidates.iter().any(|c| c.value == share.value)
@@ -539,11 +539,9 @@ impl KeyMemory {
             let concentration = attribute.concentration(&key.attribute);
             // A value outside the domain, or not beginning with the typed text, is not offered, but it still counts
             // towards its key's total.
-            for share in self
-                .shares(settled, excluding)
-                .into_iter()
-                .filter(|s| attribute.admits(&s.value) && begins(&s.value, typed))
-            {
+            for share in self.shares(settled, excluding).into_iter().filter(|s| {
+                attribute.admits_in(&s.value, q.known, q.known_sets) && begins(&s.value, typed)
+            }) {
                 let strength = share.weight / (share.total + concentration);
                 match scores.iter_mut().find(|s| s.0 == share.value) {
                     Some(entry) => {

@@ -3,8 +3,8 @@
 //!
 //! Where neither memory has evidence, the answer says so and carries what an external judgement would read
 //! ([`Answer::needs_external`]); the host asks its model, or does not, and hands the ranked result back
-//! ([`Decider::offer_external`]) — the core calls nothing outside itself. Not yet carried over from the reference: a
-//! domain taken from another attribute's values, and telemetry.
+//! ([`Decider::offer_external`]) — the core calls nothing outside itself. Not yet carried over from the
+//! reference: telemetry.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -400,7 +400,9 @@ impl Decider {
             .filter(|_| wants_external)
             .into_iter()
             .flatten()
-            .filter(|e| attribute.admits(&e.value) && !chosen.contains(&&e.value))
+            .filter(|e| {
+                attribute.admits_in(&e.value, q.known, q.known_sets) && !chosen.contains(&&e.value)
+            })
             .map(|e| Candidate {
                 value: e.value.clone(),
                 score: e.probability,
@@ -549,7 +551,7 @@ impl Decider {
             .into_iter()
             .filter(|m| {
                 q.excluding != Some(m.source.as_str())
-                    && attribute.admits(&m.answer)
+                    && attribute.admits_in(&m.answer, q.known, q.known_sets)
                     && key_memory::begins(&m.answer, typed)
             })
             .collect();

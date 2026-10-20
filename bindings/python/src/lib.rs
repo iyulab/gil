@@ -134,6 +134,9 @@ fn attribute(value: &Value) -> Parsed<Attribute> {
             "memory_floor" => f.memory_floor = optional_number(v, &what)?,
             "coarse" => f.coarse = (!v.is_null()).then(|| coarse(v)).transpose()?,
             "candidates" => f.candidates = (!v.is_null()).then(|| strings(v, &what)).transpose()?,
+            "candidates_from" => {
+                f.candidates_from = (!v.is_null()).then(|| string(v, &what)).transpose()?;
+            }
             "must_catch" => f.must_catch = (!v.is_null()).then(|| strings(v, &what)).transpose()?,
             "policy" => {
                 f.policy = match v.as_str() {
@@ -169,6 +172,16 @@ fn schema(text: &str) -> Parsed<Schema> {
         .collect::<Parsed<Vec<_>>>()?;
     if let Some(other) = settings.keys().find(|k| *k != "name" && *k != "attributes") {
         return Err(format!("unknown schema setting '{other}'"));
+    }
+    for a in &attributes {
+        if let Some(from) = &a.candidates_from
+            && (from == &a.name || !attributes.iter().any(|b| &b.name == from))
+        {
+            return Err(format!(
+                "attribute '{}' takes its candidates from '{from}', which is not another attribute of the schema",
+                a.name
+            ));
+        }
     }
     Ok(Schema { name, attributes })
 }
