@@ -4,7 +4,11 @@ The Rust crate `gilfit` (crates.io) and the Python package `gilfit` (PyPI) share
 `0.x`: a minor release may change the public API, and each such change is listed under **Breaking** with what to do.
 The .NET library on NuGet (`Gil`) keeps its own line in the repository's root `CHANGELOG.md`.
 
-## Unreleased
+## 0.2.0
+
+### Rust crate
+
+- No changes; published with the Python package, which shares the version line.
 
 ### Python package
 
