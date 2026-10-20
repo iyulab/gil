@@ -57,6 +57,37 @@ The other settings follow the same pattern — choose, then set on the attribute
 `key_concentrations`, after `key_fields`) and, for an attribute with a coarse level (`"coarse": {"prefix": 2}`),
 `select_coarse` once its value thresholds are set.
 
+## Answering a record while its values arrive
+
+A decider holds the settled records; an open record asks it each time a value arrives or is settled, and hands back
+the answers that changed. Times are 100-nanosecond ticks since the Unix epoch, UTC.
+
+```python
+decider = gil.Decider(schema, records)
+record = gil.OpenRecord(schema, "t9", settled_at=now)
+(team,) = record.observe(decider, "summary", "vpn drops every hour")
+if team["answered"]:  # shown to the person, who keeps it
+    record.settle(decider, "team", "Accept", now, value=team["candidates"][0]["value"])
+else:  # nothing shown: the person types it
+    record.settle(decider, "team", "Enter", now, value="network")
+saved = record.snapshot()  # save it; gil.OpenRecord.reopen(schema, saved) picks it up again
+```
+
+Settle with the kind that says what the person saw: `Accept` / `Correct` for the answer shown, `Enter` with nothing
+shown, `AcceptOther` / `CorrectOther` when the suggestion shown was not the decider's (your own model's, a default),
+`Fill` when the application settled it with no person. Choosing thresholds and `gil.usage` read the kinds.
+
+When an answer carries `needs_external`, no memory had evidence: ask your model about those (attribute, value) pairs
+and pass its ranked values back with `record.offer_external(decider, "team", [{"value": ..., "probability": ...,
+"trusted": ...}])`.
+
+## Keeping a tuning
+
+`gil.capture_tuning(schema, settled, target_precision)` keeps the chosen settings (with `gil.record_promise` for what
+each layer replay promised), `gil.apply_tuning` puts them back on a schema, and `gil.tuning_stale` says when to choose
+again — another package version, a changed setting, or a tenth more (or fewer) settled records. `gil.usage(decisions)`
+counts, without content, how the answers shown were settled and the precision they realized against the promise.
+
 **Status: early.** The API may change within 0.x — each change is listed in
 [CHANGELOG.md](https://github.com/iyulab/gil/blob/rust-core/crates/gil/CHANGELOG.md) with what to do about it.
 

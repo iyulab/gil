@@ -3,12 +3,18 @@
 from typing import final
 
 __all__ = [
+    "Decider",
+    "OpenRecord",
     "Records",
     "check_schema",
     "select_coarse_json",
     "select_key_concentrations_json",
     "select_key_fields_json",
     "select_layers_json",
+    "tuning_apply_json",
+    "tuning_capture_json",
+    "tuning_stale_json",
+    "usage_json",
 ]
 
 @final
@@ -61,3 +67,66 @@ def select_key_concentrations_json(
     schema_json: str, attribute: str, records: Records
 ) -> str:
     """The concentration chosen for each attribute that keys the decided attribute, as a JSON object."""
+
+@final
+class Decider:
+    """The memories that answer: the settled key memory and, unless left out, the lexical similar record memory."""
+
+    def __new__(
+        cls,
+        schema_json: str,
+        records: Records | None = None,
+        similar_records: bool = True,
+    ) -> Decider: ...
+
+@final
+class OpenRecord:
+    """One record of a schema while its values arrive; each change returns the answers it causes, as JSON."""
+
+    def __new__(cls, schema_json: str, id: str, settled_at: int) -> OpenRecord: ...
+    @staticmethod
+    def reopen(schema_json: str, record_json: str) -> OpenRecord:
+        """A saved record (JSON, as a snapshot gives it) reopened as it was left."""
+
+    @property
+    def id(self) -> str: ...
+    def observe(self, decider: Decider, attribute: str, value: str | None) -> str:
+        """Sets (or with `None` clears) an observed attribute's value; the answers it changes, as JSON."""
+
+    def settle(
+        self,
+        decider: Decider,
+        attribute: str,
+        kind: str,
+        now: int,
+        value: str | None = None,
+        values: list[str] | None = None,
+        probability: float | None = None,
+    ) -> str:
+        """Settles a decided attribute at `now` (ticks) — `kind` by name, with the value, values or probability it needs; the answers it changes, as JSON."""
+
+    def answer(self, decider: Decider) -> str:
+        """Answers for every open decided attribute, as JSON."""
+
+    def answer_partial(
+        self, decider: Decider, attribute: str, partial: str | None = None
+    ) -> str:
+        """The answer for one open decided attribute alone — with `partial`, the text typed into it so far — as JSON."""
+
+    def offer_external(self, decider: Decider, attribute: str, ranked_json: str) -> str:
+        """The answer for an open decided attribute with an external judgement's ranked values in it (JSON list of `{"value", "probability", "trusted"}`), as JSON."""
+
+    def snapshot(self) -> str:
+        """The record as it stands, to save — JSON in the form records are read in."""
+
+def tuning_capture_json(schema_json: str, settled: int, target_precision: float) -> str:
+    """The chosen settings of the schema's decided attributes, chosen on `settled` records for `target_precision`, as JSON."""
+
+def tuning_apply_json(tuning_json: str, schema_json: str) -> str:
+    """The schema with the tuning's settings put back on its attributes, as JSON."""
+
+def tuning_stale_json(tuning_json: str, schema_json: str, settled: int) -> str | None:
+    """Why the tuning no longer stands for the schema with `settled` records, as JSON — `None` while it does."""
+
+def usage_json(decisions_json: str) -> str:
+    """The usage counts of the decisions (a JSON list of `{"attribute", "answer", "settled", "settlement", "probability", "promise"}`), by attribute, as JSON."""

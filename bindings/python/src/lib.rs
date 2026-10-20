@@ -4,15 +4,21 @@
 //! `gil` package around it reads that text into dictionaries. Records are gathered and returned whole rather than
 //! passed to a Python callback, which would cost a call back into the interpreter per lookup.
 
+use std::panic::{AssertUnwindSafe, catch_unwind};
+
+use gil::decider::{Answer, Candidate, Evidence, ExternalCandidate};
 use gil::decision_record::{DecisionRecord, KeyLook, SimilarLook};
 use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
+use gil::open_record;
 use gil::replay::{
     Choice, KeyFieldsChoice, KeyFieldsTrial, KeyState, LayerThresholds, ThresholdChoice,
     ThresholdReplay, TypedKeyThresholds, select_coarse_with, select_key_concentrations,
     select_key_fields, select_layers_with,
 };
-use gil::schema::{AttributeRole, Record, Schema, SettlementKind};
+use gil::schema::{AttributePolicy, AttributeRole, Record, Schema, Settlement, SettlementKind};
+use gil::tuning::Tuning;
+use gil::usage::{Decision, usage};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use serde_json::{Value, json};
@@ -170,6 +176,43 @@ fn similar_look_json(s: &SimilarLook) -> Value {
         "nearest": s.nearest,
         "voted": s.voted,
     })
+}
+
+fn policy_name(p: AttributePolicy) -> &'static str {
+    match p {
+        AttributePolicy::Suggest => "suggest",
+        AttributePolicy::ConfirmRequired => "confirm_required",
+        AttributePolicy::Off => "off",
+    }
+}
+
+fn candidate_json(c: &Candidate) -> Value {
+    json!({
+        "value": c.value,
+        "score": c.score,
+        "source": c.source.name(),
+        "evidence": c.evidence.as_ref().map(|e| match e {
+            Evidence::Key(k) => json!({ "key": { "attribute": k.attribute, "value": k.value } }),
+            Evidence::Record { id, similarity } => json!({ "record": { "id": id, "similarity": similarity } }),
+        }),
+        "trusted": c.trusted,
+    })
+}
+
+fn answer_json(a: &Answer) -> Value {
+    json!({
+        "attribute": a.attribute,
+        "answered": a.answered(),
+        "candidates": a.candidates.iter().map(candidate_json).collect::<Vec<_>>(),
+        "source": a.source.name(),
+        "coarse": a.coarse.as_ref().map(candidate_json),
+        "policy": policy_name(a.policy),
+        "needs_external": a.needs_external,
+    })
+}
+
+fn answers_json(answers: &[Answer]) -> String {
+    Value::Array(answers.iter().map(answer_json).collect()).to_string()
 }
 
 fn record_json(r: &DecisionRecord) -> Value {
@@ -412,9 +455,306 @@ fn select_key_fields_json(
     Ok(key_fields_json(&chosen).to_string())
 }
 
+/// Runs a core call, turning a broken contract (the core panics on one) into a `ValueError` with the core's message.
+fn guarded<T>(call: impl FnOnce() -> T) -> PyResult<T> {
+    catch_unwind(AssertUnwindSafe(call)).map_err(|panic| {
+        let message = panic
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| panic.downcast_ref::<&str>().map(|s| (*s).to_owned()))
+            .unwrap_or_else(|| "the core refused the call".to_owned());
+        invalid(message)
+    })
+}
+
+/// The memories that answer: the settled key memory and, unless left out, the lexical similar record memory.
+#[pyclass(module = "gil._gil", unsendable)]
+struct Decider {
+    inner: gil::decider::Decider,
+}
+
+#[pymethods]
+impl Decider {
+    /// A decider whose memories hold `records` (settled records of the schema, in settlement order), with the similar
+    /// record memory unless `similar_records` is false.
+    #[new]
+    #[pyo3(signature = (schema_json, records=None, similar_records=true))]
+    fn new(schema_json: &str, records: Option<&Records>, similar_records: bool) -> PyResult<Self> {
+        let schema = schema(schema_json).map_err(invalid)?;
+        let mut inner = gil::decider::Decider::new(
+            KeyMemory::default(),
+            similar_records.then(LexicalMemory::default),
+        );
+        if let Some(records) = records {
+            inner.rebuild(&schema, &records.records);
+        }
+        Ok(Self { inner })
+    }
+}
+
+fn settlement_of(
+    kind: &str,
+    value: Option<&str>,
+    values: Option<Vec<String>>,
+    probability: Option<f64>,
+) -> Parsed<Settlement> {
+    let kind = settlement(kind)?;
+    let one = || value.ok_or_else(|| format!("a {kind:?} settlement needs a value"));
+    let many = || {
+        values
+            .clone()
+            .ok_or_else(|| format!("a {kind:?} settlement needs values"))
+    };
+    Ok(match kind {
+        SettlementKind::Accept => Settlement::accept(one()?),
+        SettlementKind::Correct => Settlement::correct(one()?),
+        SettlementKind::Enter => Settlement::enter(one()?),
+        SettlementKind::Fill => Settlement::fill(one()?),
+        SettlementKind::AcceptOther => Settlement::accept_other(one()?),
+        SettlementKind::CorrectOther => Settlement::correct_other(one()?),
+        SettlementKind::Restore if values.is_some() => {
+            Settlement::restore_set(many()?.iter().map(String::as_str))
+        }
+        SettlementKind::Restore => Settlement::restore(one()?),
+        SettlementKind::Set => Settlement::set(many()?.iter().map(String::as_str)),
+        SettlementKind::Check => {
+            let p =
+                probability.ok_or("a Check settlement needs the probability it was drawn with")?;
+            if !(p > 0.0 && p <= 1.0) {
+                return Err("a check is drawn with a probability above 0 and at most 1".to_owned());
+            }
+            Settlement::check(one()?, p)
+        }
+        SettlementKind::Reject => Settlement::reject(),
+        SettlementKind::Revert => Settlement::revert(),
+    })
+}
+
+/// One record of a schema while its values arrive. Each change puts it into the decider's memory again and returns the
+/// fresh answers it causes, as JSON.
+#[pyclass(module = "gil._gil", unsendable)]
+struct OpenRecord {
+    inner: open_record::OpenRecord,
+}
+
+#[pymethods]
+impl OpenRecord {
+    /// A new record `id`, starting at `settled_at` (100-nanosecond ticks since the Unix epoch, UTC).
+    #[new]
+    fn new(schema_json: &str, id: &str, settled_at: i64) -> PyResult<Self> {
+        let schema = schema(schema_json).map_err(invalid)?;
+        guarded(|| open_record::OpenRecord::new(schema, id, settled_at)).map(|inner| Self { inner })
+    }
+
+    /// A saved record (JSON, as a snapshot gives it) reopened as it was left.
+    #[staticmethod]
+    fn reopen(schema_json: &str, record_json: &str) -> PyResult<Self> {
+        let schema = schema(schema_json).map_err(invalid)?;
+        let value: Value = serde_json::from_str(record_json).map_err(|e| invalid(e.to_string()))?;
+        let saved = record(&value).map_err(invalid)?;
+        guarded(|| open_record::OpenRecord::reopen(schema, &saved)).map(|inner| Self { inner })
+    }
+
+    #[getter]
+    fn id(&self) -> String {
+        self.inner.id().to_owned()
+    }
+
+    /// Sets (or with `None` clears) an observed attribute's value; the answers it changes, as JSON.
+    #[pyo3(signature = (decider, attribute, value))]
+    fn observe(
+        &mut self,
+        mut decider: PyRefMut<'_, Decider>,
+        attribute: &str,
+        value: Option<&str>,
+    ) -> PyResult<String> {
+        let decider = &mut decider.inner;
+        guarded(|| self.inner.observe(decider, attribute, value)).map(|a| answers_json(&a))
+    }
+
+    /// Settles a decided attribute at `now` (ticks) — `kind` by name, with the value, values or probability it needs;
+    /// the answers it changes, as JSON.
+    #[pyo3(signature = (decider, attribute, kind, now, value=None, values=None, probability=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn settle(
+        &mut self,
+        mut decider: PyRefMut<'_, Decider>,
+        attribute: &str,
+        kind: &str,
+        now: i64,
+        value: Option<&str>,
+        values: Option<Vec<String>>,
+        probability: Option<f64>,
+    ) -> PyResult<String> {
+        let settlement = settlement_of(kind, value, values, probability).map_err(invalid)?;
+        let decider = &mut decider.inner;
+        guarded(|| self.inner.settle(decider, attribute, &settlement, now))
+            .map(|a| answers_json(&a))
+    }
+
+    /// Answers for every open decided attribute, as JSON.
+    fn answer(&self, decider: PyRef<'_, Decider>) -> PyResult<String> {
+        guarded(|| self.inner.answer(&decider.inner)).map(|a| answers_json(&a))
+    }
+
+    /// The answer for one open decided attribute alone — with `partial`, the text typed into it so far — as JSON.
+    #[pyo3(signature = (decider, attribute, partial=None))]
+    fn answer_partial(
+        &self,
+        decider: PyRef<'_, Decider>,
+        attribute: &str,
+        partial: Option<&str>,
+    ) -> PyResult<String> {
+        guarded(|| {
+            self.inner
+                .answer_partial(&decider.inner, attribute, partial)
+        })
+        .map(|a| answer_json(&a).to_string())
+    }
+
+    /// The answer for an open decided attribute with an external judgement's ranked values in it (JSON list of
+    /// `{"value", "probability", "trusted"}`), as JSON.
+    fn offer_external(
+        &self,
+        decider: PyRef<'_, Decider>,
+        attribute: &str,
+        ranked_json: &str,
+    ) -> PyResult<String> {
+        let ranked: Value =
+            serde_json::from_str(ranked_json).map_err(|e| invalid(e.to_string()))?;
+        let ranked = ranked
+            .as_array()
+            .ok_or_else(|| invalid("an external judgement is a list".to_owned()))?
+            .iter()
+            .map(|c| {
+                Ok(ExternalCandidate {
+                    value: c["value"]
+                        .as_str()
+                        .ok_or("an external value is a string")?
+                        .to_owned(),
+                    probability: c["probability"]
+                        .as_f64()
+                        .ok_or("an external probability is a number")?,
+                    trusted: c.get("trusted").and_then(Value::as_bool).unwrap_or(false),
+                })
+            })
+            .collect::<Parsed<Vec<_>>>()
+            .map_err(invalid)?;
+        guarded(|| {
+            self.inner
+                .offer_external(&decider.inner, attribute, &ranked)
+        })
+        .map(|a| answer_json(&a).to_string())
+    }
+
+    /// The record as it stands, to save — JSON in the form records are read in.
+    fn snapshot(&self) -> String {
+        serde_json::to_string(&self.inner.snapshot()).expect("a record serializes")
+    }
+}
+
+fn tuning(text: &str) -> PyResult<Tuning> {
+    serde_json::from_str(text).map_err(|e| invalid(format!("a tuning does not read: {e}")))
+}
+
+/// The chosen settings of the schema's decided attributes, chosen on `settled` records for `target_precision`, as JSON.
+#[pyfunction]
+fn tuning_capture_json(
+    schema_json: &str,
+    settled: usize,
+    target_precision: f64,
+) -> PyResult<String> {
+    let schema = schema(schema_json).map_err(invalid)?;
+    Ok(
+        serde_json::to_string(&Tuning::capture(&schema, settled, target_precision))
+            .expect("a tuning serializes"),
+    )
+}
+
+/// The schema with the tuning's settings put back on its attributes, as JSON.
+#[pyfunction]
+fn tuning_apply_json(tuning_json: &str, schema_json: &str) -> PyResult<String> {
+    let mut schema = schema(schema_json).map_err(invalid)?;
+    tuning(tuning_json)?.apply(&mut schema);
+    Ok(serde_json::to_string(&schema).expect("a schema serializes"))
+}
+
+/// Why the tuning no longer stands for the schema with `settled` records, as JSON — `None` while it does.
+#[pyfunction]
+fn tuning_stale_json(
+    tuning_json: &str,
+    schema_json: &str,
+    settled: usize,
+) -> PyResult<Option<String>> {
+    let schema = schema(schema_json).map_err(invalid)?;
+    Ok(tuning(tuning_json)?
+        .stale(&schema, settled)
+        .map(|s| serde_json::to_string(&s).expect("a reason serializes")))
+}
+
+/// The usage counts of the decisions (a JSON list of `{"attribute", "answer", "settled", "settlement", "probability",
+/// "promise"}`), by attribute, as JSON.
+#[pyfunction]
+fn usage_json(decisions_json: &str) -> PyResult<String> {
+    let items: Value = serde_json::from_str(decisions_json).map_err(|e| invalid(e.to_string()))?;
+    let items = items
+        .as_array()
+        .ok_or_else(|| invalid("decisions are a list".to_owned()))?;
+    let text = |v: &Value, what: &str| -> Parsed<Option<String>> {
+        match v {
+            Value::Null => Ok(None),
+            Value::String(s) => Ok(Some(s.clone())),
+            _ => Err(format!("a decision's {what} is a string or None")),
+        }
+    };
+    struct Owned {
+        attribute: String,
+        answer: Option<String>,
+        settled: Option<String>,
+        settlement: Option<SettlementKind>,
+        probability: f64,
+        promise: Option<f64>,
+    }
+    let owned = items
+        .iter()
+        .map(|d| {
+            Ok(Owned {
+                attribute: text(&d["attribute"], "attribute")?
+                    .ok_or("a decision needs its attribute")?,
+                answer: text(&d["answer"], "answer")?,
+                settled: text(&d["settled"], "settled")?,
+                settlement: text(&d["settlement"], "settlement")?
+                    .map(|k| settlement(&k))
+                    .transpose()?,
+                probability: d.get("probability").and_then(Value::as_f64).unwrap_or(1.0),
+                promise: d.get("promise").and_then(Value::as_f64),
+            })
+        })
+        .collect::<Parsed<Vec<_>>>()
+        .map_err(invalid)?;
+    let counts = usage(owned.iter().map(|d| Decision {
+        attribute: &d.attribute,
+        answer: d.answer.as_deref(),
+        settled: d.settled.as_deref(),
+        settlement: d.settlement,
+        probability: d.probability,
+        promise: d.promise,
+    }));
+    Ok(serde_json::to_string(&counts).expect("counts serialize"))
+}
+
 #[pymodule]
 fn _gil(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // A broken contract reaches Python as an exception carrying the core's message; the default hook would also print
+    // it to stderr. The hook belongs to this extension's own copy of the Rust runtime.
+    std::panic::set_hook(Box::new(|_| {}));
     m.add_class::<Records>()?;
+    m.add_class::<Decider>()?;
+    m.add_class::<OpenRecord>()?;
+    m.add_function(wrap_pyfunction!(tuning_capture_json, m)?)?;
+    m.add_function(wrap_pyfunction!(tuning_apply_json, m)?)?;
+    m.add_function(wrap_pyfunction!(tuning_stale_json, m)?)?;
+    m.add_function(wrap_pyfunction!(usage_json, m)?)?;
     m.add_function(wrap_pyfunction!(check_schema, m)?)?;
     m.add_function(wrap_pyfunction!(select_layers_json, m)?)?;
     m.add_function(wrap_pyfunction!(select_key_fields_json, m)?)?;

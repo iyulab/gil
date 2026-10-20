@@ -27,6 +27,12 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   Python bindings read: Rust field names, snake-case roles and policies, settlement kinds by name, settings left out
   taking `Attribute::new`'s defaults, unknown settings refused.
 
+- **Python: answering a record while its values arrive, tunings and usage.** `gil.Decider` (the memories, from
+  settled records) and `gil.OpenRecord` (`observe` · `settle` by kind name · `answer` · `answer_partial` ·
+  `offer_external` · `snapshot` · `reopen`), with answers as typed dictionaries (candidates with structured evidence,
+  policy, `needs_external`); `gil.capture_tuning` · `gil.record_promise` · `gil.apply_tuning` · `gil.tuning_stale`; and
+  `gil.usage`. A call the core refuses raises `ValueError` with the core's message.
+
 ### Changed
 
 - Python: schemas and records are read through the core's `serde` form. An unknown or missing setting is now reported
