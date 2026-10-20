@@ -762,6 +762,15 @@ following the kind against the establishment's own record — and abstained on 2
 concentrations ranged from 0.2 to 5 and the answers given rightly moved by −0.2% to +1.9%, every threshold keeping its
 target.
 
+A concentration near zero is also what a field gets when it was written from the judged value itself — a copy of it, an
+identifier assigned to each value — and such a field may not be there yet while the document is being filled in. With
+fields like these planted beside the judged field of seven public streams of settled records, a copy and an identifier
+per value came out below 0.001 in every stream, and none of the 141 fields the records really had came out below 0.14.
+Before trusting a field whose concentration is under 0.01, check that it is there when a suggestion is asked for, as an
+establishment is; if it is filled only once the judged field is settled, save `Arrival`, so the replay looks the field
+up without it. A field computed from the judged value that folds several values into one code reads to the replay as
+strong evidence and comes out like any other field: only `Arrival` keeps it out.
+
 A key is a short value that recurs. `FieldMemory` uses a value as a key only up to `maxKeyLength` characters once
 normalised (60 by default): free text rarely recurs, and a value that never repeats keys nothing. Where the evidence
 is a line of text that differs from one document to the next only in its variable parts — numbers, addresses,
