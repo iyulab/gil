@@ -1,6 +1,6 @@
 [package]
 name = "iyulab-gil"
-version = "0.5.0"
+version = "0.6.0"
 description = "Suggests and decides form field values from how settled documents were filled - the decision core, with no I/O."
 edition.workspace = true
 license.workspace = true
