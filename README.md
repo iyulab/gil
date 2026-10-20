@@ -425,7 +425,9 @@ var checkedLayers = await ThresholdSelection.SelectLayersAsync(new FieldMemory()
 
 The check is a second settlement of the same field in the same session, after the fill; the snapshot then keeps the
 checked value, its kind and its probability. In a public bug tracker, values a machine filled were changed by a person
-within 30 days 26% of the time, values a person chose 7% — filled values need the checking.
+within 30 days 26% of the time, values a person chose 7%. Within the same component the gap grows rather than shrinks —
+the machine's values were changed 4.8 times as often as people's (3.5 to 6.7), so they are wrong more often, not merely
+placed where values move. Filled values need the checking.
 
 Some values must not be missed: answering a dangerous grade as a harmless one costs far more than asking. A threshold
 cannot hold such a value back where it is rare — a key under which it was settled once among hundreds of other values
