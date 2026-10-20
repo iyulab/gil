@@ -13,6 +13,8 @@ with what to do. The Rust crate and Python package `gilfit` keep their own line 
   when a wrong value costs ρ entries.
 - README: a key concentration under 0.01 can mean a field written from the judged value; check that it is there when
   a suggestion is asked for, or save `Arrival`.
+- README: values a machine filled are changed more often than people's within the same component too (4.8 times
+  in a public bug tracker), not only overall.
 
 ## 0.24.0
 
