@@ -63,6 +63,12 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   from a schema, `Tuning::apply` puts it back, and **`Tuning::stale`** says when to choose again: another crate version
   (`tuning::VERSION`), a changed setting the choice rests on (role, domain, dependencies, votes, coarse level …), or
   settled records grown or shrunk by a tenth since the choice.
+- **`usage::usage`** — what the answers came to, counted without content, per attribute: decisions, answered and
+  abstained, accepted · corrected · rejected · filled · checked (and how many checks agreed) · entered, the realized
+  precision (`AttributeUsage::realized` — accepts right, corrections wrong, checks weighted by one ÷ their probability;
+  fills and rejects left out) against the mean promise (`AttributeUsage::promise`). An answered decision settled as
+  entered — a host reporting its own answers' acceptance as entry, which grades the answers on themselves — is counted
+  apart (`entered_over_answer`) and should stay 0.
 - **`schema::Settlement`** — `accept` · `correct` · `enter` · `fill` · `check(value, probability)` · `restore` · `set`
   · `restore_set` · `reject` · `revert`.
 - **`schema::AttributePolicy`** (`Suggest` · `ConfirmRequired` · `Off`) on `Attribute::policy`: an attribute that is
