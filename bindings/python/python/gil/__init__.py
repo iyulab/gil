@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, TypedDict, cast
+from typing import Any, Literal, TypedDict, cast
 
 from gil._gil import Decider as _Decider
 from gil._gil import OpenRecord as _OpenRecord
@@ -263,12 +263,18 @@ def select_layers(
     minimum_answered: int = 10,
     counting: Iterable[str] | None = None,
     decisions: bool = True,
+    rule: Literal["every_band", "pooled"] = "every_band",
 ) -> tuple[LayerThresholds, list[DecisionRecord] | None]:
     """Replays ``records`` and chooses ``attribute``'s key and memory thresholds.
 
     Returns the two replays (``{"key": ..., "memory": ...}``, each with its ``chosen`` threshold) and, unless
     ``decisions`` is false, the decision records: what the key layer and the similar record vote made of each record
     asked about, whatever the thresholds, with the value it was settled as.
+
+    ``rule`` is how the two thresholds are chosen: ``"every_band"`` (each layer on its own, every band of its answers
+    at the target) or ``"pooled"`` (the pair answering the most of the attribute's latest lookups while all their
+    answers together hold the target at the bottom of their Wilson interval at 1.645 standard errors — see the crate's
+    ``ThresholdRule::Pooled``).
     """
     thresholds, lines = select_layers_json(
         schema.json,
@@ -278,6 +284,7 @@ def select_layers(
         minimum_answered,
         None if counting is None else list(counting),
         decisions,
+        rule,
     )
     out = (
         None

@@ -6,6 +6,16 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ## Unreleased
 
+### Added
+
+- **`replay::ThresholdRule` and `replay::select_layers_by_rule` (`_with`): choose an attribute's two thresholds for a
+  target on its answers together.** `ThresholdRule::EveryBand` is the rule of `select_layers`, unchanged.
+  `ThresholdRule::Pooled` chooses the key and memory thresholds as the pair that answers the most of the attribute's
+  latest `POOLED_RECENT_LOOKUPS` lookups while the precision of all those answers holds the target at the bottom of its
+  Wilson interval at `POOLED_STANDARD_ERRORS` (1.645) standard errors, reaching back while the attribute's current
+  thresholds answered fewer than `POOLED_RECENT_ANSWERS` of them. Python: `select_layers(..., rule="pooled")`. The
+  same rule as the .NET library's `ThresholdRule.Pooled`, to the bit.
+
 ### Documentation
 
 - How to choose `replay::Choice::target_precision` from what a wrong answer costs: answering pays only above

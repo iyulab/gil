@@ -20,6 +20,43 @@ use crate::{coarse_groups, similar_vote, text};
 /// order counts, whether or not it was asked about.
 pub const RECENT_DOCUMENTS: usize = 5_000;
 
+/// How many standard errors below the measured precision [`ThresholdRule::Pooled`] holds the target at. More than the one
+/// [`ThresholdChoice::promise`] is lowered by: at one, thin attributes answered on a few hundred lookups fell below the
+/// target in replays the rule had not been chosen on; at this many none did.
+pub const POOLED_STANDARD_ERRORS: f64 = 1.645;
+
+/// How many of the attribute's latest lookups [`ThresholdRule::Pooled`] chooses on, at the least.
+pub const POOLED_RECENT_LOOKUPS: usize = 5_000;
+
+/// How many answers, under the attribute's thresholds as they stand, [`ThresholdRule::Pooled`] reaches back for when its
+/// latest lookups hold fewer — an attribute answered rarely has too few in them to rest a pooled precision on.
+pub const POOLED_RECENT_ANSWERS: usize = 1_000;
+
+/// How many key scores [`ThresholdRule::Pooled`] tries as thresholds, at most, besides none.
+const POOLED_KEY_CANDIDATES: usize = 200;
+
+/// How [`select_layers_by_rule`] chooses an attribute's two thresholds.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum ThresholdRule {
+    /// Each layer on its own: the lowest threshold down to which every band of its answers meets the target precision.
+    /// No band of weak answers is admitted on the strength of good ones above it, so the attribute answers less than it
+    /// could while keeping its promise. The rule of [`select_layers`].
+    #[default]
+    EveryBand,
+    /// The two thresholds together, as the pair that answers the most of the attribute's latest lookups while the
+    /// precision of all those answers taken together stays at or above the target at the low end of its Wilson score
+    /// interval at [`POOLED_STANDARD_ERRORS`] standard errors — a promise about the answers on average, not about every
+    /// band of them. The lookups are the attribute's latest [`POOLED_RECENT_LOOKUPS`], reaching further back while the
+    /// attribute's thresholds as they stand would have answered fewer than [`POOLED_RECENT_ANSWERS`] of them. In eight
+    /// forward replays on seven public collections, each on records the rule was not tuned on, it kept a 0.8 target
+    /// every time and answered 0.92–1.80 times as often as [`ThresholdRule::EveryBand`], 1.52 in the middle. Some bands
+    /// of its answers fall below the target where others are above it: choose it when the target is a share of all
+    /// answers, not a floor under each kind of answer.
+    Pooled,
+}
+
 /// What a threshold is chosen for — the target precision, the fewest answers it may rest on, and which settlements count.
 #[derive(Clone, Copy, Debug)]
 pub struct Choice<'a> {
@@ -564,57 +601,109 @@ fn fit_recent(
         target_precision,
         minimum_answered,
     );
-    let recent: Vec<&Answer> = matches
-        .iter()
-        .filter(|m| m.order as i64 > latest as i64 - RECENT_DOCUMENTS as i64)
-        .collect();
-    let promised = |choice: Option<ThresholdChoice>| -> Option<ThresholdChoice> {
-        let choice = choice?;
-        let (mut weight, mut correct, mut squares) = (0.0_f64, 0.0_f64, 0.0_f64);
-        for m in recent.iter().filter(|m| m.score >= choice.threshold) {
-            weight += m.weight;
-            correct += if m.correct { m.weight } else { 0.0 };
-            squares += m.weight * m.weight;
-        }
-
-        let effective = if weight > 0.0 {
-            weight * weight / squares
-        } else {
-            0.0
-        };
-        Some(if effective >= minimum_answered as f64 {
-            ThresholdChoice {
-                promise: lower(correct / weight, effective),
-                promise_answered: effective,
-                ..choice
-            }
-        } else {
-            ThresholdChoice {
-                promise: lower(choice.precision, choice.effective_answered),
-                promise_answered: choice.effective_answered,
-                ..choice
-            }
-        })
-    };
-
     ThresholdReplay {
-        chosen: promised(replay.chosen),
-        most_precise: promised(replay.most_precise),
+        chosen: promised(replay.chosen, matches, latest, minimum_answered),
+        most_precise: promised(replay.most_precise, matches, latest, minimum_answered),
         ..replay
     }
+}
+
+/// The choice with its promise, taken over the answers of the latest [`RECENT_DOCUMENTS`] records of `latest`.
+fn promised(
+    choice: Option<ThresholdChoice>,
+    matches: &[Answer],
+    latest: usize,
+    minimum_answered: usize,
+) -> Option<ThresholdChoice> {
+    let choice = choice?;
+    let (mut weight, mut correct, mut squares) = (0.0_f64, 0.0_f64, 0.0_f64);
+    for m in matches.iter().filter(|m| {
+        m.order as i64 > latest as i64 - RECENT_DOCUMENTS as i64 && m.score >= choice.threshold
+    }) {
+        weight += m.weight;
+        correct += if m.correct { m.weight } else { 0.0 };
+        squares += m.weight * m.weight;
+    }
+
+    let effective = if weight > 0.0 {
+        weight * weight / squares
+    } else {
+        0.0
+    };
+    Some(if effective >= minimum_answered as f64 {
+        ThresholdChoice {
+            promise: lower(correct / weight, effective),
+            promise_answered: effective,
+            ..choice
+        }
+    } else {
+        ThresholdChoice {
+            promise: lower(choice.precision, choice.effective_answered),
+            promise_answered: choice.effective_answered,
+            ..choice
+        }
+    })
+}
+
+/// The choice of a given threshold: how the answers at or above it did over the whole replay, and its promise; `None`
+/// when none is.
+fn at(
+    matches: &[Answer],
+    lookups: usize,
+    lookup_weight: f64,
+    latest: usize,
+    threshold: f64,
+    minimum_answered: usize,
+) -> Option<ThresholdChoice> {
+    let (mut count, mut weight, mut correct, mut squares) = (0_usize, 0.0_f64, 0.0_f64, 0.0_f64);
+    for m in matches.iter().filter(|m| m.score >= threshold) {
+        count += 1;
+        weight += m.weight;
+        correct += if m.correct { m.weight } else { 0.0 };
+        squares += m.weight * m.weight;
+    }
+
+    if weight <= 0.0 {
+        return None;
+    }
+
+    promised(
+        Some(ThresholdChoice {
+            threshold,
+            precision: correct / weight,
+            answer_rate: weight / lookup_weight,
+            answered: count,
+            lookups,
+            answered_weight: weight,
+            effective_answered: weight * weight / squares,
+            similarity_floor: None,
+            promise: correct / weight,
+            promise_answered: count as f64,
+        }),
+        matches,
+        latest,
+        minimum_answered,
+    )
 }
 
 /// The lower end of the Wilson score interval at one standard error for a precision measured on `answered` independent
 /// answers.
 fn lower(precision: f64, answered: f64) -> f64 {
+    lower_at(precision, answered, 1.0)
+}
+
+/// The lower end of the Wilson score interval at `standard_errors` for a precision measured on `answered` independent
+/// answers.
+fn lower_at(precision: f64, answered: f64, standard_errors: f64) -> f64 {
     if answered <= 0.0 {
         return precision;
     }
 
-    let centre = precision + (1.0 / (2.0 * answered));
-    let margin =
-        ((precision * (1.0 - precision) / answered) + (1.0 / (4.0 * answered * answered))).sqrt();
-    (centre - margin) / (1.0 + (1.0 / answered))
+    let z2 = standard_errors * standard_errors;
+    let centre = precision + (z2 / (2.0 * answered));
+    let margin = standard_errors
+        * ((precision * (1.0 - precision) / answered) + (z2 / (4.0 * answered * answered))).sqrt();
+    (centre - margin) / (1.0 + (z2 / answered))
 }
 
 /// The state under each key that backed a best value: its lookups, and what `replay`'s chosen threshold made of them. A
@@ -830,13 +919,43 @@ pub fn select_layers(
     records: &[Record],
     choice: Choice,
 ) -> LayerThresholds {
-    select_layers_with(
+    select_layers_by_rule_with(
         key_memory,
         memory,
         schema,
         attribute,
         records,
         choice,
+        ThresholdRule::EveryBand,
+        &mut |_| {},
+    )
+}
+
+/// As [`select_layers`], by the rule given. With [`ThresholdRule::Pooled`] each layer's `chosen` is that layer's half of
+/// the pair, `None` when the pair leaves the layer silent; its precision, answer rate and promise are the layer's own,
+/// over the whole replay, and the precision of the two layers' answers together held the target on the lookups the pair
+/// was chosen on. `most_precise` is as under [`ThresholdRule::EveryBand`]. The attribute's thresholds as they stand in
+/// `schema` (`key_threshold`, `memory_threshold`, `memory_floor`) decide only how far back the rule reaches.
+///
+/// # Panics
+/// As [`select_layers`].
+pub fn select_layers_by_rule(
+    key_memory: &mut KeyMemory,
+    memory: &mut LexicalMemory,
+    schema: &Schema,
+    attribute: &str,
+    records: &[Record],
+    choice: Choice,
+    rule: ThresholdRule,
+) -> LayerThresholds {
+    select_layers_by_rule_with(
+        key_memory,
+        memory,
+        schema,
+        attribute,
+        records,
+        choice,
+        rule,
         &mut |_| {},
     )
 }
@@ -854,6 +973,34 @@ pub fn select_layers_with(
     attribute: &str,
     records: &[Record],
     choice: Choice,
+    sink: &mut dyn FnMut(&DecisionRecord),
+) -> LayerThresholds {
+    select_layers_by_rule_with(
+        key_memory,
+        memory,
+        schema,
+        attribute,
+        records,
+        choice,
+        ThresholdRule::EveryBand,
+        sink,
+    )
+}
+
+/// As [`select_layers_by_rule`], handing `sink` the decision record of every record the replay asks about, as
+/// [`select_layers_with`] does.
+///
+/// # Panics
+/// As [`select_layers`].
+#[allow(clippy::too_many_arguments)]
+pub fn select_layers_by_rule_with(
+    key_memory: &mut KeyMemory,
+    memory: &mut LexicalMemory,
+    schema: &Schema,
+    attribute: &str,
+    records: &[Record],
+    choice: Choice,
+    rule: ThresholdRule,
     sink: &mut dyn FnMut(&DecisionRecord),
 ) -> LayerThresholds {
     choice.check();
@@ -892,17 +1039,39 @@ pub fn select_layers_with(
         })
         .collect();
     let uncaught: Vec<Answer> = answers.iter().filter(|a| !a.caught).cloned().collect();
-    let key = with_keys(
-        fit_recent(
-            &uncaught,
-            keyed.len(),
-            keyed.iter().fold(0.0, |sum, s| sum + s.weight),
-            latest,
+    let mut key_replay = fit_recent(
+        &uncaught,
+        keyed.len(),
+        keyed.iter().fold(0.0, |sum, s| sum + s.weight),
+        latest,
+        choice.target_precision,
+        choice.minimum_answered,
+    );
+    let mut pooled_memory = None;
+    if rule == ThresholdRule::Pooled {
+        let (key_threshold, similar_threshold) = pooled(
+            &steps,
+            definition,
             choice.target_precision,
             choice.minimum_answered,
-        ),
-        &answers,
-    );
+        );
+        key_replay = ThresholdReplay {
+            chosen: key_threshold.and_then(|k| {
+                at(
+                    &uncaught,
+                    keyed.len(),
+                    keyed.iter().fold(0.0, |sum, s| sum + s.weight),
+                    latest,
+                    k,
+                    choice.minimum_answered,
+                )
+            }),
+            ..key_replay
+        };
+        pooled_memory = Some(similar_threshold);
+    }
+
+    let key = with_keys(key_replay, &answers);
 
     let chosen = key.chosen.as_ref().map(|c| c.threshold);
     // Left to the similar record layer: what the chosen key threshold does not answer — but not a lookup under a key
@@ -925,8 +1094,180 @@ pub fn select_layers_with(
         definition.similar_votes,
         choice.target_precision,
         choice.minimum_answered,
+        pooled_memory,
     );
     LayerThresholds { key, memory }
+}
+
+/// [`ThresholdRule::Pooled`]: of the attribute's latest lookups, reaching back for answers as the rule says, the key and
+/// similar record thresholds that answer the most while the precision of their answers together holds the target at
+/// [`POOLED_STANDARD_ERRORS`] standard errors, on at least the minimum number of answers. Key thresholds are tried from
+/// none down through the key scores seen (at most [`POOLED_KEY_CANDIDATES`] of them, evenly spread), and for each, every
+/// similarity score at which ties end; the first pair to answer the most wins. `None` for a layer the pair leaves
+/// silent — both when no pair holds the target.
+fn pooled(
+    steps: &[Step],
+    definition: &crate::schema::Attribute,
+    target_precision: f64,
+    minimum_answered: usize,
+) -> (Option<f64>, Option<f64>) {
+    let lookups: Vec<&Step> = steps.iter().filter(|s| s.key_looked || s.looked).collect();
+    let mut start = lookups.len().saturating_sub(POOLED_RECENT_LOOKUPS);
+    if start > 0 {
+        // Reach back while the attribute's thresholds as they stand answer fewer than the answers to rest on.
+        let mut answered = 0_usize;
+        let mut reach = 0_usize;
+        for i in (0..lookups.len()).rev() {
+            if answered_as_it_stands(lookups[i], definition) {
+                answered += 1;
+            }
+
+            if answered >= POOLED_RECENT_ANSWERS {
+                reach = i;
+                break;
+            }
+        }
+
+        start = start.min(reach);
+    }
+
+    let window = &lookups[start..];
+    let mut keys: Vec<f64> = window
+        .iter()
+        .filter(|s| s.key_looked)
+        .filter_map(|s| s.key.as_ref().filter(|k| !k.caught).map(|k| k.score))
+        .collect();
+    keys.sort_by(f64::total_cmp);
+    keys.dedup();
+    let mut similar: Vec<(&Step, Vote)> = window
+        .iter()
+        .filter(|s| s.looked && !s.key.as_ref().is_some_and(|k| k.caught))
+        .filter_map(|s| s.vote.map(|v| (*s, v)))
+        .collect();
+    similar.sort_by(|a, b| b.1.score.total_cmp(&a.1.score));
+
+    let mut best: Option<(usize, f64, f64)> = None;
+    for key_threshold in key_candidates(&keys) {
+        let key_answers = |s: &Step| {
+            s.key_looked
+                && s.key
+                    .as_ref()
+                    .is_some_and(|k| !k.caught && k.score >= key_threshold)
+        };
+        let (mut count, mut weight, mut correct, mut squares) =
+            (0_usize, 0.0_f64, 0.0_f64, 0.0_f64);
+        for s in window.iter().filter(|s| key_answers(s)) {
+            count += 1;
+            weight += s.weight;
+            correct += if s.key.as_ref().is_some_and(|k| k.matches) {
+                s.weight
+            } else {
+                0.0
+            };
+            squares += s.weight * s.weight;
+        }
+
+        let key_count = count;
+        let mut most: i64 = if holds(weight, correct, squares, target_precision, minimum_answered) {
+            count as i64
+        } else {
+            -1
+        };
+        let mut at_score = f64::INFINITY;
+        for (i, (s, v)) in similar.iter().enumerate() {
+            if !key_answers(s) {
+                count += 1;
+                weight += s.weight;
+                correct += if v.correct { s.weight } else { 0.0 };
+                squares += s.weight * s.weight;
+            }
+
+            let tie_ends = i == similar.len() - 1 || similar[i + 1].1.score != v.score;
+            if tie_ends
+                && count > key_count
+                && count as i64 > most
+                && holds(weight, correct, squares, target_precision, minimum_answered)
+            {
+                most = count as i64;
+                at_score = v.score;
+            }
+        }
+
+        if most > 0 && best.is_none_or(|(c, _, _)| most as usize > c) {
+            best = Some((most as usize, key_threshold, at_score));
+        }
+    }
+
+    match best {
+        Some((_, k, s)) => (
+            (!k.is_infinite()).then_some(k),
+            (!s.is_infinite()).then_some(s),
+        ),
+        None => (None, None),
+    }
+}
+
+/// None, then the key scores seen from the highest down — or, when there are more than [`POOLED_KEY_CANDIDATES`], that
+/// many evenly spread between the lowest and the highest, interpolated linearly between neighbouring scores.
+fn key_candidates(ascending: &[f64]) -> Vec<f64> {
+    let mut spread: Vec<f64> = if ascending.len() > POOLED_KEY_CANDIDATES {
+        let last = ascending.len() - 1;
+        (0..POOLED_KEY_CANDIDATES)
+            .map(|i| {
+                let position = (i as f64 * last as f64) / (POOLED_KEY_CANDIDATES - 1) as f64;
+                let below = position.floor() as usize;
+                if below >= last {
+                    ascending[last]
+                } else {
+                    ascending[below]
+                        + ((position - below as f64) * (ascending[below + 1] - ascending[below]))
+                }
+            })
+            .collect()
+    } else {
+        ascending.to_vec()
+    };
+    spread.sort_by(|a, b| b.total_cmp(a));
+    spread.dedup();
+    let mut candidates = vec![f64::INFINITY];
+    candidates.extend(spread);
+    candidates
+}
+
+/// Whether answers of this weight hold the target at the low end of their Wilson interval at
+/// [`POOLED_STANDARD_ERRORS`], resting on at least the minimum number.
+fn holds(
+    weight: f64,
+    correct: f64,
+    squares: f64,
+    target_precision: f64,
+    minimum_answered: usize,
+) -> bool {
+    if weight <= 0.0 {
+        return false;
+    }
+
+    let effective = weight * weight / squares;
+    effective >= minimum_answered as f64
+        && lower_at(correct / weight, effective, POOLED_STANDARD_ERRORS) >= target_precision
+}
+
+/// Whether the attribute's thresholds as they stand would have answered the lookup, as a suggestion does.
+fn answered_as_it_stands(step: &Step, definition: &crate::schema::Attribute) -> bool {
+    step.key_looked
+        && step
+            .key
+            .as_ref()
+            .is_some_and(|k| !k.caught && definition.key_threshold.is_some_and(|t| k.score >= t))
+        || step.looked
+            && !step.key.as_ref().is_some_and(|k| k.caught)
+            && step.vote.is_some_and(|v| {
+                definition.memory_threshold.is_some_and(|t| v.score >= t)
+                    && !(v.voted
+                        && definition
+                            .memory_floor
+                            .is_some_and(|floor| v.nearest < floor))
+            })
 }
 
 /// Chooses the thresholds of `attribute`'s coarse level in the order a suggestion offers it: on the lookups the attribute's
@@ -1048,6 +1389,7 @@ pub fn select_coarse_with(
         definition.similar_votes,
         choice.target_precision,
         choice.minimum_answered,
+        None,
     );
     LayerThresholds { key, memory }
 }
@@ -1252,6 +1594,7 @@ fn similarity(
     votes: usize,
     target_precision: f64,
     minimum_answered: usize,
+    pooled: Option<Option<f64>>,
 ) -> ThresholdReplay {
     let voting: Vec<(&Step, Vote)> = looked
         .iter()
@@ -1268,7 +1611,7 @@ fn similarity(
             caught: false,
         })
         .collect();
-    let replay = fit_recent(
+    let mut replay = fit_recent(
         &answers,
         looked.len(),
         looked.iter().fold(0.0, |sum, s| sum + s.weight),
@@ -1276,6 +1619,22 @@ fn similarity(
         target_precision,
         minimum_answered,
     );
+    if let Some(threshold) = pooled {
+        replay = ThresholdReplay {
+            chosen: threshold.and_then(|t| {
+                at(
+                    &answers,
+                    looked.len(),
+                    looked.iter().fold(0.0, |sum, s| sum + s.weight),
+                    latest,
+                    t,
+                    minimum_answered,
+                )
+            }),
+            ..replay
+        };
+    }
+
     if votes == 1 {
         return replay;
     }

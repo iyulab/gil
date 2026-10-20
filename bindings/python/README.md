@@ -57,6 +57,16 @@ The other settings follow the same pattern — choose, then set on the attribute
 `key_concentrations`, after `key_fields`) and, for an attribute with a coarse level (`"coarse": {"prefix": 2}`),
 `select_coarse` once its value thresholds are set.
 
+When the target is a share of all the attribute's answers rather than a floor under every band of them, choose both
+thresholds together with `rule="pooled"`: the pair that answers the most of the latest 5,000 lookups while all those
+answers hold the target at the bottom of their Wilson interval at 1.645 standard errors (it reaches further back when
+the attribute's current thresholds answered fewer than 1,000 of them). Each layer's `chosen` still reports that
+layer's own precision and promise.
+
+```python
+thresholds, _ = gil.select_layers(schema, "team", records, target_precision=0.8, rule="pooled")
+```
+
 ## Answering a record while its values arrive
 
 A decider holds the settled records; an open record asks it each time a value arrives or is settled, and hands back

@@ -12,8 +12,8 @@ use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::open_record;
 use gil::replay::{
-    Choice, LayerThresholds, select_coarse_with, select_key_concentrations, select_key_fields,
-    select_layers_with,
+    Choice, LayerThresholds, ThresholdRule, select_coarse_with, select_key_concentrations,
+    select_key_fields, select_layers_by_rule_with,
 };
 use gil::schema::{AttributeRole, Record, Schema, Settlement, SettlementKind};
 use gil::tuning::Tuning;
@@ -188,7 +188,8 @@ fn selection_input(
 /// Replays the records in order and chooses the attribute's key and memory thresholds, as `select_layers` does. Returns
 /// the thresholds as JSON and, when `decisions` is true, the decision records as JSON lines.
 #[pyfunction]
-#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, decisions=true))]
+#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, decisions=true, rule="every_band"))]
+#[allow(clippy::too_many_arguments)]
 fn select_layers_json(
     schema_json: &str,
     attribute: &str,
@@ -197,7 +198,17 @@ fn select_layers_json(
     minimum_answered: usize,
     counting: Option<Vec<String>>,
     decisions: bool,
+    rule: &str,
 ) -> PyResult<(String, Option<String>)> {
+    let rule = match rule {
+        "every_band" => ThresholdRule::EveryBand,
+        "pooled" => ThresholdRule::Pooled,
+        other => {
+            return Err(invalid(format!(
+                "unknown threshold rule '{other}' (every_band or pooled)"
+            )));
+        }
+    };
     let (schema, counting) = selection_input(
         schema_json,
         attribute,
@@ -211,13 +222,14 @@ fn select_layers_json(
         counting: counting.as_deref(),
     };
     let mut lines = decisions.then(String::new);
-    let layers = select_layers_with(
+    let layers = select_layers_by_rule_with(
         &mut KeyMemory::default(),
         &mut LexicalMemory::default(),
         &schema,
         attribute,
         &records.records,
         choice,
+        rule,
         &mut |r| push_record(&mut lines, r),
     );
     Ok((to_json(&layers), lines))

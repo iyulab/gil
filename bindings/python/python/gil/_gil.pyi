@@ -39,6 +39,7 @@ def select_layers_json(
     minimum_answered: int,
     counting: list[str] | None = None,
     decisions: bool = True,
+    rule: str = "every_band",
 ) -> tuple[str, str | None]:
     """The attribute's key and memory threshold replays as JSON and, when `decisions` is true, the decision records as JSON lines."""
 

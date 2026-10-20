@@ -160,6 +160,33 @@ def test_the_golden_layers_choice_comes_back() -> None:
                 assert have["promise"] == want["promise"], (attribute, layer)
 
 
+def test_the_pooled_rule_holds_the_target_on_its_answers_together() -> None:
+    import math
+
+    first = gil.records(lines("records.jsonl")[:CHOSEN])
+    schema = gil.Schema.from_dict(golden_form("team"))
+    every, _ = gil.select_layers(schema, "team", first, 0.8, 10, decisions=False)
+    pooled, _ = gil.select_layers(
+        schema, "team", first, 0.8, 10, decisions=False, rule="pooled"
+    )
+
+    def together(layers: dict) -> tuple[int, float]:
+        chosen = [layers[k]["chosen"] for k in ("key", "memory") if layers[k]["chosen"]]
+        n = sum(c["answered"] for c in chosen)
+        return n, sum(c["precision"] * c["answered"] for c in chosen)
+
+    n, right = together(pooled)
+    assert n >= together(every)[0]
+    p, z = right / n, 1.645
+    low = (p + z * z / (2 * n) - z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))) / (
+        1 + z * z / n
+    )
+    assert low >= 0.8
+    assert pooled["key"]["most_precise"] == every["key"]["most_precise"]
+    with pytest.raises(ValueError, match="unknown threshold rule"):
+        gil.select_layers(schema, "team", first, 0.8, 10, rule="some")  # type: ignore[arg-type]
+
+
 def test_bad_input_is_a_value_error() -> None:
     with pytest.raises(ValueError, match="unknown field `colour`"):
         gil.Schema.from_dict(
