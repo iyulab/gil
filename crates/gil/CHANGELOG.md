@@ -31,6 +31,14 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   "decided", ...}]}` (was `fields` · `judged`), with `similar_votes` · `memory_floor` for the renamed settings. A
   decision record's `field` is `attribute`, and a similar look's `document` is `record`. Records' JSON lines are
   unchanged.
+- **A candidate's evidence is structured.** `decider::Candidate::evidence` is `Option<Evidence>` —
+  `Evidence::Key(Key { attribute, value })` for a key (the value as the key memory keeps it, normalized and cut to the
+  key length) or `Evidence::Record { id, similarity }` for a similar record — in place of the string
+  `"attribute: value"` or the record id. What to do: match on it; `to_string()` gives the old text. Likewise
+  `key_memory::Candidate::evidence` is `Option<Key>` and `KeyMemory::keyed_values` returns `Key`s. Decision records keep
+  the text (`KeyLook::key`).
+- **Python rejects a schema the core would not take**: no decided attribute, a duplicate name, settings on an attribute
+  they do not fit (see `Schema::check`). Such a schema used to read and fail later or behave oddly.
 
 ### Added
 
@@ -45,6 +53,9 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   offer only values inside it once it has a value; while it is empty the domain is not narrowed. `Attribute::admits_in`
   answers for a record; `admits` keeps answering for `candidates` alone. Python reads it as `"candidates_from"`; a
   schema whose attribute takes its candidates from itself or from an unknown attribute is rejected.
+- **`Schema::check`** — the rules the .NET library applies when a form is made: unique names, at least one decided
+  attribute, settings that fit their attribute, dependencies · key attributes · key concentrations · `candidates_from`
+  that name other attributes. The Python binding applies it to every schema it reads.
 - **`schema::Settlement`** — `accept` · `correct` · `enter` · `fill` · `check(value, probability)` · `restore` · `set`
   · `restore_set` · `reject` · `revert`.
 - **`schema::AttributePolicy`** (`Suggest` · `ConfirmRequired` · `Off`) on `Attribute::policy`: an attribute that is

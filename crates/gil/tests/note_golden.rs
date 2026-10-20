@@ -185,7 +185,13 @@ fn the_note_settings_reproduce_their_golden() {
 }
 
 fn candidate(c: &Candidate) -> Value {
-    json!([c.value, c.score, c.source.name(), c.evidence, c.trusted])
+    json!([
+        c.value,
+        c.score,
+        c.source.name(),
+        c.evidence.as_ref().map(ToString::to_string),
+        c.trusted
+    ])
 }
 
 fn decision(kind: &str, id: &str, s: &Answer) -> Value {

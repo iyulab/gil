@@ -1,6 +1,7 @@
 //! An attribute's coarse level as the two memory layers back it, shared by suggestions and by the replays its thresholds are
 //! chosen on.
 
+use crate::key_memory::Key;
 use crate::lexical_memory::Match;
 use crate::schema::CoarseLevel;
 
@@ -8,8 +9,8 @@ use crate::schema::CoarseLevel;
 /// class's, the classes in order of their best-ranked value. The score is that sum, on the key layer's scale, and the
 /// evidence the key backing its best value. A tie goes to the class of the better-ranked value. `None` when no value is
 /// under the keys.
-pub fn keys(keyed: &[(String, f64, String)], level: &CoarseLevel) -> Option<(String, f64, String)> {
-    let mut groups: Vec<(String, f64, String)> = Vec::new();
+pub fn keys(keyed: &[(String, f64, Key)], level: &CoarseLevel) -> Option<(String, f64, Key)> {
+    let mut groups: Vec<(String, f64, Key)> = Vec::new();
     for (value, score, evidence) in keyed {
         let named = level.of(value);
         match groups.iter_mut().find(|g| g.0 == named) {

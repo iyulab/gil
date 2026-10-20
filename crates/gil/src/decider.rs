@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::coarse_groups;
 use crate::decision_record::{Answered, CoarseLook, DecisionRecord, KeyLook, SimilarLook};
-use crate::key_memory::{self, KeyMemory, Lookup};
+use crate::key_memory::{self, Key, KeyMemory, Lookup};
 use crate::lexical_memory::{LexicalMemory, Match};
 use crate::schema::{Attribute, AttributePolicy, AttributeRole, CoarseLevel, Record, Schema};
 use crate::{similar_vote, text};
@@ -37,14 +37,33 @@ impl Source {
     }
 }
 
-/// A value offered for an attribute: its score on its layer's scale, the layer, what backs it (the key `attribute: value`, or
-/// the similar record's id), and whether the layer trusts it.
+/// What a candidate rests on, for a host to show: the key backing it, or the similar settled record it came from.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Evidence {
+    /// Another attribute's value (as the key memory keeps it) under which the value was settled.
+    Key(Key),
+    /// The settled record whose value it is — for a vote, its nearest voter — and how similar that record is.
+    Record { id: String, similarity: f64 },
+}
+
+impl std::fmt::Display for Evidence {
+    /// The reference implementation's text: `attribute: value` for a key, the record id for a record.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Evidence::Key(key) => key.fmt(f),
+            Evidence::Record { id, .. } => f.write_str(id),
+        }
+    }
+}
+
+/// A value offered for an attribute: its score on its layer's scale, the layer, what backs it — none for the attribute's
+/// overall frequency and an external judgement — and whether the layer trusts it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Candidate {
     pub value: String,
     pub score: f64,
     pub source: Source,
-    pub evidence: Option<String>,
+    pub evidence: Option<Evidence>,
     pub trusted: bool,
 }
 
@@ -372,7 +391,7 @@ impl Decider {
                 value: c.value,
                 score: c.score,
                 source: Source::SettledFieldMemory,
-                evidence: c.evidence,
+                evidence: c.evidence.map(Evidence::Key),
                 trusted: c.trusted,
             })
             .collect();
@@ -477,7 +496,11 @@ impl Decider {
                 strength: best.score,
                 value: best.value.clone(),
                 correct: None,
-                key: best.evidence.clone().unwrap_or_default(),
+                key: best
+                    .evidence
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_default(),
                 caught,
             }),
             similar: vote,
@@ -487,7 +510,7 @@ impl Decider {
                     strength,
                     value: class,
                     correct: None,
-                    key,
+                    key: key.to_string(),
                     caught,
                 }),
                 vote: vote.map(|(class, score, nearest, voted)| SimilarLook {
@@ -571,7 +594,10 @@ impl Decider {
             value: winner.answer.clone(),
             score,
             source: Source::SimilarDocument,
-            evidence: Some(winner.source.clone()),
+            evidence: Some(Evidence::Record {
+                id: winner.source.clone(),
+                similarity: winner.similarity,
+            }),
             trusted: hit,
         };
         let look = SimilarLook {
@@ -591,21 +617,24 @@ impl Decider {
 /// class, or the vote's when the keys back none.
 fn coarse(
     level: &CoarseLevel,
-    keys: Option<(String, f64, String)>,
+    keys: Option<(String, f64, Key)>,
     vote: Option<(String, f64, Match, bool)>,
 ) -> Option<Candidate> {
-    let from_keys = |(class, score, evidence): (String, f64, String), trusted| Candidate {
+    let from_keys = |(class, score, key): (String, f64, Key), trusted| Candidate {
         value: class,
         score,
         source: Source::SettledFieldMemory,
-        evidence: Some(evidence),
+        evidence: Some(Evidence::Key(key)),
         trusted,
     };
     let from_vote = |(class, score, nearest, _): (String, f64, Match, bool), trusted| Candidate {
         value: class,
         score,
         source: Source::SimilarDocument,
-        evidence: Some(nearest.source),
+        evidence: Some(Evidence::Record {
+            id: nearest.source,
+            similarity: nearest.similarity,
+        }),
         trusted,
     };
     if let Some(k) = &keys

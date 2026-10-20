@@ -10,11 +10,18 @@ use std::collections::{BTreeMap, HashMap};
 use crate::schema::{Attribute, AttributeRole, Record, Schema};
 use crate::{hangul, text};
 
-/// Another attribute's normalized value.
+/// A key: another attribute and its value as the key memory keeps it — normalized and cut to the memory's key length, so
+/// it may differ from the value as settled. Shown as `attribute: value`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct Key {
-    attribute: String,
-    value: String,
+pub struct Key {
+    pub attribute: String,
+    pub value: String,
+}
+
+impl std::fmt::Display for Key {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.attribute, self.value)
+    }
 }
 
 /// An attribute's counts under one key, or overall when the key is `None`.
@@ -42,12 +49,13 @@ struct Share {
     latest: i64,
 }
 
-/// A candidate value: its score, the key that backs it most strongly (`attribute: value`), and whether it is trusted.
+/// A candidate value: its score, the key that backs it most strongly (none for the attribute's overall frequency), and
+/// whether it is trusted.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Candidate {
     pub value: String,
     pub score: f64,
-    pub evidence: Option<String>,
+    pub evidence: Option<Key>,
     pub trusted: bool,
 }
 
@@ -329,7 +337,7 @@ impl KeyMemory {
             .map(|(i, (value, score, key))| Candidate {
                 value,
                 score,
-                evidence: Some(format!("{}: {}", key.attribute, key.value)),
+                evidence: Some(key),
                 // One value answers an attribute that takes one value; each value whose own score reaches the threshold, a set.
                 trusted: if definition.multiple {
                     reaches(score)
@@ -411,7 +419,7 @@ impl KeyMemory {
     /// (`attribute: value`) — what an attribute's coarse level adds up by class. Empty when no known key was seen. The
     /// settlements of the record the lookup excludes, one asked about again, are left out; its typed text is not
     /// taken into account.
-    pub fn keyed_values(&self, q: &Lookup) -> Vec<(String, f64, String)> {
+    pub fn keyed_values(&self, q: &Lookup) -> Vec<(String, f64, Key)> {
         let Some(index) = self.schemas.get(&q.schema.name) else {
             return Vec::new();
         };
@@ -421,9 +429,6 @@ impl KeyMemory {
         }
 
         self.keyed(index, &q)
-            .into_iter()
-            .map(|(value, score, key)| (value, score, format!("{}: {}", key.attribute, key.value)))
-            .collect()
     }
 
     /// For each key the known values give the looked-up attribute and that was seen before: the key's attribute, its weighted

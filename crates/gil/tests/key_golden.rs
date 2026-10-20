@@ -40,7 +40,14 @@ fn the_key_layer_reproduces_its_golden() {
             let candidates: Vec<Value> = memory
                 .rank(&Lookup::new(&schema, attribute, &observed), 3)
                 .into_iter()
-                .map(|c| json!([c.value, c.score, c.evidence, c.trusted]))
+                .map(|c| {
+                    json!([
+                        c.value,
+                        c.score,
+                        c.evidence.as_ref().map(ToString::to_string),
+                        c.trusted
+                    ])
+                })
                 .collect();
             let actual = json!({
                 "kind": "key_rank",

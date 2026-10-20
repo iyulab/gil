@@ -1158,7 +1158,7 @@ fn replay(
                         strength,
                         correct: Some(c == class),
                         value: c,
-                        key,
+                        key: key.to_string(),
                         caught: false,
                     }),
                     vote: voted_class.map(|(c, score, nearest, voted)| SimilarLook {

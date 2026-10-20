@@ -173,17 +173,9 @@ fn schema(text: &str) -> Parsed<Schema> {
     if let Some(other) = settings.keys().find(|k| *k != "name" && *k != "attributes") {
         return Err(format!("unknown schema setting '{other}'"));
     }
-    for a in &attributes {
-        if let Some(from) = &a.candidates_from
-            && (from == &a.name || !attributes.iter().any(|b| &b.name == from))
-        {
-            return Err(format!(
-                "attribute '{}' takes its candidates from '{from}', which is not another attribute of the schema",
-                a.name
-            ));
-        }
-    }
-    Ok(Schema { name, attributes })
+    let schema = Schema { name, attributes };
+    schema.check()?;
+    Ok(schema)
 }
 
 /// `yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM` → 100-nanosecond ticks since the Unix epoch, UTC.

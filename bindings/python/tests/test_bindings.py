@@ -169,8 +169,27 @@ def test_bad_input_is_a_value_error() -> None:
         gil.Schema.from_dict({"name": "f", "attributes": [{"name": "a"}]})
     with pytest.raises(ValueError, match="settled_at"):
         gil.records([{"id": "1", "settled_at": "yesterday", "values": {}}])
+    with pytest.raises(ValueError, match="at least one decided attribute"):
+        gil.Schema.from_dict(
+            {"name": "f", "attributes": [{"name": "a", "role": "observed"}]}
+        )
+    with pytest.raises(ValueError, match="takes its candidates from 'b'"):
+        gil.Schema.from_dict(
+            {
+                "name": "f",
+                "attributes": [
+                    {"name": "a", "role": "decided", "candidates_from": "b"}
+                ],
+            }
+        )
     schema = gil.Schema.from_dict(
-        {"name": "f", "attributes": [{"name": "a", "role": "observed"}]}
+        {
+            "name": "f",
+            "attributes": [
+                {"name": "a", "role": "observed"},
+                {"name": "b", "role": "decided"},
+            ],
+        }
     )
     with pytest.raises(ValueError, match="not decided"):
         gil.select_layers(schema, "a", gil.records([]))
@@ -232,7 +251,13 @@ def test_the_golden_key_fields_choice_comes_back() -> None:
     for world, typed_longest in (("ticket", 0), ("ticket-typed", 2)):
         want = wanted[world]
         have = gil.select_key_fields(
-            schema, "team", first, 0.8, 10, counting=COUNTED, typed_longest=typed_longest
+            schema,
+            "team",
+            first,
+            0.8,
+            10,
+            counting=COUNTED,
+            typed_longest=typed_longest,
         )
         assert have["key_fields"] == want["fields"], world
         same_replay(have["chosen"], want["chosen"], world)
@@ -280,20 +305,26 @@ def test_the_golden_coarse_choice_and_records_come_back() -> None:
         for line in lines("golden.jsonl")
         if line["kind"] == "coarse" and line["field"] == "code"
     )
-    thresholds, records = gil.select_coarse(schema, "code", first, 0.8, 10, counting=COUNTED)
+    thresholds, records = gil.select_coarse(
+        schema, "code", first, 0.8, 10, counting=COUNTED
+    )
     for layer in ("key", "memory"):
         same_replay(thresholds[layer], want[layer], f"coarse {layer}")
     bare, none = gil.select_coarse(
         schema, "code", first, 0.8, 10, counting=COUNTED, decisions=False
     )
     assert none is None and bare == thresholds
-    expected = [line for line in lines("records-out.jsonl") if line["kind"] == "coarse_record"]
+    expected = [
+        line for line in lines("records-out.jsonl") if line["kind"] == "coarse_record"
+    ]
     assert records is not None and len(records) == len(expected)
     for i, (record, line) in enumerate(zip(records, expected, strict=True)):
         assert set(record["coarse"]) == set(gil.CoarseLook.__annotations__)
         assert json.loads(
             json.dumps(as_golden(record, "coarse_record")), parse_int=float
-        ) == json.loads(json.dumps(line), parse_int=float), f"coarse record line {i + 1}"
+        ) == json.loads(json.dumps(line), parse_int=float), (
+            f"coarse record line {i + 1}"
+        )
     with pytest.raises(ValueError, match="no coarse level"):
         gil.select_coarse(gil.Schema.from_dict(declared_form()), "team", first)
 

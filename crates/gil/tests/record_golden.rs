@@ -206,7 +206,11 @@ fn suggest_and_check(schema: &gil::schema::Schema) -> [usize; 7] {
                     .find(|c| c.source == Source::SimilarDocument)
                 {
                     assert_eq!(
-                        (c.value.as_str(), c.score, c.evidence.as_deref()),
+                        (
+                            c.value.as_str(),
+                            c.score,
+                            c.evidence.as_ref().map(ToString::to_string).as_deref()
+                        ),
                         (
                             similar.value.as_str(),
                             similar.score,
@@ -224,7 +228,10 @@ fn suggest_and_check(schema: &gil::schema::Schema) -> [usize; 7] {
                     .find(|c| c.source == Source::SettledFieldMemory && c.evidence.is_some());
                 if let Some(c) = best.filter(|c| c.value == key.value) {
                     assert_eq!(
-                        (c.score, c.evidence.as_deref()),
+                        (
+                            c.score,
+                            c.evidence.as_ref().map(ToString::to_string).as_deref()
+                        ),
                         (key.strength, Some(key.key.as_str()))
                     );
                 }
@@ -242,7 +249,11 @@ fn suggest_and_check(schema: &gil::schema::Schema) -> [usize; 7] {
                         Some(c) if c.source == Source::SettledFieldMemory => {
                             let k = keys.expect("the keys' class");
                             assert_eq!(
-                                (c.value.as_str(), c.score, c.evidence.as_deref()),
+                                (
+                                    c.value.as_str(),
+                                    c.score,
+                                    c.evidence.as_ref().map(ToString::to_string).as_deref()
+                                ),
                                 (k.value.as_str(), k.strength, Some(k.key.as_str()))
                             );
                             offered += 1;
@@ -251,7 +262,11 @@ fn suggest_and_check(schema: &gil::schema::Schema) -> [usize; 7] {
                             assert_eq!(c.source, Source::SimilarDocument);
                             let v = vote.expect("the vote's class");
                             assert_eq!(
-                                (c.value.as_str(), c.score, c.evidence.as_deref()),
+                                (
+                                    c.value.as_str(),
+                                    c.score,
+                                    c.evidence.as_ref().map(ToString::to_string).as_deref()
+                                ),
                                 (v.value.as_str(), v.score, Some(v.record.as_str()))
                             );
                             offered += 1;

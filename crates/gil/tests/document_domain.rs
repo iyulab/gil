@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use gil::decider::{Answer, Decider, ExternalCandidate, Source};
+use gil::decider::{Answer, Decider, Evidence, ExternalCandidate, Source};
 use gil::key_memory::{KeyMemory, Lookup};
 use gil::lexical_memory::LexicalMemory;
 use gil::replay::{Choice, select_key_threshold};
@@ -211,7 +211,7 @@ fn a_similar_record_whose_value_lies_outside_the_records_domain_does_not_vote() 
         .filter(|c| c.source == Source::SimilarDocument)
         .collect();
     assert_eq!(similar.len(), 1);
-    assert_eq!(similar[0].evidence.as_deref(), Some("d2"));
+    assert!(matches!(&similar[0].evidence, Some(Evidence::Record { id, .. }) if id == "d2"));
 }
 
 #[test]
@@ -245,4 +245,90 @@ fn a_key_threshold_replay_narrows_as_answers_do() {
 
     assert_eq!(narrowed.chosen.expect("a threshold").precision, 1.0);
     assert!(unnarrowed.chosen.is_none());
+}
+
+#[test]
+fn a_schema_is_checked_as_the_reference_checks_a_form() {
+    assert_eq!(paper(Some(0.3), None).check(), Ok(()));
+    let broken = |edit: &dyn Fn(&mut Schema)| {
+        let mut s = paper(Some(0.3), None);
+        edit(&mut s);
+        s.check().expect_err("a broken schema")
+    };
+    assert!(
+        broken(&|s| s.attributes[3].candidates_from = Some("subjects".into()))
+            .contains("'main' takes its candidates from 'subjects'")
+    );
+    assert!(
+        broken(&|s| s.attributes[3].candidates_from = Some("main".into()))
+            .contains("'main' takes its candidates from 'main'")
+    );
+    assert!(
+        broken(&|s| s.attributes[1].name = "area".into()).contains("'area' appears more than once")
+    );
+    assert!(
+        broken(&|s| s.attributes[0].multiple = true)
+            .contains("only a decided attribute can take several values")
+    );
+    assert!(
+        broken(&|s| s.attributes[2].memory_threshold = Some(0.5))
+            .contains("takes no memory threshold")
+    );
+    assert!(
+        broken(&|s| s.attributes[3].depends_on = Some(vec!["main".into()]))
+            .contains("depends on 'main'")
+    );
+    assert!(
+        broken(&|s| s.attributes[3].key_fields = Some(vec!["topics".into()]))
+            .contains("is keyed by 'topics'")
+    );
+    assert!(broken(&|s| s.attributes[3].similar_votes = 0).contains("at least one must"));
+    assert!(
+        broken(&|s| {
+            for a in &mut s.attributes {
+                a.role = AttributeRole::Observed;
+                a.multiple = false;
+            }
+        })
+        .contains("at least one decided attribute")
+    );
+}
+
+#[test]
+fn a_candidate_carries_the_key_or_the_record_it_rests_on() {
+    let schema = paper(Some(0.3), Some(0.0));
+    let mut decider = Decider::new(KeyMemory::default(), Some(LexicalMemory::default()));
+    decider.rebuild(&schema, &history());
+    let ai = values("ai", "paper 1");
+    let answer = main_answer(&decider, &schema, &ai, &topics(&[]));
+
+    let key = answer
+        .candidates
+        .iter()
+        .find_map(|c| match &c.evidence {
+            Some(Evidence::Key(key)) => Some(key),
+            _ => None,
+        })
+        .expect("a keyed candidate");
+    assert_eq!((key.attribute.as_str(), key.value.as_str()), ("area", "ai"));
+    assert_eq!(key.to_string(), "area: ai");
+
+    let similar = decider.answer_one(
+        &schema,
+        "d9",
+        "main",
+        &BTreeMap::from([("abstract".to_owned(), "paper 1 again".to_owned())]),
+        &topics(&[]),
+        None,
+    );
+    let record = similar
+        .candidates
+        .iter()
+        .find_map(|c| match &c.evidence {
+            Some(Evidence::Record { id, similarity }) => Some((id.clone(), *similarity)),
+            _ => None,
+        })
+        .expect("a similar record");
+    assert_eq!(record.0, "d1");
+    assert!(record.1 > 0.0);
 }

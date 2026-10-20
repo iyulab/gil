@@ -29,19 +29,19 @@ from gil._gil import (
 __all__ = [
     "CoarseLook",
     "DecisionRecord",
-    "Records",
-    "Schema",
     "KeyFieldsChoice",
     "KeyFieldsTrial",
     "KeyLook",
     "KeyState",
     "LayerThresholds",
+    "Records",
+    "Schema",
     "SimilarLook",
     "ThresholdChoice",
     "ThresholdReplay",
     "TypedKeyThresholds",
-    "records",
     "read_records",
+    "records",
     "select_coarse",
     "select_key_concentrations",
     "select_key_fields",
@@ -306,7 +306,9 @@ def select_coarse(
     return cast(LayerThresholds, json.loads(thresholds)), out
 
 
-def select_key_concentrations(schema: Schema, attribute: str, records: Records) -> dict[str, float]:
+def select_key_concentrations(
+    schema: Schema, attribute: str, records: Records
+) -> dict[str, float]:
     """Chooses, for each attribute that keys ``attribute``, how readily its keys are believed after only a few settlements.
 
     A key attribute whose keys point at one record's value (a reference number, an outlet) is believed after one or two

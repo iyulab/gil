@@ -186,6 +186,123 @@ pub struct Schema {
 }
 
 impl Schema {
+    /// Checks the schema as the reference implementation does when one is made: a name, unique attribute names, at least
+    /// one decided attribute, and settings that fit their attribute — several values only for a decided attribute and
+    /// then no memory threshold or typed key thresholds, at least one similar-record vote, a coarse level (with a prefix
+    /// of at least one, or a table) and values to catch only on a decided single-valued attribute, dependencies and key
+    /// attributes that name other attributes that are evidence (key attributes among the dependencies when those are
+    /// given), key concentrations for known attributes that are finite and above 0, and candidates taken from another
+    /// attribute. The error names the first rule broken.
+    pub fn check(&self) -> Result<(), String> {
+        if self.name.trim().is_empty() {
+            return Err("a schema needs a name".into());
+        }
+
+        let mut seen = std::collections::BTreeSet::new();
+        for a in &self.attributes {
+            if a.name.trim().is_empty() {
+                return Err("an attribute needs a name".into());
+            }
+            if !seen.insert(a.name.as_str()) {
+                return Err(format!("attribute '{}' appears more than once", a.name));
+            }
+        }
+
+        if !self
+            .attributes
+            .iter()
+            .any(|a| a.role == AttributeRole::Decided)
+        {
+            return Err("a schema needs at least one decided attribute".into());
+        }
+
+        let named = |name: &str| self.attributes.iter().find(|a| a.name == name);
+        for a in &self.attributes {
+            let n = &a.name;
+            let decided_one = a.role == AttributeRole::Decided && !a.multiple;
+            if a.multiple && a.role != AttributeRole::Decided {
+                return Err(format!(
+                    "attribute '{n}' is observed; only a decided attribute can take several values"
+                ));
+            }
+            if a.multiple && a.memory_threshold.is_some() {
+                return Err(format!(
+                    "attribute '{n}' takes several values; the similar record layer does not answer it, so it takes no memory threshold"
+                ));
+            }
+            if a.similar_votes < 1 {
+                return Err(format!(
+                    "attribute '{n}' gives no similar record a vote; at least one must"
+                ));
+            }
+            if let Some(level) = &a.coarse {
+                if level.prefix < 1 && level.classes.is_none() {
+                    return Err(format!(
+                        "attribute '{n}' gives its coarse level a prefix of 0 characters; at least one"
+                    ));
+                }
+                if !decided_one {
+                    return Err(format!(
+                        "attribute '{n}' takes a coarse level, which only a decided attribute with a single value has"
+                    ));
+                }
+            }
+            if a.must_catch.as_ref().is_some_and(|m| !m.is_empty()) && !decided_one {
+                return Err(format!(
+                    "attribute '{n}' names values it must not miss, which only a decided attribute with a single value has"
+                ));
+            }
+            if a.multiple && a.typed_key_thresholds.is_some() {
+                return Err(format!(
+                    "attribute '{n}' takes several values; typed text narrows its candidates but takes no typed key thresholds"
+                ));
+            }
+            for d in a.depends_on.iter().flatten() {
+                match named(d) {
+                    Some(other) if d != n && other.use_as_evidence => {}
+                    Some(other) if d != n && !other.use_as_evidence => {
+                        return Err(format!(
+                            "attribute '{n}' depends on '{d}', which is not evidence"
+                        ));
+                    }
+                    _ => {
+                        return Err(format!(
+                            "attribute '{n}' depends on '{d}', which is not another attribute of the schema"
+                        ));
+                    }
+                }
+            }
+            for k in a.key_fields.iter().flatten() {
+                let rests = named(k).is_some_and(|other| {
+                    k != n
+                        && other.use_as_evidence
+                        && a.depends_on.as_ref().is_none_or(|d| d.contains(k))
+                });
+                if !rests {
+                    return Err(format!(
+                        "attribute '{n}' is keyed by '{k}', which is not an attribute it rests on"
+                    ));
+                }
+            }
+            for (k, c) in &a.key_concentrations {
+                if named(k).is_none() || !c.is_finite() || *c <= 0.0 {
+                    return Err(format!(
+                        "attribute '{n}' has a key concentration for '{k}' that is not an attribute of the schema with a finite concentration above 0"
+                    ));
+                }
+            }
+            if let Some(from) = &a.candidates_from
+                && (from == n || named(from).is_none())
+            {
+                return Err(format!(
+                    "attribute '{n}' takes its candidates from '{from}', which is not another attribute of the schema"
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
     /// The attribute named `name`.
     ///
     /// # Panics

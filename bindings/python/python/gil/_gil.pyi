@@ -57,5 +57,7 @@ def select_coarse_json(
 ) -> tuple[str, str | None]:
     """The attribute's coarse level thresholds as JSON and, when `decisions` is true, the decision records as JSON lines."""
 
-def select_key_concentrations_json(schema_json: str, attribute: str, records: Records) -> str:
+def select_key_concentrations_json(
+    schema_json: str, attribute: str, records: Records
+) -> str:
     """The concentration chosen for each attribute that keys the decided attribute, as a JSON object."""
