@@ -1,0 +1,15 @@
+[package]
+name = "iyulab-gil-review"
+version = "0.1.0"
+description = "Review statistics for checking automated decisions by hand: stratified samples, Neyman allocation, weighted estimates with intervals, agreement between reviewers."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+keywords = ["sampling", "survey", "stratified", "bootstrap", "agreement"]
+categories = ["mathematics", "science"]
+
+[lib]
+# Published as iyulab-gil-review; imported as gil_review.
+name = "gil_review"
