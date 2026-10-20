@@ -56,6 +56,13 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 - **`Schema::check`** — the rules the .NET library applies when a form is made: unique names, at least one decided
   attribute, settings that fit their attribute, dependencies · key attributes · key concentrations · `candidates_from`
   that name other attributes. The Python binding applies it to every schema it reads.
+- **`tuning::Tuning`** — the settings the replays chose for a schema as one plain record a host keeps between runs:
+  per decided attribute the key attributes, key concentrations, key · typed key · memory thresholds, floor and coarse
+  thresholds, with the promises the replays made (`Tuning::promise`), plus the crate version, a fingerprint of the
+  settings the choice rests on (`tuning::fingerprint`) and how many records were settled. `Tuning::capture` takes it
+  from a schema, `Tuning::apply` puts it back, and **`Tuning::stale`** says when to choose again: another crate version
+  (`tuning::VERSION`), a changed setting the choice rests on (role, domain, dependencies, votes, coarse level …), or
+  settled records grown or shrunk by a tenth since the choice.
 - **`schema::Settlement`** — `accept` · `correct` · `enter` · `fill` · `check(value, probability)` · `restore` · `set`
   · `restore_set` · `reject` · `revert`.
 - **`schema::AttributePolicy`** (`Suggest` · `ConfirmRequired` · `Off`) on `Attribute::policy`: an attribute that is

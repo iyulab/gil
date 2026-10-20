@@ -274,7 +274,7 @@ pub fn pick_order(record: &Record, attribute: &str) -> Vec<String> {
 }
 
 /// A stable 64-bit FNV-1a hash of the text's UTF-8 bytes.
-fn fnv1a(text: &str) -> u64 {
+pub(crate) fn fnv1a(text: &str) -> u64 {
     text.bytes()
         .fold(14_695_981_039_346_656_037_u64, |hash, b| {
             (hash ^ u64::from(b)).wrapping_mul(1_099_511_628_211)

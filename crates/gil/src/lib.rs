@@ -18,3 +18,4 @@ pub mod replay;
 pub mod schema;
 pub mod similar_vote;
 pub mod text;
+pub mod tuning;
