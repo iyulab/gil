@@ -16,6 +16,15 @@ with what to do.
   without such case pairs is unchanged; choose typed thresholds and coarse thresholds again where values hold
   characters beyond it.
 
+### Added
+
+- **Experimental (`GIL0005`): `AskPlanner`, which observed field to ask a person for first.** For a judged field and the
+  observed fields a person could be asked for, it learns from settled documents, in settlement order, what asking each
+  field gained per character typed: the judged field's suggestion without the field against the suggestion with it,
+  under the coarse class the suggestion without it showed. `Advise` ranks an open document's empty fields by that gain
+  and marks those worth asking within a budget — a share of the typing that asking every time would take. Nothing
+  changes for code that does not use it. See "Asking for a field first" in the README.
+
 ### Fixed
 
 - `LexicalMemory` squares the weights of a query's norm by multiplying rather than with `Math.Pow(x, 2)`, which is not
