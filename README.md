@@ -586,6 +586,15 @@ var tuned = form.WithField(team);
 Put the field back with `WithField`; the form is a record whose fields are checked together, so it is not changed in
 place.
 
+Which target to ask for is yours to set, and it follows from what a wrong answer costs. Count a value a person enters
+with no suggestion as 1, a right answer as nothing, and a wrong one — noticed, undone and entered again — as ρ. An
+answer right with probability p then costs ρ(1 − p) against the 1 of asking, so answering pays only above a precision of
+1 − 1/ρ: 0.5 where a wrong value costs two entries, 0.8 at five, 0.9 at ten, 0.95 at twenty. Below that line a threshold
+that keeps its promise still loses — each answer it adds costs more than it saves. Replaying a public stream of
+biological sample records with costs counted this way, thresholds chosen for 0.8 answered right 0.88 of the time — a
+loss once a wrong value costs ten entries; chosen for a target at or above 1 − 1/ρ, they cost less than asking at every
+ρ from 2 to 20. When you do not know ρ, time how long undoing a wrong value takes against entering one.
+
 A value a person accepted with the suggestion in view may be right because it was suggested. A value the application
 filled was never checked. To know how right a layer is on its own, count only the settlements that saw no suggestion.
 Every document is still replayed into memory; only the lookups counted change. A document that does not say how a field
