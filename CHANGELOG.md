@@ -10,6 +10,8 @@ with what to do.
   `gil`); `gilfit` 0.1.0 and 0.2.0 are yanked.
 - README: how to choose `targetPrecision` from what a wrong answer costs — answering pays only above `1 − 1/ρ`
   when a wrong value costs ρ entries.
+- README: a key concentration under 0.01 can mean a field written from the judged value; check that it is there when
+  a suggestion is asked for, or save `Arrival`.
 
 ## 0.24.0
 
