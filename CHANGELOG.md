@@ -5,6 +5,23 @@ with what to do.
 
 ## Unreleased
 
+### Breaking
+
+- `SettlementKind` has two more members, `AcceptOther` and `CorrectOther` (below): a `switch` over it that names every
+  kind needs cases for them.
+
+### Added
+
+- **A value a person settled over a suggestion that was not the form resolver's.** An application may show its own
+  suggestion — its own model's, a rule's, a default — in place of the resolver's. `Settlement.AcceptOther` (kept) and
+  `Settlement.CorrectOther` (changed), recorded as `SettlementKind.AcceptOther` and `SettlementKind.CorrectOther`:
+  memory learns the value and choosing thresholds counts it as it counts the others, but it says nothing about the
+  resolver's suggestions. Settled as `Enter` such a value would count among the values settled with nothing in view, and
+  as `Fill` it would be kept out of memory. The Rust crate and Python package `iyulab-gil` have had the same two kinds
+  since 0.5.0.
+
+### Documentation
+
 - The repository is https://github.com/iyulab/gil again; `iyulab/gilfit` redirects. The NuGet package ID and
   namespace stay `Gil`. The Rust crate and the Python package are published as `iyulab-gil` from 0.3.0 (imported as
   `gil`); `gilfit` 0.1.0 and 0.2.0 are yanked.
