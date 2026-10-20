@@ -34,6 +34,12 @@ with what to do. The Rust crate and Python package `gilfit` keep their own line 
   moved by that much. The Rust rebuild squares the same way, so a release build no longer folds
   `powf(2.0)` into a product where the reference called the platform's `pow`.
 
+### Documentation
+
+- How to count what an upgrade changes in your own suggestions: replay saved documents once with each version and
+  compare each suggestion's first candidate, whether it was answered and its coarse class (README, under choosing
+  thresholds again). Measured on two public streams, 0.21.0 through 0.24.0 answered the same.
+
 ## 0.23.0
 
 ### Breaking
