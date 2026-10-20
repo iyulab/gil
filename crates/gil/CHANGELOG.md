@@ -26,6 +26,11 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   and `AttributeUsage` — a host keeps tunings and snapshots without a copy of their shape. The form is the one the
   Python bindings read: Rust field names, snake-case roles and policies, settlement kinds by name, settings left out
   taking `Attribute::new`'s defaults, unknown settings refused.
+- `serde` also covers the replay results (`ThresholdChoice` · `ThresholdReplay` · `KeyState` · `LayerThresholds` ·
+  `TypedKeyThresholds` · `KeyFieldsTrial` · `KeyFieldsChoice`), the decision records (`DecisionRecord` and its looks)
+  and the answers (`Answer` · `Candidate` · `Evidence` — `{"key": {"attribute", "value"}}` or `{"record": {"id",
+  "similarity"}}` · `ExternalCandidate` · `key_memory::Key`), with `Source` written as the reference names the layers
+  (`SettledFieldMemory`, `SimilarDocument`, `Model`) — a host passes an answer on as it is.
 
 - **Python: answering a record while its values arrive, tunings and usage.** `gil.Decider` (the memories, from
   settled records) and `gil.OpenRecord` (`observe` · `settle` by kind name · `answer` · `answer_partial` ·
@@ -35,6 +40,8 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Changed
 
+- Python: decision records also carry `typed` (on a typed replay) and `answered` (what a suggestion answered), as the
+  core's records do; results are written through the core's `serde` form.
 - Python: schemas and records are read through the core's `serde` form. An unknown or missing setting is now reported
   in serde's words (``unknown field `colour` `` · ``missing field `role` ``); what reads is unchanged — times as text
   or ticks, entries given as `None` left out.

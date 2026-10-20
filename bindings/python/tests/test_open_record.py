@@ -106,9 +106,12 @@ def test_a_tuning_captures_applies_and_goes_stale() -> None:
     thresholds, _ = gil.select_layers(
         SCHEMA, "team", settled(), minimum_answered=1, decisions=False
     )
-    gil.record_promise(tuning, "team", thresholds)
+    promised = gil.record_promise(tuning, "team", thresholds)
     chosen = thresholds["key"]["chosen"]
-    assert team["key_promise"] == (None if chosen is None else chosen["promise"])
+    assert promised["attributes"][0]["key_promise"] == (
+        None if chosen is None else chosen["promise"]
+    )
+    assert team["key_promise"] is None  # the tuning given is left as it was
     with pytest.raises(ValueError, match="no attribute 'lead'"):
         gil.record_promise(tuning, "lead", thresholds)
 
@@ -181,5 +184,7 @@ def test_answers_and_counts_carry_exactly_the_typed_keys() -> None:
     (team,) = record.observe(decider, "component", "vpn")
     assert set(team) == set(gil.Answer.__annotations__)
     assert set(team["candidates"][0]) == set(gil.Candidate.__annotations__)
-    counts = gil.usage([{"attribute": "team", "answer": None, "settled": None, "settlement": None}])
+    counts = gil.usage(
+        [{"attribute": "team", "answer": None, "settled": None, "settlement": None}]
+    )
     assert set(counts["team"]) == set(gil.AttributeUsage.__annotations__)

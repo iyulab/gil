@@ -13,6 +13,7 @@ __all__ = [
     "select_layers_json",
     "tuning_apply_json",
     "tuning_capture_json",
+    "tuning_promise_json",
     "tuning_stale_json",
     "usage_json",
 ]
@@ -121,6 +122,9 @@ class OpenRecord:
 
 def tuning_capture_json(schema_json: str, settled: int, target_precision: float) -> str:
     """The chosen settings of the schema's decided attributes, chosen on `settled` records for `target_precision`, as JSON."""
+
+def tuning_promise_json(tuning_json: str, attribute: str, layers_json: str) -> str:
+    """The tuning with what `attribute`'s layer replay (JSON, as `select_layers_json` gives it) promised, as JSON."""
 
 def tuning_apply_json(tuning_json: str, schema_json: str) -> str:
     """The schema with the tuning's settings put back on its attributes, as JSON."""

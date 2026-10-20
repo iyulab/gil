@@ -17,11 +17,13 @@ use crate::{similar_vote, text};
 
 /// Which layer offered a candidate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Source {
     None,
     SettledFieldMemory,
     SimilarDocument,
-    /// A judgement the host made outside the core (a model) and offered back.
+    /// A judgement the host made outside the core (a model) and offered back — named `Model`, as the reference names it.
+    #[cfg_attr(feature = "serde", serde(rename = "Model"))]
     External,
 }
 
@@ -39,6 +41,8 @@ impl Source {
 
 /// What a candidate rests on, for a host to show: the key backing it, or the similar settled record it came from.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum Evidence {
     /// Another attribute's value (as the key memory keeps it) under which the value was settled.
     Key(Key),
@@ -59,6 +63,7 @@ impl std::fmt::Display for Evidence {
 /// A value offered for an attribute: its score on its layer's scale, the layer, what backs it — none for the attribute's
 /// overall frequency and an external judgement — and whether the layer trusts it.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Candidate {
     pub value: String,
     pub score: f64,
@@ -70,6 +75,7 @@ pub struct Candidate {
 /// One attribute's suggestion: its candidates, best first, the layer of the first, and — when no layer answered the value
 /// and the attribute has a coarse level — the class offered instead.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Answer {
     pub attribute: String,
     pub candidates: Vec<Candidate>,
@@ -88,6 +94,7 @@ pub struct Answer {
 /// A value an external judgement ranked, offered back to the core: its probability on the judgement's own scale, and
 /// whether the judgement trusts it.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ExternalCandidate {
     pub value: String,
     pub probability: f64,

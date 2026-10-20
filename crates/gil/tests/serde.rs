@@ -4,6 +4,7 @@
 
 use std::collections::BTreeMap;
 
+use gil::decider::Source;
 use gil::schema::{
     Attribute, AttributePolicy, AttributeRole, CoarseLevel, Record, Schema, Settlement,
     SettlementKind,
@@ -151,4 +152,62 @@ fn usage_counts_read_back() {
     let (written, read) = round_trip(&counts);
     assert_eq!(read, counts);
     assert_eq!(written["team"]["accepted"], 1);
+}
+
+#[test]
+fn a_judgement_from_outside_is_named_as_the_reference_names_it() {
+    assert_eq!(serde_json::to_value(Source::External).unwrap(), "Model");
+    assert_eq!(
+        serde_json::to_value(Source::SettledFieldMemory).unwrap(),
+        Source::SettledFieldMemory.name()
+    );
+    let (_, read) = round_trip(&Source::External);
+    assert_eq!(read, Source::External);
+}
+
+#[test]
+fn an_answer_reads_back_with_its_evidence() {
+    use gil::decider::{Answer, Candidate, Evidence};
+    use gil::key_memory::Key;
+    let answer = Answer {
+        attribute: "team".into(),
+        candidates: vec![
+            Candidate {
+                value: "network".into(),
+                score: 0.93,
+                source: Source::SettledFieldMemory,
+                evidence: Some(Evidence::Key(Key {
+                    attribute: "component".into(),
+                    value: "vpn".into(),
+                })),
+                trusted: true,
+            },
+            Candidate {
+                value: "security".into(),
+                score: 0.4,
+                source: Source::SimilarDocument,
+                evidence: Some(Evidence::Record {
+                    id: "t3".into(),
+                    similarity: 0.71,
+                }),
+                trusted: false,
+            },
+        ],
+        source: Source::SettledFieldMemory,
+        coarse: None,
+        policy: AttributePolicy::ConfirmRequired,
+        needs_external: Some(vec![("summary".into(), "vpn drops".into())]),
+    };
+    let (written, read) = round_trip(&answer);
+    assert_eq!(read, answer);
+    assert_eq!(
+        written["candidates"][0]["evidence"],
+        json!({ "key": { "attribute": "component", "value": "vpn" } })
+    );
+    assert_eq!(
+        written["candidates"][1]["evidence"],
+        json!({ "record": { "id": "t3", "similarity": 0.71 } })
+    );
+    assert_eq!(written["policy"], "confirm_required");
+    assert_eq!(written["needs_external"], json!([["summary", "vpn drops"]]));
 }

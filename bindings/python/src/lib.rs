@@ -6,17 +6,16 @@
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use gil::decider::{Answer, Candidate, Evidence, ExternalCandidate};
-use gil::decision_record::{DecisionRecord, KeyLook, SimilarLook};
+use gil::decider::{Answer, ExternalCandidate};
+use gil::decision_record::DecisionRecord;
 use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::open_record;
 use gil::replay::{
-    Choice, KeyFieldsChoice, KeyFieldsTrial, KeyState, LayerThresholds, ThresholdChoice,
-    ThresholdReplay, TypedKeyThresholds, select_coarse_with, select_key_concentrations,
-    select_key_fields, select_layers_with,
+    Choice, LayerThresholds, select_coarse_with, select_key_concentrations, select_key_fields,
+    select_layers_with,
 };
-use gil::schema::{AttributePolicy, AttributeRole, Record, Schema, Settlement, SettlementKind};
+use gil::schema::{AttributeRole, Record, Schema, Settlement, SettlementKind};
 use gil::tuning::Tuning;
 use gil::usage::{Decision, usage};
 use pyo3::exceptions::PyValueError;
@@ -94,144 +93,20 @@ fn record(value: &Value) -> Parsed<Record> {
 
 // ---- writing ----
 
-fn choice_json(c: &ThresholdChoice) -> Value {
-    json!({
-        "threshold": c.threshold,
-        "precision": c.precision,
-        "answer_rate": c.answer_rate,
-        "answered": c.answered,
-        "lookups": c.lookups,
-        "answered_weight": c.answered_weight,
-        "effective_answered": c.effective_answered,
-        "similarity_floor": c.similarity_floor,
-        "promise": c.promise,
-        "promise_answered": c.promise_answered,
-    })
+/// A result in the core's `serde` form, as JSON text.
+fn to_json<T: serde::Serialize>(value: &T) -> String {
+    serde_json::to_string(value).expect("a core result serializes")
 }
 
-fn key_state_json(k: &KeyState) -> Value {
-    json!({
-        "key": k.key,
-        "lookups": k.lookups,
-        "answered": k.answered,
-        "precision": k.precision,
-        "answering": k.answering,
-        "answered_weight": k.answered_weight,
-        "effective_answered": k.effective_answered,
-    })
-}
-
-fn replay_json(r: &ThresholdReplay) -> Value {
-    json!({
-        "chosen": r.chosen.as_ref().map(choice_json),
-        "most_precise": r.most_precise.as_ref().map(choice_json),
-        "lookups": r.lookups,
-        "candidates": r.candidates,
-        "keys": r.keys.as_ref().map(|keys| keys.iter().map(key_state_json).collect::<Vec<_>>()),
-    })
-}
-
-fn layers_json(l: &LayerThresholds) -> Value {
-    json!({ "key": replay_json(&l.key), "memory": replay_json(&l.memory) })
-}
-
-fn typed_json(t: &TypedKeyThresholds) -> Value {
-    json!({ "by_length": t.by_length.iter().map(replay_json).collect::<Vec<_>>() })
-}
-
-fn trial_json(t: &KeyFieldsTrial) -> Value {
-    json!({
-        "key_fields": t.key_fields,
-        "replay": replay_json(&t.replay),
-        "typed": t.typed.as_ref().map(typed_json),
-    })
-}
-
-fn key_fields_json(c: &KeyFieldsChoice) -> Value {
-    json!({
-        "key_fields": c.key_fields,
-        "chosen": replay_json(&c.chosen),
-        "all_fields": replay_json(&c.all_fields),
-        "trials": c.trials.iter().map(trial_json).collect::<Vec<_>>(),
-        "typed": c.typed.as_ref().map(typed_json),
-    })
-}
-
-fn key_look_json(k: &KeyLook) -> Value {
-    json!({
-        "strength": k.strength,
-        "value": k.value,
-        "correct": k.correct,
-        "key": k.key,
-        "caught": k.caught,
-    })
-}
-
-fn similar_look_json(s: &SimilarLook) -> Value {
-    json!({
-        "score": s.score,
-        "value": s.value,
-        "record": s.record,
-        "correct": s.correct,
-        "nearest": s.nearest,
-        "voted": s.voted,
-    })
-}
-
-fn policy_name(p: AttributePolicy) -> &'static str {
-    match p {
-        AttributePolicy::Suggest => "suggest",
-        AttributePolicy::ConfirmRequired => "confirm_required",
-        AttributePolicy::Off => "off",
-    }
-}
-
-fn candidate_json(c: &Candidate) -> Value {
-    json!({
-        "value": c.value,
-        "score": c.score,
-        "source": c.source.name(),
-        "evidence": c.evidence.as_ref().map(|e| match e {
-            Evidence::Key(k) => json!({ "key": { "attribute": k.attribute, "value": k.value } }),
-            Evidence::Record { id, similarity } => json!({ "record": { "id": id, "similarity": similarity } }),
-        }),
-        "trusted": c.trusted,
-    })
-}
-
+/// An answer in the core's `serde` form, with `answered` (whether the first candidate is trusted) beside it.
 fn answer_json(a: &Answer) -> Value {
-    json!({
-        "attribute": a.attribute,
-        "answered": a.answered(),
-        "candidates": a.candidates.iter().map(candidate_json).collect::<Vec<_>>(),
-        "source": a.source.name(),
-        "coarse": a.coarse.as_ref().map(candidate_json),
-        "policy": policy_name(a.policy),
-        "needs_external": a.needs_external,
-    })
+    let mut value = serde_json::to_value(a).expect("an answer serializes");
+    value["answered"] = json!(a.answered());
+    value
 }
 
 fn answers_json(answers: &[Answer]) -> String {
     Value::Array(answers.iter().map(answer_json).collect()).to_string()
-}
-
-fn record_json(r: &DecisionRecord) -> Value {
-    json!({
-        "record": r.record,
-        "attribute": r.attribute,
-        "order": r.order,
-        "weight": r.weight,
-        "key": r.key.as_ref().map(key_look_json),
-        "similar": r.similar.as_ref().map(similar_look_json),
-        "coarse": r.coarse.as_ref().map(|c| json!({
-            "value_answered": c.value_answered,
-            "keys": c.keys.as_ref().map(key_look_json),
-            "vote": c.vote.as_ref().map(similar_look_json),
-        })),
-        "settled": r.settled,
-        "settlement": r.settlement.map(|k| format!("{k:?}")),
-        "probability": r.probability,
-    })
 }
 
 // ---- the module ----
@@ -345,12 +220,12 @@ fn select_layers_json(
         choice,
         &mut |r| push_record(&mut lines, r),
     );
-    Ok((layers_json(&layers).to_string(), lines))
+    Ok((to_json(&layers), lines))
 }
 
 fn push_record(lines: &mut Option<String>, r: &DecisionRecord) {
     if let Some(out) = lines.as_mut() {
-        out.push_str(&record_json(r).to_string());
+        out.push_str(&to_json(r));
         out.push('\n');
     }
 }
@@ -400,7 +275,7 @@ fn select_coarse_json(
         choice,
         &mut |r| push_record(&mut lines, r),
     );
-    Ok((layers_json(&layers).to_string(), lines))
+    Ok((to_json(&layers), lines))
 }
 
 /// Chooses, for each attribute that keys the decided attribute, how readily its keys are believed after only a few settlements,
@@ -452,7 +327,7 @@ fn select_key_fields_json(
         counting: counting.as_deref(),
     };
     let chosen = select_key_fields(&schema, attribute, &records.records, choice, typed_longest);
-    Ok(key_fields_json(&chosen).to_string())
+    Ok(to_json(&chosen))
 }
 
 /// Runs a core call, turning a broken contract (the core panics on one) into a `ValueError` with the core's message.
@@ -671,6 +546,16 @@ fn tuning_capture_json(
     )
 }
 
+/// The tuning with what `attribute`'s layer replay (JSON, as `select_layers_json` gives it) promised, as JSON.
+#[pyfunction]
+fn tuning_promise_json(tuning_json: &str, attribute: &str, layers_json: &str) -> PyResult<String> {
+    let mut tuned = tuning(tuning_json)?;
+    let layers: LayerThresholds = serde_json::from_str(layers_json)
+        .map_err(|e| invalid(format!("a layer replay does not read: {e}")))?;
+    guarded(|| tuned.promise(attribute, &layers))?;
+    Ok(to_json(&tuned))
+}
+
 /// The schema with the tuning's settings put back on its attributes, as JSON.
 #[pyfunction]
 fn tuning_apply_json(tuning_json: &str, schema_json: &str) -> PyResult<String> {
@@ -753,6 +638,7 @@ fn _gil(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<OpenRecord>()?;
     m.add_function(wrap_pyfunction!(tuning_capture_json, m)?)?;
     m.add_function(wrap_pyfunction!(tuning_apply_json, m)?)?;
+    m.add_function(wrap_pyfunction!(tuning_promise_json, m)?)?;
     m.add_function(wrap_pyfunction!(tuning_stale_json, m)?)?;
     m.add_function(wrap_pyfunction!(usage_json, m)?)?;
     m.add_function(wrap_pyfunction!(check_schema, m)?)?;

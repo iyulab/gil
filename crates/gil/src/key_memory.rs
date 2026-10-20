@@ -13,6 +13,7 @@ use crate::{hangul, text};
 /// A key: another attribute and its value as the key memory keeps it — normalized and cut to the memory's key length, so
 /// it may differ from the value as settled. Shown as `attribute: value`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Key {
     pub attribute: String,
     pub value: String,

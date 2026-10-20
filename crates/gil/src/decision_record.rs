@@ -8,6 +8,7 @@ use crate::schema::SettlementKind;
 
 /// What the key layer found for one lookup, whatever the threshold: its best value and the key that backs it most strongly.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct KeyLook {
     /// The best value's score.
     pub strength: f64,
@@ -23,6 +24,7 @@ pub struct KeyLook {
 
 /// What the similar record layer's vote came to for one lookup, whatever the threshold.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SimilarLook {
     /// The winning value's score.
     pub score: f64,
@@ -42,6 +44,7 @@ pub struct SimilarLook {
 /// similar records vote for, and whether the attribute's value layers answered at their own thresholds — the level is
 /// offered only where they did not.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CoarseLook {
     /// Whether the value layers answered at the attribute's thresholds.
     pub value_answered: bool,
@@ -53,6 +56,7 @@ pub struct CoarseLook {
 
 /// The key layer's best value with some of the settled value typed — on a typed replay.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TypedLook {
     /// The best value's score.
     pub strength: f64,
@@ -64,6 +68,7 @@ pub struct TypedLook {
 
 /// What a suggestion answered: the first candidate, when a layer trusted it.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Answered {
     /// The layer that answered.
     pub layer: Source,
@@ -78,6 +83,7 @@ pub struct Answered {
 /// settled as. On a suggestion: a record being filled in, with what the layers found and what was answered — whether
 /// it was right is known only once the record is settled.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DecisionRecord {
     /// The record asked about.
     pub record: String,

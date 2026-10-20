@@ -36,12 +36,14 @@ from gil._gil import (
     select_layers_json,
     tuning_apply_json,
     tuning_capture_json,
+    tuning_promise_json,
     tuning_stale_json,
     usage_json,
 )
 
 __all__ = [
     "Answer",
+    "Answered",
     "AttributeUsage",
     "Candidate",
     "CoarseLook",
@@ -60,6 +62,7 @@ __all__ = [
     "ThresholdChoice",
     "ThresholdReplay",
     "TypedKeyThresholds",
+    "TypedLook",
     "apply_tuning",
     "capture_tuning",
     "read_records",
@@ -176,6 +179,23 @@ class CoarseLook(TypedDict):
     vote: SimilarLook | None
 
 
+class TypedLook(TypedDict):
+    """On a typed replay, the key layer's best value with some of the settled value typed."""
+
+    strength: float
+    value: str
+    correct: bool
+
+
+class Answered(TypedDict):
+    """What a suggestion answered: the first candidate, when a layer trusted it, and the threshold the layer held it to —
+    ``None`` while a person types, when the key layer is held to the threshold for that many characters."""
+
+    layer: str
+    value: str
+    threshold: float | None
+
+
 class DecisionRecord(TypedDict):
     """One record asked about on a replay: what each layer made of it and what it was settled as."""
 
@@ -186,6 +206,8 @@ class DecisionRecord(TypedDict):
     key: KeyLook | None
     similar: SimilarLook | None
     coarse: CoarseLook | None
+    typed: list[TypedLook | None] | None
+    answered: Answered | None
     settled: str | None
     settlement: str | None
     probability: float | None
@@ -496,7 +518,7 @@ def capture_tuning(
     schema: Schema, settled: int, target_precision: float
 ) -> dict[str, Any]:
     """The chosen settings of ``schema``'s decided attributes as they now stand, chosen on ``settled`` records for
-    ``target_precision`` — the core's ``Tuning``. Record each layer replay's promises with :func:`record_promise`."""
+    ``target_precision`` — the core's ``Tuning``. Add each layer replay's promises with :func:`record_promise`."""
     return cast(
         dict[str, Any],
         json.loads(tuning_capture_json(schema.json, settled, target_precision)),
@@ -505,14 +527,14 @@ def capture_tuning(
 
 def record_promise(
     tuning: dict[str, Any], attribute: str, layers: LayerThresholds
-) -> None:
-    """Records in ``tuning`` what ``attribute``'s chosen key and memory thresholds promised (from :func:`select_layers`)."""
-    tuned = next((a for a in tuning["attributes"] if a["attribute"] == attribute), None)
-    if tuned is None:
-        raise ValueError(f"the tuning has no attribute '{attribute}'")
-    key, memory = layers["key"]["chosen"], layers["memory"]["chosen"]
-    tuned["key_promise"] = None if key is None else key["promise"]
-    tuned["memory_promise"] = None if memory is None else memory["promise"]
+) -> dict[str, Any]:
+    """``tuning`` with what ``attribute``'s chosen key and memory thresholds promised (from :func:`select_layers`)."""
+    return cast(
+        dict[str, Any],
+        json.loads(
+            tuning_promise_json(json.dumps(tuning), attribute, json.dumps(layers))
+        ),
+    )
 
 
 def apply_tuning(tuning: dict[str, Any], schema: Schema) -> Schema:

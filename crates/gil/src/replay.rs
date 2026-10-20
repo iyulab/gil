@@ -52,6 +52,7 @@ impl Choice<'_> {
 /// ([`SettlementKind::Check`]) counts as one ÷ its draw probability lookups, so `precision` and `answer_rate` are
 /// weighted, while `answered` and `lookups` count the lookups made.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ThresholdChoice {
     /// The lowest score down to which every band of answers met the target precision.
     pub threshold: f64,
@@ -81,6 +82,7 @@ pub struct ThresholdChoice {
 /// How the key layer did under one key: the lookups whose best value this key backed most strongly, and how the chosen
 /// threshold treated them.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct KeyState {
     /// The key, as a suggestion's evidence names it — `attribute: value`.
     pub key: String,
@@ -100,6 +102,7 @@ pub struct KeyState {
 
 /// What replaying settled records found for one memory layer of an attribute.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ThresholdReplay {
     /// The lowest threshold down to which every band of answers met the target precision; `None` when none does.
     pub chosen: Option<ThresholdChoice>,
@@ -285,6 +288,7 @@ pub(crate) fn fnv1a(text: &str) -> u64 {
 /// when none are named), one ÷ the draw probability for a check, one otherwise.
 /// The replays a single-valued attribute's typed key thresholds are chosen on, one per length typed, shortest first.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TypedKeyThresholds {
     pub by_length: Vec<ThresholdReplay>,
 }
@@ -758,6 +762,7 @@ fn fit(
 
 /// The replays of an attribute's two memory layers, in the order a suggestion consults them.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct LayerThresholds {
     /// For the key threshold, replayed on every lookup.
     pub key: ThresholdReplay,
@@ -1308,6 +1313,7 @@ fn similarity_floor(answers: &[(f64, f64)], threshold: f64) -> Option<f64> {
 
 /// One set of attributes tried for a decided attribute's key attributes, and how its key layer replayed.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct KeyFieldsTrial {
     /// The attributes that keyed the decided attribute in this replay; empty for every attribute it rests on.
     pub key_fields: Vec<String>,
@@ -1321,6 +1327,7 @@ pub struct KeyFieldsTrial {
 /// The attributes that should key a decided attribute in the settled key memory, chosen by replaying its key layer, and the
 /// replays the choice was made from.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct KeyFieldsChoice {
     /// The attributes to name, in the order they were added; `None` when no narrower set gained more than every attribute the
     /// attribute rests on — leave the key attributes unset.

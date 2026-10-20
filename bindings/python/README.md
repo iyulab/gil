@@ -83,8 +83,8 @@ and pass its ranked values back with `record.offer_external(decider, "team", [{"
 
 ## Keeping a tuning
 
-`gil.capture_tuning(schema, settled, target_precision)` keeps the chosen settings (with `gil.record_promise` for what
-each layer replay promised), `gil.apply_tuning` puts them back on a schema, and `gil.tuning_stale` says when to choose
+`gil.capture_tuning(schema, settled, target_precision)` keeps the chosen settings (`gil.record_promise` adds what each
+layer replay promised), `gil.apply_tuning` puts them back on a schema, and `gil.tuning_stale` says when to choose
 again — another package version, a changed setting, or a tenth more (or fewer) settled records. `gil.usage(decisions)`
 counts, without content, how the answers shown were settled and the precision they realized against the promise.
 
