@@ -900,6 +900,11 @@ The decision core is rebuilt in Rust under `crates/gil`, checked against the sam
 cargo test
 ```
 
+`cargo test` also checks `crates/gil-review` (`iyulab-gil-review`, imported as `gil_review`; not yet published): the
+statistics for checking decisions by hand — a seeded stratified sample, Neyman allocation, a stratified weighted
+estimate with normal and bootstrap intervals, agreement between two reviewers. It depends on nothing, the decision core
+included, and its golden is `tests/fixtures/review/golden.jsonl`, for a binding to reproduce.
+
 ## License
 
 Apache-2.0
