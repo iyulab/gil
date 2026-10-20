@@ -8,10 +8,17 @@
 //! dependencies, no I/O.
 
 mod error;
+pub mod estimate;
 mod rng;
 pub mod sample;
 
 pub use error::ReviewError;
+pub use estimate::{
+    BOOTSTRAP_DRAWS, ESTIMATE_NO_VARIATION_IN_STRATUM, ESTIMATE_STRATUM_IS_CENSUS,
+    ESTIMATE_STRATUM_TOO_SMALL, ESTIMATE_WEIGHTS_DEGENERATE, Estimate, Exclusion, Interval,
+    MINIMUM_REVIEWED_PER_STRATUM, NEWTON_STEPS, NORMAL_QUANTILE_95, ScoredItem, Stratum, estimate,
+    estimate_bounds, unobserved_variation_bound,
+};
 pub use sample::{
     PILOT_RECORDS_PER_STRATUM, PopulationStratum, ReviewSample, SAMPLE_NO_PARAMETERS,
     SAMPLE_STRATUM_EMPTY, SAMPLE_STRATUM_TAKEN_WHOLE, SampledStratum, StratumSpread,
