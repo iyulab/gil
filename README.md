@@ -379,13 +379,17 @@ var document = session.Snapshot();
 Say how a value was settled. `Settlement.Accept` and `Settlement.Correct` are for a person who had the suggestion in
 view. `Settlement.Enter` is for a person who settled the field with no suggestion shown — because the application
 withheld it, kept it below the threshold it shows, or had none. `Settlement.Fill` is for the application settling the
-suggested value on its own, with no person confirming it. The snapshot keeps the kind of each judged value in
-`SettledDocument.Settlements`; save it with the document. A value put back with `Settlement.Restore` is not known to have
-been settled any way. A filled value stays in the document, but memory does not learn it and choosing thresholds does not
-ask about it. Remembered, a suggestion's own answer would come back as evidence for itself. Replaying a public stream
-with nine in ten trusted answers filled, a replay that learned from them promised 0.97 where 0.73 was right, and one
-stream's key layer ended up answering every document with 0.11 right. Learning only from what a person settled kept the
-promise within a few points of what was right.
+suggested value on its own, with no person confirming it. `Settlement.AcceptOther` and `Settlement.CorrectOther` are for
+a person who kept or changed a value the application suggested some other way — its own model, a rule, a default — shown
+in place of the resolver's suggestion: memory learns it as any value a person settled, and it says nothing about the
+resolver's suggestions. Settled as entered it would count among the values chosen with nothing in view, and as filled it
+would be kept out of memory. The snapshot keeps the kind of each judged value in `SettledDocument.Settlements`; save it
+with the document. A value put back with `Settlement.Restore` is not known to have been settled any way. A filled value
+stays in the document, but memory does not learn it and choosing thresholds does not ask about it. Remembered, a
+suggestion's own answer would come back as evidence for itself. Replaying a public stream with nine in ten trusted
+answers filled, a replay that learned from them promised 0.97 where 0.73 was right, and one stream's key layer ended up
+answering every document with 0.11 right. Learning only from what a person settled kept the promise within a few points
+of what was right.
 
 A field left empty is not settled: leave it out of the document rather than settling an empty string. An empty string
 is a value like any other, so memory would learn it and suggest it to the next similar document; a field the document

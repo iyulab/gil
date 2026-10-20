@@ -512,7 +512,8 @@ public sealed record SettledDocument(
     /// <summary>
     /// Judged field name to how its current value was settled — <see cref="SettlementKind.Accept"/>,
     /// <see cref="SettlementKind.Correct"/>, <see cref="SettlementKind.Enter"/>, <see cref="SettlementKind.Fill"/>,
-    /// <see cref="SettlementKind.Check"/> or <see cref="SettlementKind.Set"/> — which is what a form session's snapshot gives. A field left out is not known: its
+    /// <see cref="SettlementKind.Check"/>, <see cref="SettlementKind.Set"/>, <see cref="SettlementKind.AcceptOther"/> or
+    /// <see cref="SettlementKind.CorrectOther"/> — which is what a form session's snapshot gives. A field left out is not known: its
     /// value was restored without it, or saved before settlements were kept. Memory leaves out the values filled
     /// (<see cref="SettlementKind.Fill"/>), and choosing thresholds can count only the settlements of some kinds.
     /// </summary>
@@ -709,6 +710,21 @@ public enum SettlementKind
     /// from, so drawing some keys more often than others does not tilt the promise toward them.
     /// </summary>
     Check,
+
+    /// <summary>
+    /// A person kept a value suggested by something other than the form resolver — the application's own model, a rule, a
+    /// default — shown in place of a suggestion. Memory learns it and choosing thresholds counts it as it counts the others;
+    /// it says nothing about the resolver's suggestions, none having been in view. Settling such a value as
+    /// <see cref="Enter"/> would put it among the values settled with nothing in view, and as <see cref="Fill"/> would keep
+    /// it out of memory.
+    /// </summary>
+    AcceptOther,
+
+    /// <summary>
+    /// A person settled another value than one suggested by something other than the form resolver, shown in place of a
+    /// suggestion — as <see cref="AcceptOther"/>, with the suggestion changed.
+    /// </summary>
+    CorrectOther,
 }
 
 /// <summary>
@@ -747,6 +763,18 @@ public sealed record Settlement
     public static Settlement Revert() => new(SettlementKind.Revert, null);
 
     public static Settlement Restore(string value) => new(SettlementKind.Restore, Required(value));
+
+    /// <summary>
+    /// A value suggested by something other than the form resolver, shown in place of a suggestion and kept by a person
+    /// (<see cref="SettlementKind.AcceptOther"/>).
+    /// </summary>
+    public static Settlement AcceptOther(string value) => new(SettlementKind.AcceptOther, Required(value));
+
+    /// <summary>
+    /// A value a person settled in place of one suggested by something other than the form resolver, shown in place of a
+    /// suggestion (<see cref="SettlementKind.CorrectOther"/>).
+    /// </summary>
+    public static Settlement CorrectOther(string value) => new(SettlementKind.CorrectOther, Required(value));
 
     /// <summary>A value a person settled with no suggestion in view (<see cref="SettlementKind.Enter"/>).</summary>
     public static Settlement Enter(string value) => new(SettlementKind.Enter, Required(value));

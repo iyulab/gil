@@ -64,6 +64,34 @@ public sealed class SettlementOriginTests
     }
 
     [Fact]
+    public async Task A_value_settled_over_another_suggestion_is_recorded_as_such_learned_and_counted()
+    {
+        var resolver = new FormResolver(new FieldMemory(), new LexicalMemory());
+        var kept = resolver.Open(Ticket, "d1");
+        await kept.ObserveAsync("summary", "vpn drops", Ct);
+        await kept.SettleAsync("team", Settlement.AcceptOther("network"), Ct);
+        kept.Snapshot().Settlements["team"].Should().Be(SettlementKind.AcceptOther);
+
+        var changed = resolver.Open(Ticket, "d2");
+        await changed.ObserveAsync("summary", "printer jams", Ct);
+        await changed.SettleAsync("team", Settlement.CorrectOther("facilities"), Ct);
+        changed.Snapshot().Settlements["team"].Should().Be(SettlementKind.CorrectOther);
+
+        (await resolver.Open(Ticket, "d3").ObserveAsync("summary", "vpn drops", Ct))
+            .Single(s => s.Field == "team").Candidates.Select(c => c.Value).Should().Contain("network"); // learned, unlike a fill
+
+        SettledDocument[] documents =
+        [
+            Doc("d1", "vpn drops", "network", 0, SettlementKind.AcceptOther),
+            Doc("d2", "vpn drops", "network", 1, SettlementKind.CorrectOther),
+            Doc("d3", "vpn drops", "network", 2, SettlementKind.AcceptOther),
+        ];
+        ThresholdSelection.SelectKeyThreshold(new FieldMemory(), Ticket, "team", documents, 1.0, 1).Lookups.Should().Be(2);
+        ThresholdSelection.SelectKeyThreshold(new FieldMemory(), Ticket, "team", documents, 1.0, 1, counting: [SettlementKind.Enter])
+            .Lookups.Should().Be(0); // counted only where asked for
+    }
+
+    [Fact]
     public async Task Rejecting_reverting_or_restoring_a_field_forgets_how_it_was_settled()
     {
         var session = new FormResolver(new FieldMemory()).Open(Ticket, "d1");
