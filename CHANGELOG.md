@@ -4,6 +4,12 @@ Versions follow `0.x`: a minor release may change the public API. Each such chan
 with what to do. The Rust crate and Python package `gilfit` keep their own line in
 [crates/gilfit/CHANGELOG.md](crates/gilfit/CHANGELOG.md).
 
+## Unreleased
+
+- The repository is https://github.com/iyulab/gil again; `iyulab/gilfit` redirects. The NuGet package ID and
+  namespace stay `Gil`. The Rust crate and the Python package are published as `iyulab-gil` from 0.3.0 (imported as
+  `gil`); `gilfit` 0.1.0 and 0.2.0 are yanked.
+
 ## 0.24.0
 
 ### Breaking

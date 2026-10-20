@@ -26,5 +26,5 @@ internal static class Stability
     public const string Asking = "GIL0005";
 
     /// <summary>Where the stability of each surface is described.</summary>
-    public const string Url = "https://github.com/iyulab/gilfit/blob/main/README.md#stability";
+    public const string Url = "https://github.com/iyulab/gil/blob/main/README.md#stability";
 }

@@ -11,8 +11,8 @@
     <IsPackable>true</IsPackable>
     <Authors>iyulab</Authors>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/iyulab/gilfit</RepositoryUrl>
-    <PackageProjectUrl>https://github.com/iyulab/gilfit</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/iyulab/gil</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/iyulab/gil</PackageProjectUrl>
     <PackageTags>llm;routing;classification;cache;fallback;habits</PackageTags>
   </PropertyGroup>
 
