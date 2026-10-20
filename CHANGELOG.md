@@ -3,6 +3,12 @@
 Versions follow `0.x`: a minor release may change the public API. Each such change is listed under **Breaking**
 with what to do.
 
+## Unreleased
+
+- The repository is https://github.com/iyulab/gil again; `iyulab/gilfit` redirects. The NuGet package ID and
+  namespace stay `Gil`. The Rust crate and the Python package are published as `iyulab-gil` from 0.3.0 (imported as
+  `gil`); `gilfit` 0.1.0 and 0.2.0 are yanked.
+
 ## 0.24.0
 
 ### Breaking
