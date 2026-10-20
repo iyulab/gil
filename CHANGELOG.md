@@ -4,7 +4,7 @@ Versions follow `0.x`: a minor release may change the public API. Each such chan
 with what to do. The Rust crate and Python package `gilfit` keep their own line in
 [crates/gilfit/CHANGELOG.md](crates/gilfit/CHANGELOG.md).
 
-## Unreleased
+## 0.25.0
 
 ### Breaking
 
