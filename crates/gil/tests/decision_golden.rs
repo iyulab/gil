@@ -9,10 +9,10 @@ mod common;
 use std::collections::BTreeMap;
 
 use common::{CHOSEN, document, doubles, fixture, form, lines};
-use gilfit::field_memory::FieldMemory;
-use gilfit::form::{Document, Role};
-use gilfit::form_resolver::{Candidate, FormResolver};
-use gilfit::lexical_memory::LexicalMemory;
+use gil::field_memory::FieldMemory;
+use gil::form::{Document, Role};
+use gil::form_resolver::{Candidate, FormResolver};
+use gil::lexical_memory::LexicalMemory;
 use serde_json::{Value, json};
 
 fn candidate(c: &Candidate) -> Value {

@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import gilfit
+import gil
 import pytest
 
 CORE = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "core"
@@ -115,16 +115,16 @@ def as_golden(record: dict, kind: str = "record") -> dict:
 
 
 def test_select_layers_writes_the_golden_decision_records() -> None:
-    documents = gilfit.documents(settled_again())
+    documents = gil.documents(settled_again())
     expected = [line for line in lines("records-out.jsonl") if line["kind"] == "record"]
     got = []
     for field in ("team", "code"):
-        form = gilfit.Form.from_dict(golden_form(field))
-        thresholds, records = gilfit.select_layers(
+        form = gil.Form.from_dict(golden_form(field))
+        thresholds, records = gil.select_layers(
             form, field, documents, 0.8, 10, counting=COUNTED
         )
         assert set(thresholds) == {"key", "memory"}
-        bare, none = gilfit.select_layers(
+        bare, none = gil.select_layers(
             form, field, documents, 0.8, 10, counting=COUNTED, records=False
         )
         assert none is None and bare == thresholds
@@ -138,17 +138,17 @@ def test_select_layers_writes_the_golden_decision_records() -> None:
 
 
 def test_the_golden_layers_choice_comes_back() -> None:
-    documents = gilfit.read_records(CORE / "records.jsonl")
+    documents = gil.read_records(CORE / "records.jsonl")
     assert len(documents) == len(lines("records.jsonl"))
     golden = {
         line["field"]: line
         for line in lines("golden.jsonl")
         if line["kind"] == "layers"
     }
-    first = gilfit.documents(lines("records.jsonl")[:CHOSEN])
+    first = gil.documents(lines("records.jsonl")[:CHOSEN])
     for field, line in golden.items():
-        form = gilfit.Form.from_dict(golden_form(field))
-        thresholds, _ = gilfit.select_layers(
+        form = gil.Form.from_dict(golden_form(field))
+        thresholds, _ = gil.select_layers(
             form, field, first, 0.8, 10, counting=COUNTED, records=False
         )
         for layer in ("key", "memory"):
@@ -162,41 +162,41 @@ def test_the_golden_layers_choice_comes_back() -> None:
 
 def test_bad_input_is_a_value_error() -> None:
     with pytest.raises(ValueError, match="unknown setting 'colour'"):
-        gilfit.Form.from_dict(
+        gil.Form.from_dict(
             {"name": "f", "fields": [{"name": "a", "role": "judged", "colour": 1}]}
         )
     with pytest.raises(ValueError, match="needs a role"):
-        gilfit.Form.from_dict({"name": "f", "fields": [{"name": "a"}]})
+        gil.Form.from_dict({"name": "f", "fields": [{"name": "a"}]})
     with pytest.raises(ValueError, match="settled_at"):
-        gilfit.documents([{"id": "1", "settled_at": "yesterday", "values": {}}])
-    form = gilfit.Form.from_dict(
+        gil.documents([{"id": "1", "settled_at": "yesterday", "values": {}}])
+    form = gil.Form.from_dict(
         {"name": "f", "fields": [{"name": "a", "role": "observed"}]}
     )
     with pytest.raises(ValueError, match="not judged"):
-        gilfit.select_layers(form, "a", gilfit.documents([]))
+        gil.select_layers(form, "a", gil.documents([]))
 
 
 def test_results_carry_exactly_the_typed_keys() -> None:
     # The TypedDicts are the documented shape; a field added or dropped on the Rust side must show up here.
-    form = gilfit.Form.from_dict(golden_form("team"))
-    thresholds, records = gilfit.select_layers(
-        form, "team", gilfit.documents(settled_again()), 0.8, 10, counting=COUNTED
+    form = gil.Form.from_dict(golden_form("team"))
+    thresholds, records = gil.select_layers(
+        form, "team", gil.documents(settled_again()), 0.8, 10, counting=COUNTED
     )
-    assert set(thresholds) == set(gilfit.LayerThresholds.__annotations__)
+    assert set(thresholds) == set(gil.LayerThresholds.__annotations__)
     for layer in thresholds.values():
-        assert set(layer) == set(gilfit.ThresholdReplay.__annotations__)
+        assert set(layer) == set(gil.ThresholdReplay.__annotations__)
         for choice in (layer["chosen"], layer["most_precise"]):
             if choice is not None:
-                assert set(choice) == set(gilfit.ThresholdChoice.__annotations__)
+                assert set(choice) == set(gil.ThresholdChoice.__annotations__)
         for state in layer["keys"] or []:
-            assert set(state) == set(gilfit.KeyState.__annotations__)
+            assert set(state) == set(gil.KeyState.__annotations__)
     assert records
     for record in records:
-        assert set(record) == set(gilfit.DecisionRecord.__annotations__)
+        assert set(record) == set(gil.DecisionRecord.__annotations__)
         if record["key"] is not None:
-            assert set(record["key"]) == set(gilfit.KeyLook.__annotations__)
+            assert set(record["key"]) == set(gil.KeyLook.__annotations__)
         if record["similar"] is not None:
-            assert set(record["similar"]) == set(gilfit.SimilarLook.__annotations__)
+            assert set(record["similar"]) == set(gil.SimilarLook.__annotations__)
         assert record["coarse"] is None
 
 
@@ -226,12 +226,12 @@ def same_replay(have: dict, want: dict, where: str) -> None:
 
 
 def test_the_golden_key_fields_choice_comes_back() -> None:
-    first = gilfit.documents(lines("records.jsonl")[:CHOSEN])
-    form = gilfit.Form.from_dict(declared_form())
+    first = gil.documents(lines("records.jsonl")[:CHOSEN])
+    form = gil.Form.from_dict(declared_form())
     wanted = {line["world"]: line for line in lines("key_fields.jsonl")}
     for world, typed_longest in (("ticket", 0), ("ticket-typed", 2)):
         want = wanted[world]
-        have = gilfit.select_key_fields(
+        have = gil.select_key_fields(
             form, "team", first, 0.8, 10, counting=COUNTED, typed_longest=typed_longest
         )
         assert have["key_fields"] == want["fields"], world
@@ -254,54 +254,54 @@ def test_the_golden_key_fields_choice_comes_back() -> None:
     # The choice goes on the form as the field's key fields.
     keyed = declared_form()
     keyed["fields"][3]["key_fields"] = wanted["ticket"]["fields"]
-    gilfit.Form.from_dict(keyed)
+    gil.Form.from_dict(keyed)
 
 
 def test_key_fields_choice_carries_exactly_the_typed_keys() -> None:
-    form = gilfit.Form.from_dict(declared_form())
-    choice = gilfit.select_key_fields(
-        form, "team", gilfit.documents(lines("records.jsonl")[:CHOSEN]), typed_longest=2
+    form = gil.Form.from_dict(declared_form())
+    choice = gil.select_key_fields(
+        form, "team", gil.documents(lines("records.jsonl")[:CHOSEN]), typed_longest=2
     )
-    assert set(choice) == set(gilfit.KeyFieldsChoice.__annotations__)
+    assert set(choice) == set(gil.KeyFieldsChoice.__annotations__)
     for trial in choice["trials"]:
-        assert set(trial) == set(gilfit.KeyFieldsTrial.__annotations__)
-        assert set(trial["replay"]) == set(gilfit.ThresholdReplay.__annotations__)
+        assert set(trial) == set(gil.KeyFieldsTrial.__annotations__)
+        assert set(trial["replay"]) == set(gil.ThresholdReplay.__annotations__)
     assert choice["typed"] is not None
-    assert set(choice["typed"]) == set(gilfit.TypedKeyThresholds.__annotations__)
+    assert set(choice["typed"]) == set(gil.TypedKeyThresholds.__annotations__)
     with pytest.raises(ValueError, match="several values"):
-        gilfit.select_key_fields(form, "tags", gilfit.documents([]), typed_longest=1)
+        gil.select_key_fields(form, "tags", gil.documents([]), typed_longest=1)
 
 
 def test_the_golden_coarse_choice_and_records_come_back() -> None:
-    first = gilfit.documents(lines("records.jsonl")[:CHOSEN])
-    form = gilfit.Form.from_dict(golden_form("code", stop_kind="coarse"))
+    first = gil.documents(lines("records.jsonl")[:CHOSEN])
+    form = gil.Form.from_dict(golden_form("code", stop_kind="coarse"))
     want = next(
         line
         for line in lines("golden.jsonl")
         if line["kind"] == "coarse" and line["field"] == "code"
     )
-    thresholds, records = gilfit.select_coarse(form, "code", first, 0.8, 10, counting=COUNTED)
+    thresholds, records = gil.select_coarse(form, "code", first, 0.8, 10, counting=COUNTED)
     for layer in ("key", "memory"):
         same_replay(thresholds[layer], want[layer], f"coarse {layer}")
-    bare, none = gilfit.select_coarse(
+    bare, none = gil.select_coarse(
         form, "code", first, 0.8, 10, counting=COUNTED, records=False
     )
     assert none is None and bare == thresholds
     expected = [line for line in lines("records-out.jsonl") if line["kind"] == "coarse_record"]
     assert records is not None and len(records) == len(expected)
     for i, (record, line) in enumerate(zip(records, expected, strict=True)):
-        assert set(record["coarse"]) == set(gilfit.CoarseLook.__annotations__)
+        assert set(record["coarse"]) == set(gil.CoarseLook.__annotations__)
         assert json.loads(
             json.dumps(as_golden(record, "coarse_record")), parse_int=float
         ) == json.loads(json.dumps(line), parse_int=float), f"coarse record line {i + 1}"
     with pytest.raises(ValueError, match="no coarse level"):
-        gilfit.select_coarse(gilfit.Form.from_dict(declared_form()), "team", first)
+        gil.select_coarse(gil.Form.from_dict(declared_form()), "team", first)
 
 
 def test_the_golden_key_concentrations_come_back() -> None:
-    first = gilfit.documents(lines("records.jsonl")[:CHOSEN])
+    first = gil.documents(lines("records.jsonl")[:CHOSEN])
     keyed = declared_form()
     want = {line["kind"]: line for line in lines("golden.jsonl")[:2]}
     keyed["fields"][3]["key_fields"] = want["key_fields"]["fields"]
-    found = gilfit.select_key_concentrations(gilfit.Form.from_dict(keyed), "team", first)
+    found = gil.select_key_concentrations(gil.Form.from_dict(keyed), "team", first)
     assert found == want["key_concentrations"]["concentrations"]

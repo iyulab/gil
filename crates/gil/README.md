@@ -1,14 +1,15 @@
-# gilfit
+# Gil (`iyulab-gil`)
 
-gilfit suggests the judged fields of a form from the documents people have already settled, and chooses — by
+Gil suggests the judged fields of a form from the documents people have already settled, and chooses — by
 replaying them in the order they were settled — how far each suggestion can be trusted and how often a trusted one will
 be right.
 
-This crate is its decision core, with no I/O: a Rust rebuild of the .NET library published on NuGet as `Gil`. It
+This crate is its decision core, with no I/O: a Rust rebuild of the .NET library published on NuGet as `Gil`. It is
+published as `iyulab-gil` and imported as `gil` (`cargo add iyulab-gil`, then `use gil::…`). It
 reproduces that library's language-neutral goldens (`tests/fixtures/core` in the repository) to the bit.
 
 **Status: early.** The API may still change within 0.x — each change is listed in
-[CHANGELOG.md](https://github.com/iyulab/gilfit/blob/rust-core/crates/gilfit/CHANGELOG.md) with what to do about it.
+[CHANGELOG.md](https://github.com/iyulab/gil/blob/rust-core/crates/gil/CHANGELOG.md) with what to do about it.
 
 ## What it does
 
@@ -23,9 +24,10 @@ reproduces that library's language-neutral goldens (`tests/fixtures/core` in the
 
 The core does no I/O: documents come in as values and records go out through a callback. How they are stored is the
 host's business. Text is compared after the normalization specified in
-[docs/text-normalization.md](https://github.com/iyulab/gilfit/blob/main/docs/text-normalization.md).
+[docs/text-normalization.md](https://github.com/iyulab/gil/blob/main/docs/text-normalization.md).
 
-Python bindings are published on PyPI as `gilfit` (`pip install gilfit`, Python 3.11 or later).
+Python bindings are published on PyPI as `iyulab-gil` (`pip install iyulab-gil`, then `import gil`; Python 3.11 or
+later).
 
 ## License
 

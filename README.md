@@ -848,8 +848,8 @@ with the normalized text, the key and the n-grams each makes, and `keys.jsonl` f
 what it ranks for each single-valued judged field of every later record, with the same settings. Set
 `GIL_WRITE_CORE_GOLDEN` to a directory to write the files afresh.
 
-The decision core is being rebuilt in Rust under `crates/gilfit`, checked against the same goldens; it is not
-published yet. With a stable Rust toolchain:
+The decision core is rebuilt in Rust under `crates/gil`, checked against the same goldens, and published as
+`iyulab-gil` on crates.io and PyPI (imported as `gil`). With a stable Rust toolchain:
 
 ```
 cargo test

@@ -1,8 +1,19 @@
-# Changelog — gilfit
+# Changelog — Gil (Rust crate and Python package `iyulab-gil`)
 
-The Rust crate `gilfit` (crates.io) and the Python package `gilfit` (PyPI) share this version line. Versions follow
-`0.x`: a minor release may change the public API, and each such change is listed under **Breaking** with what to do.
-The .NET library on NuGet (`Gil`) keeps its own line in the repository's root `CHANGELOG.md`.
+The Rust crate (crates.io) and the Python package (PyPI), both published as `iyulab-gil`, share this version line.
+Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
+with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the repository's root `CHANGELOG.md`.
+
+## 0.3.0
+
+### Breaking
+
+- **Renamed.** The Rust crate and the Python package are published as `iyulab-gil` and imported as `gil`; they were
+  `gilfit` up to 0.2.0, and `gilfit` 0.1.0 and 0.2.0 are yanked. The API is unchanged. What to do:
+  - Rust: depend on `iyulab-gil = "0.3"` and write `use gil::…` in place of `use gilfit::…`.
+  - Python: `pip install iyulab-gil` (uninstall `gilfit`) and `import gil` in place of `import gilfit`. The package is
+    `gil`, the same name as another distribution on PyPI; do not install both into one environment.
+- The repository is https://github.com/iyulab/gil again; the `gilfit` address redirects.
 
 ## 0.2.0
 

@@ -11,11 +11,11 @@ mod common;
 use std::collections::BTreeMap;
 
 use common::{document, doubles, fixture, lines, replay};
-use gilfit::field_memory::FieldMemory;
-use gilfit::form::{CoarseLevel, Document, Field, Form, Role};
-use gilfit::form_resolver::{Candidate, FormResolver, Suggestion};
-use gilfit::lexical_memory::LexicalMemory;
-use gilfit::threshold_selection::{
+use gil::field_memory::FieldMemory;
+use gil::form::{CoarseLevel, Document, Field, Form, Role};
+use gil::form_resolver::{Candidate, FormResolver, Suggestion};
+use gil::lexical_memory::LexicalMemory;
+use gil::threshold_selection::{
     Choice, select_coarse, select_key_threshold, select_layers, select_typed_key_thresholds,
 };
 use serde_json::{Value, json};
@@ -305,7 +305,7 @@ fn the_typed_replay_writes_the_golden_decision_records() {
         counting: Some(&common::COUNTED[..]),
     };
     let mut records = Vec::new();
-    let typed = gilfit::threshold_selection::select_typed_key_thresholds_with(
+    let typed = gil::threshold_selection::select_typed_key_thresholds_with(
         &mut FieldMemory::default(),
         &form,
         "owner",

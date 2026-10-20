@@ -7,11 +7,11 @@
 mod common;
 
 use common::{CHOSEN, COUNTED, doubles, fixture, form, lines};
-use gilfit::decision_record::DecisionRecord;
-use gilfit::field_memory::FieldMemory;
-use gilfit::form::Document;
-use gilfit::lexical_memory::LexicalMemory;
-use gilfit::threshold_selection::{
+use gil::decision_record::DecisionRecord;
+use gil::field_memory::FieldMemory;
+use gil::form::Document;
+use gil::lexical_memory::LexicalMemory;
+use gil::threshold_selection::{
     Choice, select_coarse, select_coarse_with, select_layers, select_layers_with,
 };
 use serde_json::{Value, json};
@@ -147,10 +147,10 @@ fn suggestions_hand_over_records_that_agree_with_them() {
 /// Asks every judged field of each later record as the answer-side test describes and checks each record against its
 /// suggestion — the counts of lookups asked, answered, with a key look, with a vote, with a coarse look, with a class
 /// offered, and with a class withheld because a value was answered.
-fn suggest_and_check(form: &gilfit::form::Form) -> [usize; 7] {
-    use gilfit::field_memory::Lookup;
-    use gilfit::form::Role;
-    use gilfit::form_resolver::{FormResolver, Source};
+fn suggest_and_check(form: &gil::form::Form) -> [usize; 7] {
+    use gil::field_memory::Lookup;
+    use gil::form::Role;
+    use gil::form_resolver::{FormResolver, Source};
     use std::collections::BTreeMap;
 
     let documents: Vec<Document> = lines(&fixture("records.jsonl"))

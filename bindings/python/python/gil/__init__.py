@@ -1,13 +1,13 @@
-"""Python bindings for the gilfit decision core.
+"""Python bindings for the Gil decision core (published as ``iyulab-gil``).
 
 Replays settled documents to choose how far each layer's suggestions can be trusted, and hands back the decision
 records the choice rests on — one per document asked about, in settlement order.
 
-    import gilfit
+    import gil
 
-    form = gilfit.Form.from_json(text)            # the form and its fields' settings
-    documents = gilfit.read_records(path)         # settled documents, one JSON object per line
-    thresholds, records = gilfit.select_layers(form, "team", documents, target_precision=0.8)
+    form = gil.Form.from_json(text)            # the form and its fields' settings
+    documents = gil.read_records(path)         # settled documents, one JSON object per line
+    thresholds, records = gil.select_layers(form, "team", documents, target_precision=0.8)
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
-from gilfit._gilfit import (
+from gil._gil import (
     Documents,
     check_form,
     select_coarse_json,

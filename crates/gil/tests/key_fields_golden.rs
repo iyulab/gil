@@ -9,9 +9,9 @@ mod common;
 use std::collections::BTreeMap;
 
 use common::{CHOSEN, COUNTED, document, doubles, fixture, form, lines, replay};
-use gilfit::field_memory::FieldMemory;
-use gilfit::form::{Document, Field, Form, Role};
-use gilfit::threshold_selection::{
+use gil::field_memory::FieldMemory;
+use gil::form::{Document, Field, Form, Role};
+use gil::threshold_selection::{
     Choice, KeyFieldsChoice, TypedKeyThresholds, select_key_concentrations, select_key_fields,
 };
 use serde_json::{Map, Value, json};

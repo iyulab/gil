@@ -18,14 +18,14 @@ fn the_text_normalization_reproduces_its_golden() {
     for line in golden.lines().filter(|l| !l.is_empty()) {
         let expected: Value = serde_json::from_str(line).expect("a JSON line");
         let text = expected["text"].as_str().expect("text");
-        let grams: Vec<Value> = gilfit::text::grams(text, MIN_GRAM, MAX_GRAM)
+        let grams: Vec<Value> = gil::text::grams(text, MIN_GRAM, MAX_GRAM)
             .into_iter()
             .map(|(gram, count)| json!([gram, count]))
             .collect();
         let actual = json!({
             "text": text,
-            "normal": gilfit::text::normalize(text),
-            "key": gilfit::text::key(text, MAX_KEY_LENGTH),
+            "normal": gil::text::normalize(text),
+            "key": gil::text::key(text, MAX_KEY_LENGTH),
             "grams": grams,
         });
         assert_eq!(actual, expected, "line {}", lines + 1);

@@ -7,8 +7,8 @@ mod common;
 use std::collections::BTreeMap;
 
 use common::{CHOSEN, document, fixture, form, lines, ticks};
-use gilfit::field_memory::{FieldMemory, Lookup};
-use gilfit::form::Role;
+use gil::field_memory::{FieldMemory, Lookup};
+use gil::form::Role;
 use serde_json::{Value, json};
 
 #[test]

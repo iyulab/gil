@@ -1,4 +1,4 @@
-"""Type stubs for the gilfit extension module."""
+"""Type stubs for the gil extension module."""
 
 from typing import final
 

@@ -1,8 +1,8 @@
 //! What the golden tests share: reading the core fixtures, their records as documents, and the golden's form.
 #![allow(dead_code)] // each test binary uses its own part
 
-use gilfit::form::{CoarseLevel, Document, Field, Form, Role, SettlementKind};
-use gilfit::threshold_selection::{ThresholdChoice, ThresholdReplay};
+use gil::form::{CoarseLevel, Document, Field, Form, Role, SettlementKind};
+use gil::threshold_selection::{ThresholdChoice, ThresholdReplay};
 use serde_json::{Number, Value, json};
 
 /// How many records the golden chooses its settings on; decisions are made on the rest.

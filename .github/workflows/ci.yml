@@ -35,7 +35,7 @@ jobs:
       # Compatibility replays and live calls skip themselves: their fixtures and endpoints are not part of this repository.
       - run: dotnet test --solution Gil.slnx --no-build --configuration Release
 
-  # The Rust decision core (crates/gilfit): format, lints, and the language-neutral goldens it shares with .NET.
+  # The Rust decision core (crates/gil): format, lints, and the language-neutral goldens it shares with .NET.
   rust:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -67,9 +67,9 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-      - run: cargo clippy -p gilfit-py --all-targets --locked -- -D warnings
+      - run: cargo clippy -p gil-py --all-targets --locked -- -D warnings
       - run: pip install maturin==1.15.0 pytest mypy==2.4.0
       - run: maturin build --release --locked -m bindings/python/Cargo.toml -o dist
       - run: pip install dist/*.whl && pytest -q bindings/python/tests
       # The extension module's type stubs match what it exports.
-      - run: python -m mypy.stubtest gilfit
+      - run: python -m mypy.stubtest gil

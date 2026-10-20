@@ -7,10 +7,10 @@
 mod common;
 
 use common::{CHOSEN, COUNTED, document, doubles, fixture, form, lines, replay};
-use gilfit::field_memory::FieldMemory;
-use gilfit::form::Document;
-use gilfit::lexical_memory::LexicalMemory;
-use gilfit::threshold_selection::{Choice, select_coarse, select_key_threshold, select_layers};
+use gil::field_memory::FieldMemory;
+use gil::form::Document;
+use gil::lexical_memory::LexicalMemory;
+use gil::threshold_selection::{Choice, select_coarse, select_key_threshold, select_layers};
 use serde_json::{Value, json};
 
 #[test]

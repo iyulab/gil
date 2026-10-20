@@ -3,7 +3,7 @@ requires = ["maturin>=1.15,<2"]
 build-backend = "maturin"
 
 [project]
-name = "gilfit"
+name = "iyulab-gil"
 description = "Suggests and decides form field values from how settled documents were filled."
 requires-python = ">=3.11"
 license = "Apache-2.0"
@@ -18,12 +18,12 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/iyulab/gilfit"
-Changelog = "https://github.com/iyulab/gilfit/blob/rust-core/crates/gilfit/CHANGELOG.md"
+Repository = "https://github.com/iyulab/gil"
+Changelog = "https://github.com/iyulab/gil/blob/rust-core/crates/gil/CHANGELOG.md"
 
 [tool.maturin]
 python-source = "python"
-module-name = "gilfit._gilfit"
+module-name = "gil._gil"
 features = ["pyo3/extension-module"]
 # maturin lays the sdist out from the workspace root, so the license file the metadata names must be placed at its root.
 include = [{ path = "LICENSE", format = "sdist" }]

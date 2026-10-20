@@ -8,8 +8,8 @@ mod common;
 use std::collections::BTreeMap;
 
 use common::{CHOSEN, document, fixture, form, lines};
-use gilfit::form::{Document, Form, Role};
-use gilfit::lexical_memory::LexicalMemory;
+use gil::form::{Document, Form, Role};
+use gil::lexical_memory::LexicalMemory;
 use serde_json::{Value, json};
 
 /// How many similar documents a lookup asks for: the resolver's default of ten voters, and one more for the document

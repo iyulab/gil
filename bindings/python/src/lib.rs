@@ -1,16 +1,16 @@
-//! Python bindings for the gilfit decision core.
+//! Python bindings for the Gil decision core.
 //!
-//! The extension module (`gilfit._gilfit`) takes forms and documents as JSON and hands results back as JSON text; the
-//! `gilfit` package around it reads that text into dictionaries. Records are gathered and returned whole rather than
+//! The extension module (`gil._gil`) takes forms and documents as JSON and hands results back as JSON text; the
+//! `gil` package around it reads that text into dictionaries. Records are gathered and returned whole rather than
 //! passed to a Python callback, which would cost a call back into the interpreter per lookup.
 
 use std::collections::BTreeMap;
 
-use gilfit::decision_record::{DecisionRecord, KeyLook, SimilarLook};
-use gilfit::field_memory::FieldMemory;
-use gilfit::form::{CoarseLevel, Document, Field, Form, Role, SettlementKind};
-use gilfit::lexical_memory::LexicalMemory;
-use gilfit::threshold_selection::{
+use gil::decision_record::{DecisionRecord, KeyLook, SimilarLook};
+use gil::field_memory::FieldMemory;
+use gil::form::{CoarseLevel, Document, Field, Form, Role, SettlementKind};
+use gil::lexical_memory::LexicalMemory;
+use gil::threshold_selection::{
     Choice, KeyFieldsChoice, KeyFieldsTrial, KeyState, LayerThresholds, ThresholdChoice,
     ThresholdReplay, TypedKeyThresholds, select_coarse_with, select_key_concentrations,
     select_key_fields, select_layers_with,
@@ -373,7 +373,7 @@ fn record_json(r: &DecisionRecord) -> Value {
 // ---- the module ----
 
 /// Settled documents, read once and kept on the Rust side.
-#[pyclass(frozen, module = "gilfit._gilfit")]
+#[pyclass(frozen, module = "gil._gil")]
 struct Documents {
     documents: Vec<Document>,
 }
@@ -590,7 +590,7 @@ fn select_key_fields_json(
 }
 
 #[pymodule]
-fn _gilfit(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _gil(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Documents>()?;
     m.add_function(wrap_pyfunction!(check_form, m)?)?;
     m.add_function(wrap_pyfunction!(select_layers_json, m)?)?;

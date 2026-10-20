@@ -1,7 +1,7 @@
 [package]
-name = "gilfit-py"
-version = "0.2.0"
-description = "Python bindings for the gilfit decision core."
+name = "gil-py"
+version = "0.3.0"
+description = "Python bindings for the Gil decision core."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -10,10 +10,10 @@ rust-version.workspace = true
 publish = false
 
 [lib]
-name = "_gilfit"
+name = "_gil"
 crate-type = ["cdylib"]
 
 [dependencies]
-gilfit = { path = "../../crates/gilfit", version = "0.2.0" }
+gil = { package = "iyulab-gil", path = "../../crates/gil", version = "0.3.0" }
 pyo3 = { version = "0.30.1", features = ["abi3-py311"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
