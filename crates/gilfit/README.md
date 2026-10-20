@@ -1,12 +1,14 @@
 # gilfit
 
-The decision core of [gilfit](https://github.com/iyulab/gilfit): it suggests the judged fields of a form — a ticket's
-team, a report's fault code — from the documents already settled, and chooses how far each suggestion can be trusted by
-replaying those documents in the order they were settled.
+gilfit suggests the judged fields of a form from the documents people have already settled, and chooses — by
+replaying them in the order they were settled — how far each suggestion can be trusted and how often a trusted one will
+be right.
 
-**Status: early, not yet published.** This crate is a Rust rebuild of the .NET library published on NuGet as `Gil`. It
-reproduces that library's language-neutral goldens (`tests/fixtures/core` in the repository) to the bit; its API may
-still change within 0.x.
+This crate is its decision core, with no I/O: a Rust rebuild of the .NET library published on NuGet as `Gil`. It
+reproduces that library's language-neutral goldens (`tests/fixtures/core` in the repository) to the bit.
+
+**Status: early.** The API may still change within 0.x — each change is listed in
+[CHANGELOG.md](https://github.com/iyulab/gilfit/blob/rust-core/crates/gilfit/CHANGELOG.md) with what to do about it.
 
 ## What it does
 
@@ -23,7 +25,7 @@ The core does no I/O: documents come in as values and records go out through a c
 host's business. Text is compared after the normalization specified in
 [docs/text-normalization.md](https://github.com/iyulab/gilfit/blob/main/docs/text-normalization.md).
 
-Python bindings live under `bindings/python` in the repository.
+Python bindings are published on PyPI as `gilfit` (`pip install gilfit`, Python 3.11 or later).
 
 ## License
 

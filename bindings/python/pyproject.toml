@@ -4,11 +4,22 @@ build-backend = "maturin"
 
 [project]
 name = "gilfit"
-version = "0.0.0"
 description = "Suggests and decides form field values from how settled documents were filled."
 requires-python = ">=3.11"
 license = "Apache-2.0"
 readme = "README.md"
+# The version is the bindings crate's (bindings/python/Cargo.toml), which follows the core crate's.
+dynamic = ["version"]
+keywords = ["forms", "suggestion", "precision", "replay", "classification"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Repository = "https://github.com/iyulab/gilfit"
+Changelog = "https://github.com/iyulab/gilfit/blob/rust-core/crates/gilfit/CHANGELOG.md"
 
 [tool.maturin]
 python-source = "python"

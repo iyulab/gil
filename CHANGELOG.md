@@ -1,7 +1,8 @@
 # Changelog
 
 Versions follow `0.x`: a minor release may change the public API. Each such change is listed under **Breaking**
-with what to do.
+with what to do. The Rust crate and Python package `gilfit` keep their own line in
+[crates/gilfit/CHANGELOG.md](crates/gilfit/CHANGELOG.md).
 
 ## Unreleased
 
@@ -23,108 +24,6 @@ with what to do.
   place apart from one operating system to another. Similarities are now the same everywhere; where they moved, they
   moved by that much. The Rust rebuild squares the same way, so a release build no longer folds
   `powf(2.0)` into a product where the reference called the platform's `pow`.
-
-### Performance
-
-- The Rust rebuild's lexical memory looks a request up through an index of which remembered texts hold each n-gram,
-  with the n-gram's weight kept beside each entry, rather than comparing the request with every remembered text, and
-  ranks only the nearest it was asked for. The sums are taken in the same order, so similarities and goldens are
-  unchanged to the bit; a layers replay over 8,000 documents took 37 s and now takes under 2 s.
-
-### Dependencies
-
-- The Rust rebuild's `unicode-normalization` 0.1.25 → 0.1.26; it reproduces the text golden as before.
-
-### Documentation
-
-- The Rust crate and the Python bindings carry their own README and LICENSE and the metadata a registry shows
-  (keywords, categories, readme); the packaged crate leaves out the golden tests, which read fixtures at the repository
-  root. CI checks the declared minimum Rust version (1.90) builds and passes the core's tests.
-- Python bindings for the Rust rebuild start under `bindings/python` (built with maturin, not published):
-  `gilfit.select_layers` replays settled documents and returns the key and memory threshold replays with the decision
-  records they rest on, as dictionaries; forms and documents are read from JSON. They reproduce the decision record
-  golden (`tests/fixtures/core/records-out.jsonl`) to the bit, and CI builds and tests them. The package is typed
-  (`py.typed`, stubs for the extension module that CI checks against it), and `select_layers` returns typed dictionaries
-  (`LayerThresholds`, `DecisionRecord` and the looks and choices inside them) whose keys a test holds to the core's.
-- A text golden, `tests/fixtures/core/text.jsonl`: texts that exercise each step of docs/text-normalization.md with
-  the normalized text, key and n-grams each makes.
-- The decision core's Rust rebuild starts under `crates/gilfit` (not published): text normalization, keys and
-  n-grams, reproducing the text golden, and the settled field memory, reproducing a new key layer golden
-  (`tests/fixtures/core/keys.jsonl` — the field memory's ranking for each later record of the form path's golden) to
-  the bit. CI checks its format, lints and tests.
-- The Rust rebuild replays the key layer to choose a key threshold for a field that takes one value, reproducing a new
-  golden (`tests/fixtures/core/replay.jsonl` — the chosen and most precise thresholds, their promises and the state under
-  each key, for each single-valued judged field of the form path's golden) to the bit. Values a field must not miss and
-  typed thresholds are not replayed there yet.
-- The Rust settled field memory remembers fields that take several values — each value overall, under the document's
-  keys and under each of its other values, weighing as one settlement — and the key threshold replay covers such a
-  field, picking its values in the golden's fixed order, reproducing the golden's replay of one to the bit.
-- A similar document memory golden, `tests/fixtures/core/lexical.jsonl`: for each single-valued judged field of the
-  form path's golden, the documents the lexical memory finds most like each later record's observed values, as
-  documents are remembered, forgotten and remembered again. The Rust rebuild's lexical memory (character n-gram
-  TF-IDF cosine, weights retaken as the memory grows) and the evidence text it is asked with reproduce it to the bit.
-- The Rust rebuild chooses a field's key and memory thresholds together, as the reference does: one replay through
-  both memories, the similar document layer voting among the nearest documents, keeping one document per case of the
-  same evidence, and choosing its threshold and similarity floor on what the key threshold would not have answered. It
-  reproduces the form path's golden layer lines, and a new golden (`tests/fixtures/core/layers.jsonl` — the same
-  replays with documents settled again and copied under new ids), to the bit.
-- The Rust rebuild chooses a field's key fields by the gain over the target and its key concentrations by the
-  likeliest Chinese restaurant process, as the reference does. It reproduces the form path's golden lines for both, and
-  a new golden (`tests/fixtures/core/key_fields.jsonl` — every trial of that choice, and the choice on made-up
-  inspections in `tests/fixtures/core/inspection.jsonl`, where the field naming what is judged gains more than a broad
-  field that answers more often), to the bit. Counting typed text in the choice is not yet supported there.
-- The Rust rebuild chooses a field's coarse level thresholds, as the reference does: on the lookups the field's own
-  thresholds leave unanswered, the class the keys back (their values' scores added up by class), then on what that
-  leaves the class the nearest documents vote for, with its similarity floor. A class by prefix counts UTF-16 code
-  units, as the reference does. It reproduces the form path's golden coarse line to the bit.
-- The Rust rebuild has a form resolver: it keeps the settled field memory and the lexical memory up to date as
-  documents are settled (one document per case of the same evidence, the latest settled), and suggests each open
-  judged field — trusted values first, then guesses, three at most, and the coarse class when no layer answered. It
-  reproduces every decision line of the form path's golden to the bit. A model, typed text and telemetry are not yet
-  carried over.
-- A second core golden, `tests/fixtures/core/note-records.jsonl` and `note-golden.jsonl`: made-up notes whose long
-  free text decides a judged field through the similar document layer, with a value that must not be missed, a value
-  settled outside the field's candidates, a coarse level made from a table, a field that takes several values, typed
-  thresholds, values arriving in three orders, and documents settled again and copied while the resolver is asked.
-  Records may now carry their arrival order. The Rust rebuild leaves values outside a field's candidates out of both
-  layers, holds the key layer back where a value that must not be missed was settled under the document's keys, and
-  reproduces the golden's settings and its decisions, with and without a set field's first value chosen, to the bit.
-- The Rust rebuild suggests while a person types into a field: only values that begin with the typed text (ignoring
-  case, Hangul by its keystrokes), held to the threshold for that many characters, a value trusted with fewer of them
-  staying trusted, and no similar document vote trusted nor coarse class offered. It chooses the typed key thresholds
-  as the reference does, and reproduces the note golden's typed thresholds and typed decisions to the bit. Characters
-  are counted in UTF-16 code units, as the reference counts them.
-- The note golden also asks about every fourth note again once it is saved. The Rust rebuild's field memory leaves the
-  saved document's own settlements out when it is asked about again, as the reference does, and reproduces those lines
-  to the bit.
-- The key fields golden (`tests/fixtures/core/key_fields.jsonl`) also chooses the ticket's team counting the answers
-  while its first two characters are typed. The Rust rebuild's key field choice counts typing the same way, with the
-  typed thresholds of every trial, and reproduces it to the bit.
-- The Rust rebuild holds back the similar document layer and the coarse level too where a value that must not be
-  missed was settled under the document's keys, and leaves such lookups out of the memory and coarse threshold replays,
-  as the reference now does. The note golden's decisions were written again by the reference and it reproduces them to
-  the bit.
-- The Rust rebuild trusts only the key layer's answer among a single-valued field's candidates, as the reference now
-  does; the key layer, form path and note goldens were written again by the reference and it reproduces them to the bit.
-- A decision record golden (`tests/fixtures/core/records-out.jsonl`): for the layers replay with documents settled
-  again, every document asked about in settlement order, with the key layer's best value (strength, whether it is the
-  settled one, the key behind it, whether it was held back) and the similar document vote (score, whether it is the
-  settled one, the nearest voter's similarity, whether more than one voted) whatever the thresholds, and how it was
-  settled. The Rust rebuild hands these records to a caller's sink while it chooses the layers' thresholds
-  (`select_layers_with`), adds the best value and the winning value, and reproduces the golden to the bit.
-- The Rust rebuild's form resolver hands the same record for a suggestion (`suggest_one_with`): what the key layer and
-  the similar document vote found, the winning document, and what was answered at which threshold, leaving open whether
-  it was right until the document is settled.
-- The decision record golden also holds the coarse level replay of the ticket's code: each lookup's class the keys
-  back and class the similar documents vote for, whatever the level's thresholds, and whether the value layers
-  answered. The Rust rebuild writes these records too (`select_coarse_with`) and reproduces them to the bit.
-- A typed decision record golden (`tests/fixtures/core/note-records-out.jsonl`): for the note golden's typed key
-  thresholds, every note asked about with the key layer's best value with none, one and two characters of the settled
-  value typed. The Rust rebuild writes these records while it chooses typed thresholds
-  (`select_typed_key_thresholds_with`) and reproduces them to the bit.
-- The Rust rebuild's suggestion record (`suggest_one_with`) carries the coarse look for a field with a coarse level
-  when nothing is typed: the class the keys back and the class the similar documents vote for, whatever the level's
-  thresholds, and whether the value layers answered. The class a suggestion offers is the one the look names.
 
 ## 0.23.0
 
