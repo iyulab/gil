@@ -9,6 +9,8 @@ with what to do. The Rust crate and Python package `gilfit` keep their own line 
 - The repository is https://github.com/iyulab/gil again; `iyulab/gilfit` redirects. The NuGet package ID and
   namespace stay `Gil`. The Rust crate and the Python package are published as `iyulab-gil` from 0.3.0 (imported as
   `gil`); `gilfit` 0.1.0 and 0.2.0 are yanked.
+- README: how to choose `targetPrecision` from what a wrong answer costs — answering pays only above `1 − 1/ρ`
+  when a wrong value costs ρ entries.
 
 ## 0.24.0
 
