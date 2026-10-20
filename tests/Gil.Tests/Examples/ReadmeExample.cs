@@ -144,6 +144,20 @@ internal static class ReadmeExample
         var tuned = form.WithField(team);
         var unprompted = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30, counting: [SettlementKind.Enter]);
 
+        var planner = new AskPlanner(form, "team", askable: ["component"], budget: 0.5);
+        var replay = new FormResolver(new FieldMemory(), new LexicalMemory()); // starts empty: no later document leaks in
+        foreach (var earlier in saved)                                         // in settlement order
+        {
+            await planner.LearnAsync(replay, earlier);
+            await replay.RebuildAsync(form, [earlier]);
+        }
+
+        var teamNow = await forms.SuggestAsync(form, "tickets/0412", "team", valuesOnScreen);
+        foreach (var advice in planner.Advise(teamNow, valuesOnScreen)) // empty fields, highest gain per character first
+        {
+            if (advice.Ask) { /* ask for advice.Field before the rest */ }
+        }
+
         var gilVersion = typeof(FormResolver).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
 

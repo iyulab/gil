@@ -71,6 +71,7 @@ type may change shape or be removed in any release without a migration note.
 | `GIL0002` | Habit promotion: proposals and their review, deactivation, differentiation, shadow evidence |
 | `GIL0003` | Recording and pricing: `ITelemetrySink` and `SqliteTelemetryStore`, the call recorders, `EnergyModel`, statistics, rebuilding a memory from the feedback log |
 | `GIL0004` | A document memory other than `LexicalMemory` on the form path: `EmbeddingMemory`, `CircuitBreakingMemory`, a memory of your own, and the `FormResolver` and `ThresholdSelection` overloads that take any `IMemory` |
+| `GIL0005` | Asking advice on the form path: `AskPlanner` and `AskAdvice` — which observed field to ask a person for first, within a budget of typing |
 
 Suppress the ids of what you use, in the project file or around the code:
 
@@ -613,6 +614,38 @@ is a class of its own, so list every value — those without a known class under
 medical device recall records with the review panel of each product code from the public classification table — 19
 panels — the panel was trusted for 54% of the records whose code went unanswered at 0.8, and was right for 90% of
 them; the code's own first letter, as a prefix, managed 9%.
+
+**Asking for a field first** (experimental, `GIL0005`). When no layer answers a judged field, one more observed value
+from the person — the component a ticket is about, the part a fault was found on — may let one answer, or a class be
+trusted. Asking every time costs every one of those values typed. `AskPlanner` learns, from settled documents in the
+order they were settled, what asking each field gained per character, and advises an open document within a budget:
+
+```csharp
+var planner = new AskPlanner(form, "team", askable: ["component"], budget: 0.5);
+var replay = new FormResolver(new FieldMemory(), new LexicalMemory()); // starts empty: no later document leaks in
+foreach (var earlier in saved)                                         // in settlement order
+{
+    await planner.LearnAsync(replay, earlier);
+    await replay.RebuildAsync(form, [earlier]);
+}
+
+var teamNow = await forms.SuggestAsync(form, "tickets/0412", "team", valuesOnScreen);
+foreach (var advice in planner.Advise(teamNow, valuesOnScreen)) // empty fields, highest gain per character first
+{
+    if (advice.Ask) { /* ask for advice.Field before the rest */ }
+}
+```
+
+What a suggestion is worth: 1 for a value answered right, and for a trusted class that holds the settled value, the
+share of the field's values it rules out. A field's gain is kept under the class the suggestion without it showed and
+whether that class was trusted, starting from 0.1 gained over 10 characters, and asking is advised where the gain is
+among the highest that, counted down, fill the budget — a share of the typing that asking every time would take — while
+asking has spent no more than that share; the planner counts as though its advice was followed. Learn from a resolver whose memory holds only the
+documents before each one, then keep calling `LearnAsync` with the live resolver as documents are settled. A field the suggestion already answers is not worth asking, and with several
+fields open the advice for each was learned with only that one missing. Replaying a public stream of medical device
+recalls (asking for the recalling firm to answer the product code, ten thousand records after thirty thousand) with a
+budget of 0.49, advice spent 49% of the typing and gained 0.032 per record — 60% of what asking every time gained;
+on a public stream of aircraft fault reports (asking for the part to answer the fault code), 48% and 0.094 — 68%.
 
 A chosen threshold also holds only for the version of Gil that chose it. A threshold rests on how a layer scores its
 candidates and on what the replay asks, and a release may change either: 0.9.0 changed the key layer's scale, 0.10.0

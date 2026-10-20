@@ -22,6 +22,9 @@ internal static class Stability
     /// </summary>
     public const string DocumentMemory = "GIL0004";
 
+    /// <summary>Asking advice: which observed field to ask a person for first, and whether it is worth asking within a budget.</summary>
+    public const string Asking = "GIL0005";
+
     /// <summary>Where the stability of each surface is described.</summary>
     public const string Url = "https://github.com/iyulab/gilfit/blob/main/README.md#stability";
 }
