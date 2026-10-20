@@ -4,6 +4,16 @@ The Rust crate (crates.io) and the Python package (PyPI), both published as `iyu
 Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the repository's root `CHANGELOG.md`.
 
+## Unreleased
+
+### Added
+
+- **`ask_planner::AskPlanner`: which observed attribute to ask a person for first, so that a decided attribute gets
+  answered.** It learns from settled records, in settlement order, what asking each attribute gained per character typed
+  (`learn`), and advises an open record's missing attributes by that gain, marking those worth asking within a budget
+  of the typing asking every time would take (`advise` → `AskAdvice`). Experimental, as in the .NET library, whose
+  `AskPlanner` it reproduces to the bit (a new golden, `tests/fixtures/core/ask.jsonl`).
+
 ## 0.6.0
 
 ### Added

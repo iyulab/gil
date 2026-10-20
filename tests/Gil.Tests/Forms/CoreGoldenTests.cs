@@ -45,7 +45,7 @@ public sealed partial class CoreGoldenTests
         {
             Directory.CreateDirectory(target);
             await File.WriteAllLinesAsync(Path.Combine(target, "records.jsonl"), Generate().Select(Write), Ct);
-            var (written, keys, replays, layers, decisionRecords) = await RunAsync([.. (await File.ReadAllLinesAsync(Path.Combine(target, "records.jsonl"), Ct)).Select(Read)]);
+            var (written, keys, replays, layers, decisionRecords, chosen) = await RunAsync([.. (await File.ReadAllLinesAsync(Path.Combine(target, "records.jsonl"), Ct)).Select(Read)]);
             await File.WriteAllLinesAsync(Path.Combine(target, "golden.jsonl"), written, Ct);
             await File.WriteAllLinesAsync(Path.Combine(target, "keys.jsonl"), keys, Ct);
             await File.WriteAllLinesAsync(Path.Combine(target, "replay.jsonl"), replays, Ct);
@@ -60,12 +60,13 @@ public sealed partial class CoreGoldenTests
                 Ct);
             await File.WriteAllLinesAsync(Path.Combine(target, "lexical.jsonl"), await LexicalAsync([.. (await File.ReadAllLinesAsync(Path.Combine(target, "records.jsonl"), Ct)).Select(Read)]), Ct);
             await File.WriteAllLinesAsync(Path.Combine(target, "pooled.jsonl"), await PooledAsync([.. (await File.ReadAllLinesAsync(Path.Combine(target, "records.jsonl"), Ct)).Select(Read)], written), Ct);
+            await File.WriteAllLinesAsync(Path.Combine(target, "ask.jsonl"), await AskAsync(chosen, [.. (await File.ReadAllLinesAsync(Path.Combine(target, "records.jsonl"), Ct)).Select(Read)]), Ct);
             return;
         }
 
         var documents = (await File.ReadAllLinesAsync(records, Ct)).Select(Read).ToList();
 
-        var (lines, keyLines, replayLines, layerLines, recordLines) = await RunAsync(documents);
+        var (lines, keyLines, replayLines, layerLines, recordLines, form) = await RunAsync(documents);
 
         lines.Should().Equal(await File.ReadAllLinesAsync(golden, Ct));
         keyLines.Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "keys.jsonl"), Ct));
@@ -76,6 +77,7 @@ public sealed partial class CoreGoldenTests
         KeyFieldLines(documents, inspections).Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "key_fields.jsonl"), Ct));
         (await LexicalAsync(documents)).Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "lexical.jsonl"), Ct));
         (await PooledAsync(documents, lines)).Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "pooled.jsonl"), Ct));
+        (await AskAsync(form, documents)).Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "ask.jsonl"), Ct));
     }
 
     /// <summary>
@@ -142,7 +144,7 @@ public sealed partial class CoreGoldenTests
     /// own evidence and cases of the same evidence keep only the latest (layers.jsonl) — with the decision record of every
     /// document that replay asks about (records-out.jsonl).
     /// </summary>
-    private static async Task<(List<string> Golden, List<string> Keys, List<string> Replays, List<string> Layers, List<string> Records)> RunAsync(IReadOnlyList<SettledDocument> documents)
+    private static async Task<(List<string> Golden, List<string> Keys, List<string> Replays, List<string> Layers, List<string> Records, FormDefinition Form)> RunAsync(IReadOnlyList<SettledDocument> documents)
     {
         var form = Form();
         var early = documents.Take(Chosen).ToList();
@@ -264,7 +266,7 @@ public sealed partial class CoreGoldenTests
             await resolver.RebuildAsync(form, [document], Ct);
         }
 
-        return (lines, keyLines, replayLines, layerLines, recordLines);
+        return (lines, keyLines, replayLines, layerLines, recordLines, form);
     }
 
     /// <summary>

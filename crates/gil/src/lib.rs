@@ -7,6 +7,7 @@
 //! layer ([`decider::Answer`]); [`replay`] chooses each layer's threshold. The crate reproduces the .NET
 //! implementation's language-neutral goldens (`tests/fixtures/core`) to the bit.
 
+pub mod ask_planner;
 pub mod coarse_groups;
 pub mod decider;
 pub mod decision_record;
