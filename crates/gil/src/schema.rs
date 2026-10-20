@@ -9,7 +9,20 @@ pub enum AttributeRole {
     Decided,
 }
 
-/// One attribute of a schema, with the settings that govern how it is suggested.
+/// How answers for a decided attribute are offered.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AttributePolicy {
+    /// Answer when a layer is confident enough.
+    #[default]
+    Suggest,
+    /// Answer, but mark the attribute so that the host never fills it on its own — for attributes where a wrong value
+    /// accepted without a look costs more than typing it.
+    ConfirmRequired,
+    /// Never answer — for attributes a model or a memory should not decide, such as an assessment of a person.
+    Off,
+}
+
+/// One attribute of a schema, with the settings that govern how it is answered.
 #[derive(Clone, Debug)]
 pub struct Attribute {
     pub name: String,
@@ -41,6 +54,8 @@ pub struct Attribute {
     /// The score the first keyed value that begins with the typed text must reach, for one, two, … characters typed;
     /// `None` (or a length beyond the list) trusts none.
     pub typed_key_thresholds: Option<Vec<Option<f64>>>,
+    /// How answers for the attribute are offered; an open record never answers an attribute that is off.
+    pub policy: AttributePolicy,
 }
 
 impl Attribute {
@@ -61,6 +76,7 @@ impl Attribute {
             candidates: None,
             must_catch: None,
             typed_key_thresholds: None,
+            policy: AttributePolicy::Suggest,
         }
     }
 
@@ -183,22 +199,36 @@ impl Schema {
         values: &BTreeMap<String, String>,
         sets: &BTreeMap<String, Vec<String>>,
     ) -> String {
+        self.evidence_values(attribute, values, sets)
+            .iter()
+            .map(|(name, value)| format!("{name}: {value}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// The (attribute, value) pairs [`Schema::evidence`] writes as lines, in the same order.
+    pub fn evidence_values(
+        &self,
+        attribute: &str,
+        values: &BTreeMap<String, String>,
+        sets: &BTreeMap<String, Vec<String>>,
+    ) -> Vec<(String, String)> {
         let target = self.attribute(attribute);
-        let mut lines: Vec<String> = Vec::new();
-        for f in self.attributes.iter().filter(|f| {
-            self.supports(&f.name, attribute) || (f.name == attribute && target.multiple)
+        let mut pairs: Vec<(String, String)> = Vec::new();
+        for a in self.attributes.iter().filter(|a| {
+            self.supports(&a.name, attribute) || (a.name == attribute && target.multiple)
         }) {
-            if f.multiple {
-                let mut elements: Vec<&String> = sets.get(&f.name).into_iter().flatten().collect();
+            if a.multiple {
+                let mut elements: Vec<&String> = sets.get(&a.name).into_iter().flatten().collect();
                 elements.sort();
                 elements.dedup();
-                lines.extend(elements.into_iter().map(|e| format!("{}: {e}", f.name)));
-            } else if let Some(value) = values.get(&f.name) {
-                lines.push(format!("{}: {value}", f.name));
+                pairs.extend(elements.into_iter().map(|e| (a.name.clone(), e.clone())));
+            } else if let Some(value) = values.get(&a.name) {
+                pairs.push((a.name.clone(), value.clone()));
             }
         }
 
-        lines.join("\n")
+        pairs
     }
 }
 
@@ -242,6 +272,119 @@ impl SettlementKind {
             "Check" => Self::Check,
             _ => return None,
         })
+    }
+}
+
+/// A settlement of one decided attribute. Accepting is not the same as being right: settling the attribute again later
+/// corrects it. An attribute that takes several values is settled with [`Settlement::set`], restored with
+/// [`Settlement::restore_set`], and rejected or reverted as any other.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Settlement {
+    pub kind: SettlementKind,
+    /// The settled value of a single-valued attribute; `None` for a reject, a revert and settlements of a set.
+    pub value: Option<String>,
+    /// The settled values of an attribute that takes several, once each and in scalar order; `None` otherwise.
+    pub values: Option<Vec<String>>,
+    /// For a check, the probability the decision was drawn to be checked with, fixed before the draw; 1 otherwise.
+    pub probability: f64,
+}
+
+impl Settlement {
+    fn one(kind: SettlementKind, value: &str) -> Self {
+        Self {
+            kind,
+            value: Some(value.to_owned()),
+            values: None,
+            probability: 1.0,
+        }
+    }
+
+    fn many<'a>(kind: SettlementKind, values: impl IntoIterator<Item = &'a str>) -> Self {
+        let mut values: Vec<String> = values.into_iter().map(str::to_owned).collect();
+        values.sort();
+        values.dedup();
+        Self {
+            kind,
+            value: None,
+            values: Some(values),
+            probability: 1.0,
+        }
+    }
+
+    fn none(kind: SettlementKind) -> Self {
+        Self {
+            kind,
+            value: None,
+            values: None,
+            probability: 1.0,
+        }
+    }
+
+    /// The answered value, taken as it was.
+    pub fn accept(value: &str) -> Self {
+        Self::one(SettlementKind::Accept, value)
+    }
+
+    /// A value other than the answered one.
+    pub fn correct(value: &str) -> Self {
+        Self::one(SettlementKind::Correct, value)
+    }
+
+    /// A value a person settled with no answer in view.
+    pub fn enter(value: &str) -> Self {
+        Self::one(SettlementKind::Enter, value)
+    }
+
+    /// The answered value, settled by the host with no person confirming it: memory does not learn it.
+    pub fn fill(value: &str) -> Self {
+        Self::one(SettlementKind::Fill, value)
+    }
+
+    /// A saved value put back when a record is reopened; it keeps the record's time.
+    pub fn restore(value: &str) -> Self {
+        Self::one(SettlementKind::Restore, value)
+    }
+
+    /// A value settled again by someone who did not see the answer, the decision having been drawn to be checked with
+    /// `probability` — fixed before the draw. A decision picked because it looked doubtful is not a check.
+    ///
+    /// # Panics
+    /// When `probability` is not above 0 and at most 1.
+    pub fn check(value: &str, probability: f64) -> Self {
+        assert!(
+            probability > 0.0 && probability <= 1.0,
+            "a check is drawn with a probability above 0 and at most 1"
+        );
+        Self {
+            probability,
+            ..Self::one(SettlementKind::Check, value)
+        }
+    }
+
+    /// Settles an attribute that takes several values with these — none at all clears it. Order and repeats carry no
+    /// meaning.
+    pub fn set<'a>(values: impl IntoIterator<Item = &'a str>) -> Self {
+        Self::many(SettlementKind::Set, values)
+    }
+
+    /// Puts back the saved values of an attribute that takes several, as [`Settlement::restore`] does for one.
+    pub fn restore_set<'a>(values: impl IntoIterator<Item = &'a str>) -> Self {
+        Self::many(SettlementKind::Restore, values)
+    }
+
+    /// The answer turned down, no value settled: the attribute is not answered again until it is reverted or settled.
+    pub fn reject() -> Self {
+        Self::none(SettlementKind::Reject)
+    }
+
+    /// The attribute's earlier settlement undone: it is open again.
+    pub fn revert() -> Self {
+        Self::none(SettlementKind::Revert)
+    }
+
+    /// Whether this settles an attribute that takes several values.
+    pub fn is_set(&self) -> bool {
+        self.values.is_some()
     }
 }
 

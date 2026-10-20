@@ -32,6 +32,26 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   decision record's `field` is `attribute`, and a similar look's `document` is `record`. Records' JSON lines are
   unchanged.
 
+### Added
+
+- **`open_record::OpenRecord`** — a record while its values arrive, as the .NET `FormSession` keeps one: `observe` an
+  observed attribute, `settle` a decided one (with the time it happened — the core keeps no clock), and get fresh
+  answers for the attributes whose evidence changed; `answer`, `answer_partial` (a value seen in part, such as typed
+  text), `snapshot` (the record to save, with the order its values arrived in and how each was settled) and `reopen`
+  (a saved record as its snapshot left it). Rejected attributes stay closed until reverted or settled; an attribute
+  that takes several values stays open once settled.
+- **`schema::Settlement`** — `accept` · `correct` · `enter` · `fill` · `check(value, probability)` · `restore` · `set`
+  · `restore_set` · `reject` · `revert`.
+- **`schema::AttributePolicy`** (`Suggest` · `ConfirmRequired` · `Off`) on `Attribute::policy`: an attribute that is
+  off is never answered; every `Answer` carries its attribute's policy, so a host fills on its own only what does not
+  require confirmation. Python reads it as `"policy": "suggest" | "confirm_required" | "off"`.
+- **External judgement without a callback.** Where neither memory has evidence and nothing is typed,
+  `Answer::needs_external` carries the (attribute, value) pairs a model would read — in the order they arrived, or the
+  schema's order without a history. The host asks its model, or does not, and hands the ranked values back with
+  `Decider::offer_external` (or `OpenRecord::offer_external`): they join the candidates after the values a memory
+  trusts and before the guesses (`Source::External`), values outside the attribute's domain or already chosen left
+  out. `Schema::evidence_values` gives the same pairs; `Lookup::arrival` orders them.
+
 ## 0.3.0
 
 ### Breaking

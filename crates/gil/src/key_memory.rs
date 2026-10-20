@@ -82,6 +82,9 @@ pub struct Lookup<'a> {
     pub typed: Option<&'a str>,
     /// The saved record asked about again, whose settlements are no evidence for it.
     pub excluding: Option<&'a str>,
+    /// The attributes with a value, in the order their values arrived; `None` without a history. Orders the evidence an
+    /// external judgement is asked with.
+    pub arrival: Option<&'a [String]>,
 }
 
 impl<'a> Lookup<'a> {
@@ -98,6 +101,7 @@ impl<'a> Lookup<'a> {
             known_sets: &NO_SETS,
             typed: None,
             excluding: None,
+            arrival: None,
         }
     }
 
@@ -112,6 +116,11 @@ impl<'a> Lookup<'a> {
             typed: typed.filter(|t| !t.is_empty()),
             ..self
         }
+    }
+
+    /// The lookup with the order the record's values arrived in, oldest first.
+    pub fn arrival(self, arrival: Option<&'a [String]>) -> Self {
+        Self { arrival, ..self }
     }
 
     /// The lookup leaving out the settlements of `record`, a saved record asked about again.
@@ -132,11 +141,11 @@ impl<'a> Lookup<'a> {
 pub struct KeyMemory {
     max_key_length: usize,
     recency_decay: f64,
-    schemas: HashMap<String, FormIndex>,
+    schemas: HashMap<String, SchemaIndex>,
 }
 
 #[derive(Default)]
-struct FormIndex {
+struct SchemaIndex {
     records: HashMap<String, Vec<(Slot, Settled)>>,
     values: HashMap<Slot, Vec<Settled>>,
 }
@@ -475,7 +484,7 @@ impl KeyMemory {
 
     /// Whether a value the attribute must not miss was ever settled under a key the record has — then no layer answers the
     /// attribute for it. The lookup's typed text is not read.
-    fn caught(&self, index: &FormIndex, q: &Lookup) -> bool {
+    fn caught(&self, index: &SchemaIndex, q: &Lookup) -> bool {
         let attribute = q.definition();
         let Some(must_catch) = attribute.must_catch.as_ref().filter(|m| !m.is_empty()) else {
             return false;
@@ -502,7 +511,7 @@ impl KeyMemory {
     /// The values settled under the known keys, best first: by score, then latest settlement, then scalar order. Each
     /// carries the key it is strongest under. Values outside the attribute's domain, or not beginning with the typed text,
     /// are left out, and so are the settlements of the record the lookup excludes.
-    fn keyed(&self, index: &FormIndex, q: &Lookup) -> Vec<(String, f64, Key)> {
+    fn keyed(&self, index: &SchemaIndex, q: &Lookup) -> Vec<(String, f64, Key)> {
         let attribute = q.definition();
         let (typed, excluding) = (q.typed, q.excluding);
         // value → (score, strongest, backing key, latest); summed in the order the keys come.

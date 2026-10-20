@@ -14,7 +14,9 @@ use gil::replay::{
     ThresholdReplay, TypedKeyThresholds, select_coarse_with, select_key_concentrations,
     select_key_fields, select_layers_with,
 };
-use gil::schema::{Attribute, AttributeRole, CoarseLevel, Record, Schema, SettlementKind};
+use gil::schema::{
+    Attribute, AttributePolicy, AttributeRole, CoarseLevel, Record, Schema, SettlementKind,
+};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use serde_json::{Map, Value, json};
@@ -133,6 +135,18 @@ fn attribute(value: &Value) -> Parsed<Attribute> {
             "coarse" => f.coarse = (!v.is_null()).then(|| coarse(v)).transpose()?,
             "candidates" => f.candidates = (!v.is_null()).then(|| strings(v, &what)).transpose()?,
             "must_catch" => f.must_catch = (!v.is_null()).then(|| strings(v, &what)).transpose()?,
+            "policy" => {
+                f.policy = match v.as_str() {
+                    Some("suggest") => AttributePolicy::Suggest,
+                    Some("confirm_required") => AttributePolicy::ConfirmRequired,
+                    Some("off") => AttributePolicy::Off,
+                    _ => {
+                        return Err(format!(
+                            "{what}: a policy is \"suggest\", \"confirm_required\" or \"off\""
+                        ));
+                    }
+                }
+            }
             other => return Err(format!("unknown setting '{other}' on attribute '{name}'")),
         }
     }

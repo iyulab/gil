@@ -1,8 +1,10 @@
 //! The schema resolver: answers each open decided attribute of a record from the settled key memory and the similar
 //! record memory, and keeps both up to date as records are settled.
 //!
-//! Not yet carried over from the reference: a model where neither memory had evidence, a domain taken from another
-//! attribute's values, and telemetry.
+//! Where neither memory has evidence, the answer says so and carries what an external judgement would read
+//! ([`Answer::needs_external`]); the host asks its model, or does not, and hands the ranked result back
+//! ([`Decider::offer_external`]) — the core calls nothing outside itself. Not yet carried over from the reference: a
+//! domain taken from another attribute's values, and telemetry.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -10,7 +12,7 @@ use crate::coarse_groups;
 use crate::decision_record::{Answered, CoarseLook, DecisionRecord, KeyLook, SimilarLook};
 use crate::key_memory::{self, KeyMemory, Lookup};
 use crate::lexical_memory::{LexicalMemory, Match};
-use crate::schema::{Attribute, AttributeRole, CoarseLevel, Record, Schema};
+use crate::schema::{Attribute, AttributePolicy, AttributeRole, CoarseLevel, Record, Schema};
 use crate::{similar_vote, text};
 
 /// Which layer offered a candidate.
@@ -19,6 +21,8 @@ pub enum Source {
     None,
     SettledFieldMemory,
     SimilarDocument,
+    /// A judgement the host made outside the core (a model) and offered back.
+    External,
 }
 
 impl Source {
@@ -28,6 +32,7 @@ impl Source {
             Source::None => "None",
             Source::SettledFieldMemory => "SettledFieldMemory",
             Source::SimilarDocument => "SimilarDocument",
+            Source::External => "Model",
         }
     }
 }
@@ -51,6 +56,23 @@ pub struct Answer {
     pub candidates: Vec<Candidate>,
     pub source: Source,
     pub coarse: Option<Candidate>,
+    /// How the attribute's answers are offered — a host fills on its own only what is not
+    /// [`AttributePolicy::ConfirmRequired`].
+    pub policy: AttributePolicy,
+    /// Set when neither memory had evidence — no keyed value and no trusted similar record — and nothing is typed: the
+    /// (attribute, value) pairs an external judgement would read, in the order they arrived (the schema's order without a
+    /// history). The host may ask its model and offer the result with [`Decider::offer_external`]; ignoring it leaves the
+    /// answer as it is.
+    pub needs_external: Option<Vec<(String, String)>>,
+}
+
+/// A value an external judgement ranked, offered back to the core: its probability on the judgement's own scale, and
+/// whether the judgement trusts it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExternalCandidate {
+    pub value: String,
+    pub probability: f64,
+    pub trusted: bool,
 }
 
 impl Answer {
@@ -224,7 +246,7 @@ impl Decider {
         }
     }
 
-    /// Answers every open decided attribute — without a value, unless it takes several — from the values given, writing
+    /// Answers every open decided attribute — without a value, unless it takes several, and not off — from the values given, writing
     /// nothing to memory. The saved version of `record`, if memory holds one, is not evidence for itself: its
     /// settlements are left out of the key memory, and a similar record lookup that finds it passes it over.
     pub fn answer(
@@ -238,13 +260,15 @@ impl Decider {
             .attributes
             .iter()
             .filter(|f| {
-                f.role == AttributeRole::Decided && (f.multiple || !values.contains_key(&f.name))
+                f.role == AttributeRole::Decided
+                    && f.policy != AttributePolicy::Off
+                    && (f.multiple || !values.contains_key(&f.name))
             })
             .map(|f| {
                 let q = Lookup::new(schema, &f.name, values)
                     .sets(sets)
                     .excluding(Some(record));
-                self.answer_attribute(&q, f, &mut |_| {})
+                self.answer_attribute(&q, f, None, &mut |_| {})
             })
             .collect()
     }
@@ -255,7 +279,7 @@ impl Decider {
     /// similar record's value that fits is offered as a guess, and no coarse class is offered.
     ///
     /// # Panics
-    /// When the attribute is not decided, or has a value and takes one.
+    /// When the attribute is not decided, is off, or has a value and takes one.
     pub fn answer_one(
         &self,
         schema: &Schema,
@@ -280,16 +304,52 @@ impl Decider {
     /// # Panics
     /// As [`Decider::answer_one`].
     pub fn answer_one_with(&self, q: &Lookup, sink: &mut dyn FnMut(&DecisionRecord)) -> Answer {
+        let definition = Self::open_attribute(q);
+        self.answer_attribute(q, definition, None, sink)
+    }
+
+    /// The answer for the lookup `q` with an external judgement's ranked values in it — what the host's model made of the
+    /// evidence an earlier answer asked for ([`Answer::needs_external`]). The values join the candidates in the same order
+    /// a model's always took: after values a memory trusts, before the guesses; values outside the attribute's domain, and
+    /// values of a set already chosen, are left out. A judgement offered where a memory had evidence changes nothing.
+    ///
+    /// # Panics
+    /// As [`Decider::answer_one`].
+    pub fn offer_external(&self, q: &Lookup, ranked: &[ExternalCandidate]) -> Answer {
+        self.offer_external_with(q, ranked, &mut |_| {})
+    }
+
+    /// As [`Decider::offer_external`], handing `sink` the lookup's decision record.
+    ///
+    /// # Panics
+    /// As [`Decider::answer_one`].
+    pub fn offer_external_with(
+        &self,
+        q: &Lookup,
+        ranked: &[ExternalCandidate],
+        sink: &mut dyn FnMut(&DecisionRecord),
+    ) -> Answer {
+        let definition = Self::open_attribute(q);
+        self.answer_attribute(q, definition, Some(ranked), sink)
+    }
+
+    /// The looked-up attribute's definition, checked to be open: decided, not off, and without a value unless it takes
+    /// several.
+    fn open_attribute<'a>(q: &Lookup<'a>) -> &'a Attribute {
         let (attribute, definition) = (q.attribute, q.schema.attribute(q.attribute));
         assert!(
             definition.role == AttributeRole::Decided,
             "'{attribute}' is not a decided attribute"
         );
         assert!(
+            definition.policy != AttributePolicy::Off,
+            "'{attribute}' is off and is not answered"
+        );
+        assert!(
             definition.multiple || !q.known.contains_key(attribute),
             "'{attribute}' already has a value"
         );
-        self.answer_attribute(q, definition, sink)
+        definition
     }
 
     /// One attribute's suggestion. Layers that answer come first — values under a key strong enough, a record similar
@@ -299,6 +359,7 @@ impl Decider {
         &self,
         q: &Lookup,
         attribute: &Attribute,
+        external: Option<&[ExternalCandidate]>,
         sink: &mut dyn FnMut(&DecisionRecord),
     ) -> Answer {
         let q = *q;
@@ -321,12 +382,52 @@ impl Decider {
         let caught = self.key_memory.catches(&q);
         let (similar, admitted, vote) = self.similar(&q, attribute, caught);
 
+        // An external judgement only where neither memory had evidence: a value backed by what the record says — even by a
+        // key too weak to answer — beats a model's guess. Not while a person is typing: they ask again with every pause.
+        // An attribute with a value to catch has a key's values, so it never asks.
+        let wants_external =
+            typed.is_none() && keyed.is_empty() && !similar.iter().any(|c| c.trusted);
+        let chosen: Vec<&String> = if attribute.multiple {
+            q.known_sets
+                .get(&attribute.name)
+                .into_iter()
+                .flatten()
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let offered: Vec<Candidate> = external
+            .filter(|_| wants_external)
+            .into_iter()
+            .flatten()
+            .filter(|e| attribute.admits(&e.value) && !chosen.contains(&&e.value))
+            .map(|e| Candidate {
+                value: e.value.clone(),
+                score: e.probability,
+                source: Source::External,
+                evidence: None,
+                trusted: e.trusted,
+            })
+            .collect();
+        let needs_external = (wants_external && external.is_none()).then(|| {
+            let mut pairs = q
+                .schema
+                .evidence_values(&attribute.name, q.known, q.known_sets);
+            if let Some(arrival) = q.arrival {
+                pairs.sort_by_key(|(name, _)| {
+                    arrival.iter().position(|a| a == name).unwrap_or(usize::MAX)
+                });
+            }
+            pairs
+        });
+
         let mut candidates: Vec<Candidate> = Vec::new();
         let ordered = keyed
             .iter()
             .copied()
             .filter(|c| c.trusted)
             .chain(similar.iter().filter(|c| c.trusted))
+            .chain(offered.iter())
             .chain(keyed.iter().copied().filter(|c| !c.trusted))
             .chain(frequent.iter().copied().take(1))
             .chain(similar.iter().filter(|c| !c.trusted))
@@ -416,6 +517,8 @@ impl Decider {
             candidates,
             source,
             coarse,
+            policy: attribute.policy,
+            needs_external,
         }
     }
 
