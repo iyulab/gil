@@ -1,25 +1,25 @@
-//! The key field and concentration goldens, written by the .NET implementation: the form path's choice for its team
+//! The key attribute and concentration goldens, written by the .NET implementation: the schema path's choice for its team
 //! (`golden.jsonl`, kinds `key_fields` and `key_concentrations`) and, with every trial, that choice again and the
-//! choice on made-up inspections (`key_fields.jsonl` on `inspection.jsonl`) — where a broad field alone answers more
-//! often than the field naming what the judged field describes, and the gain over the target keeps the latter — must come
+//! choice on made-up inspections (`key_fields.jsonl` on `inspection.jsonl`) — where a broad attribute alone answers more
+//! often than the attribute naming what the decided attribute describes, and the gain over the target keeps the latter — must come
 //! out the same here, every number to the bit.
 
 mod common;
 
 use std::collections::BTreeMap;
 
-use common::{CHOSEN, COUNTED, document, doubles, fixture, form, lines, replay};
-use gil::field_memory::FieldMemory;
-use gil::form::{Document, Field, Form, Role};
-use gil::threshold_selection::{
+use common::{CHOSEN, COUNTED, doubles, fixture, lines, replay, schema, to_record};
+use gil::key_memory::KeyMemory;
+use gil::replay::{
     Choice, KeyFieldsChoice, TypedKeyThresholds, select_key_concentrations, select_key_fields,
 };
+use gil::schema::{Attribute, AttributeRole, Record, Schema};
 use serde_json::{Map, Value, json};
 
-fn early() -> Vec<Document> {
+fn early() -> Vec<Record> {
     lines(&fixture("records.jsonl"))
         .take(CHOSEN)
-        .map(|r| document(&r))
+        .map(|r| to_record(&r))
         .collect()
 }
 
@@ -40,7 +40,7 @@ fn with_typed(mut line: Value, typed: &Option<TypedKeyThresholds>) -> Value {
     line
 }
 
-fn choice(world: &str, field: &str, choice: &KeyFieldsChoice) -> Value {
+fn choice(world: &str, attribute: &str, choice: &KeyFieldsChoice) -> Value {
     let trials: Vec<Value> = choice
         .trials
         .iter()
@@ -55,7 +55,7 @@ fn choice(world: &str, field: &str, choice: &KeyFieldsChoice) -> Value {
         json!({
             "kind": "key_fields",
             "world": world,
-            "field": field,
+            "field": attribute,
             "fields": strings(&choice.key_fields),
             "chosen": replay(&choice.chosen),
             "all_fields": replay(&choice.all_fields),
@@ -65,15 +65,15 @@ fn choice(world: &str, field: &str, choice: &KeyFieldsChoice) -> Value {
     )
 }
 
-fn inspection(concentrations: BTreeMap<String, f64>) -> Form {
-    let mut risk = Field::new("risk", Role::Judged);
+fn inspection(concentrations: BTreeMap<String, f64>) -> Schema {
+    let mut risk = Attribute::new("risk", AttributeRole::Decided);
     risk.key_concentrations = concentrations;
-    Form {
+    Schema {
         name: "inspection".to_owned(),
-        fields: vec![
-            Field::new("outlet", Role::Observed),
-            Field::new("kind", Role::Observed),
-            Field::new("inspector", Role::Observed),
+        attributes: vec![
+            Attribute::new("outlet", AttributeRole::Observed),
+            Attribute::new("kind", AttributeRole::Observed),
+            Attribute::new("inspector", AttributeRole::Observed),
             risk,
         ],
     }
@@ -83,11 +83,11 @@ fn inspection(concentrations: BTreeMap<String, f64>) -> Form {
 fn the_form_paths_key_fields_and_concentrations_reproduce_its_golden() {
     let early = early();
     let golden = fixture("golden.jsonl");
-    let mut form = form(&golden, |_| true); // the form as declared
+    let mut schema = schema(&golden, |_| true); // the schema as declared
     let expected: Vec<Value> = lines(&golden).take(2).collect();
 
     let chosen = select_key_fields(
-        &form,
+        &schema,
         "team",
         &early,
         Choice {
@@ -105,10 +105,10 @@ fn the_form_paths_key_fields_and_concentrations_reproduce_its_golden() {
     });
     assert_eq!(doubles(actual), doubles(expected[0].clone()));
 
-    for f in form.fields.iter_mut().filter(|f| f.name == "team") {
+    for f in schema.attributes.iter_mut().filter(|f| f.name == "team") {
         f.key_fields = chosen.key_fields.clone();
     }
-    let found = select_key_concentrations(&mut FieldMemory::default(), &form, "team", &early);
+    let found = select_key_concentrations(&mut KeyMemory::default(), &schema, "team", &early);
     let actual = json!({
         "kind": "key_concentrations",
         "field": "team",
@@ -123,7 +123,7 @@ fn key_fields_with_every_trial_reproduce_their_golden() {
     assert_eq!(expected.len(), 4);
 
     let ticket = select_key_fields(
-        &form(&fixture("golden.jsonl"), |_| true),
+        &schema(&fixture("golden.jsonl"), |_| true),
         "team",
         &early(),
         Choice {
@@ -138,11 +138,11 @@ fn key_fields_with_every_trial_reproduce_their_golden() {
         doubles(expected[0].clone())
     );
 
-    let inspections: Vec<Document> = lines(&fixture("inspection.jsonl"))
-        .map(|r| document(&r))
+    let inspections: Vec<Record> = lines(&fixture("inspection.jsonl"))
+        .map(|r| to_record(&r))
         .collect();
     let found = select_key_concentrations(
-        &mut FieldMemory::default(),
+        &mut KeyMemory::default(),
         &inspection(Default::default()),
         "risk",
         &inspections,
@@ -173,7 +173,7 @@ fn key_fields_with_every_trial_reproduce_their_golden() {
 
     // The ticket's team again, counting the answers while its first two characters are typed as well.
     let typed = select_key_fields(
-        &form(&fixture("golden.jsonl"), |_| true),
+        &schema(&fixture("golden.jsonl"), |_| true),
         "team",
         &early(),
         Choice {

@@ -1,7 +1,7 @@
-//! The similar document memory that needs no model: cosine nearest neighbour over character n-gram TF-IDF, one index
+//! The similar record memory that needs no model: cosine nearest neighbour over character n-gram TF-IDF, one index
 //! per task. Text is compared by its characters ([`text::grams`]), so it works in any script without a tokenizer.
 //!
-//! Weights follow the remembered answers: the inverse document frequencies are taken afresh whenever the number of
+//! Weights follow the remembered answers: the inverse record frequencies are taken afresh whenever the number of
 //! remembered answers has moved by a tenth (or by one, while there are fewer than ten) since they were last taken, and
 //! every row and every lookup is weighted with the same ones in between — so a similarity stays a cosine, 1 for the same
 //! text. Each distinct n-gram gets an id the first time it is remembered, in the n-grams' scalar order, and every sum is
@@ -13,7 +13,7 @@ use std::collections::HashMap;
 
 use crate::text;
 
-/// A remembered document found by a lookup: its key, how similar its text is to the request, and its answer.
+/// A remembered record found by a lookup: its key, how similar its text is to the request, and its answer.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Match {
     pub source: String,
@@ -126,7 +126,7 @@ struct Index {
     /// The rows holding each id with the id's weight in that row, in no particular order — a lookup visits only the
     /// rows that share an n-gram with it, and reads each weight where it walks. Rebuilt whenever the weights are retaken.
     postings: Vec<Vec<(usize, f64)>>,
-    /// The inverse document frequency of every id known when there were `taken_at` rows; later ids had none.
+    /// The inverse record frequency of every id known when there were `taken_at` rows; later ids had none.
     idf: Vec<f64>,
     taken_at: usize,
 }
@@ -316,7 +316,7 @@ impl Index {
         squares.sqrt()
     }
 
-    /// The smoothed inverse document frequency at the last refresh: never zero, highest for an n-gram no row had.
+    /// The smoothed inverse record frequency at the last refresh: never zero, highest for an n-gram no row had.
     fn smoothed(&self, frequency: i64) -> f64 {
         ((1.0 + self.taken_at as f64) / (1.0 + frequency as f64)).ln() + 1.0
     }

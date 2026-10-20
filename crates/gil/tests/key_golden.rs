@@ -1,53 +1,58 @@
-//! The key layer golden (`tests/fixtures/core/keys.jsonl`), written by the .NET implementation: the settled field
-//! memory's ranking for each single-valued judged field of every record after the first 200, with the settings the
+//! The key layer golden (`tests/fixtures/core/keys.jsonl`), written by the .NET implementation: the settled attribute
+//! memory's ranking for each single-valued decided attribute of every log after the first 200, with the settings the
 //! golden chose (`golden.jsonl`), must come out the same here — values, scores to the bit, evidence and trust.
 
 mod common;
 
 use std::collections::BTreeMap;
 
-use common::{CHOSEN, document, fixture, form, lines, ticks};
-use gil::field_memory::{FieldMemory, Lookup};
-use gil::form::Role;
+use common::{CHOSEN, fixture, lines, schema, ticks, to_record};
+use gil::key_memory::{KeyMemory, Lookup};
+use gil::schema::AttributeRole;
 use serde_json::{Value, json};
 
 #[test]
 fn the_key_layer_reproduces_its_golden() {
-    let records: Vec<Value> = lines(&fixture("records.jsonl")).collect();
-    let form = form(&fixture("golden.jsonl"), |_| false);
+    let logs: Vec<Value> = lines(&fixture("records.jsonl")).collect();
+    let schema = schema(&fixture("golden.jsonl"), |_| false);
     let expected: Vec<Value> = lines(&fixture("keys.jsonl")).collect();
 
-    let mut memory = FieldMemory::default();
-    for record in &records[..CHOSEN] {
-        memory.put(&form, &document(record).remembered());
+    let mut memory = KeyMemory::default();
+    for log in &logs[..CHOSEN] {
+        memory.put(&schema, &to_record(log).remembered());
     }
 
     let mut at = 0;
-    for record in &records[CHOSEN..] {
-        let observed: BTreeMap<String, String> = record["values"]
+    for log in &logs[CHOSEN..] {
+        let observed: BTreeMap<String, String> = log["values"]
             .as_object()
             .expect("values")
             .iter()
-            .filter(|(field, _)| form.field(field).role == Role::Observed)
-            .map(|(field, value)| (field.clone(), value.as_str().expect("a value").to_owned()))
+            .filter(|(attribute, _)| schema.attribute(attribute).role == AttributeRole::Observed)
+            .map(|(attribute, value)| {
+                (
+                    attribute.clone(),
+                    value.as_str().expect("a value").to_owned(),
+                )
+            })
             .collect();
-        for field in ["team", "code"] {
+        for attribute in ["team", "code"] {
             let candidates: Vec<Value> = memory
-                .rank(&Lookup::new(&form, field, &observed), 3)
+                .rank(&Lookup::new(&schema, attribute, &observed), 3)
                 .into_iter()
                 .map(|c| json!([c.value, c.score, c.evidence, c.trusted]))
                 .collect();
             let actual = json!({
                 "kind": "key_rank",
-                "doc": record["id"],
-                "field": field,
+                "doc": log["id"],
+                "field": attribute,
                 "candidates": candidates,
             });
             assert_eq!(actual, expected[at], "line {}", at + 1);
             at += 1;
         }
 
-        memory.put(&form, &document(record).remembered());
+        memory.put(&schema, &to_record(log).remembered());
     }
 
     assert_eq!(at, expected.len());

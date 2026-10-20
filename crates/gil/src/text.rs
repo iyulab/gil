@@ -27,7 +27,7 @@ pub fn normalize(text: &str) -> String {
     normal
 }
 
-/// The simple lowercase mapping of one scalar (`UnicodeData.txt`, field 13). Rust's lowercase follows the full mapping,
+/// The simple lowercase mapping of one scalar (`UnicodeData.txt`, attribute 13). Rust's lowercase follows the full mapping,
 /// which differs from the simple one only for U+0130 — taken to U+0069 here, as the simple mapping says.
 fn lower(c: char) -> char {
     if c == '\u{130}' {
@@ -46,7 +46,7 @@ pub fn scalars(text: &str) -> usize {
     text.chars().count()
 }
 
-/// The key a field value makes: its normalized text, when non-empty and at most `max_key_length` scalars long.
+/// The key an attribute value makes: its normalized text, when non-empty and at most `max_key_length` scalars long.
 pub fn key(text: &str, max_key_length: usize) -> Option<String> {
     let normal = normalize(text);
     (!normal.is_empty() && scalars(&normal) <= max_key_length).then_some(normal)

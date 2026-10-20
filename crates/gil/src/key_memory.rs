@@ -1,35 +1,35 @@
-//! The settled field memory: suggests a judged field's value from how often each value was settled alongside the values
-//! of the document's other fields. Each other field's value is a key; a value's score is the sum over the document's
-//! keys of its strength there — its weighted count over the key's weighted total plus the key field's concentration.
+//! The settled key memory: answers a decided attribute's value from how often each value was settled alongside the values
+//! of the record's other attributes. Each other attribute's value is a key; a value's score is the sum over the record's
+//! keys of its strength there — its weighted count over the key's weighted total plus the key attribute's concentration.
 //! Recent settlements weigh more: under each key, a settlement counts `recency_decay` to the power of the settlements
 //! made under the same key after it.
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 
-use crate::form::{Document, Field, Form, Role};
+use crate::schema::{Attribute, AttributeRole, Record, Schema};
 use crate::{hangul, text};
 
-/// Another field's normalized value.
+/// Another attribute's normalized value.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct Key {
-    field: String,
+    attribute: String,
     value: String,
 }
 
-/// A field's counts under one key, or overall when the key is `None`.
+/// An attribute's counts under one key, or overall when the key is `None`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct Slot {
-    field: String,
+    attribute: String,
     key: Option<Key>,
 }
 
-/// A value a document settled, and when; the time and then the document id order settlements.
+/// A value a record settled, and when; the time and then the record id order settlements.
 #[derive(Clone, Debug, PartialEq)]
 struct Settled {
     value: String,
     at: i64,
-    document: String,
+    record: String,
 }
 
 /// One value's place under a slot: its share of the weighted total, its weight, the total and its latest settlement.
@@ -42,7 +42,7 @@ struct Share {
     latest: i64,
 }
 
-/// A candidate value: its score, the key that backs it most strongly (`field: value`), and whether it is trusted.
+/// A candidate value: its score, the key that backs it most strongly (`attribute: value`), and whether it is trusted.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Candidate {
     pub value: String,
@@ -51,8 +51,8 @@ pub struct Candidate {
     pub trusted: bool,
 }
 
-/// The best-ranked value settled under the known keys ([`FieldMemory::first`]): its score, whether it is the value
-/// asked about, the key that backs it most strongly (`field: value`), and whether a value the field must not miss was
+/// The best-ranked value settled under the known keys ([`KeyMemory::first`]): its score, whether it is the value
+/// asked about, the key that backs it most strongly (`attribute: value`), and whether a value the attribute must not miss was
 /// settled under the known keys.
 #[derive(Clone, Debug, PartialEq)]
 pub struct First {
@@ -61,35 +61,39 @@ pub struct First {
     pub value: String,
     pub matches: bool,
     pub key: String,
-    /// Whether a value the field must not miss was settled under the known keys — then the key layer does not answer.
+    /// Whether a value the attribute must not miss was settled under the known keys — then the key layer does not answer.
     pub caught: bool,
 }
 
 /// The sets a lookup without any carries.
 static NO_SETS: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
-/// What one field is looked up with — the key layer, the similar document layer and the replays take the same shape.
+/// What one attribute is looked up with — the key layer, the similar record layer and the replays take the same shape.
 #[derive(Clone, Copy, Debug)]
 pub struct Lookup<'a> {
-    pub form: &'a Form,
-    /// The field looked up.
-    pub field: &'a str,
+    pub schema: &'a Schema,
+    /// The attribute looked up.
+    pub attribute: &'a str,
     /// The values known so far.
     pub known: &'a BTreeMap<String, String>,
-    /// The values known so far of the fields that take several.
+    /// The values known so far of the attributes that take several.
     pub known_sets: &'a BTreeMap<String, Vec<String>>,
-    /// The text typed into the field so far; empty text reads as none.
+    /// The text typed into the attribute so far; empty text reads as none.
     pub typed: Option<&'a str>,
-    /// The saved document asked about again, whose settlements are no evidence for it.
+    /// The saved record asked about again, whose settlements are no evidence for it.
     pub excluding: Option<&'a str>,
 }
 
 impl<'a> Lookup<'a> {
-    /// A lookup of `field` from the values known so far: no sets known, nothing typed, no document left out.
-    pub fn new(form: &'a Form, field: &'a str, known: &'a BTreeMap<String, String>) -> Self {
+    /// A lookup of `attribute` from the values known so far: no sets known, nothing typed, no record left out.
+    pub fn new(
+        schema: &'a Schema,
+        attribute: &'a str,
+        known: &'a BTreeMap<String, String>,
+    ) -> Self {
         Self {
-            form,
-            field,
+            schema,
+            attribute,
             known,
             known_sets: &NO_SETS,
             typed: None,
@@ -97,12 +101,12 @@ impl<'a> Lookup<'a> {
         }
     }
 
-    /// The lookup with the values known so far of the fields that take several.
+    /// The lookup with the values known so far of the attributes that take several.
     pub fn sets(self, known_sets: &'a BTreeMap<String, Vec<String>>) -> Self {
         Self { known_sets, ..self }
     }
 
-    /// The lookup with the text typed into the field so far; empty text reads as none.
+    /// The lookup with the text typed into the attribute so far; empty text reads as none.
     pub fn typed(self, typed: Option<&'a str>) -> Self {
         Self {
             typed: typed.filter(|t| !t.is_empty()),
@@ -110,40 +114,40 @@ impl<'a> Lookup<'a> {
         }
     }
 
-    /// The lookup leaving out the settlements of `document`, a saved document asked about again.
-    pub fn excluding(self, document: Option<&'a str>) -> Self {
+    /// The lookup leaving out the settlements of `record`, a saved record asked about again.
+    pub fn excluding(self, record: Option<&'a str>) -> Self {
         Self {
-            excluding: document,
+            excluding: record,
             ..self
         }
     }
 
-    /// The field looked up.
-    fn definition(&self) -> &'a Field {
-        self.form.field(self.field)
+    /// The attribute looked up.
+    fn definition(&self) -> &'a Attribute {
+        self.schema.attribute(self.attribute)
     }
 }
 
-/// The settled field memory. Not thread-safe.
-pub struct FieldMemory {
+/// The settled key memory. Not thread-safe.
+pub struct KeyMemory {
     max_key_length: usize,
     recency_decay: f64,
-    forms: HashMap<String, FormIndex>,
+    schemas: HashMap<String, FormIndex>,
 }
 
 #[derive(Default)]
 struct FormIndex {
-    documents: HashMap<String, Vec<(Slot, Settled)>>,
+    records: HashMap<String, Vec<(Slot, Settled)>>,
     values: HashMap<Slot, Vec<Settled>>,
 }
 
-impl Default for FieldMemory {
+impl Default for KeyMemory {
     fn default() -> Self {
         Self::new(60, 0.95)
     }
 }
 
-impl FieldMemory {
+impl KeyMemory {
     pub fn new(max_key_length: usize, recency_decay: f64) -> Self {
         assert!(max_key_length >= 1, "max_key_length must be at least 1");
         assert!(
@@ -153,43 +157,47 @@ impl FieldMemory {
         Self {
             max_key_length,
             recency_decay,
-            forms: HashMap::new(),
+            schemas: HashMap::new(),
         }
     }
 
-    /// How many documents with at least one settled judged field the form's memory holds.
-    pub fn count(&self, form: &str) -> usize {
-        self.forms
-            .get(form)
-            .map_or(0, |index| index.documents.len())
+    /// How many records with at least one settled decided attribute the schema's memory holds.
+    pub fn count(&self, schema: &str) -> usize {
+        self.schemas
+            .get(schema)
+            .map_or(0, |index| index.records.len())
     }
 
-    /// Replaces what the document contributed with what its current values imply. A field that takes several values
-    /// settles each of them: overall, under the document's keys, and under each of its other values — the values of one
-    /// document weigh alike, as one settlement, whatever order they are listed in.
-    pub fn put(&mut self, form: &Form, document: &Document) {
-        self.remove(&form.name, &document.id);
+    /// Replaces what the record contributed with what its current values imply. An attribute that takes several values
+    /// settles each of them: overall, under the record's keys, and under each of its other values — the values of one
+    /// record weigh alike, as one settlement, whatever order they are listed in.
+    pub fn put(&mut self, schema: &Schema, record: &Record) {
+        self.remove(&schema.name, &record.id);
         let mut tallies = Vec::new();
-        for field in form.fields.iter().filter(|f| f.role == Role::Judged) {
-            if field.multiple {
-                let elements = elements(&document.sets, &field.name);
-                let keys = self.keys(form, field, &document.values, &document.sets);
+        for attribute in schema
+            .attributes
+            .iter()
+            .filter(|f| f.role == AttributeRole::Decided)
+        {
+            if attribute.multiple {
+                let elements = elements(&record.sets, &attribute.name);
+                let keys = self.keys(schema, attribute, &record.values, &record.sets);
                 for element in &elements {
                     let settled = Settled {
                         value: (*element).clone(),
-                        at: document.settled_at,
-                        document: document.id.clone(),
+                        at: record.settled_at,
+                        record: record.id.clone(),
                     };
                     tallies.push((
                         Slot {
-                            field: field.name.clone(),
+                            attribute: attribute.name.clone(),
                             key: None,
                         },
                         settled.clone(),
                     ));
                     let mut under = keys.clone();
                     for other in elements.iter().filter(|e| *e != element) {
-                        if let Some(key) = self.key_of(&field.name, other)
+                        if let Some(key) = self.key_of(&attribute.name, other)
                             && !under.contains(&key)
                         {
                             under.push(key);
@@ -198,7 +206,7 @@ impl FieldMemory {
                     for key in under {
                         tallies.push((
                             Slot {
-                                field: field.name.clone(),
+                                attribute: attribute.name.clone(),
                                 key: Some(key),
                             },
                             settled.clone(),
@@ -209,26 +217,26 @@ impl FieldMemory {
                 continue;
             }
 
-            let Some(value) = document.values.get(&field.name) else {
+            let Some(value) = record.values.get(&attribute.name) else {
                 continue;
             };
 
             let settled = Settled {
                 value: value.clone(),
-                at: document.settled_at,
-                document: document.id.clone(),
+                at: record.settled_at,
+                record: record.id.clone(),
             };
             tallies.push((
                 Slot {
-                    field: field.name.clone(),
+                    attribute: attribute.name.clone(),
                     key: None,
                 },
                 settled.clone(),
             ));
-            for key in self.keys(form, field, &document.values, &document.sets) {
+            for key in self.keys(schema, attribute, &record.values, &record.sets) {
                 tallies.push((
                     Slot {
-                        field: field.name.clone(),
+                        attribute: attribute.name.clone(),
                         key: Some(key),
                     },
                     settled.clone(),
@@ -240,7 +248,7 @@ impl FieldMemory {
             return;
         }
 
-        let index = self.forms.entry(form.name.clone()).or_default();
+        let index = self.schemas.entry(schema.name.clone()).or_default();
         for (slot, settled) in &tallies {
             index
                 .values
@@ -248,15 +256,15 @@ impl FieldMemory {
                 .or_default()
                 .push(settled.clone());
         }
-        index.documents.insert(document.id.clone(), tallies);
+        index.records.insert(record.id.clone(), tallies);
     }
 
-    /// Removes what the document contributed, if anything.
-    pub fn remove(&mut self, form: &str, document: &str) {
-        let Some(index) = self.forms.get_mut(form) else {
+    /// Removes what the record contributed, if anything.
+    pub fn remove(&mut self, schema: &str, record: &str) {
+        let Some(index) = self.schemas.get_mut(schema) else {
             return;
         };
-        let Some(tallies) = index.documents.remove(document) else {
+        let Some(tallies) = index.records.remove(record) else {
             return;
         };
         for (slot, settled) in tallies {
@@ -271,23 +279,23 @@ impl FieldMemory {
         }
     }
 
-    /// The `count` values most likely for the looked-up field given the values known so far, best first: the values
-    /// settled under the known keys by their score (with the key backing each most strongly), then the field's most
+    /// The `count` values most likely for the looked-up attribute given the values known so far, best first: the values
+    /// settled under the known keys by their score (with the key backing each most strongly), then the attribute's most
     /// frequently settled values by their share — only values that begin with the text typed so far, if any. The keyed
-    /// values are trusted when the first one's score reaches the field's key threshold for that many characters typed,
-    /// or the same value was already trusted with fewer of them. The settlements of the document the lookup excludes,
-    /// one asked about again once saved, are no evidence for it; for a field that takes several values, each value on
+    /// values are trusted when the first one's score reaches the attribute's key threshold for that many characters typed,
+    /// or the same value was already trusted with fewer of them. The settlements of the record the lookup excludes,
+    /// one asked about again once saved, are no evidence for it; for an attribute that takes several values, each value on
     /// its own score, and the values already chosen in the known sets are evidence and are not offered again.
     pub fn rank(&self, q: &Lookup, count: usize) -> Vec<Candidate> {
         let q = q.typed(q.typed);
         let (typed, excluding) = (q.typed, q.excluding);
         let definition = q.definition();
-        let Some(index) = self.forms.get(&q.form.name) else {
+        let Some(index) = self.schemas.get(&q.schema.name) else {
             return Vec::new();
         };
 
         let chosen: Vec<&String> = if definition.multiple {
-            elements(q.known_sets, q.field)
+            elements(q.known_sets, q.attribute)
         } else {
             Vec::new()
         };
@@ -312,8 +320,8 @@ impl FieldMemory {
             .map(|(i, (value, score, key))| Candidate {
                 value,
                 score,
-                evidence: Some(format!("{}: {}", key.field, key.value)),
-                // One value answers a field that takes one value; each value whose own score reaches the threshold, a set.
+                evidence: Some(format!("{}: {}", key.attribute, key.value)),
+                // One value answers an attribute that takes one value; each value whose own score reaches the threshold, a set.
                 trusted: if definition.multiple {
                     reaches(score)
                 } else {
@@ -322,7 +330,7 @@ impl FieldMemory {
             })
             .collect();
         let overall = Slot {
-            field: q.field.to_owned(),
+            attribute: q.attribute.to_owned(),
             key: None,
         };
         if let Some(settled) = index.values.get(&overall) {
@@ -347,11 +355,11 @@ impl FieldMemory {
     }
 
     /// The score of the best-ranked value settled under the known keys, whether it is `value`, and the key that backs it
-    /// most strongly — what the field's key threshold is compared with unless a value the field must not miss was settled
-    /// under the known keys ([`First::caught`]). `None` when no known key was seen. Reads the lookup's form, field, known
-    /// values and sets; its typed text and excluded document are not taken into account.
+    /// most strongly — what the attribute's key threshold is compared with unless a value the attribute must not miss was settled
+    /// under the known keys ([`First::caught`]). `None` when no known key was seen. Reads the lookup's schema, attribute, known
+    /// values and sets; its typed text and excluded record are not taken into account.
     pub fn first(&self, q: &Lookup, value: &str) -> Option<First> {
-        let index = self.forms.get(&q.form.name)?;
+        let index = self.schemas.get(&q.schema.name)?;
         let q = q.typed(None).excluding(None);
         let caught = self.caught(index, &q);
         let ranked = self.keyed(index, &q);
@@ -359,18 +367,18 @@ impl FieldMemory {
             score,
             matches: best == value,
             value: best,
-            key: format!("{}: {}", key.field, key.value),
+            key: format!("{}: {}", key.attribute, key.value),
             caught,
         })
     }
 
-    /// As [`FieldMemory::first`], with none, one, … up to `longest` characters of `value` typed into the field: for each
+    /// As [`KeyMemory::first`], with none, one, … up to `longest` characters of `value` typed into the attribute: for each
     /// length, the best-ranked value that begins with that much of it and its score — or `None` when no value under the
-    /// known keys does, or when a value the field must not miss holds the key layer back. Reads the lookup's form, field,
-    /// known values and sets; its own typed text and excluded document are not taken into account.
+    /// known keys does, or when a value the attribute must not miss holds the key layer back. Reads the lookup's schema, attribute,
+    /// known values and sets; its own typed text and excluded record are not taken into account.
     pub fn typed(&self, q: &Lookup, value: &str, longest: usize) -> Vec<Option<(f64, String)>> {
         let mut best = vec![None; longest.min(text::scalars(value)) + 1];
-        let Some(index) = self.forms.get(&q.form.name) else {
+        let Some(index) = self.schemas.get(&q.schema.name) else {
             return best;
         };
         let q = q.typed(None).excluding(None);
@@ -391,11 +399,11 @@ impl FieldMemory {
     }
 
     /// Every value settled under the known keys, best first: its score and the key that backs it most strongly
-    /// (`field: value`) — what a field's coarse level adds up by class. Empty when no known key was seen. The
-    /// settlements of the document the lookup excludes, one asked about again, are left out; its typed text is not
+    /// (`attribute: value`) — what an attribute's coarse level adds up by class. Empty when no known key was seen. The
+    /// settlements of the record the lookup excludes, one asked about again, are left out; its typed text is not
     /// taken into account.
     pub fn keyed_values(&self, q: &Lookup) -> Vec<(String, f64, String)> {
-        let Some(index) = self.forms.get(&q.form.name) else {
+        let Some(index) = self.schemas.get(&q.schema.name) else {
             return Vec::new();
         };
         let q = q.typed(None);
@@ -405,23 +413,23 @@ impl FieldMemory {
 
         self.keyed(index, &q)
             .into_iter()
-            .map(|(value, score, key)| (value, score, format!("{}: {}", key.field, key.value)))
+            .map(|(value, score, key)| (value, score, format!("{}: {}", key.attribute, key.value)))
             .collect()
     }
 
-    /// For each key the known values give the looked-up field and that was seen before: the key's field, its weighted
+    /// For each key the known values give the looked-up attribute and that was seen before: the key's attribute, its weighted
     /// total and the weight `value` has under it (0 when the key has not had it) — what the next settlement under each
-    /// key is predicted from. Reads the lookup's form, field and known values only: its sets, typed text and excluded
-    /// document are not taken into account.
+    /// key is predicted from. Reads the lookup's schema, attribute and known values only: its sets, typed text and excluded
+    /// record are not taken into account.
     pub fn key_totals(&self, q: &Lookup, value: &str) -> Vec<(String, f64, f64)> {
-        let Some(index) = self.forms.get(&q.form.name) else {
+        let Some(index) = self.schemas.get(&q.schema.name) else {
             return Vec::new();
         };
 
         let mut found = Vec::new();
-        for key in self.keys(q.form, q.definition(), q.known, &NO_SETS) {
+        for key in self.keys(q.schema, q.definition(), q.known, &NO_SETS) {
             let slot = Slot {
-                field: q.field.to_owned(),
+                attribute: q.attribute.to_owned(),
                 key: Some(key.clone()),
             };
             let Some(settled) = index.values.get(&slot) else {
@@ -433,22 +441,22 @@ impl FieldMemory {
                     .iter()
                     .find(|s| s.value == value)
                     .map_or(0.0, |s| s.weight);
-                found.push((key.field, first.total, own));
+                found.push((key.attribute, first.total, own));
             }
         }
 
         found
     }
 
-    /// Every value of a field that takes several settled under the known keys, best first, with the score each is compared
-    /// with the field's key threshold on — the values already chosen (the field's own entry in the known sets) left out.
-    /// Reads the lookup's form, field, known values and sets; its typed text and excluded document are not taken into
+    /// Every value of an attribute that takes several settled under the known keys, best first, with the score each is compared
+    /// with the attribute's key threshold on — the values already chosen (the attribute's own entry in the known sets) left out.
+    /// Reads the lookup's schema, attribute, known values and sets; its typed text and excluded record are not taken into
     /// account.
     pub fn scored(&self, q: &Lookup) -> Vec<(String, f64)> {
-        let Some(index) = self.forms.get(&q.form.name) else {
+        let Some(index) = self.schemas.get(&q.schema.name) else {
             return Vec::new();
         };
-        let chosen = elements(q.known_sets, q.field);
+        let chosen = elements(q.known_sets, q.attribute);
         self.keyed(index, &q.typed(None).excluding(None))
             .into_iter()
             .filter(|(value, _, _)| !chosen.contains(&value))
@@ -456,31 +464,31 @@ impl FieldMemory {
             .collect()
     }
 
-    /// Whether a value the field must not miss was ever settled under a key the document has — then no layer answers the
-    /// field for it. The settlements of the document the lookup excludes are left out; its typed text is not taken into
+    /// Whether a value the attribute must not miss was ever settled under a key the record has — then no layer answers the
+    /// attribute for it. The settlements of the record the lookup excludes are left out; its typed text is not taken into
     /// account.
     pub fn catches(&self, q: &Lookup) -> bool {
-        self.forms
-            .get(&q.form.name)
+        self.schemas
+            .get(&q.schema.name)
             .is_some_and(|index| self.caught(index, q))
     }
 
-    /// Whether a value the field must not miss was ever settled under a key the document has — then no layer answers the
-    /// field for it. The lookup's typed text is not read.
+    /// Whether a value the attribute must not miss was ever settled under a key the record has — then no layer answers the
+    /// attribute for it. The lookup's typed text is not read.
     fn caught(&self, index: &FormIndex, q: &Lookup) -> bool {
-        let field = q.definition();
-        let Some(must_catch) = field.must_catch.as_ref().filter(|m| !m.is_empty()) else {
+        let attribute = q.definition();
+        let Some(must_catch) = attribute.must_catch.as_ref().filter(|m| !m.is_empty()) else {
             return false;
         };
-        if field.multiple {
+        if attribute.multiple {
             return false;
         }
 
-        self.keys(q.form, field, q.known, q.known_sets)
+        self.keys(q.schema, attribute, q.known, q.known_sets)
             .into_iter()
             .any(|key| {
                 let slot = Slot {
-                    field: field.name.clone(),
+                    attribute: attribute.name.clone(),
                     key: Some(key),
                 };
                 index.values.get(&slot).is_some_and(|settled| {
@@ -492,18 +500,18 @@ impl FieldMemory {
     }
 
     /// The values settled under the known keys, best first: by score, then latest settlement, then scalar order. Each
-    /// carries the key it is strongest under. Values outside the field's domain, or not beginning with the typed text,
-    /// are left out, and so are the settlements of the document the lookup excludes.
+    /// carries the key it is strongest under. Values outside the attribute's domain, or not beginning with the typed text,
+    /// are left out, and so are the settlements of the record the lookup excludes.
     fn keyed(&self, index: &FormIndex, q: &Lookup) -> Vec<(String, f64, Key)> {
-        let field = q.definition();
+        let attribute = q.definition();
         let (typed, excluding) = (q.typed, q.excluding);
         // value → (score, strongest, backing key, latest); summed in the order the keys come.
         let mut scores: Vec<(String, f64, f64, Key, i64)> = Vec::new();
-        let mut keys = self.keys(q.form, field, q.known, q.known_sets);
-        if field.multiple {
-            // A field that takes several values: its chosen values are keys for the rest.
-            for element in elements(q.known_sets, &field.name) {
-                if let Some(key) = self.key_of(&field.name, element)
+        let mut keys = self.keys(q.schema, attribute, q.known, q.known_sets);
+        if attribute.multiple {
+            // An attribute that takes several values: its chosen values are keys for the rest.
+            for element in elements(q.known_sets, &attribute.name) {
+                if let Some(key) = self.key_of(&attribute.name, element)
                     && !keys.contains(&key)
                 {
                     keys.push(key);
@@ -513,19 +521,19 @@ impl FieldMemory {
 
         for key in keys {
             let slot = Slot {
-                field: field.name.clone(),
+                attribute: attribute.name.clone(),
                 key: Some(key.clone()),
             };
             let Some(settled) = index.values.get(&slot) else {
                 continue;
             };
-            let concentration = field.concentration(&key.field);
+            let concentration = attribute.concentration(&key.attribute);
             // A value outside the domain, or not beginning with the typed text, is not offered, but it still counts
             // towards its key's total.
             for share in self
                 .shares(settled, excluding)
                 .into_iter()
-                .filter(|s| field.admits(&s.value) && begins(&s.value, typed))
+                .filter(|s| attribute.admits(&s.value) && begins(&s.value, typed))
             {
                 let strength = share.weight / (share.total + concentration);
                 match scores.iter_mut().find(|s| s.0 == share.value) {
@@ -556,12 +564,12 @@ impl FieldMemory {
             .collect()
     }
 
-    /// The keys the document's values give `field`: every other field that keys it, with a short enough value — each
-    /// value of a field that takes several being a key of its own. Once each, in the form's order.
+    /// The keys the record's values give `attribute`: every other attribute that keys it, with a short enough value — each
+    /// value of an attribute that takes several being a key of its own. Once each, in the schema's order.
     fn keys(
         &self,
-        form: &Form,
-        field: &Field,
+        schema: &Schema,
+        attribute: &Attribute,
         values: &BTreeMap<String, String>,
         sets: &BTreeMap<String, Vec<String>>,
     ) -> Vec<Key> {
@@ -573,10 +581,10 @@ impl FieldMemory {
                 keys.push(key);
             }
         };
-        for evidence in form
-            .fields
+        for evidence in schema
+            .attributes
             .iter()
-            .filter(|e| form.keys(&e.name, &field.name))
+            .filter(|e| schema.keys(&e.name, &attribute.name))
         {
             if evidence.multiple {
                 for element in elements(sets, &evidence.name) {
@@ -590,9 +598,9 @@ impl FieldMemory {
         keys
     }
 
-    fn key_of(&self, field: &str, raw: &str) -> Option<Key> {
+    fn key_of(&self, attribute: &str, raw: &str) -> Option<Key> {
         text::key(raw, self.max_key_length).map(|value| Key {
-            field: field.to_owned(),
+            attribute: attribute.to_owned(),
             value,
         })
     }
@@ -603,9 +611,9 @@ impl FieldMemory {
     fn shares(&self, settled: &[Settled], excluding: Option<&str>) -> Vec<Share> {
         let mut ordered: Vec<&Settled> = settled
             .iter()
-            .filter(|s| excluding != Some(s.document.as_str()))
+            .filter(|s| excluding != Some(s.record.as_str()))
             .collect();
-        ordered.sort_by(|a, b| a.at.cmp(&b.at).then(a.document.cmp(&b.document)));
+        ordered.sort_by(|a, b| a.at.cmp(&b.at).then(a.record.cmp(&b.record)));
 
         let mut raw: BTreeMap<String, (f64, i64)> = BTreeMap::new();
         let mut newest: Vec<&Settled> = Vec::new();
@@ -613,9 +621,9 @@ impl FieldMemory {
         for s in ordered {
             if let Some(last) = newest.last()
                 && last.at == s.at
-                && last.document == s.document
+                && last.record == s.record
             {
-                newest.push(s); // one document's values settled together weigh alike
+                newest.push(s); // one record's values settled together weigh alike
                 continue;
             }
 
@@ -678,7 +686,7 @@ impl FieldMemory {
     }
 }
 
-/// A set field's values, once each and in scalar order — the order a set is listed in carries no meaning.
+/// A set attribute's values, once each and in scalar order — the order a set is listed in carries no meaning.
 /// Whether `value` begins with the text typed so far, ignoring case; always when none is. Korean is typed a letter at a
 /// time and the last syllable may still be composing, so text with Hangul begins a value when its keystrokes begin the
 /// value's.
@@ -695,20 +703,23 @@ pub fn begins(value: &str, typed: Option<&str>) -> bool {
 
 /// Whether `value`, the best value that begins with `typed`, was already trusted with fewer of its characters typed —
 /// the best value there too, with a score that reached the threshold for that many. It is the same claim, not a new one.
-fn claimed(ranked: &[(String, f64, Key)], field: &Field, typed: &str, value: &str) -> bool {
+fn claimed(ranked: &[(String, f64, Key)], attribute: &Attribute, typed: &str, value: &str) -> bool {
     (0..text::scalars(typed)).any(|length| {
         let prefix = (length > 0).then(|| text::prefix(typed, length));
         ranked
             .iter()
             .find(|(v, _, _)| begins(v, prefix))
             .is_some_and(|(v, score, _)| {
-                v == value && field.key_threshold_for(length).is_some_and(|t| *score >= t)
+                v == value
+                    && attribute
+                        .key_threshold_for(length)
+                        .is_some_and(|t| *score >= t)
             })
     })
 }
 
-fn elements<'a>(sets: &'a BTreeMap<String, Vec<String>>, field: &str) -> Vec<&'a String> {
-    let mut elements: Vec<&String> = sets.get(field).into_iter().flatten().collect();
+fn elements<'a>(sets: &'a BTreeMap<String, Vec<String>>, attribute: &str) -> Vec<&'a String> {
+    let mut elements: Vec<&String> = sets.get(attribute).into_iter().flatten().collect();
     elements.sort();
     elements.dedup();
     elements

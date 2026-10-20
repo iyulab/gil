@@ -1,50 +1,50 @@
-//! Forms and settled documents, in the decision core's vocabulary.
+//! Schemas and settled records, in the decision core's vocabulary.
 
 use std::collections::BTreeMap;
 
-/// Whether a field is read (observed) or decided (judged).
+/// Whether an attribute is read (observed) or decided (decided).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Role {
+pub enum AttributeRole {
     Observed,
-    Judged,
+    Decided,
 }
 
-/// One field of a form, with the settings that govern how it is suggested.
+/// One attribute of a schema, with the settings that govern how it is suggested.
 #[derive(Clone, Debug)]
-pub struct Field {
+pub struct Attribute {
     pub name: String,
-    pub role: Role,
+    pub role: AttributeRole,
     /// A set of values rather than one.
     pub multiple: bool,
-    /// False keeps the field out of every other field's evidence.
+    /// False keeps the attribute out of every other attribute's evidence.
     pub use_as_evidence: bool,
-    /// The fields this field's suggestions may rest on; `None` is every other field that is evidence.
+    /// The attributes this attribute's suggestions may rest on; `None` is every other attribute that is evidence.
     pub depends_on: Option<Vec<String>>,
-    /// The fields that key this field in the field memory; `None` is every field it rests on.
+    /// The attributes that key this attribute in the key memory; `None` is every attribute it rests on.
     pub key_fields: Option<Vec<String>>,
-    /// How readily each key field's keys are believed; a field not named takes 1.
+    /// How readily each key attribute's keys are believed; an attribute not named takes 1.
     pub key_concentrations: BTreeMap<String, f64>,
     /// The score the first keyed value must reach to be trusted; `None` trusts none.
     pub key_threshold: Option<f64>,
-    /// How many of the most similar documents vote on the field's value; at least 1.
-    pub similar_document_votes: usize,
-    /// The vote's score at or above which the similar document layer is trusted; `None` trusts none.
+    /// How many of the most similar records vote on the attribute's value; at least 1.
+    pub similar_votes: usize,
+    /// The vote's score at or above which the similar record layer is trusted; `None` trusts none.
     pub memory_threshold: Option<f64>,
-    /// The similarity the nearest document voting for the value must also reach when more than one voted.
-    pub memory_similarity_floor: Option<f64>,
-    /// The field's coarse level, offered when neither layer answers the value.
+    /// The similarity the nearest record voting for the value must also reach when more than one voted.
+    pub memory_floor: Option<f64>,
+    /// The attribute's coarse level, offered when neither layer answers the value.
     pub coarse: Option<CoarseLevel>,
-    /// The values the field may take; `None` is any. A value settled outside them is remembered but never offered.
+    /// The values the attribute may take; `None` is any. A value settled outside them is remembered but never offered.
     pub candidates: Option<Vec<String>>,
-    /// Values the field must not miss: the key layer does not answer for a document whose keys have ever had one.
+    /// Values the attribute must not miss: the key layer does not answer for a record whose keys have ever had one.
     pub must_catch: Option<Vec<String>>,
     /// The score the first keyed value that begins with the typed text must reach, for one, two, … characters typed;
     /// `None` (or a length beyond the list) trusts none.
     pub typed_key_thresholds: Option<Vec<Option<f64>>>,
 }
 
-impl Field {
-    pub fn new(name: &str, role: Role) -> Self {
+impl Attribute {
+    pub fn new(name: &str, role: AttributeRole) -> Self {
         Self {
             name: name.to_owned(),
             role,
@@ -54,9 +54,9 @@ impl Field {
             key_fields: None,
             key_concentrations: BTreeMap::new(),
             key_threshold: None,
-            similar_document_votes: 10,
+            similar_votes: 10,
             memory_threshold: None,
-            memory_similarity_floor: None,
+            memory_floor: None,
             coarse: None,
             candidates: None,
             must_catch: None,
@@ -64,15 +64,15 @@ impl Field {
         }
     }
 
-    /// Whether `value` lies in the field's domain: among its candidates when it has them. Domains taken from another
-    /// field's values are not yet supported by this implementation.
+    /// Whether `value` lies in the attribute's domain: among its candidates when it has them. Domains taken from another
+    /// attribute's values are not yet supported by this implementation.
     pub fn admits(&self, value: &str) -> bool {
         self.candidates
             .as_ref()
             .is_none_or(|c| c.iter().any(|v| v == value))
     }
 
-    /// The key threshold with `typed` characters typed into the field: the key threshold before typing, then the typed
+    /// The key threshold with `typed` characters typed into the attribute: the key threshold before typing, then the typed
     /// thresholds.
     pub fn key_threshold_for(&self, typed: usize) -> Option<f64> {
         if typed == 0 {
@@ -84,7 +84,7 @@ impl Field {
             .and_then(|t| t.get(typed - 1).copied().flatten())
     }
 
-    /// The concentration of `key_field`'s keys for this field — 1 unless set.
+    /// The concentration of `key_field`'s keys for this attribute — 1 unless set.
     pub fn concentration(&self, key_field: &str) -> f64 {
         self.key_concentrations
             .get(key_field)
@@ -93,7 +93,7 @@ impl Field {
     }
 }
 
-/// The coarse level of a judged field: the class of each of its values — its first `prefix` characters, or what a
+/// The coarse level of a decided attribute: the class of each of its values — its first `prefix` characters, or what a
 /// table of `classes` says — and the thresholds at which the class the two layers back is trusted.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CoarseLevel {
@@ -103,10 +103,10 @@ pub struct CoarseLevel {
     pub classes: Option<BTreeMap<String, String>>,
     /// The summed key scores of a class's values at or above which the keys' class is trusted; `None` trusts none.
     pub key_threshold: Option<f64>,
-    /// The vote's margin over classes at or above which the similar documents' class is trusted; `None` trusts none.
+    /// The vote's margin over classes at or above which the similar records' class is trusted; `None` trusts none.
     pub memory_threshold: Option<f64>,
-    /// The similarity the nearest document voting for the class must also reach when more than one voted.
-    pub memory_similarity_floor: Option<f64>,
+    /// The similarity the nearest record voting for the class must also reach when more than one voted.
+    pub memory_floor: Option<f64>,
 }
 
 impl CoarseLevel {
@@ -132,29 +132,29 @@ impl CoarseLevel {
     }
 }
 
-/// A form: its name scopes memory, its fields are in order.
+/// A schema: its name scopes memory, its attributes are in order.
 #[derive(Clone, Debug)]
-pub struct Form {
+pub struct Schema {
     pub name: String,
-    pub fields: Vec<Field>,
+    pub attributes: Vec<Attribute>,
 }
 
-impl Form {
-    /// The field named `name`.
+impl Schema {
+    /// The attribute named `name`.
     ///
     /// # Panics
-    /// When the form has no such field.
-    pub fn field(&self, name: &str) -> &Field {
-        self.fields
+    /// When the schema has no such attribute.
+    pub fn attribute(&self, name: &str) -> &Attribute {
+        self.attributes
             .iter()
             .find(|f| f.name == name)
-            .unwrap_or_else(|| panic!("form '{}' has no field '{name}'", self.name))
+            .unwrap_or_else(|| panic!("schema '{}' has no attribute '{name}'", self.name))
     }
 
-    /// Whether `evidence`'s value may support suggestions for `field`: another field that is evidence and, when the field
+    /// Whether `evidence`'s value may support suggestions for `attribute`: another attribute that is evidence and, when the attribute
     /// declares its dependencies, one of them.
-    pub fn supports(&self, evidence: &str, field: &str) -> bool {
-        let (source, target) = (self.field(evidence), self.field(field));
+    pub fn supports(&self, evidence: &str, attribute: &str) -> bool {
+        let (source, target) = (self.attribute(evidence), self.attribute(attribute));
         source.name != target.name
             && source.use_as_evidence
             && target
@@ -163,33 +163,31 @@ impl Form {
                 .is_none_or(|d| d.iter().any(|n| n == evidence))
     }
 
-    /// Whether `evidence`'s value keys `field` in the field memory: a field that supports it and, when the field names
-    /// its key fields, one of them.
-    pub fn keys(&self, evidence: &str, field: &str) -> bool {
-        self.supports(evidence, field)
+    /// Whether `evidence`'s value keys `attribute` in the key memory: an attribute that supports it and, when the attribute names
+    /// its key attributes, one of them.
+    pub fn keys(&self, evidence: &str, attribute: &str) -> bool {
+        self.supports(evidence, attribute)
             && self
-                .field(field)
+                .attribute(attribute)
                 .key_fields
                 .as_ref()
                 .is_none_or(|k| k.iter().any(|n| n == evidence))
     }
 
-    /// The `name: value` lines of the fields that support `field`, in the form's order — what a similar document is
-    /// remembered and looked up by. A field that takes several values gives a line for each, once each and in scalar
-    /// order, so the same set reads the same; a field that takes several is supported by its own values chosen so far.
+    /// The `name: value` lines of the attributes that support `attribute`, in the schema's order — what a similar record is
+    /// remembered and looked up by. An attribute that takes several values gives a line for each, once each and in scalar
+    /// order, so the same set reads the same; an attribute that takes several is supported by its own values chosen so far.
     pub fn evidence(
         &self,
-        field: &str,
+        attribute: &str,
         values: &BTreeMap<String, String>,
         sets: &BTreeMap<String, Vec<String>>,
     ) -> String {
-        let target = self.field(field);
+        let target = self.attribute(attribute);
         let mut lines: Vec<String> = Vec::new();
-        for f in self
-            .fields
-            .iter()
-            .filter(|f| self.supports(&f.name, field) || (f.name == field && target.multiple))
-        {
+        for f in self.attributes.iter().filter(|f| {
+            self.supports(&f.name, attribute) || (f.name == attribute && target.multiple)
+        }) {
             if f.multiple {
                 let mut elements: Vec<&String> = sets.get(&f.name).into_iter().flatten().collect();
                 elements.sort();
@@ -204,7 +202,7 @@ impl Form {
     }
 }
 
-/// What happened to a judged field when it was settled — the names the reference implementation uses.
+/// What happened to a decided attribute when it was settled — the names the reference implementation uses.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SettlementKind {
     /// The suggested value was taken as it was.
@@ -213,11 +211,11 @@ pub enum SettlementKind {
     Correct,
     /// The suggestion was turned down and no value settled.
     Reject,
-    /// The field's earlier settlement was undone.
+    /// The attribute's earlier settlement was undone.
     Revert,
-    /// A saved value put back when a document is reopened.
+    /// A saved value put back when a record is reopened.
     Restore,
-    /// The values of a field that takes several were settled.
+    /// The values of an attribute that takes several were settled.
     Set,
     /// A person settled a value with no suggestion in view.
     Enter,
@@ -247,39 +245,39 @@ impl SettlementKind {
     }
 }
 
-/// A document's values as last settled. `settled_at` is in 100-nanosecond ticks since the Unix epoch, UTC.
+/// A record's values as last settled. `settled_at` is in 100-nanosecond ticks since the Unix epoch, UTC.
 #[derive(Clone, Debug, Default)]
-pub struct Document {
+pub struct Record {
     pub id: String,
     pub values: BTreeMap<String, String>,
     pub sets: BTreeMap<String, Vec<String>>,
     pub settled_at: i64,
-    /// How each judged field was settled, where known.
+    /// How each decided attribute was settled, where known.
     pub settlements: BTreeMap<String, SettlementKind>,
-    /// For a field settled as a check, the probability it was drawn with.
+    /// For an attribute settled as a check, the probability it was drawn with.
     pub probabilities: BTreeMap<String, f64>,
-    /// The fields with a value, in the order their current values arrived, oldest first; a field the list leaves out
+    /// The attributes with a value, in the order their current values arrived, oldest first; an attribute the list leaves out
     /// counts as there from the start. `None` when the order is unknown: the observed values are then taken as there from
-    /// the start and the judged ones as settled in the form's order.
+    /// the start and the decided ones as settled in the schema's order.
     pub arrival: Option<Vec<String>>,
 }
 
-impl Document {
-    /// The document as memory remembers it: the values (and sets) the application filled ([`SettlementKind::Fill`]) are
+impl Record {
+    /// The record as memory remembers it: the values (and sets) the application filled ([`SettlementKind::Fill`]) are
     /// left out, with their settlements.
-    pub fn remembered(&self) -> Document {
+    pub fn remembered(&self) -> Record {
         let filled: Vec<&String> = self
             .settlements
             .iter()
             .filter(|(_, kind)| **kind == SettlementKind::Fill)
-            .map(|(field, _)| field)
+            .map(|(attribute, _)| attribute)
             .collect();
         if filled.is_empty() {
             return self.clone();
         }
 
-        let kept = |field: &String| !filled.contains(&field);
-        Document {
+        let kept = |attribute: &String| !filled.contains(&attribute);
+        Record {
             values: self
                 .values
                 .iter()

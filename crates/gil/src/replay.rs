@@ -1,22 +1,22 @@
-//! Chooses a judged field's key threshold by replaying settled documents: each document, in settlement order, is asked
-//! about with the values that had arrived before the field, against a field memory holding the documents settled before
+//! Chooses a decided attribute's key threshold by replaying settled records: each record, in settlement order, is asked
+//! about with the values that had arrived before the attribute, against a key memory holding the records settled before
 //! it, then remembered. Precision is fitted as a non-decreasing function of the score, and the threshold is the lowest
 //! score down to which every fitted band of answers meets the target precision.
 //!
 //! Every sum here is taken in the order the reference implementation takes it — the same operations on the same operands
-//! — so the numbers come out the same to the bit. Not yet supported by this implementation: values a field must not
-//! miss, typed thresholds and the similar document layer.
+//! — so the numbers come out the same to the bit. Not yet supported by this implementation: values an attribute must not
+//! miss, typed thresholds and the similar record layer.
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 
 use crate::decision_record::{CoarseLook, DecisionRecord, KeyLook, SimilarLook, TypedLook};
-use crate::field_memory::{FieldMemory, First, Lookup};
-use crate::form::{Document, Form, Role, SettlementKind};
+use crate::key_memory::{First, KeyMemory, Lookup};
 use crate::lexical_memory::LexicalMemory;
+use crate::schema::{AttributeRole, Record, Schema, SettlementKind};
 use crate::{coarse_groups, similar_vote, text};
 
-/// How many of the latest documents replayed [`ThresholdChoice::promise`] is taken over — every document in settlement
+/// How many of the latest records replayed [`ThresholdChoice::promise`] is taken over — every record in settlement
 /// order counts, whether or not it was asked about.
 pub const RECENT_DOCUMENTS: usize = 5_000;
 
@@ -48,7 +48,7 @@ impl Choice<'_> {
     }
 }
 
-/// A threshold chosen for one memory layer of a field, and how it did on the replay it was chosen on. A checked value
+/// A threshold chosen for one memory layer of an attribute, and how it did on the replay it was chosen on. A checked value
 /// ([`SettlementKind::Check`]) counts as one ÷ its draw probability lookups, so `precision` and `answer_rate` are
 /// weighted, while `answered` and `lookups` count the lookups made.
 #[derive(Clone, Debug, PartialEq)]
@@ -68,10 +68,10 @@ pub struct ThresholdChoice {
     /// How many independent answers the weighted precision is worth: the squared sum of the weights over the sum of
     /// their squares.
     pub effective_answered: f64,
-    /// For the similar document layer only; always `None` for the key layer.
+    /// For the similar record layer only; always `None` for the key layer.
     pub similarity_floor: Option<f64>,
     /// The precision to expect of the next answers: the precision of the answers at or above the threshold among the
-    /// latest [`RECENT_DOCUMENTS`] documents replayed (or `precision` when those are worth fewer than the minimum number
+    /// latest [`RECENT_DOCUMENTS`] records replayed (or `precision` when those are worth fewer than the minimum number
     /// of answers), lowered to the bottom of its Wilson score interval at one standard error.
     pub promise: f64,
     /// How many independent answers `promise` is worth.
@@ -82,7 +82,7 @@ pub struct ThresholdChoice {
 /// threshold treated them.
 #[derive(Clone, Debug, PartialEq)]
 pub struct KeyState {
-    /// The key, as a suggestion's evidence names it — `field: value`.
+    /// The key, as a suggestion's evidence names it — `attribute: value`.
     pub key: String,
     /// How many lookups this key backed the best value of.
     pub lookups: usize,
@@ -98,7 +98,7 @@ pub struct KeyState {
     pub effective_answered: f64,
 }
 
-/// What replaying settled documents found for one memory layer of a field.
+/// What replaying settled records found for one memory layer of an attribute.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ThresholdReplay {
     /// The lowest threshold down to which every band of answers met the target precision; `None` when none does.
@@ -109,14 +109,14 @@ pub struct ThresholdReplay {
     pub lookups: usize,
     /// How many of them found a candidate at any score.
     pub candidates: usize,
-    /// For the key layer of a field that takes one value, the state under each key that backed a best value, most
+    /// For the key layer of an attribute that takes one value, the state under each key that backed a best value, most
     /// lookups first, then by key in scalar order.
     pub keys: Option<Vec<KeyState>>,
 }
 
 /// One answer the layer would give at some threshold: its score, whether it matched, how many decisions it counts as,
-/// the place of its document in settlement order (from 1, counting every document), the key that backed it most
-/// strongly, and whether a value the field must not miss held the key layer back from it.
+/// the place of its record in settlement order (from 1, counting every record), the key that backed it most
+/// strongly, and whether a value the attribute must not miss held the key layer back from it.
 #[derive(Clone, Debug)]
 struct Answer {
     score: f64,
@@ -144,47 +144,47 @@ impl Block {
     }
 }
 
-/// Chooses `field`'s key threshold by replaying `documents` through `memory`, which must be empty and configured as the
-/// one in use. Documents are replayed in settlement order (then by id in scalar order), each without its earlier version
+/// Chooses `attribute`'s key threshold by replaying `records` through `memory`, which must be empty and configured as the
+/// one in use. Records are replayed in settlement order (then by id in scalar order), each without its earlier version
 /// as evidence; a value the application filled is neither asked about nor remembered. `counting` names the kinds of
 /// settlement whose lookups are counted — `None` counts every settlement, including those not known.
 ///
-/// A field that takes several values trusts each value on its own score, so every value offered under the keys counts,
+/// An attribute that takes several values trusts each value on its own score, so every value offered under the keys counts,
 /// right when it is one of the settled values not yet chosen. A person picks such values one after another, and those
-/// chosen are evidence for the rest, so each document is asked about once with none of its values chosen, then again
+/// chosen are evidence for the rest, so each record is asked about once with none of its values chosen, then again
 /// after each but the last is chosen, in [`pick_order`]. `lookups` then counts the values sought, and the replay carries
 /// no state under each key.
 ///
 /// # Panics
-/// When `target_precision` is outside (0, 1], `minimum_answered` is 0, or the field is not judged.
+/// When `target_precision` is outside (0, 1], `minimum_answered` is 0, or the attribute is not decided.
 pub fn select_key_threshold(
-    memory: &mut FieldMemory,
-    form: &Form,
-    field: &str,
-    documents: &[Document],
+    memory: &mut KeyMemory,
+    schema: &Schema,
+    attribute: &str,
+    records: &[Record],
     choice: Choice,
 ) -> ThresholdReplay {
     choice.check();
-    let definition = form.field(field);
+    let definition = schema.attribute(attribute);
     assert!(
-        definition.role == Role::Judged,
-        "'{field}' is not a judged field"
+        definition.role == AttributeRole::Decided,
+        "'{attribute}' is not a decided attribute"
     );
     let multiple = definition.multiple;
 
-    let mut ordered: Vec<Document> = documents.iter().map(Document::remembered).collect();
+    let mut ordered: Vec<Record> = records.iter().map(Record::remembered).collect();
     ordered.sort_by(|a, b| a.settled_at.cmp(&b.settled_at).then(a.id.cmp(&b.id)));
 
     let mut matches: Vec<Answer> = Vec::new();
     let (mut lookups, mut lookup_weight, mut order) = (0_usize, 0.0_f64, 0_usize);
-    for document in &ordered {
+    for record in &ordered {
         order += 1;
         let settled_set = if multiple {
-            pick_order(document, field)
+            pick_order(record, attribute)
         } else {
             Vec::new()
         };
-        let settled = document.values.get(field);
+        let settled = record.values.get(attribute);
         let nothing_settled = if multiple {
             settled_set.is_empty()
         } else {
@@ -194,12 +194,12 @@ pub fn select_key_threshold(
             continue;
         }
 
-        memory.remove(&form.name, &document.id); // a document settled again is not its own evidence
-        let weight = weight(document, field, choice.counting);
-        if memory.count(&form.name) > 0 && weight > 0.0 {
-            let before = arrived(form, document, field, &document.values);
-            let before_sets = arrived(form, document, field, &document.sets);
-            let asked = Lookup::new(form, field, &before).sets(&before_sets);
+        memory.remove(&schema.name, &record.id); // a record settled again is not its own evidence
+        let weight = weight(record, attribute, choice.counting);
+        if memory.count(&schema.name) > 0 && weight > 0.0 {
+            let before = arrived(schema, record, attribute, &record.values);
+            let before_sets = arrived(schema, record, attribute, &record.sets);
+            let asked = Lookup::new(schema, attribute, &before).sets(&before_sets);
             if let Some(settled) = settled.filter(|_| !multiple) {
                 lookups += 1;
                 lookup_weight += weight;
@@ -216,7 +216,7 @@ pub fn select_key_threshold(
             } else {
                 for chosen in 0..settled_set.len() {
                     let mut sets = before_sets.clone();
-                    sets.insert(field.to_owned(), settled_set[..chosen].to_vec());
+                    sets.insert(attribute.to_owned(), settled_set[..chosen].to_vec());
                     let mut sought: Vec<&String> = settled_set[chosen..].iter().collect();
                     sought.sort();
                     sought.dedup();
@@ -236,7 +236,7 @@ pub fn select_key_threshold(
             }
         }
 
-        memory.put(form, document);
+        memory.put(schema, record);
     }
 
     let uncaught: Vec<Answer> = matches.iter().filter(|m| !m.caught).cloned().collect();
@@ -255,19 +255,19 @@ pub fn select_key_threshold(
     }
 }
 
-/// A set field's settled values, once each, in the order a replay supposes they were picked: by the 64-bit FNV-1a hash
-/// of the UTF-8 of the document id, U+001F and the value, then in scalar order — so it depends neither on the order the
+/// A set attribute's settled values, once each, in the order a replay supposes they were picked: by the 64-bit FNV-1a hash
+/// of the UTF-8 of the record id, U+001F and the value, then in scalar order — so it depends neither on the order the
 /// values are listed in nor on their scalar order.
-pub fn pick_order(document: &Document, field: &str) -> Vec<String> {
+pub fn pick_order(record: &Record, attribute: &str) -> Vec<String> {
     let mut values: Vec<&String> = Vec::new();
-    for value in document.sets.get(field).into_iter().flatten() {
+    for value in record.sets.get(attribute).into_iter().flatten() {
         if !values.contains(&value) {
             values.push(value);
         }
     }
     let mut keyed: Vec<(u64, &String)> = values
         .into_iter()
-        .map(|v| (fnv1a(&format!("{}\u{1f}{v}", document.id)), v))
+        .map(|v| (fnv1a(&format!("{}\u{1f}{v}", record.id)), v))
         .collect();
     keyed.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(b.1)));
     keyed.into_iter().map(|(_, v)| v.clone()).collect()
@@ -281,16 +281,16 @@ fn fnv1a(text: &str) -> u64 {
         })
 }
 
-/// How many decisions the field's settlement in the document counts as: none when its kind is not counted (every kind is
+/// How many decisions the attribute's settlement in the record counts as: none when its kind is not counted (every kind is
 /// when none are named), one ÷ the draw probability for a check, one otherwise.
-/// The replays a single-valued field's typed key thresholds are chosen on, one per length typed, shortest first.
+/// The replays a single-valued attribute's typed key thresholds are chosen on, one per length typed, shortest first.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypedKeyThresholds {
     pub by_length: Vec<ThresholdReplay>,
 }
 
 impl TypedKeyThresholds {
-    /// The thresholds to set as the field's typed key thresholds: each replay's chosen one, `None` where none was.
+    /// The thresholds to set as the attribute's typed key thresholds: each replay's chosen one, `None` where none was.
     pub fn thresholds(&self) -> Vec<Option<f64>> {
         self.by_length
             .iter()
@@ -299,7 +299,7 @@ impl TypedKeyThresholds {
     }
 }
 
-/// One document of a typed replay: its settled value, the key layer's best value with none of it typed and with each
+/// One record of a typed replay: its settled value, the key layer's best value with none of it typed and with each
 /// length typed, and what the thresholds chosen so far claimed for it.
 struct Asked {
     settled: String,
@@ -332,80 +332,88 @@ impl Asked {
         let typed = text::prefix(&self.settled, length);
         self.wrong
             .iter()
-            .any(|v| crate::field_memory::begins(v, Some(typed)))
+            .any(|v| crate::key_memory::begins(v, Some(typed)))
     }
 }
 
-/// Chooses a single-valued field's typed key thresholds — for one, two, … up to `longest` characters of its value
-/// typed. Replays the documents in settlement order as [`select_key_threshold`] does, asking the field memory for the
+/// Chooses a single-valued attribute's typed key thresholds — for one, two, … up to `longest` characters of its value
+/// typed. Replays the records in settlement order as [`select_key_threshold`] does, asking the key memory for the
 /// best value that begins with each length of the settled value. A value trusted with fewer characters typed is one
-/// claim, kept while the typed text still leads to it: a document so answered rightly needs no more typing, one
-/// answered wrongly by a value the next characters still lead to is not among the documents a longer threshold is
-/// chosen on until the typing has left that value behind. Each length's threshold is chosen on the documents left.
+/// claim, kept while the typed text still leads to it: a record so answered rightly needs no more typing, one
+/// answered wrongly by a value the next characters still lead to is not among the records a longer threshold is
+/// chosen on until the typing has left that value behind. Each length's threshold is chosen on the records left.
 ///
 /// # Panics
-/// When `target_precision` is outside (0, 1], `minimum_answered` or `longest` is 0, or the field is not judged or
+/// When `target_precision` is outside (0, 1], `minimum_answered` or `longest` is 0, or the attribute is not decided or
 /// takes several values.
 pub fn select_typed_key_thresholds(
-    memory: &mut FieldMemory,
-    form: &Form,
-    field: &str,
-    documents: &[Document],
+    memory: &mut KeyMemory,
+    schema: &Schema,
+    attribute: &str,
+    records: &[Record],
     choice: Choice,
     longest: usize,
 ) -> TypedKeyThresholds {
-    select_typed_key_thresholds_with(memory, form, field, documents, choice, longest, &mut |_| {})
+    select_typed_key_thresholds_with(
+        memory,
+        schema,
+        attribute,
+        records,
+        choice,
+        longest,
+        &mut |_| {},
+    )
 }
 
-/// As [`select_typed_key_thresholds`], handing `sink` the decision record of every document the replay asks about, in
+/// As [`select_typed_key_thresholds`], handing `sink` the decision record of every record the replay asks about, in
 /// settlement order — the key layer's best value at each typed length ([`DecisionRecord::typed`]).
 ///
 /// # Panics
 /// As [`select_typed_key_thresholds`].
 pub fn select_typed_key_thresholds_with(
-    memory: &mut FieldMemory,
-    form: &Form,
-    field: &str,
-    documents: &[Document],
+    memory: &mut KeyMemory,
+    schema: &Schema,
+    attribute: &str,
+    records: &[Record],
     choice: Choice,
     longest: usize,
     sink: &mut dyn FnMut(&DecisionRecord),
 ) -> TypedKeyThresholds {
     choice.check();
     assert!(longest >= 1, "longest must be at least 1");
-    let definition = form.field(field);
+    let definition = schema.attribute(attribute);
     assert!(
-        definition.role == Role::Judged,
-        "'{field}' is not a judged field"
+        definition.role == AttributeRole::Decided,
+        "'{attribute}' is not a decided attribute"
     );
     assert!(
         !definition.multiple,
-        "'{field}' takes several values; typed key thresholds are for a field that takes one"
+        "'{attribute}' takes several values; typed key thresholds are for an attribute that takes one"
     );
 
-    let mut ordered: Vec<Document> = documents.iter().map(Document::remembered).collect();
+    let mut ordered: Vec<Record> = records.iter().map(Record::remembered).collect();
     ordered.sort_by(|a, b| a.settled_at.cmp(&b.settled_at).then(a.id.cmp(&b.id)));
     let mut asked: Vec<Asked> = Vec::new();
     let mut order = 0;
-    for document in &ordered {
+    for record in &ordered {
         order += 1;
-        let Some(settled) = document.values.get(field) else {
+        let Some(settled) = record.values.get(attribute) else {
             continue;
         };
 
-        memory.remove(&form.name, &document.id); // a document settled again is not its own evidence
-        let weight = weight(document, field, choice.counting);
-        if memory.count(&form.name) > 0 && weight > 0.0 {
-            let before = arrived(form, document, field, &document.values);
-            let before_sets = arrived(form, document, field, &document.sets);
+        memory.remove(&schema.name, &record.id); // a record settled again is not its own evidence
+        let weight = weight(record, attribute, choice.counting);
+        if memory.count(&schema.name) > 0 && weight > 0.0 {
+            let before = arrived(schema, record, attribute, &record.values);
+            let before_sets = arrived(schema, record, attribute, &record.sets);
             let best = memory.typed(
-                &Lookup::new(form, field, &before).sets(&before_sets),
+                &Lookup::new(schema, attribute, &before).sets(&before_sets),
                 settled,
                 longest,
             );
             sink(&DecisionRecord {
-                record: document.id.clone(),
-                field: field.to_owned(),
+                record: record.id.clone(),
+                attribute: attribute.to_owned(),
                 order: Some(order as u64),
                 weight,
                 key: None,
@@ -424,8 +432,8 @@ pub fn select_typed_key_thresholds_with(
                 ),
                 answered: None,
                 settled: Some(settled.clone()),
-                settlement: document.settlements.get(field).copied(),
-                probability: document.probabilities.get(field).copied(),
+                settlement: record.settlements.get(attribute).copied(),
+                probability: record.probabilities.get(attribute).copied(),
             });
             asked.push(Asked {
                 settled: settled.clone(),
@@ -437,7 +445,7 @@ pub fn select_typed_key_thresholds_with(
             });
         }
 
-        memory.put(form, document);
+        memory.put(schema, record);
     }
 
     for a in &mut asked {
@@ -485,54 +493,54 @@ pub fn select_typed_key_thresholds_with(
     TypedKeyThresholds { by_length }
 }
 
-fn weight(document: &Document, field: &str, counting: Option<&[SettlementKind]>) -> f64 {
-    let kind = document.settlements.get(field).copied();
+fn weight(record: &Record, attribute: &str, counting: Option<&[SettlementKind]>) -> f64 {
+    let kind = record.settlements.get(attribute).copied();
     if let Some(counting) = counting
         && !kind.is_some_and(|k| counting.contains(&k))
     {
         return 0.0;
     }
 
-    match (kind, document.probabilities.get(field)) {
+    match (kind, record.probabilities.get(attribute)) {
         (Some(SettlementKind::Check), Some(probability)) => 1.0 / probability,
         _ => 1.0,
     }
 }
 
-/// The document's values that had arrived before `field` was settled — what its last suggestion was made from. With no
-/// arrival order, the observed values count as there from the start and the judged ones as settled in the form's order;
-/// with one, a field it leaves out counts as there from the start.
+/// The record's values that had arrived before `attribute` was settled — what its last suggestion was made from. With no
+/// arrival order, the observed values count as there from the start and the decided ones as settled in the schema's order;
+/// with one, an attribute it leaves out counts as there from the start.
 fn arrived<T: Clone>(
-    form: &Form,
-    document: &Document,
-    field: &str,
+    schema: &Schema,
+    record: &Record,
+    attribute: &str,
     values: &BTreeMap<String, T>,
 ) -> BTreeMap<String, T> {
     let rank = |name: &str| -> i64 {
-        if let Some(arrival) = &document.arrival {
+        if let Some(arrival) = &record.arrival {
             return match arrival.iter().position(|n| n == name) {
                 Some(at) => at as i64,
-                None if name == field => i64::MAX,
+                None if name == attribute => i64::MAX,
                 None => -1,
             };
         }
 
-        // A value of no field of the form is no evidence anyway.
-        match form.fields.iter().position(|f| f.name == name) {
-            Some(index) if form.fields[index].role != Role::Observed => index as i64,
+        // A value of no attribute of the schema is no evidence anyway.
+        match schema.attributes.iter().position(|f| f.name == name) {
+            Some(index) if schema.attributes[index].role != AttributeRole::Observed => index as i64,
             _ => -1,
         }
     };
 
-    let own = rank(field);
+    let own = rank(attribute);
     values
         .iter()
-        .filter(|(name, _)| name.as_str() != field && rank(name) < own)
+        .filter(|(name, _)| name.as_str() != attribute && rank(name) < own)
         .map(|(name, value)| (name.clone(), value.clone()))
         .collect()
 }
 
-/// [`fit`], then each choice's promise over the answers among the latest [`RECENT_DOCUMENTS`] documents of `latest`.
+/// [`fit`], then each choice's promise over the answers among the latest [`RECENT_DOCUMENTS`] records of `latest`.
 fn fit_recent(
     matches: &[Answer],
     lookups: usize,
@@ -670,7 +678,7 @@ fn fit(
     target_precision: f64,
     minimum_answered: usize,
 ) -> ThresholdReplay {
-    // Answers of one score form a group, in replay order; groups go from the lowest score up.
+    // Answers of one score schema a group, in replay order; groups go from the lowest score up.
     let mut sorted: Vec<&Answer> = matches.iter().collect();
     sorted.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap_or(Ordering::Equal));
 
@@ -748,7 +756,7 @@ fn fit(
     }
 }
 
-/// The replays of a field's two memory layers, in the order a suggestion consults them.
+/// The replays of an attribute's two memory layers, in the order a suggestion consults them.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LayerThresholds {
     /// For the key threshold, replayed on every lookup.
@@ -757,8 +765,8 @@ pub struct LayerThresholds {
     pub memory: ThresholdReplay,
 }
 
-/// What the similar document layer made of one lookup: the vote's score, whether its value matched, the similarity of
-/// the nearest document voting for it, and whether more than one document voted.
+/// What the similar record layer made of one lookup: the vote's score, whether its value matched, the similarity of
+/// the nearest record voting for it, and whether more than one record voted.
 #[derive(Clone, Copy, Debug)]
 struct Vote {
     score: f64,
@@ -767,8 +775,8 @@ struct Vote {
     voted: bool,
 }
 
-/// One document of a layers replay: whether the key layer was asked and what its best value was, whether the similar
-/// document layer was asked and how it voted, the document's weight and its place in settlement order.
+/// One record of a layers replay: whether the key layer was asked and what its best value was, whether the similar
+/// record layer was asked and how it voted, the record's weight and its place in settlement order.
 #[derive(Clone, Debug)]
 struct Step {
     key_looked: bool,
@@ -777,12 +785,12 @@ struct Step {
     vote: Option<Vote>,
     weight: f64,
     order: usize,
-    /// For a coarse replay: the level as the keys and the vote back it, and whether the field's value layers answered.
+    /// For a coarse replay: the level as the keys and the vote back it, and whether the attribute's value layers answered.
     coarse: Option<CoarseStep>,
 }
 
-/// What a field's coarse level made of one lookup: whether the field's own layers answered the value at its thresholds,
-/// the score of the class the keys back and whether it was the settled value's, and how the similar documents voted
+/// What an attribute's coarse level made of one lookup: whether the attribute's own layers answered the value at its thresholds,
+/// the score of the class the keys back and whether it was the settled value's, and how the similar records voted
 /// for a class.
 #[derive(Clone, Copy, Debug)]
 struct CoarseStep {
@@ -794,68 +802,68 @@ struct CoarseStep {
 /// The share of a threshold's answers whose nearest voter may fall below its similarity floor.
 const FLOOR_SHARE: f64 = 0.01;
 
-/// Chooses `field`'s key threshold and memory threshold together by replaying `documents` through both memories, which
-/// must be empty and configured as the ones in use. Each document, in settlement order, is asked about before it is put
-/// in: the key layer as [`select_key_threshold`] asks it, and the similar document layer with the evidence of the values
-/// that had arrived before the field, voting among the field's `similar_document_votes` nearest documents. The document
-/// memory keeps one document per case — evidence that reads the same after normalization — the latest settled. The key
+/// Chooses `attribute`'s key threshold and memory threshold together by replaying `records` through both memories, which
+/// must be empty and configured as the ones in use. Each record, in settlement order, is asked about before it is put
+/// in: the key layer as [`select_key_threshold`] asks it, and the similar record layer with the evidence of the values
+/// that had arrived before the attribute, voting among the attribute's `similar_votes` nearest records. The record
+/// memory keeps one record per case — evidence that reads the same after normalization — the latest settled. The key
 /// threshold is chosen on every lookup; the memory threshold on the lookups the chosen key threshold would not have
 /// answered, and with more than one voter each memory choice carries its similarity floor.
 ///
 /// # Panics
-/// When `target_precision` is outside (0, 1], `minimum_answered` is 0, the field is not judged, or it takes several
-/// values — the similar document layer does not suggest such a field.
+/// When `target_precision` is outside (0, 1], `minimum_answered` is 0, the attribute is not decided, or it takes several
+/// values — the similar record layer does not answer such an attribute.
 pub fn select_layers(
-    field_memory: &mut FieldMemory,
+    key_memory: &mut KeyMemory,
     memory: &mut LexicalMemory,
-    form: &Form,
-    field: &str,
-    documents: &[Document],
+    schema: &Schema,
+    attribute: &str,
+    records: &[Record],
     choice: Choice,
 ) -> LayerThresholds {
     select_layers_with(
-        field_memory,
+        key_memory,
         memory,
-        form,
-        field,
-        documents,
+        schema,
+        attribute,
+        records,
         choice,
         &mut |_| {},
     )
 }
 
-/// As [`select_layers`], handing `sink` the decision record of every document the replay asks about, in settlement
-/// order: what the key layer and the similar document layer made of it whatever the thresholds, and what it was settled
+/// As [`select_layers`], handing `sink` the decision record of every record the replay asks about, in settlement
+/// order: what the key layer and the similar record layer made of it whatever the thresholds, and what it was settled
 /// as. The thresholds are chosen from exactly these records.
 ///
 /// # Panics
 /// As [`select_layers`].
 pub fn select_layers_with(
-    field_memory: &mut FieldMemory,
+    key_memory: &mut KeyMemory,
     memory: &mut LexicalMemory,
-    form: &Form,
-    field: &str,
-    documents: &[Document],
+    schema: &Schema,
+    attribute: &str,
+    records: &[Record],
     choice: Choice,
     sink: &mut dyn FnMut(&DecisionRecord),
 ) -> LayerThresholds {
     choice.check();
-    let definition = form.field(field);
+    let definition = schema.attribute(attribute);
     assert!(
-        definition.role == Role::Judged,
-        "'{field}' is not a judged field"
+        definition.role == AttributeRole::Decided,
+        "'{attribute}' is not a decided attribute"
     );
     assert!(
         !definition.multiple,
-        "'{field}' takes several values; the similar document layer does not suggest it"
+        "'{attribute}' takes several values; the similar record layer does not answer it"
     );
 
     let (steps, latest) = replay(
-        field_memory,
+        key_memory,
         memory,
-        form,
-        field,
-        documents,
+        schema,
+        attribute,
+        records,
         choice.counting,
         Replaying::Values(sink),
     );
@@ -888,7 +896,7 @@ pub fn select_layers_with(
     );
 
     let chosen = key.chosen.as_ref().map(|c| c.threshold);
-    // Left to the similar document layer: what the chosen key threshold does not answer — but not a lookup under a key
+    // Left to the similar record layer: what the chosen key threshold does not answer — but not a lookup under a key
     // that settled a value to catch, which no layer answers.
     let left: Vec<&Step> = steps
         .iter()
@@ -905,79 +913,79 @@ pub fn select_layers_with(
     let memory = similarity(
         &left,
         latest,
-        definition.similar_document_votes,
+        definition.similar_votes,
         choice.target_precision,
         choice.minimum_answered,
     );
     LayerThresholds { key, memory }
 }
 
-/// Chooses the thresholds of `field`'s coarse level in the order a suggestion offers it: on the lookups the field's
+/// Chooses the thresholds of `attribute`'s coarse level in the order a suggestion offers it: on the lookups the attribute's
 /// value layers leave unanswered at the thresholds it has (its key threshold, its memory threshold with its floor —
 /// choose those first), the class the keys back, as [`select_key_threshold`] chooses for a value; on the lookups that
-/// leaves, the class the similar documents vote for, as [`select_layers`] chooses the memory threshold, with its
-/// similarity floor. A class is right when it is the settled value's ([`CoarseLevel::of`]). Each document is asked
-/// about in memories holding only the documents settled before it, then put into both, as for the value. Each replay's
+/// leaves, the class the similar records vote for, as [`select_layers`] chooses the memory threshold, with its
+/// similarity floor. A class is right when it is the settled value's ([`CoarseLevel::of`]). Each record is asked
+/// about in memories holding only the records settled before it, then put into both, as for the value. Each replay's
 /// lookups count only the lookups left to it.
 ///
-/// [`CoarseLevel::of`]: crate::form::CoarseLevel::of
+/// [`CoarseLevel::of`]: crate::schema::CoarseLevel::of
 ///
 /// # Panics
-/// As [`select_layers`], and when the field has no coarse level.
+/// As [`select_layers`], and when the attribute has no coarse level.
 pub fn select_coarse(
-    field_memory: &mut FieldMemory,
+    key_memory: &mut KeyMemory,
     memory: &mut LexicalMemory,
-    form: &Form,
-    field: &str,
-    documents: &[Document],
+    schema: &Schema,
+    attribute: &str,
+    records: &[Record],
     choice: Choice,
 ) -> LayerThresholds {
     select_coarse_with(
-        field_memory,
+        key_memory,
         memory,
-        form,
-        field,
-        documents,
+        schema,
+        attribute,
+        records,
         choice,
         &mut |_| {},
     )
 }
 
-/// As [`select_coarse`], handing `sink` the decision record of every document the replay asks about, in settlement
+/// As [`select_coarse`], handing `sink` the decision record of every record the replay asks about, in settlement
 /// order — with what the coarse level made of it ([`DecisionRecord::coarse`]).
 ///
 /// # Panics
 /// As [`select_coarse`].
 pub fn select_coarse_with(
-    field_memory: &mut FieldMemory,
+    key_memory: &mut KeyMemory,
     memory: &mut LexicalMemory,
-    form: &Form,
-    field: &str,
-    documents: &[Document],
+    schema: &Schema,
+    attribute: &str,
+    records: &[Record],
     choice: Choice,
     sink: &mut dyn FnMut(&DecisionRecord),
 ) -> LayerThresholds {
     choice.check();
-    let definition = form.field(field);
+    let definition = schema.attribute(attribute);
     assert!(
-        definition.role == Role::Judged,
-        "'{field}' is not a judged field"
+        definition.role == AttributeRole::Decided,
+        "'{attribute}' is not a decided attribute"
     );
     assert!(
         !definition.multiple,
-        "'{field}' takes several values; the similar document layer does not suggest it"
+        "'{attribute}' takes several values; the similar record layer does not answer it"
     );
     assert!(
         definition.coarse.is_some(),
-        "'{field}' has no coarse level to choose thresholds for"
+        "'{attribute}' has no coarse level to choose thresholds for"
     );
 
     let (steps, latest) = replay(
-        field_memory,
+        key_memory,
         memory,
-        form,
-        field,
-        documents,
+        schema,
+        attribute,
+        records,
         choice.counting,
         Replaying::Coarse(sink),
     );
@@ -1028,7 +1036,7 @@ pub fn select_coarse_with(
     let memory = similarity(
         &rest,
         latest,
-        definition.similar_document_votes,
+        definition.similar_votes,
         choice.target_precision,
         choice.minimum_answered,
     );
@@ -1041,14 +1049,14 @@ enum Replaying<'s> {
     Coarse(&'s mut dyn FnMut(&DecisionRecord)),
 }
 
-/// Replays the documents in settlement order, asking each memory about each document before putting it in — the
-/// document memory keeping one document per case.
+/// Replays the records in settlement order, asking each memory about each record before putting it in — the
+/// record memory keeping one record per case.
 fn replay(
-    field_memory: &mut FieldMemory,
+    key_memory: &mut KeyMemory,
     memory: &mut LexicalMemory,
-    form: &Form,
-    field: &str,
-    documents: &[Document],
+    schema: &Schema,
+    attribute: &str,
+    records: &[Record],
     counting: Option<&[SettlementKind]>,
     replaying: Replaying,
 ) -> (Vec<Step>, usize) {
@@ -1056,46 +1064,50 @@ fn replay(
         Replaying::Values(sink) => (false, sink),
         Replaying::Coarse(sink) => (true, sink),
     };
-    let task = format!("{}/{field}", form.name);
-    let definition = form.field(field);
-    let votes = definition.similar_document_votes;
-    let mut ordered: Vec<Document> = documents.iter().map(Document::remembered).collect();
+    let task = format!("{}/{attribute}", schema.name);
+    let definition = schema.attribute(attribute);
+    let votes = definition.similar_votes;
+    let mut ordered: Vec<Record> = records.iter().map(Record::remembered).collect();
     ordered.sort_by(|a, b| a.settled_at.cmp(&b.settled_at).then(a.id.cmp(&b.id)));
 
     let mut steps = Vec::new();
     let mut remembered = 0_usize;
-    let mut cases: HashMap<String, String> = HashMap::new(); // case → the document representing it
-    let mut case_of: HashMap<String, String> = HashMap::new(); // document → the case it represents
+    let mut cases: HashMap<String, String> = HashMap::new(); // case → the record representing it
+    let mut case_of: HashMap<String, String> = HashMap::new(); // record → the case it represents
     let mut order = 0;
-    for document in &ordered {
+    for record in &ordered {
         order += 1;
-        let Some(settled) = document.values.get(field) else {
+        let Some(settled) = record.values.get(attribute) else {
             continue;
         };
 
-        // A document settled again is not its own evidence.
-        field_memory.remove(&form.name, &document.id);
-        if let Some(own) = case_of.remove(&document.id) {
-            memory.forget(&task, &document.id);
+        // A record settled again is not its own evidence.
+        key_memory.remove(&schema.name, &record.id);
+        if let Some(own) = case_of.remove(&record.id) {
+            memory.forget(&task, &record.id);
             cases.remove(&own);
             remembered -= 1;
         }
 
-        // Asked with what the field's last suggestion saw; remembered, below, with everything.
-        let before = arrived(form, document, field, &document.values);
-        let before_sets = arrived(form, document, field, &document.sets);
-        let key_looked = field_memory.count(&form.name) > 0;
-        let asked = Lookup::new(form, field, &before).sets(&before_sets);
+        // Asked with what the attribute's last suggestion saw; remembered, below, with everything.
+        let before = arrived(schema, record, attribute, &record.values);
+        let before_sets = arrived(schema, record, attribute, &record.sets);
+        let key_looked = key_memory.count(&schema.name) > 0;
+        let asked = Lookup::new(schema, attribute, &before).sets(&before_sets);
         let first = if key_looked {
-            field_memory.first(&asked, settled)
+            key_memory.first(&asked, settled)
         } else {
             None
         };
-        let evidence = form.evidence(field, &document.values, &document.sets);
-        // As a suggestion does: only documents whose value lies in the field's domain vote.
+        let evidence = schema.evidence(attribute, &record.values, &record.sets);
+        // As a suggestion does: only records whose value lies in the attribute's domain vote.
         let found: Vec<_> = if remembered > 0 {
             memory
-                .nearest(&task, &form.evidence(field, &before, &before_sets), votes)
+                .nearest(
+                    &task,
+                    &schema.evidence(attribute, &before, &before_sets),
+                    votes,
+                )
                 .into_iter()
                 .filter(|m| definition.admits(&m.answer))
                 .collect()
@@ -1111,7 +1123,7 @@ fn replay(
         });
         let (coarse_step, coarse_look) = match &definition.coarse {
             Some(level) if coarse => {
-                // As a suggestion: the value layers answer at the field's own thresholds; only where they do not is
+                // As a suggestion: the value layers answer at the attribute's own thresholds; only where they do not is
                 // the level offered.
                 let value_answered = first.as_ref().is_some_and(|f| {
                     !f.caught && definition.key_threshold.is_some_and(|t| f.score >= t)
@@ -1120,12 +1132,12 @@ fn replay(
                         definition.memory_threshold.is_some_and(|t| v.score >= t)
                             && !(v.voted
                                 && definition
-                                    .memory_similarity_floor
+                                    .memory_floor
                                     .is_some_and(|floor| v.nearest < floor))
                     });
                 let class = level.of(settled);
                 let keys = if key_looked {
-                    coarse_groups::keys(&field_memory.keyed_values(&asked), level)
+                    coarse_groups::keys(&key_memory.keyed_values(&asked), level)
                 } else {
                     None
                 };
@@ -1153,7 +1165,7 @@ fn replay(
                         score,
                         correct: Some(c == class),
                         value: c,
-                        document: nearest.source,
+                        record: nearest.source,
                         nearest: nearest.similarity,
                         voted,
                     }),
@@ -1164,11 +1176,11 @@ fn replay(
         };
 
         // A settlement not counted is replayed into memory like any other, but not asked about.
-        let weight = weight(document, field, counting);
+        let weight = weight(record, attribute, counting);
         let counted = weight > 0.0;
         sink(&DecisionRecord {
-            record: document.id.clone(),
-            field: field.to_owned(),
+            record: record.id.clone(),
+            attribute: attribute.to_owned(),
             order: Some(order as u64),
             weight,
             key: first.as_ref().map(|f| KeyLook {
@@ -1184,7 +1196,7 @@ fn replay(
                 .map(|((winner, _), v)| SimilarLook {
                     score: v.score,
                     value: winner.answer.clone(),
-                    document: winner.source.clone(),
+                    record: winner.source.clone(),
                     correct: Some(v.correct),
                     nearest: v.nearest,
                     voted: v.voted,
@@ -1193,8 +1205,8 @@ fn replay(
             typed: None,
             answered: None,
             settled: Some(settled.clone()),
-            settlement: document.settlements.get(field).copied(),
-            probability: document.probabilities.get(field).copied(),
+            settlement: record.settlements.get(attribute).copied(),
+            probability: record.probabilities.get(attribute).copied(),
         });
         steps.push(Step {
             key_looked: key_looked && counted,
@@ -1205,7 +1217,7 @@ fn replay(
             order,
             coarse: coarse_step,
         });
-        field_memory.put(form, document);
+        key_memory.put(schema, record);
 
         let case = text::normalize(&evidence);
         if let Some(earlier) = cases.get(&case) {
@@ -1214,9 +1226,9 @@ fn replay(
             remembered -= 1;
         }
 
-        cases.insert(case.clone(), document.id.clone());
-        case_of.insert(document.id.clone(), case);
-        memory.remember(&task, &document.id, &evidence, settled);
+        cases.insert(case.clone(), record.id.clone());
+        case_of.insert(record.id.clone(), case);
+        memory.remember(&task, &record.id, &evidence, settled);
         remembered += 1;
     }
 
@@ -1294,83 +1306,87 @@ fn similarity_floor(answers: &[(f64, f64)], threshold: f64) -> Option<f64> {
     Some(nearest[(FLOOR_SHARE * (nearest.len() - 1) as f64) as usize])
 }
 
-/// One set of fields tried for a judged field's key fields, and how its key layer replayed.
+/// One set of attributes tried for a decided attribute's key attributes, and how its key layer replayed.
 #[derive(Clone, Debug, PartialEq)]
 pub struct KeyFieldsTrial {
-    /// The fields that keyed the judged field in this replay; empty for every field it rests on.
+    /// The attributes that keyed the decided attribute in this replay; empty for every attribute it rests on.
     pub key_fields: Vec<String>,
     /// The key layer's replay with them, as [`select_key_threshold`] makes it.
     pub replay: ThresholdReplay,
-    /// When typing was counted, the typed thresholds with these fields and their key threshold, as
+    /// When typing was counted, the typed thresholds with these attributes and their key threshold, as
     /// [`select_typed_key_thresholds`] makes them.
     pub typed: Option<TypedKeyThresholds>,
 }
 
-/// The fields that should key a judged field in the settled field memory, chosen by replaying its key layer, and the
+/// The attributes that should key a decided attribute in the settled key memory, chosen by replaying its key layer, and the
 /// replays the choice was made from.
 #[derive(Clone, Debug, PartialEq)]
 pub struct KeyFieldsChoice {
-    /// The fields to name, in the order they were added; `None` when no narrower set gained more than every field the
-    /// field rests on — leave the key fields unset.
+    /// The attributes to name, in the order they were added; `None` when no narrower set gained more than every attribute the
+    /// attribute rests on — leave the key attributes unset.
     pub key_fields: Option<Vec<String>>,
     /// The key layer's replay with the choice.
     pub chosen: ThresholdReplay,
-    /// The key layer's replay keyed by every field the field rests on.
+    /// The key layer's replay keyed by every attribute the attribute rests on.
     pub all_fields: ThresholdReplay,
-    /// Every set tried: each field it rests on alone, in the form's order, then each set the greedy additions tried.
+    /// Every set tried: each attribute it rests on alone, in the schema's order, then each set the greedy additions tried.
     pub trials: Vec<KeyFieldsTrial>,
     /// When typing was counted, the typed thresholds that go with the choice.
     pub typed: Option<TypedKeyThresholds>,
 }
 
-/// The form with `field` keyed by `key_fields` (every field it rests on when `None`).
-fn keyed_by(form: &Form, field: &str, key_fields: Option<Vec<String>>) -> Form {
-    let mut form = form.clone();
-    for f in form.fields.iter_mut().filter(|f| f.name == field) {
+/// The schema with `attribute` keyed by `key_fields` (every attribute it rests on when `None`).
+fn keyed_by(schema: &Schema, attribute: &str, key_fields: Option<Vec<String>>) -> Schema {
+    let mut schema = schema.clone();
+    for f in schema.attributes.iter_mut().filter(|f| f.name == attribute) {
         f.key_fields = key_fields.clone();
     }
-    form
+    schema
 }
 
-/// Chooses the fields that should key `field` by the gain their chosen key threshold gives over the target precision —
+/// Chooses the attributes that should key `attribute` by the gain their chosen key threshold gives over the target precision —
 /// the precision above the target times the answers' weight. Replays the key layer as [`select_key_threshold`] does with
-/// each field the field rests on alone, ranks them by gain (a tie keeps the form's order), then adds them in that order
-/// while each addition gains more. The result names that set only if it gains more than every such field together.
-/// A fresh default field memory serves each replay. With `typed_longest` above 0, each set is counted by its answers
+/// each attribute the attribute rests on alone, ranks them by gain (a tie keeps the schema's order), then adds them in that order
+/// while each addition gains more. The result names that set only if it gains more than every such attribute together.
+/// A fresh default key memory serves each replay. With `typed_longest` above 0, each set is counted by its answers
 /// before typing and while typing up to that many characters together ([`select_typed_key_thresholds`], with the set's
 /// key threshold), and the typed thresholds for the choice come with it.
 ///
 /// # Panics
-/// As [`select_key_threshold`], and when typing is counted for a field that takes several values.
+/// As [`select_key_threshold`], and when typing is counted for an attribute that takes several values.
 pub fn select_key_fields(
-    form: &Form,
-    field: &str,
-    documents: &[Document],
+    schema: &Schema,
+    attribute: &str,
+    records: &[Record],
     choice: Choice,
     typed_longest: usize,
 ) -> KeyFieldsChoice {
     assert!(
-        typed_longest == 0 || !form.field(field).multiple,
-        "'{field}' takes several values; typing is not counted for it"
+        typed_longest == 0 || !schema.attribute(attribute).multiple,
+        "'{attribute}' takes several values; typing is not counted for it"
     );
     let replay = |key_fields: Option<Vec<String>>| {
-        let mut resting = keyed_by(form, field, key_fields.clone());
+        let mut resting = keyed_by(schema, attribute, key_fields.clone());
         let replay = select_key_threshold(
-            &mut FieldMemory::default(),
+            &mut KeyMemory::default(),
             &resting,
-            field,
-            documents,
+            attribute,
+            records,
             choice,
         );
         let typed = (typed_longest > 0).then(|| {
-            for f in resting.fields.iter_mut().filter(|f| f.name == field) {
+            for f in resting
+                .attributes
+                .iter_mut()
+                .filter(|f| f.name == attribute)
+            {
                 f.key_threshold = replay.chosen.as_ref().map(|c| c.threshold);
             }
             select_typed_key_thresholds(
-                &mut FieldMemory::default(),
+                &mut KeyMemory::default(),
                 &resting,
-                field,
-                documents,
+                attribute,
+                records,
                 choice,
                 typed_longest,
             )
@@ -1398,10 +1414,10 @@ pub fn select_key_fields(
 
     let mut trials: Vec<KeyFieldsTrial> = Vec::new();
     let all = replay(None);
-    let evidence: Vec<String> = form
-        .fields
+    let evidence: Vec<String> = schema
+        .attributes
         .iter()
-        .filter(|f| form.supports(&f.name, field))
+        .filter(|f| schema.supports(&f.name, attribute))
         .map(|f| f.name.clone())
         .collect();
     let mut ranked: Vec<KeyFieldsTrial> = evidence
@@ -1430,12 +1446,12 @@ pub fn select_key_fields(
 
     for next in &ranked[1..] {
         if best.key_fields.len() + 1 == evidence.len() {
-            break; // every field it rests on: the replay without key fields
+            break; // every attribute it rests on: the replay without key attributes
         }
 
-        let mut fields = best.key_fields.clone();
-        fields.push(next.key_fields[0].clone());
-        let trial = replay(Some(fields));
+        let mut attributes = best.key_fields.clone();
+        attributes.push(next.key_fields[0].clone());
+        let trial = replay(Some(attributes));
         trials.push(trial.clone());
         if gains(&trial) <= gains(&best) {
             break;
@@ -1457,51 +1473,51 @@ pub fn select_key_fields(
     }
 }
 
-/// Chooses, for each field that keys `field`, how readily its keys are believed after only a few settlements. Replays
-/// the documents in the order the field memory weighs them; before each is remembered, every key its values give the
-/// field that was seen before predicts the field's value as a Chinese restaurant process does — a value of weight w
+/// Chooses, for each attribute that keys `attribute`, how readily its keys are believed after only a few settlements. Replays
+/// the records in the order the key memory weighs them; before each is remembered, every key its values give the
+/// attribute that was seen before predicts the attribute's value as a Chinese restaurant process does — a value of weight w
 /// under a key of weighted total W by w ÷ (W + α), a value not yet seen under the key by α ÷ (W + α) — and each key
-/// field takes the α under which its keys' predictions are likeliest, with two anchoring predictions from a key seen
-/// once. The keys are those the form gives the field, from the values known when its suggestion would have been made;
-/// the field's own concentrations are ignored. `memory` must be empty and configured as the one in use.
+/// attribute takes the α under which its keys' predictions are likeliest, with two anchoring predictions from a key seen
+/// once. The keys are those the schema gives the attribute, from the values known when its suggestion would have been made;
+/// the attribute's own concentrations are ignored. `memory` must be empty and configured as the one in use.
 ///
-/// Returns a concentration for each key field whose keys were seen again; empty for a field that takes several values.
+/// Returns a concentration for each key attribute whose keys were seen again; empty for an attribute that takes several values.
 ///
 /// # Panics
-/// When the field is not judged.
+/// When the attribute is not decided.
 pub fn select_key_concentrations(
-    memory: &mut FieldMemory,
-    form: &Form,
-    field: &str,
-    documents: &[Document],
+    memory: &mut KeyMemory,
+    schema: &Schema,
+    attribute: &str,
+    records: &[Record],
 ) -> BTreeMap<String, f64> {
     assert!(
-        form.field(field).role == Role::Judged,
-        "'{field}' is not a judged field"
+        schema.attribute(attribute).role == AttributeRole::Decided,
+        "'{attribute}' is not a decided attribute"
     );
     let mut concentrations = BTreeMap::new();
-    if form.field(field).multiple {
+    if schema.attribute(attribute).multiple {
         return concentrations;
     }
 
-    let mut form = form.clone();
-    for f in form.fields.iter_mut().filter(|f| f.name == field) {
+    let mut schema = schema.clone();
+    for f in schema.attributes.iter_mut().filter(|f| f.name == attribute) {
         f.key_concentrations.clear();
     }
-    let mut ordered: Vec<Document> = documents.iter().map(Document::remembered).collect();
+    let mut ordered: Vec<Record> = records.iter().map(Record::remembered).collect();
     ordered.sort_by(|a, b| a.settled_at.cmp(&b.settled_at).then(a.id.cmp(&b.id)));
 
-    // key field → (predictions of a new value, the totals predicted from), in document order.
+    // key attribute → (predictions of a new value, the totals predicted from), in record order.
     let mut predictions: BTreeMap<String, (u64, Vec<f64>)> = BTreeMap::new();
-    for document in &ordered {
-        let Some(settled) = document.values.get(field) else {
+    for record in &ordered {
+        let Some(settled) = record.values.get(attribute) else {
             continue;
         };
 
-        memory.remove(&form.name, &document.id); // a document settled again is not its own evidence
-        let before = arrived(&form, document, field, &document.values);
+        memory.remove(&schema.name, &record.id); // a record settled again is not its own evidence
+        let before = arrived(&schema, record, attribute, &record.values);
         for (key_field, total, weight) in
-            memory.key_totals(&Lookup::new(&form, field, &before), settled)
+            memory.key_totals(&Lookup::new(&schema, attribute, &before), settled)
         {
             let (unseen, totals) = predictions.entry(key_field).or_default();
             totals.push(total);
@@ -1510,7 +1526,7 @@ pub fn select_key_concentrations(
             }
         }
 
-        memory.put(&form, document);
+        memory.put(&schema, record);
     }
 
     for (key_field, (unseen, totals)) in predictions {

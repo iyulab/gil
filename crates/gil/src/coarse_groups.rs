@@ -1,10 +1,10 @@
-//! A field's coarse level as the two memory layers back it, shared by suggestions and by the replays its thresholds are
+//! An attribute's coarse level as the two memory layers back it, shared by suggestions and by the replays its thresholds are
 //! chosen on.
 
-use crate::form::CoarseLevel;
 use crate::lexical_memory::Match;
+use crate::schema::CoarseLevel;
 
-/// The class the values under the document's keys back most: each value's score — never below 0 — added to its
+/// The class the values under the record's keys back most: each value's score — never below 0 — added to its
 /// class's, the classes in order of their best-ranked value. The score is that sum, on the key layer's scale, and the
 /// evidence the key backing its best value. A tie goes to the class of the better-ranked value. `None` when no value is
 /// under the keys.
@@ -24,10 +24,10 @@ pub fn keys(keyed: &[(String, f64, String)], level: &CoarseLevel) -> Option<(Str
         .reduce(|best, g| if g.1 > best.1 { g } else { best })
 }
 
-/// The class the nearest `votes` documents vote for, as [`crate::similar_vote::decide`] votes for a value: each with its
+/// The class the nearest `votes` records vote for, as [`crate::similar_vote::decide`] votes for a value: each with its
 /// similarity, the score the vote's margin over classes, or with a single voter its similarity. The match is the nearest
-/// document that voted for the class — its similarity is what the level's similarity floor is compared with when more
-/// than one voted (the flag). `None` when there are no documents.
+/// record that voted for the class — its similarity is what the level's similarity floor is compared with when more
+/// than one voted (the flag). `None` when there are no records.
 pub fn vote(
     nearest: &[Match],
     votes: usize,

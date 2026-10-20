@@ -1,20 +1,20 @@
 //! Python bindings for the Gil decision core.
 //!
-//! The extension module (`gil._gil`) takes forms and documents as JSON and hands results back as JSON text; the
+//! The extension module (`gil._gil`) takes schemas and records as JSON and hands results back as JSON text; the
 //! `gil` package around it reads that text into dictionaries. Records are gathered and returned whole rather than
 //! passed to a Python callback, which would cost a call back into the interpreter per lookup.
 
 use std::collections::BTreeMap;
 
 use gil::decision_record::{DecisionRecord, KeyLook, SimilarLook};
-use gil::field_memory::FieldMemory;
-use gil::form::{CoarseLevel, Document, Field, Form, Role, SettlementKind};
+use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
-use gil::threshold_selection::{
+use gil::replay::{
     Choice, KeyFieldsChoice, KeyFieldsTrial, KeyState, LayerThresholds, ThresholdChoice,
     ThresholdReplay, TypedKeyThresholds, select_coarse_with, select_key_concentrations,
     select_key_fields, select_layers_with,
 };
+use gil::schema::{Attribute, AttributeRole, CoarseLevel, Record, Schema, SettlementKind};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use serde_json::{Map, Value, json};
@@ -87,9 +87,8 @@ fn coarse(value: &Value) -> Parsed<CoarseLevel> {
             "memory_threshold" => {
                 level.memory_threshold = optional_number(v, "coarse.memory_threshold")?;
             }
-            "memory_similarity_floor" => {
-                level.memory_similarity_floor =
-                    optional_number(v, "coarse.memory_similarity_floor")?;
+            "memory_floor" => {
+                level.memory_floor = optional_number(v, "coarse.memory_similarity_floor")?;
             }
             other => return Err(format!("unknown coarse setting '{other}'")),
         }
@@ -97,18 +96,18 @@ fn coarse(value: &Value) -> Parsed<CoarseLevel> {
     Ok(level)
 }
 
-fn field(value: &Value) -> Parsed<Field> {
-    let settings = object(value, "a field")?;
+fn attribute(value: &Value) -> Parsed<Attribute> {
+    let settings = object(value, "an attribute")?;
     let name = string(
-        settings.get("name").ok_or("a field needs a name")?,
-        "a field's name",
+        settings.get("name").ok_or("an attribute needs a name")?,
+        "an attribute's name",
     )?;
     let role = match settings.get("role").and_then(Value::as_str) {
-        Some("observed") => Role::Observed,
-        Some("judged") => Role::Judged,
-        _ => return Err(format!("field '{name}' needs a role: observed or judged")),
+        Some("observed") => AttributeRole::Observed,
+        Some("decided") => AttributeRole::Decided,
+        _ => return Err(format!("field '{name}' needs a role: observed or decided")),
     };
-    let mut f = Field::new(&name, role);
+    let mut f = Attribute::new(&name, role);
     for (setting, v) in settings {
         let what = format!("{name}.{setting}");
         match setting.as_str() {
@@ -128,36 +127,36 @@ fn field(value: &Value) -> Parsed<Field> {
                     .collect::<Parsed<_>>()?;
             }
             "key_threshold" => f.key_threshold = optional_number(v, &what)?,
-            "similar_document_votes" => f.similar_document_votes = count(v, &what)?,
+            "similar_votes" => f.similar_votes = count(v, &what)?,
             "memory_threshold" => f.memory_threshold = optional_number(v, &what)?,
-            "memory_similarity_floor" => f.memory_similarity_floor = optional_number(v, &what)?,
+            "memory_floor" => f.memory_floor = optional_number(v, &what)?,
             "coarse" => f.coarse = (!v.is_null()).then(|| coarse(v)).transpose()?,
             "candidates" => f.candidates = (!v.is_null()).then(|| strings(v, &what)).transpose()?,
             "must_catch" => f.must_catch = (!v.is_null()).then(|| strings(v, &what)).transpose()?,
-            other => return Err(format!("unknown setting '{other}' on field '{name}'")),
+            other => return Err(format!("unknown setting '{other}' on attribute '{name}'")),
         }
     }
     Ok(f)
 }
 
-fn form(text: &str) -> Parsed<Form> {
-    let value: Value = serde_json::from_str(text).map_err(|e| format!("a form is JSON: {e}"))?;
-    let settings = object(&value, "a form")?;
+fn schema(text: &str) -> Parsed<Schema> {
+    let value: Value = serde_json::from_str(text).map_err(|e| format!("a schema is JSON: {e}"))?;
+    let settings = object(&value, "a schema")?;
     let name = string(
-        settings.get("name").ok_or("a form needs a name")?,
-        "a form's name",
+        settings.get("name").ok_or("a schema needs a name")?,
+        "a schema's name",
     )?;
-    let fields = settings
-        .get("fields")
+    let attributes = settings
+        .get("attributes")
         .and_then(Value::as_array)
-        .ok_or("a form needs a list of fields")?
+        .ok_or("a schema needs a list of attributes")?
         .iter()
-        .map(field)
+        .map(attribute)
         .collect::<Parsed<Vec<_>>>()?;
-    if let Some(other) = settings.keys().find(|k| *k != "name" && *k != "fields") {
-        return Err(format!("unknown form setting '{other}'"));
+    if let Some(other) = settings.keys().find(|k| *k != "name" && *k != "attributes") {
+        return Err(format!("unknown schema setting '{other}'"));
     }
-    Ok(Form { name, fields })
+    Ok(Schema { name, attributes })
 }
 
 /// `yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM` → 100-nanosecond ticks since the Unix epoch, UTC.
@@ -197,21 +196,21 @@ fn settlement(name: &str) -> Parsed<SettlementKind> {
     SettlementKind::parse(name).ok_or_else(|| format!("unknown settlement kind '{name}'"))
 }
 
-fn document(value: &Value) -> Parsed<Document> {
-    let record = object(value, "a document")?;
+fn record(value: &Value) -> Parsed<Record> {
+    let record = object(value, "a record")?;
     let id = string(
-        record.get("id").ok_or("a document needs an id")?,
-        "a document's id",
+        record.get("id").ok_or("a record needs an id")?,
+        "a record's id",
     )?;
     let at = record
         .get("settled_at")
-        .ok_or(format!("document '{id}' needs settled_at"))?;
+        .ok_or(format!("record '{id}' needs settled_at"))?;
     let settled_at = match at {
         Value::String(text) => ticks(text)?,
         Value::Number(n) => n
             .as_i64()
-            .ok_or(format!("document '{id}': settled_at ticks must be whole"))?,
-        _ => return Err(format!("document '{id}': settled_at is a time or ticks")),
+            .ok_or(format!("record '{id}': settled_at ticks must be whole"))?,
+        _ => return Err(format!("record '{id}': settled_at is a time or ticks")),
     };
     let map = |name: &str| -> Parsed<Map<String, Value>> {
         match record.get(name) {
@@ -251,10 +250,10 @@ fn document(value: &Value) -> Parsed<Document> {
         ]
         .contains(&key.as_str())
         {
-            return Err(format!("document '{id}': unknown entry '{key}'"));
+            return Err(format!("record '{id}': unknown entry '{key}'"));
         }
     }
-    Ok(Document {
+    Ok(Record {
         id,
         values,
         sets,
@@ -344,7 +343,7 @@ fn similar_look_json(s: &SimilarLook) -> Value {
     json!({
         "score": s.score,
         "value": s.value,
-        "document": s.document,
+        "record": s.record,
         "correct": s.correct,
         "nearest": s.nearest,
         "voted": s.voted,
@@ -354,7 +353,7 @@ fn similar_look_json(s: &SimilarLook) -> Value {
 fn record_json(r: &DecisionRecord) -> Value {
     json!({
         "record": r.record,
-        "field": r.field,
+        "attribute": r.attribute,
         "order": r.order,
         "weight": r.weight,
         "key": r.key.as_ref().map(key_look_json),
@@ -372,61 +371,63 @@ fn record_json(r: &DecisionRecord) -> Value {
 
 // ---- the module ----
 
-/// Settled documents, read once and kept on the Rust side.
+/// Settled records, read once and kept on the Rust side.
 #[pyclass(frozen, module = "gil._gil")]
-struct Documents {
-    documents: Vec<Document>,
+struct Records {
+    records: Vec<Record>,
 }
 
 #[pymethods]
-impl Documents {
-    /// Documents from JSON lines, one document per line, in settlement order.
+impl Records {
+    /// Records from JSON lines, one record per line, in settlement order.
     #[staticmethod]
     fn from_json_lines(text: &str) -> PyResult<Self> {
-        let documents = text
+        let records = text
             .lines()
             .enumerate()
             .filter(|(_, line)| !line.trim().is_empty())
             .map(|(i, line)| {
                 let value: Value =
                     serde_json::from_str(line).map_err(|e| format!("line {}: {e}", i + 1))?;
-                document(&value).map_err(|e| format!("line {}: {e}", i + 1))
+                record(&value).map_err(|e| format!("line {}: {e}", i + 1))
             })
             .collect::<Parsed<Vec<_>>>()
             .map_err(invalid)?;
-        Ok(Self { documents })
+        Ok(Self { records })
     }
 
     fn __len__(&self) -> usize {
-        self.documents.len()
+        self.records.len()
     }
 }
 
-/// Checks a form's JSON; raises `ValueError` when it does not read.
+/// Checks a schema's JSON; raises `ValueError` when it does not read.
 #[pyfunction]
-fn check_form(form_json: &str) -> PyResult<()> {
-    form(form_json).map(|_| ()).map_err(invalid)
+fn check_schema(schema_json: &str) -> PyResult<()> {
+    schema(schema_json).map(|_| ()).map_err(invalid)
 }
 
-/// The form, checked to have `field` as a judged field.
-fn judging(form_json: &str, field: &str) -> PyResult<Form> {
-    let form = form(form_json).map_err(invalid)?;
-    match form.fields.iter().find(|f| f.name == field) {
-        Some(f) if f.role == Role::Judged => Ok(form),
-        Some(_) => Err(invalid(format!("field '{field}' is not judged"))),
-        None => Err(invalid(format!("the form has no field '{field}'"))),
+/// The schema, checked to have `attribute` as a decided attribute.
+fn deciding(schema_json: &str, attribute: &str) -> PyResult<Schema> {
+    let schema = schema(schema_json).map_err(invalid)?;
+    match schema.attributes.iter().find(|f| f.name == attribute) {
+        Some(f) if f.role == AttributeRole::Decided => Ok(schema),
+        Some(_) => Err(invalid(format!("attribute '{attribute}' is not decided"))),
+        None => Err(invalid(format!(
+            "the schema has no attribute '{attribute}'"
+        ))),
     }
 }
 
-/// The form, checked to judge `field`, and the counted settlement kinds, from the arguments every selection takes.
+/// The schema, checked to judge `attribute`, and the counted settlement kinds, from the arguments every selection takes.
 fn selection_input(
-    form_json: &str,
-    field: &str,
+    schema_json: &str,
+    attribute: &str,
     target_precision: f64,
     minimum_answered: usize,
     counting: Option<Vec<String>>,
-) -> PyResult<(Form, Option<Vec<SettlementKind>>)> {
-    let form = judging(form_json, field)?;
+) -> PyResult<(Schema, Option<Vec<SettlementKind>>)> {
+    let schema = deciding(schema_json, attribute)?;
     if !(target_precision > 0.0 && target_precision <= 1.0) || minimum_answered == 0 {
         return Err(invalid(
             "target_precision is in (0, 1] and minimum_answered at least 1".to_owned(),
@@ -441,25 +442,25 @@ fn selection_input(
         })
         .transpose()
         .map_err(invalid)?;
-    Ok((form, counting))
+    Ok((schema, counting))
 }
 
-/// Replays the documents in order and chooses the field's key and memory thresholds, as `select_layers` does. Returns
-/// the thresholds as JSON and, when `records` is true, the decision records as JSON lines.
+/// Replays the records in order and chooses the attribute's key and memory thresholds, as `select_layers` does. Returns
+/// the thresholds as JSON and, when `decisions` is true, the decision records as JSON lines.
 #[pyfunction]
-#[pyo3(signature = (form_json, field, documents, target_precision, minimum_answered, counting=None, records=true))]
+#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, decisions=true))]
 fn select_layers_json(
-    form_json: &str,
-    field: &str,
-    documents: &Documents,
+    schema_json: &str,
+    attribute: &str,
+    records: &Records,
     target_precision: f64,
     minimum_answered: usize,
     counting: Option<Vec<String>>,
-    records: bool,
+    decisions: bool,
 ) -> PyResult<(String, Option<String>)> {
-    let (form, counting) = selection_input(
-        form_json,
-        field,
+    let (schema, counting) = selection_input(
+        schema_json,
+        attribute,
         target_precision,
         minimum_answered,
         counting,
@@ -469,13 +470,13 @@ fn select_layers_json(
         minimum_answered,
         counting: counting.as_deref(),
     };
-    let mut lines = records.then(String::new);
+    let mut lines = decisions.then(String::new);
     let layers = select_layers_with(
-        &mut FieldMemory::default(),
+        &mut KeyMemory::default(),
         &mut LexicalMemory::default(),
-        &form,
-        field,
-        &documents.documents,
+        &schema,
+        attribute,
+        &records.records,
         choice,
         &mut |r| push_record(&mut lines, r),
     );
@@ -489,95 +490,95 @@ fn push_record(lines: &mut Option<String>, r: &DecisionRecord) {
     }
 }
 
-/// Replays the documents in order and chooses the thresholds of the field's coarse level, as `select_coarse` does — on
-/// the lookups the value layers leave at the field's thresholds. Returns them as JSON and, when `records` is true, the
+/// Replays the records in order and chooses the thresholds of the attribute's coarse level, as `select_coarse` does — on
+/// the lookups the value layers leave at the attribute's thresholds. Returns them as JSON and, when `decisions` is true, the
 /// decision records with what the coarse level made of each lookup as JSON lines.
 #[pyfunction]
-#[pyo3(signature = (form_json, field, documents, target_precision, minimum_answered, counting=None, records=true))]
+#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, decisions=true))]
 fn select_coarse_json(
-    form_json: &str,
-    field: &str,
-    documents: &Documents,
+    schema_json: &str,
+    attribute: &str,
+    records: &Records,
     target_precision: f64,
     minimum_answered: usize,
     counting: Option<Vec<String>>,
-    records: bool,
+    decisions: bool,
 ) -> PyResult<(String, Option<String>)> {
-    let (form, counting) = selection_input(
-        form_json,
-        field,
+    let (schema, counting) = selection_input(
+        schema_json,
+        attribute,
         target_precision,
         minimum_answered,
         counting,
     )?;
-    let definition = form.field(field);
+    let definition = schema.attribute(attribute);
     if definition.multiple {
         return Err(invalid(format!(
-            "'{field}' takes several values; it has no coarse level"
+            "'{attribute}' takes several values; it has no coarse level"
         )));
     }
     if definition.coarse.is_none() {
-        return Err(invalid(format!("'{field}' has no coarse level")));
+        return Err(invalid(format!("'{attribute}' has no coarse level")));
     }
     let choice = Choice {
         target_precision,
         minimum_answered,
         counting: counting.as_deref(),
     };
-    let mut lines = records.then(String::new);
+    let mut lines = decisions.then(String::new);
     let layers = select_coarse_with(
-        &mut FieldMemory::default(),
+        &mut KeyMemory::default(),
         &mut LexicalMemory::default(),
-        &form,
-        field,
-        &documents.documents,
+        &schema,
+        attribute,
+        &records.records,
         choice,
         &mut |r| push_record(&mut lines, r),
     );
     Ok((layers_json(&layers).to_string(), lines))
 }
 
-/// Chooses, for each field that keys the judged field, how readily its keys are believed after only a few settlements,
-/// as `select_key_concentrations` does. Returns the concentrations as a JSON object of field to concentration.
+/// Chooses, for each attribute that keys the decided attribute, how readily its keys are believed after only a few settlements,
+/// as `select_key_concentrations` does. Returns the concentrations as a JSON object of attribute to concentration.
 #[pyfunction]
 fn select_key_concentrations_json(
-    form_json: &str,
-    field: &str,
-    documents: &Documents,
+    schema_json: &str,
+    attribute: &str,
+    records: &Records,
 ) -> PyResult<String> {
-    let form = judging(form_json, field)?;
+    let schema = deciding(schema_json, attribute)?;
     let found = select_key_concentrations(
-        &mut FieldMemory::default(),
-        &form,
-        field,
-        &documents.documents,
+        &mut KeyMemory::default(),
+        &schema,
+        attribute,
+        &records.records,
     );
     Ok(json!(found).to_string())
 }
 
-/// Chooses the fields that should key the judged field, as `select_key_fields` does: each field it rests on alone, then
+/// Chooses the attributes that should key the decided attribute, as `select_key_fields` does: each attribute it rests on alone, then
 /// greedy additions while the key layer's gain over the target grows. Returns the choice as JSON.
 #[pyfunction]
-#[pyo3(signature = (form_json, field, documents, target_precision, minimum_answered, counting=None, typed_longest=0))]
+#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, typed_longest=0))]
 fn select_key_fields_json(
-    form_json: &str,
-    field: &str,
-    documents: &Documents,
+    schema_json: &str,
+    attribute: &str,
+    records: &Records,
     target_precision: f64,
     minimum_answered: usize,
     counting: Option<Vec<String>>,
     typed_longest: usize,
 ) -> PyResult<String> {
-    let (form, counting) = selection_input(
-        form_json,
-        field,
+    let (schema, counting) = selection_input(
+        schema_json,
+        attribute,
         target_precision,
         minimum_answered,
         counting,
     )?;
-    if typed_longest > 0 && form.field(field).multiple {
+    if typed_longest > 0 && schema.attribute(attribute).multiple {
         return Err(invalid(format!(
-            "'{field}' takes several values; typing is not counted for it"
+            "'{attribute}' takes several values; typing is not counted for it"
         )));
     }
     let choice = Choice {
@@ -585,14 +586,14 @@ fn select_key_fields_json(
         minimum_answered,
         counting: counting.as_deref(),
     };
-    let chosen = select_key_fields(&form, field, &documents.documents, choice, typed_longest);
+    let chosen = select_key_fields(&schema, attribute, &records.records, choice, typed_longest);
     Ok(key_fields_json(&chosen).to_string())
 }
 
 #[pymodule]
 fn _gil(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<Documents>()?;
-    m.add_function(wrap_pyfunction!(check_form, m)?)?;
+    m.add_class::<Records>()?;
+    m.add_function(wrap_pyfunction!(check_schema, m)?)?;
     m.add_function(wrap_pyfunction!(select_layers_json, m)?)?;
     m.add_function(wrap_pyfunction!(select_key_fields_json, m)?)?;
     m.add_function(wrap_pyfunction!(select_coarse_json, m)?)?;

@@ -20,10 +20,10 @@ def lines(name: str) -> list[dict]:
 
 
 def golden_form(stop_field: str, stop_kind: str = "layers") -> dict:
-    """The golden's form with the settings its lines chose before the `stop_kind` line of `stop_field`."""
-    team = {"name": "team", "role": "judged"}
-    code = {"name": "code", "role": "judged", "coarse": {"prefix": 2}}
-    tags = {"name": "tags", "role": "judged", "multiple": True}
+    """The golden's schema with the settings its lines chose before the `stop_kind` line of `stop_field`."""
+    team = {"name": "team", "role": "decided"}
+    code = {"name": "code", "role": "decided", "coarse": {"prefix": 2}}
+    tags = {"name": "tags", "role": "decided", "multiple": True}
     targets = {"team": team, "code": code, "tags": tags}
     for line in lines("golden.jsonl"):
         if line["kind"] == "decision" or (
@@ -41,12 +41,12 @@ def golden_form(stop_field: str, stop_kind: str = "layers") -> dict:
             target["key_threshold"] = (line["key"]["chosen"] or {}).get("threshold")
             memory = line["memory"]["chosen"] or {}
             target["memory_threshold"] = memory.get("threshold")
-            target["memory_similarity_floor"] = memory.get("similarity_floor")
+            target["memory_floor"] = memory.get("similarity_floor")
         elif line["kind"] == "key":
             target["key_threshold"] = (line["replay"]["chosen"] or {}).get("threshold")
     return {
         "name": "ticket",
-        "fields": [
+        "attributes": [
             {"name": "channel", "role": "observed"},
             {"name": "product", "role": "observed"},
             {"name": "summary", "role": "observed"},
@@ -77,7 +77,7 @@ def as_golden(record: dict, kind: str = "record") -> dict:
     key, similar, coarse = record["key"], record["similar"], record["coarse"]
     return {
         "kind": kind,
-        "field": record["field"],
+        "field": record["attribute"],
         "record": record["record"],
         "order": record["order"],
         "weight": record["weight"],
@@ -115,20 +115,20 @@ def as_golden(record: dict, kind: str = "record") -> dict:
 
 
 def test_select_layers_writes_the_golden_decision_records() -> None:
-    documents = gil.documents(settled_again())
+    settled = gil.records(settled_again())
     expected = [line for line in lines("records-out.jsonl") if line["kind"] == "record"]
     got = []
-    for field in ("team", "code"):
-        form = gil.Form.from_dict(golden_form(field))
-        thresholds, records = gil.select_layers(
-            form, field, documents, 0.8, 10, counting=COUNTED
+    for attribute in ("team", "code"):
+        schema = gil.Schema.from_dict(golden_form(attribute))
+        thresholds, decisions = gil.select_layers(
+            schema, attribute, settled, 0.8, 10, counting=COUNTED
         )
         assert set(thresholds) == {"key", "memory"}
         bare, none = gil.select_layers(
-            form, field, documents, 0.8, 10, counting=COUNTED, records=False
+            schema, attribute, settled, 0.8, 10, counting=COUNTED, decisions=False
         )
         assert none is None and bare == thresholds
-        got += [as_golden(r) for r in records]
+        got += [as_golden(r) for r in decisions]
     assert len(got) == len(expected)
     for i, (a, b) in enumerate(zip(got, expected, strict=True)):
         # JSON numbers: the golden writes whole doubles without a fraction.
@@ -138,49 +138,49 @@ def test_select_layers_writes_the_golden_decision_records() -> None:
 
 
 def test_the_golden_layers_choice_comes_back() -> None:
-    documents = gil.read_records(CORE / "records.jsonl")
-    assert len(documents) == len(lines("records.jsonl"))
+    records = gil.read_records(CORE / "records.jsonl")
+    assert len(records) == len(lines("records.jsonl"))
     golden = {
         line["field"]: line
         for line in lines("golden.jsonl")
         if line["kind"] == "layers"
     }
-    first = gil.documents(lines("records.jsonl")[:CHOSEN])
-    for field, line in golden.items():
-        form = gil.Form.from_dict(golden_form(field))
+    first = gil.records(lines("records.jsonl")[:CHOSEN])
+    for attribute, line in golden.items():
+        schema = gil.Schema.from_dict(golden_form(attribute))
         thresholds, _ = gil.select_layers(
-            form, field, first, 0.8, 10, counting=COUNTED, records=False
+            schema, attribute, first, 0.8, 10, counting=COUNTED, decisions=False
         )
         for layer in ("key", "memory"):
             want = line[layer]["chosen"]
             have = thresholds[layer]["chosen"]
-            assert (want is None) == (have is None), (field, layer)
+            assert (want is None) == (have is None), (attribute, layer)
             if want is not None:
-                assert have["threshold"] == want["threshold"], (field, layer)
-                assert have["promise"] == want["promise"], (field, layer)
+                assert have["threshold"] == want["threshold"], (attribute, layer)
+                assert have["promise"] == want["promise"], (attribute, layer)
 
 
 def test_bad_input_is_a_value_error() -> None:
     with pytest.raises(ValueError, match="unknown setting 'colour'"):
-        gil.Form.from_dict(
-            {"name": "f", "fields": [{"name": "a", "role": "judged", "colour": 1}]}
+        gil.Schema.from_dict(
+            {"name": "f", "attributes": [{"name": "a", "role": "decided", "colour": 1}]}
         )
     with pytest.raises(ValueError, match="needs a role"):
-        gil.Form.from_dict({"name": "f", "fields": [{"name": "a"}]})
+        gil.Schema.from_dict({"name": "f", "attributes": [{"name": "a"}]})
     with pytest.raises(ValueError, match="settled_at"):
-        gil.documents([{"id": "1", "settled_at": "yesterday", "values": {}}])
-    form = gil.Form.from_dict(
-        {"name": "f", "fields": [{"name": "a", "role": "observed"}]}
+        gil.records([{"id": "1", "settled_at": "yesterday", "values": {}}])
+    schema = gil.Schema.from_dict(
+        {"name": "f", "attributes": [{"name": "a", "role": "observed"}]}
     )
-    with pytest.raises(ValueError, match="not judged"):
-        gil.select_layers(form, "a", gil.documents([]))
+    with pytest.raises(ValueError, match="not decided"):
+        gil.select_layers(schema, "a", gil.records([]))
 
 
 def test_results_carry_exactly_the_typed_keys() -> None:
-    # The TypedDicts are the documented shape; a field added or dropped on the Rust side must show up here.
-    form = gil.Form.from_dict(golden_form("team"))
+    # The TypedDicts are the documented shape; an attribute added or dropped on the Rust side must show up here.
+    schema = gil.Schema.from_dict(golden_form("team"))
     thresholds, records = gil.select_layers(
-        form, "team", gil.documents(settled_again()), 0.8, 10, counting=COUNTED
+        schema, "team", gil.records(settled_again()), 0.8, 10, counting=COUNTED
     )
     assert set(thresholds) == set(gil.LayerThresholds.__annotations__)
     for layer in thresholds.values():
@@ -201,16 +201,16 @@ def test_results_carry_exactly_the_typed_keys() -> None:
 
 
 def declared_form() -> dict:
-    """The golden's form as declared, before any line chose a setting."""
+    """The golden's schema as declared, before any line chose a setting."""
     return {
         "name": "ticket",
-        "fields": [
+        "attributes": [
             {"name": "channel", "role": "observed"},
             {"name": "product", "role": "observed"},
             {"name": "summary", "role": "observed"},
-            {"name": "team", "role": "judged"},
-            {"name": "code", "role": "judged", "coarse": {"prefix": 2}},
-            {"name": "tags", "role": "judged", "multiple": True},
+            {"name": "team", "role": "decided"},
+            {"name": "code", "role": "decided", "coarse": {"prefix": 2}},
+            {"name": "tags", "role": "decided", "multiple": True},
         ],
     }
 
@@ -226,13 +226,13 @@ def same_replay(have: dict, want: dict, where: str) -> None:
 
 
 def test_the_golden_key_fields_choice_comes_back() -> None:
-    first = gil.documents(lines("records.jsonl")[:CHOSEN])
-    form = gil.Form.from_dict(declared_form())
+    first = gil.records(lines("records.jsonl")[:CHOSEN])
+    schema = gil.Schema.from_dict(declared_form())
     wanted = {line["world"]: line for line in lines("key_fields.jsonl")}
     for world, typed_longest in (("ticket", 0), ("ticket-typed", 2)):
         want = wanted[world]
         have = gil.select_key_fields(
-            form, "team", first, 0.8, 10, counting=COUNTED, typed_longest=typed_longest
+            schema, "team", first, 0.8, 10, counting=COUNTED, typed_longest=typed_longest
         )
         assert have["key_fields"] == want["fields"], world
         same_replay(have["chosen"], want["chosen"], world)
@@ -251,16 +251,16 @@ def test_the_golden_key_fields_choice_comes_back() -> None:
                 same_replay(h, w, f"{world} typed {i + 1}")
         else:
             assert have["typed"] is None
-    # The choice goes on the form as the field's key fields.
+    # The choice goes on the schema as the attribute's key fields.
     keyed = declared_form()
-    keyed["fields"][3]["key_fields"] = wanted["ticket"]["fields"]
-    gil.Form.from_dict(keyed)
+    keyed["attributes"][3]["key_fields"] = wanted["ticket"]["fields"]
+    gil.Schema.from_dict(keyed)
 
 
 def test_key_fields_choice_carries_exactly_the_typed_keys() -> None:
-    form = gil.Form.from_dict(declared_form())
+    schema = gil.Schema.from_dict(declared_form())
     choice = gil.select_key_fields(
-        form, "team", gil.documents(lines("records.jsonl")[:CHOSEN]), typed_longest=2
+        schema, "team", gil.records(lines("records.jsonl")[:CHOSEN]), typed_longest=2
     )
     assert set(choice) == set(gil.KeyFieldsChoice.__annotations__)
     for trial in choice["trials"]:
@@ -269,22 +269,22 @@ def test_key_fields_choice_carries_exactly_the_typed_keys() -> None:
     assert choice["typed"] is not None
     assert set(choice["typed"]) == set(gil.TypedKeyThresholds.__annotations__)
     with pytest.raises(ValueError, match="several values"):
-        gil.select_key_fields(form, "tags", gil.documents([]), typed_longest=1)
+        gil.select_key_fields(schema, "tags", gil.records([]), typed_longest=1)
 
 
 def test_the_golden_coarse_choice_and_records_come_back() -> None:
-    first = gil.documents(lines("records.jsonl")[:CHOSEN])
-    form = gil.Form.from_dict(golden_form("code", stop_kind="coarse"))
+    first = gil.records(lines("records.jsonl")[:CHOSEN])
+    schema = gil.Schema.from_dict(golden_form("code", stop_kind="coarse"))
     want = next(
         line
         for line in lines("golden.jsonl")
         if line["kind"] == "coarse" and line["field"] == "code"
     )
-    thresholds, records = gil.select_coarse(form, "code", first, 0.8, 10, counting=COUNTED)
+    thresholds, records = gil.select_coarse(schema, "code", first, 0.8, 10, counting=COUNTED)
     for layer in ("key", "memory"):
         same_replay(thresholds[layer], want[layer], f"coarse {layer}")
     bare, none = gil.select_coarse(
-        form, "code", first, 0.8, 10, counting=COUNTED, records=False
+        schema, "code", first, 0.8, 10, counting=COUNTED, decisions=False
     )
     assert none is None and bare == thresholds
     expected = [line for line in lines("records-out.jsonl") if line["kind"] == "coarse_record"]
@@ -295,13 +295,13 @@ def test_the_golden_coarse_choice_and_records_come_back() -> None:
             json.dumps(as_golden(record, "coarse_record")), parse_int=float
         ) == json.loads(json.dumps(line), parse_int=float), f"coarse record line {i + 1}"
     with pytest.raises(ValueError, match="no coarse level"):
-        gil.select_coarse(gil.Form.from_dict(declared_form()), "team", first)
+        gil.select_coarse(gil.Schema.from_dict(declared_form()), "team", first)
 
 
 def test_the_golden_key_concentrations_come_back() -> None:
-    first = gil.documents(lines("records.jsonl")[:CHOSEN])
+    first = gil.records(lines("records.jsonl")[:CHOSEN])
     keyed = declared_form()
     want = {line["kind"]: line for line in lines("golden.jsonl")[:2]}
-    keyed["fields"][3]["key_fields"] = want["key_fields"]["fields"]
-    found = gil.select_key_concentrations(gil.Form.from_dict(keyed), "team", first)
+    keyed["attributes"][3]["key_fields"] = want["key_fields"]["fields"]
+    found = gil.select_key_concentrations(gil.Schema.from_dict(keyed), "team", first)
     assert found == want["key_concentrations"]["concentrations"]

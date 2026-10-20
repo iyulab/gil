@@ -1,13 +1,13 @@
 """Python bindings for the Gil decision core (published as ``iyulab-gil``).
 
-Replays settled documents to choose how far each layer's suggestions can be trusted, and hands back the decision
-records the choice rests on — one per document asked about, in settlement order.
+Replays settled records to choose how far each layer's answers can be trusted, and hands back the decision
+records the choice rests on — one per record asked about, in settlement order.
 
     import gil
 
-    form = gil.Form.from_json(text)            # the form and its fields' settings
-    documents = gil.read_records(path)         # settled documents, one JSON object per line
-    thresholds, records = gil.select_layers(form, "team", documents, target_precision=0.8)
+    schema = gil.Schema.from_json(text)      # the schema and its attributes' settings
+    records = gil.read_records(path)         # settled records, one JSON object per line
+    thresholds, decisions = gil.select_layers(schema, "team", records, target_precision=0.8)
 """
 
 from __future__ import annotations
@@ -18,8 +18,8 @@ from pathlib import Path
 from typing import Any, TypedDict, cast
 
 from gil._gil import (
-    Documents,
-    check_form,
+    Records,
+    check_schema,
     select_coarse_json,
     select_key_concentrations_json,
     select_key_fields_json,
@@ -29,8 +29,8 @@ from gil._gil import (
 __all__ = [
     "CoarseLook",
     "DecisionRecord",
-    "Documents",
-    "Form",
+    "Records",
+    "Schema",
     "KeyFieldsChoice",
     "KeyFieldsTrial",
     "KeyLook",
@@ -40,7 +40,7 @@ __all__ = [
     "ThresholdChoice",
     "ThresholdReplay",
     "TypedKeyThresholds",
-    "documents",
+    "records",
     "read_records",
     "select_coarse",
     "select_key_concentrations",
@@ -100,7 +100,7 @@ class TypedKeyThresholds(TypedDict):
 
 
 class KeyFieldsTrial(TypedDict):
-    """One set of fields tried as a judged field's key fields, and how its key layer replayed."""
+    """One set of attributes tried as a decided attribute's key attributes, and how its key layer replayed."""
 
     key_fields: list[str]
     replay: ThresholdReplay
@@ -108,10 +108,10 @@ class KeyFieldsTrial(TypedDict):
 
 
 class KeyFieldsChoice(TypedDict):
-    """The fields that should key a judged field, chosen by replaying its key layer.
+    """The attributes that should key a decided attribute, chosen by replaying its key layer.
 
-    ``key_fields`` is ``None`` when no narrower set gained more than every field the judged field rests on — leave the
-    field's key fields unset then.
+    ``key_fields`` is ``None`` when no narrower set gained more than every attribute the decided attribute rests on — leave the
+    attribute's key attributes unset then.
     """
 
     key_fields: list[str] | None
@@ -132,19 +132,19 @@ class KeyLook(TypedDict):
 
 
 class SimilarLook(TypedDict):
-    """What the similar document vote came to for one lookup, whatever the threshold."""
+    """What the similar record vote came to for one lookup, whatever the threshold."""
 
     score: float
     value: str
-    document: str
+    record: str
     correct: bool | None
     nearest: float
     voted: bool
 
 
 class CoarseLook(TypedDict):
-    """On a coarse replay, what the field's coarse level made of a lookup: the class the keys back and the class the
-    similar documents vote for (each as ``value``), and whether the value layers answered at the field's thresholds."""
+    """On a coarse replay, what the attribute's coarse level made of a lookup: the class the keys back and the class the
+    similar records vote for (each as ``value``), and whether the value layers answered at the attribute's thresholds."""
 
     value_answered: bool
     keys: KeyLook | None
@@ -152,10 +152,10 @@ class CoarseLook(TypedDict):
 
 
 class DecisionRecord(TypedDict):
-    """One document asked about on a replay: what each layer made of it and what it was settled as."""
+    """One record asked about on a replay: what each layer made of it and what it was settled as."""
 
     record: str
-    field: str
+    attribute: str
     order: int | None
     weight: float
     key: KeyLook | None
@@ -166,25 +166,25 @@ class DecisionRecord(TypedDict):
     probability: float | None
 
 
-class Form:
-    """A form: its name and fields, as JSON ``{"name": ..., "fields": [{"name": ..., "role": "observed" | "judged", ...}]}``.
+class Schema:
+    """A schema: its name and attributes, as JSON ``{"name": ..., "attributes": [{"name": ..., "role": "observed" | "decided", ...}]}``.
 
-    A field's optional settings are those of the core's ``Field`` (``key_fields``, ``key_threshold``,
-    ``memory_threshold``, ``similar_document_votes``, ``coarse`` …); an unknown setting is an error.
+    An attribute's optional settings are those of the core's ``Attribute`` (``key_fields``, ``key_threshold``,
+    ``memory_threshold``, ``similar_votes``, ``coarse`` …); an unknown setting is an error.
     """
 
     __slots__ = ("_json",)
 
     def __init__(self, text: str) -> None:
-        check_form(text)
+        check_schema(text)
         self._json = text
 
     @classmethod
-    def from_json(cls, text: str) -> Form:
+    def from_json(cls, text: str) -> Schema:
         return cls(text)
 
     @classmethod
-    def from_dict(cls, value: dict[str, Any]) -> Form:
+    def from_dict(cls, value: dict[str, Any]) -> Schema:
         return cls(json.dumps(value, ensure_ascii=False))
 
     @property
@@ -192,45 +192,45 @@ class Form:
         return self._json
 
 
-def documents(items: Iterable[dict[str, Any]]) -> Documents:
-    """Settled documents from dictionaries, in settlement order.
+def records(items: Iterable[dict[str, Any]]) -> Records:
+    """Settled records from dictionaries, in settlement order.
 
     Each has ``id``, ``settled_at`` (``yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM`` or 100-nanosecond ticks since the Unix
     epoch) and ``values``; ``sets``, ``settlements``, ``probabilities`` and ``arrival`` are optional.
     """
-    return Documents.from_json_lines(
+    return Records.from_json_lines(
         "\n".join(json.dumps(item, ensure_ascii=False) for item in items)
     )
 
 
-def read_records(path: str | Path) -> Documents:
-    """Settled documents from a file of JSON lines, one document per line, in settlement order."""
-    return Documents.from_json_lines(Path(path).read_text(encoding="utf-8"))
+def read_records(path: str | Path) -> Records:
+    """Settled records from a file of JSON lines, one record per line, in settlement order."""
+    return Records.from_json_lines(Path(path).read_text(encoding="utf-8"))
 
 
 def select_layers(
-    form: Form,
-    field: str,
-    documents: Documents,
+    schema: Schema,
+    attribute: str,
+    records: Records,
     target_precision: float = 0.8,
     minimum_answered: int = 10,
     counting: Iterable[str] | None = None,
-    records: bool = True,
+    decisions: bool = True,
 ) -> tuple[LayerThresholds, list[DecisionRecord] | None]:
-    """Replays ``documents`` and chooses ``field``'s key and memory thresholds.
+    """Replays ``records`` and chooses ``attribute``'s key and memory thresholds.
 
     Returns the two replays (``{"key": ..., "memory": ...}``, each with its ``chosen`` threshold) and, unless
-    ``records`` is false, the decision records: what the key layer and the similar document vote made of each document
+    ``decisions`` is false, the decision records: what the key layer and the similar record vote made of each record
     asked about, whatever the thresholds, with the value it was settled as.
     """
     thresholds, lines = select_layers_json(
-        form.json,
-        field,
-        documents,
+        schema.json,
+        attribute,
+        records,
         target_precision,
         minimum_answered,
         None if counting is None else list(counting),
-        records,
+        decisions,
     )
     out = (
         None
@@ -241,29 +241,29 @@ def select_layers(
 
 
 def select_key_fields(
-    form: Form,
-    field: str,
-    documents: Documents,
+    schema: Schema,
+    attribute: str,
+    records: Records,
     target_precision: float = 0.8,
     minimum_answered: int = 10,
     counting: Iterable[str] | None = None,
     typed_longest: int = 0,
 ) -> KeyFieldsChoice:
-    """Chooses the fields that should key ``field`` in the settled field memory by replaying its key layer.
+    """Chooses the attributes that should key ``attribute`` in the settled key memory by replaying its key layer.
 
-    Each field ``field`` rests on is tried alone, then the best are added one at a time while the key layer's gain over
-    the target — (precision − target) × answers — grows. A field that happened to settle with one value for a while
-    keys every later document that shares it; narrowing the key fields keeps such a field from answering. Set the
-    choice as the field's ``key_fields`` before choosing its thresholds with :func:`select_layers`. With
+    Each attribute ``attribute`` rests on is tried alone, then the best are added one at a time while the key layer's gain over
+    the target — (precision − target) × answers — grows. An attribute that happened to settle with one value for a while
+    keys every later record that shares it; narrowing the key attributes keeps such an attribute from answering. Set the
+    choice as the attribute's ``key_fields`` before choosing its thresholds with :func:`select_layers`. With
     ``typed_longest`` above zero the typed key thresholds that go with the choice come back too.
     """
     return cast(
         KeyFieldsChoice,
         json.loads(
             select_key_fields_json(
-                form.json,
-                field,
-                documents,
+                schema.json,
+                attribute,
+                records,
                 target_precision,
                 minimum_answered,
                 None if counting is None else list(counting),
@@ -274,29 +274,29 @@ def select_key_fields(
 
 
 def select_coarse(
-    form: Form,
-    field: str,
-    documents: Documents,
+    schema: Schema,
+    attribute: str,
+    records: Records,
     target_precision: float = 0.8,
     minimum_answered: int = 10,
     counting: Iterable[str] | None = None,
-    records: bool = True,
+    decisions: bool = True,
 ) -> tuple[LayerThresholds, list[DecisionRecord] | None]:
-    """Replays ``documents`` and chooses the thresholds of ``field``'s coarse level.
+    """Replays ``records`` and chooses the thresholds of ``attribute``'s coarse level.
 
     The coarse level answers with a class (``{"coarse": {"prefix": 2}}`` or a ``classes`` map) where the value layers
-    did not answer at the field's thresholds — set the field's ``key_threshold`` and ``memory_threshold`` from
-    :func:`select_layers` first. Returns the level's key and similar document replays and, unless ``records`` is false,
+    did not answer at the attribute's thresholds — set the attribute's ``key_threshold`` and ``memory_threshold`` from
+    :func:`select_layers` first. Returns the level's key and similar record replays and, unless ``decisions`` is false,
     the decision records with what the level made of each lookup (``coarse``).
     """
     thresholds, lines = select_coarse_json(
-        form.json,
-        field,
-        documents,
+        schema.json,
+        attribute,
+        records,
         target_precision,
         minimum_answered,
         None if counting is None else list(counting),
-        records,
+        decisions,
     )
     out = (
         None
@@ -306,14 +306,14 @@ def select_coarse(
     return cast(LayerThresholds, json.loads(thresholds)), out
 
 
-def select_key_concentrations(form: Form, field: str, documents: Documents) -> dict[str, float]:
-    """Chooses, for each field that keys ``field``, how readily its keys are believed after only a few settlements.
+def select_key_concentrations(schema: Schema, attribute: str, records: Records) -> dict[str, float]:
+    """Chooses, for each attribute that keys ``attribute``, how readily its keys are believed after only a few settlements.
 
-    A key field whose keys point at one document's value (a reference number, an outlet) is believed after one or two
-    settlements; a broad one only after many. Set the result as the field's ``key_concentrations``. Fields whose keys
-    were never seen again are left out; a field that takes several values gets none.
+    A key attribute whose keys point at one record's value (a reference number, an outlet) is believed after one or two
+    settlements; a broad one only after many. Set the result as the attribute's ``key_concentrations``. Attributes whose keys
+    were never seen again are left out; an attribute that takes several values gets none.
     """
     return cast(
         dict[str, float],
-        json.loads(select_key_concentrations_json(form.json, field, documents)),
+        json.loads(select_key_concentrations_json(schema.json, attribute, records)),
     )

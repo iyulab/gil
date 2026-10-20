@@ -4,6 +4,34 @@ The Rust crate (crates.io) and the Python package (PyPI), both published as `iyu
 Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the repository's root `CHANGELOG.md`.
 
+## Unreleased
+
+### Breaking
+
+- **The core speaks its own vocabulary, not a form's.** Gil decides attributes of records in many shapes — issues,
+  log lines, patents as well as forms — so the public names say so. Renamed in Rust and Python; behaviour, scores and
+  choices are unchanged (the goldens reproduce bit for bit). What to do — replace the names:
+
+  | Up to 0.3.0 | Now |
+  |---|---|
+  | `gil::form` · `Form` · `Field` · `Role::{Observed, Judged}` | `gil::schema` · `Schema` · `Attribute` · `AttributeRole::{Observed, Decided}` |
+  | `Form::fields` · `Form::field(name)` | `Schema::attributes` · `Schema::attribute(name)` |
+  | `Document` | `Record` |
+  | `gil::form_resolver` · `FormResolver` · `Suggestion` | `gil::decider` · `Decider` · `Answer` |
+  | `FormResolver::suggest` · `suggest_one` · `suggest_one_with` | `Decider::answer` · `answer_one` · `answer_one_with` |
+  | `gil::field_memory` · `FieldMemory` | `gil::key_memory` · `KeyMemory` |
+  | `gil::threshold_selection` | `gil::replay` |
+  | `Field::similar_document_votes` · `memory_similarity_floor` | `Attribute::similar_votes` · `memory_floor` (also on `CoarseLevel`) |
+  | `Lookup::form` · `Lookup::field` · `DecisionRecord::field` · `SimilarLook::document` | `Lookup::schema` · `Lookup::attribute` · `DecisionRecord::attribute` · `SimilarLook::record` |
+  | `FormResolver::new(field_memory, document_memory)` | `Decider::new(key_memory, record_memory)` |
+
+  Python: `gil.Form` → `gil.Schema`, `gil.Documents` → `gil.Records`, `gil.documents(...)` → `gil.records(...)`,
+  `check_form` → `check_schema`; every `field` argument is `attribute`; the flag that returns decision records is
+  `decisions=` (was `records=`). A schema's JSON is `{"name": ..., "attributes": [{"name": ..., "role": "observed" |
+  "decided", ...}]}` (was `fields` · `judged`), with `similar_votes` · `memory_floor` for the renamed settings. A
+  decision record's `field` is `attribute`, and a similar look's `document` is `record`. Records' JSON lines are
+  unchanged.
+
 ## 0.3.0
 
 ### Breaking

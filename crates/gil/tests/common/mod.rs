@@ -1,11 +1,11 @@
-//! What the golden tests share: reading the core fixtures, their records as documents, and the golden's form.
+//! What the golden tests share: reading the core fixtures, their logs as records, and the golden's schema.
 #![allow(dead_code)] // each test binary uses its own part
 
-use gil::form::{CoarseLevel, Document, Field, Form, Role, SettlementKind};
-use gil::threshold_selection::{ThresholdChoice, ThresholdReplay};
+use gil::replay::{ThresholdChoice, ThresholdReplay};
+use gil::schema::{Attribute, AttributeRole, CoarseLevel, Record, Schema, SettlementKind};
 use serde_json::{Number, Value, json};
 
-/// How many records the golden chooses its settings on; decisions are made on the rest.
+/// How many logs the golden chooses its settings on; decisions are made on the rest.
 pub const CHOSEN: usize = 200;
 
 /// A core fixture's text.
@@ -48,46 +48,51 @@ pub fn ticks(text: &str) -> i64 {
     seconds * 10_000_000 + fraction
 }
 
-/// A record as settled: its values, sets, settlements, draw probabilities and, where it has one, its arrival order.
-pub fn document(record: &Value) -> Document {
-    let object = |name: &str| record[name].as_object().expect(name);
-    Document {
-        id: record["id"].as_str().expect("id").to_owned(),
+/// A log as settled: its values, sets, settlements, draw probabilities and, where it has one, its arrival order.
+pub fn to_record(log: &Value) -> Record {
+    let object = |name: &str| log[name].as_object().expect(name);
+    Record {
+        id: log["id"].as_str().expect("id").to_owned(),
         values: object("values")
             .iter()
-            .map(|(field, value)| (field.clone(), value.as_str().expect("a value").to_owned()))
+            .map(|(attribute, value)| {
+                (
+                    attribute.clone(),
+                    value.as_str().expect("a value").to_owned(),
+                )
+            })
             .collect(),
         sets: object("sets")
             .iter()
-            .map(|(field, values)| {
+            .map(|(attribute, values)| {
                 let elements = values
                     .as_array()
                     .expect("a set")
                     .iter()
                     .map(|v| v.as_str().expect("an element").to_owned())
                     .collect();
-                (field.clone(), elements)
+                (attribute.clone(), elements)
             })
             .collect(),
-        settled_at: ticks(record["settled_at"].as_str().expect("settled_at")),
+        settled_at: ticks(log["settled_at"].as_str().expect("settled_at")),
         settlements: object("settlements")
             .iter()
-            .map(|(field, kind)| {
+            .map(|(attribute, kind)| {
                 let name = kind.as_str().expect("a kind");
                 let kind = SettlementKind::parse(name)
                     .unwrap_or_else(|| panic!("an unknown settlement kind '{name}'"));
-                (field.clone(), kind)
+                (attribute.clone(), kind)
             })
             .collect(),
         probabilities: object("probabilities")
             .iter()
-            .map(|(field, p)| (field.clone(), p.as_f64().expect("a probability")))
+            .map(|(attribute, p)| (attribute.clone(), p.as_f64().expect("a probability")))
             .collect(),
-        arrival: record
+        arrival: log
             .get("arrival")
             .and_then(Value::as_array)
-            .map(|fields| {
-                fields
+            .map(|attributes| {
+                attributes
                     .iter()
                     .map(|f| f.as_str().expect("a field").to_owned())
                     .collect()
@@ -95,13 +100,13 @@ pub fn document(record: &Value) -> Document {
     }
 }
 
-/// The golden's form with the key layer settings its lines chose before the first line `stop` holds for (and before
+/// The golden's schema with the key layer settings its lines chose before the first line `stop` holds for (and before
 /// the decisions).
-pub fn form(golden: &str, stop: impl Fn(&Value) -> bool) -> Form {
-    let mut team = Field::new("team", Role::Judged);
-    let mut code = Field::new("code", Role::Judged);
+pub fn schema(golden: &str, stop: impl Fn(&Value) -> bool) -> Schema {
+    let mut team = Attribute::new("team", AttributeRole::Decided);
+    let mut code = Attribute::new("code", AttributeRole::Decided);
     code.coarse = Some(CoarseLevel::by_prefix(2));
-    let mut tags = Field::new("tags", Role::Judged);
+    let mut tags = Attribute::new("tags", AttributeRole::Decided);
     tags.multiple = true;
     for line in lines(golden).take_while(|l| l["kind"] != "decision" && !stop(l)) {
         let target = match line["field"].as_str() {
@@ -112,8 +117,8 @@ pub fn form(golden: &str, stop: impl Fn(&Value) -> bool) -> Form {
         };
         match line["kind"].as_str() {
             Some("key_fields") => {
-                target.key_fields = line["fields"].as_array().map(|fields| {
-                    fields
+                target.key_fields = line["fields"].as_array().map(|attributes| {
+                    attributes
                         .iter()
                         .map(|f| f.as_str().expect("a field").to_owned())
                         .collect()
@@ -124,14 +129,15 @@ pub fn form(golden: &str, stop: impl Fn(&Value) -> bool) -> Form {
                     .as_object()
                     .expect("concentrations")
                     .iter()
-                    .map(|(field, value)| (field.clone(), value.as_f64().expect("a number")))
+                    .map(|(attribute, value)| {
+                        (attribute.clone(), value.as_f64().expect("a number"))
+                    })
                     .collect();
             }
             Some("layers") => {
                 target.key_threshold = line["key"]["chosen"]["threshold"].as_f64();
                 target.memory_threshold = line["memory"]["chosen"]["threshold"].as_f64();
-                target.memory_similarity_floor =
-                    line["memory"]["chosen"]["similarity_floor"].as_f64();
+                target.memory_floor = line["memory"]["chosen"]["similarity_floor"].as_f64();
             }
             Some("key") => {
                 target.key_threshold = line["replay"]["chosen"]["threshold"].as_f64();
@@ -140,19 +146,18 @@ pub fn form(golden: &str, stop: impl Fn(&Value) -> bool) -> Form {
                 let level = target.coarse.as_mut().expect("a coarse level");
                 level.key_threshold = line["key"]["chosen"]["threshold"].as_f64();
                 level.memory_threshold = line["memory"]["chosen"]["threshold"].as_f64();
-                level.memory_similarity_floor =
-                    line["memory"]["chosen"]["similarity_floor"].as_f64();
+                level.memory_floor = line["memory"]["chosen"]["similarity_floor"].as_f64();
             }
             _ => {}
         }
     }
 
-    Form {
+    Schema {
         name: "ticket".to_owned(),
-        fields: vec![
-            Field::new("channel", Role::Observed),
-            Field::new("product", Role::Observed),
-            Field::new("summary", Role::Observed),
+        attributes: vec![
+            Attribute::new("channel", AttributeRole::Observed),
+            Attribute::new("product", AttributeRole::Observed),
+            Attribute::new("summary", AttributeRole::Observed),
             team,
             code,
             tags,
@@ -204,9 +209,12 @@ pub fn doubles(value: Value) -> Value {
             Value::Number(Number::from_f64(n.as_f64().expect("a number")).expect("a finite number"))
         }
         Value::Array(items) => Value::Array(items.into_iter().map(doubles).collect()),
-        Value::Object(fields) => {
-            Value::Object(fields.into_iter().map(|(k, v)| (k, doubles(v))).collect())
-        }
+        Value::Object(attributes) => Value::Object(
+            attributes
+                .into_iter()
+                .map(|(k, v)| (k, doubles(v)))
+                .collect(),
+        ),
         other => other,
     }
 }

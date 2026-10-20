@@ -1,11 +1,11 @@
 # Gil (Python — `iyulab-gil`)
 
-Gil suggests the judged fields of a form from the documents people have already settled, and chooses — by
-replaying them in the order they were settled — how far each suggestion can be trusted and how often a trusted one will
+Gil answers the decided attributes of a record from the records people have already settled, and chooses — by
+replaying them in the order they were settled — how far each answer can be trusted and how often a trusted one will
 be right.
 
-This package binds its Rust decision core: replay settled documents to choose how far each layer's suggestions for a
-form field can be trusted, and get back the decision records the choice rests on.
+This package binds its Rust decision core: replay settled records to choose how far each layer's answers for a
+schema attribute can be trusted, and get back the decision records the choice rests on.
 
 ```sh
 pip install iyulab-gil
@@ -14,47 +14,47 @@ pip install iyulab-gil
 ```python
 import gil
 
-form = gil.Form.from_dict(
+schema = gil.Schema.from_dict(
     {
         "name": "ticket",
-        "fields": [
+        "attributes": [
             {"name": "product", "role": "observed"},
             {"name": "summary", "role": "observed"},
-            {"name": "team", "role": "judged"},
+            {"name": "team", "role": "decided"},
         ],
     }
 )
-documents = gil.read_records(
+records = gil.read_records(
     "settled.jsonl"
 )  # one JSON object per line, in settlement order
-thresholds, records = gil.select_layers(
-    form, "team", documents, target_precision=0.8
+thresholds, decisions = gil.select_layers(
+    schema, "team", records, target_precision=0.8
 )
-print(thresholds["key"]["chosen"], len(records))
+print(thresholds["key"]["chosen"], len(decisions))
 ```
 
-Before choosing thresholds, narrow the fields that key the judged field. A field that happened to settle with one
-value for a while would otherwise key every later document that shares it:
+Before choosing thresholds, narrow the attributes that key the decided attribute. An attribute that happened to settle
+with one value for a while would otherwise key every later record that shares it:
 
 ```python
-choice = gil.select_key_fields(form, "team", documents, target_precision=0.8, minimum_answered=30)
+choice = gil.select_key_fields(schema, "team", records, target_precision=0.8, minimum_answered=30)
 definition = {
     "name": "ticket",
-    "fields": [
+    "attributes": [
         {"name": "product", "role": "observed"},
         {"name": "summary", "role": "observed"},
-        {"name": "team", "role": "judged", "key_fields": choice["key_fields"]},
+        {"name": "team", "role": "decided", "key_fields": choice["key_fields"]},
     ],
 }
-thresholds, records = gil.select_layers(
-    gil.Form.from_dict(definition), "team", documents, target_precision=0.8
+thresholds, decisions = gil.select_layers(
+    gil.Schema.from_dict(definition), "team", records, target_precision=0.8
 )
 ```
 
-`key_fields` is `None` when no narrower set did better than every field — leave it unset then.
+`key_fields` is `None` when no narrower set did better than every attribute — leave it unset then.
 
-The other settings follow the same pattern — choose, then set on the field: `select_key_concentrations` (set as
-`key_concentrations`, after `key_fields`) and, for a field with a coarse level (`"coarse": {"prefix": 2}`),
+The other settings follow the same pattern — choose, then set on the attribute: `select_key_concentrations` (set as
+`key_concentrations`, after `key_fields`) and, for an attribute with a coarse level (`"coarse": {"prefix": 2}`),
 `select_coarse` once its value thresholds are set.
 
 **Status: early.** The API may change within 0.x — each change is listed in
