@@ -11,7 +11,7 @@ import pytest
 
 CORE = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "core"
 CHOSEN = 200
-COUNTED = ["Enter", "Accept", "Correct", "Check"]
+COUNTED = ["Enter", "Accept", "Correct", "Check", "AcceptOther", "CorrectOther"]
 
 
 def lines(name: str) -> list[dict]:

@@ -166,11 +166,13 @@ pub fn schema(golden: &str, stop: impl Fn(&Value) -> bool) -> Schema {
 }
 
 /// The settlement kinds the golden counts.
-pub const COUNTED: [SettlementKind; 4] = [
+pub const COUNTED: [SettlementKind; 6] = [
     SettlementKind::Enter,
     SettlementKind::Accept,
     SettlementKind::Correct,
     SettlementKind::Check,
+    SettlementKind::AcceptOther,
+    SettlementKind::CorrectOther,
 ];
 
 /// The replay in the golden's shape.

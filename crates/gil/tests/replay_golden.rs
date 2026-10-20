@@ -9,7 +9,10 @@ mod common;
 use common::{CHOSEN, COUNTED, doubles, fixture, lines, replay, schema, to_record};
 use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
-use gil::replay::{Choice, select_coarse, select_key_threshold, select_layers};
+use gil::replay::{
+    Choice, ThresholdRule, select_coarse, select_key_threshold, select_layers,
+    select_layers_by_rule,
+};
 use gil::schema::Record;
 use serde_json::{Value, json};
 
@@ -193,5 +196,77 @@ fn the_layers_replay_with_documents_settled_again_reproduces_its_golden() {
             "memory": replay(&layers.memory),
         });
         assert_eq!(doubles(actual), doubles(expected), "attribute {attribute}");
+    }
+}
+
+/// The pooled golden (`tests/fixtures/core/pooled.jsonl`): [`ThresholdRule::Pooled`] on the records laid end to end
+/// fifteen times, each copy under its own ids and later than the one before — with the schema as the golden had it when
+/// each attribute's layers were chosen, and again with that attribute's chosen thresholds — must come out the same here.
+#[test]
+fn the_pooled_rule_reproduces_its_golden() {
+    let records: Vec<Record> = lines(&fixture("records.jsonl"))
+        .map(|r| to_record(&r))
+        .collect();
+    let span = records[records.len() - 1].settled_at - records[0].settled_at + 60 * 10_000_000;
+    let mut laid = Vec::with_capacity(records.len() * 15);
+    for k in 0..15_i64 {
+        for record in &records {
+            let mut copy = record.clone();
+            if k > 0 {
+                copy.id = format!("{}-r{k}", record.id);
+                copy.settled_at = record.settled_at + span * k;
+            }
+            laid.push(copy);
+        }
+    }
+
+    let golden = fixture("golden.jsonl");
+    let expected: Vec<Value> = lines(&fixture("pooled.jsonl")).collect();
+    assert_eq!(expected.len(), 4);
+    let mut expected = expected.into_iter();
+    for attribute in ["team", "code"] {
+        let standing = schema(&golden, |l| {
+            l["kind"] == "layers" && l["field"] == attribute
+        });
+        let layers_line = lines(&golden)
+            .find(|l| l["kind"] == "layers" && l["field"] == attribute)
+            .expect("the attribute's layers line");
+        let mut chosen = standing.clone();
+        let definition = chosen
+            .attributes
+            .iter_mut()
+            .find(|a| a.name == attribute)
+            .expect("the attribute");
+        definition.key_threshold = layers_line["key"]["chosen"]["threshold"].as_f64();
+        definition.memory_threshold = layers_line["memory"]["chosen"]["threshold"].as_f64();
+        definition.memory_floor = layers_line["memory"]["chosen"]["similarity_floor"].as_f64();
+
+        for (as_it_stands, schema) in [("none", &standing), ("chosen", &chosen)] {
+            let layers = select_layers_by_rule(
+                &mut KeyMemory::default(),
+                &mut LexicalMemory::default(),
+                schema,
+                attribute,
+                &laid,
+                Choice {
+                    target_precision: 0.8,
+                    minimum_answered: 10,
+                    counting: Some(&COUNTED),
+                },
+                ThresholdRule::Pooled,
+            );
+            let actual = json!({
+                "kind": "layers_pooled",
+                "field": attribute,
+                "as_it_stands": as_it_stands,
+                "key": replay(&layers.key),
+                "memory": replay(&layers.memory),
+            });
+            assert_eq!(
+                doubles(actual),
+                doubles(expected.next().expect("a golden line")),
+                "attribute {attribute}, thresholds as they stand: {as_it_stands}"
+            );
+        }
     }
 }

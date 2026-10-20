@@ -414,8 +414,7 @@ impl Schema {
     }
 }
 
-/// What happened to a decided attribute when it was settled — the names the reference implementation uses, and two it
-/// does not have yet ([`SettlementKind::AcceptOther`], [`SettlementKind::CorrectOther`]).
+/// What happened to a decided attribute when it was settled — the names the reference implementation uses.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SettlementKind {

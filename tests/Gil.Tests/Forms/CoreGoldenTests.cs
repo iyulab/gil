@@ -23,7 +23,7 @@ public sealed partial class CoreGoldenTests
 
     private static readonly JsonSerializerOptions Json = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
-    private static readonly SettlementKind[] Counted = [SettlementKind.Enter, SettlementKind.Accept, SettlementKind.Correct, SettlementKind.Check];
+    private static readonly SettlementKind[] Counted = [SettlementKind.Enter, SettlementKind.Accept, SettlementKind.Correct, SettlementKind.Check, SettlementKind.AcceptOther, SettlementKind.CorrectOther];
 
     private static FormDefinition Form() => new("ticket",
     [
@@ -59,6 +59,7 @@ public sealed partial class CoreGoldenTests
                     [.. (await File.ReadAllLinesAsync(Path.Combine(target, "inspection.jsonl"), Ct)).Select(Read)]),
                 Ct);
             await File.WriteAllLinesAsync(Path.Combine(target, "lexical.jsonl"), await LexicalAsync([.. (await File.ReadAllLinesAsync(Path.Combine(target, "records.jsonl"), Ct)).Select(Read)]), Ct);
+            await File.WriteAllLinesAsync(Path.Combine(target, "pooled.jsonl"), await PooledAsync([.. (await File.ReadAllLinesAsync(Path.Combine(target, "records.jsonl"), Ct)).Select(Read)], written), Ct);
             return;
         }
 
@@ -74,6 +75,61 @@ public sealed partial class CoreGoldenTests
         var inspections = (await File.ReadAllLinesAsync(Path.Combine(directory, "inspection.jsonl"), Ct)).Select(Read).ToList();
         KeyFieldLines(documents, inspections).Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "key_fields.jsonl"), Ct));
         (await LexicalAsync(documents)).Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "lexical.jsonl"), Ct));
+        (await PooledAsync(documents, lines)).Should().Equal(await File.ReadAllLinesAsync(Path.Combine(directory, "pooled.jsonl"), Ct));
+    }
+
+    /// <summary>
+    /// <see cref="ThresholdRule.Pooled"/> on the records laid end to end fifteen times (6,000 — past the lookups it chooses
+    /// on, and with more key scores than it tries), each copy under its own ids and later than the one before (pooled.jsonl).
+    /// For each single-valued judged field it chooses twice with the form as it stands when the golden chose that field's
+    /// layers: with no thresholds yet, so it reaches back to the first lookup, and with the thresholds the golden chose,
+    /// which answer enough of the latest lookups that it does not.
+    /// </summary>
+    private static async Task<List<string>> PooledAsync(List<SettledDocument> documents, List<string> golden)
+    {
+        var span = documents[^1].SettledAt - documents[0].SettledAt + TimeSpan.FromMinutes(1);
+        var laid = Enumerable.Range(0, 15)
+            .SelectMany(k => documents.Select(d => k == 0 ? d : d with { DocumentId = $"{d.DocumentId}-r{k}", SettledAt = d.SettledAt + (span * k) }))
+            .ToList();
+        var lines = new List<string>();
+        var form = Form();
+        foreach (var line in golden.Select(l => JsonNode.Parse(l)!))
+        {
+            var kind = (string?)line["kind"];
+            var field = (string?)line["field"];
+            if (kind == "decision")
+            {
+                break;
+            }
+
+            if (kind == "key_fields")
+            {
+                form = With(form, form.Field(field!) with { KeyFields = line["fields"] is JsonArray fields ? [.. fields.Select(f => (string)f!)] : null });
+            }
+            else if (kind == "key_concentrations")
+            {
+                form = With(form, form.Field(field!) with { KeyConcentrations = line["concentrations"]!.AsObject().ToDictionary(c => c.Key, c => (double)c.Value!) });
+            }
+            else if (kind == "layers")
+            {
+                foreach (var (standing, stands) in new[] { ("none", form), ("chosen", With(form, Chosen(form.Field(field!), line))) })
+                {
+                    var pooled = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), stands, field!, laid, 0.8, 10, Counted, ThresholdRule.Pooled, Ct);
+                    lines.Add(Line(new JsonObject { ["kind"] = "layers_pooled", ["field"] = field, ["as_it_stands"] = standing, ["key"] = Replay(pooled.Key), ["memory"] = Replay(pooled.Memory) }));
+                }
+
+                form = With(form, Chosen(form.Field(field!), line));
+            }
+        }
+
+        return lines;
+
+        static FieldDefinition Chosen(FieldDefinition field, JsonNode line) => field with
+        {
+            KeyThreshold = (double?)line["key"]!["chosen"]?["threshold"],
+            MemoryThreshold = (double?)line["memory"]!["chosen"]?["threshold"],
+            MemorySimilarityFloor = (double?)line["memory"]!["chosen"]?["similarity_floor"],
+        };
     }
 
     /// <summary>
@@ -509,10 +565,12 @@ public sealed partial class CoreGoldenTests
             var code = codes[t][random.Next(codes[t].Length)];
             var summary = $"{phrases[(t * 2 + random.Next(3)) % phrases.Length]} {phrases[random.Next(phrases.Length)]}";
             var tags = tagPool.Where((_, k) => random.NextDouble() < (k == t ? 0.6 : 0.12)).ToList();
-            var kind = (i % 11, i % 13) switch
+            var kind = (i % 11, i % 13, i % 17, i % 19) switch
             {
-                (0, _) => SettlementKind.Fill,
-                (_, 0) => SettlementKind.Check,
+                (0, _, _, _) => SettlementKind.Fill,
+                (_, 0, _, _) => SettlementKind.Check,
+                (_, _, 0, _) => SettlementKind.AcceptOther,
+                (_, _, _, 0) => SettlementKind.CorrectOther,
                 _ => (i % 3) switch { 0 => SettlementKind.Enter, 1 => SettlementKind.Accept, _ => SettlementKind.Correct },
             };
             yield return new SettledDocument(
