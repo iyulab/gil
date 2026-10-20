@@ -19,6 +19,14 @@ with what to do.
   resolver's suggestions. Settled as `Enter` such a value would count among the values settled with nothing in view, and
   as `Fill` it would be kept out of memory. The Rust crate and Python package `iyulab-gil` have had the same two kinds
   since 0.5.0.
+- **`ThresholdRule.Pooled`: choose a field's two thresholds for a target on its answers together.** A new
+  `ThresholdSelection.SelectLayersAsync` overload takes a `ThresholdRule`. `EveryBand`, the rule of every other
+  overload, is unchanged. `Pooled` chooses the key and similar document thresholds as the pair that answers the most
+  of the field's latest `PooledRecentLookups` lookups while the precision of all those answers holds the target at the
+  bottom of its Wilson interval at `PooledStandardErrors` (1.645) standard errors, reaching back while the field's
+  current thresholds answered fewer than `PooledRecentAnswers` of them. Some bands of its answers fall below the target
+  where others are above it. See "A target can be read two ways" in the README. The Rust crate and Python package
+  `iyulab-gil` have the same rule (`replay::select_layers_by_rule`, `select_layers(..., rule="pooled")`).
 
 ### Documentation
 
