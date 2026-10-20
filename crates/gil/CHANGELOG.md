@@ -21,6 +21,17 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   memory. A value the host's model gave the decider through `offer_external` comes back in the answer, and taking that
   answer stays an `Accept`. `usage` counts the two on their own (`accepted_other`, `corrected_other`), outside the
   realized precision. Python reads both names in a record's `settlements`.
+- **`serde` feature** (off by default): `Serialize` and `Deserialize` for `Schema`, `Attribute`, `CoarseLevel`,
+  `AttributeRole`, `AttributePolicy`, `Record`, `Settlement`, `SettlementKind`, `Tuning`, `AttributeTuning`, `Stale`
+  and `AttributeUsage` — a host keeps tunings and snapshots without a copy of their shape. The form is the one the
+  Python bindings read: Rust field names, snake-case roles and policies, settlement kinds by name, settings left out
+  taking `Attribute::new`'s defaults, unknown settings refused.
+
+### Changed
+
+- Python: schemas and records are read through the core's `serde` form. An unknown or missing setting is now reported
+  in serde's words (``unknown field `colour` `` · ``missing field `role` ``); what reads is unchanged — times as text
+  or ticks, entries given as `None` left out.
 
 ## 0.4.0
 

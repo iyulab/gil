@@ -18,6 +18,8 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// One decided attribute's chosen settings, with the promises the replays made for them.
 #[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 pub struct AttributeTuning {
     pub attribute: String,
     pub key_fields: Option<Vec<String>>,
@@ -37,6 +39,8 @@ pub struct AttributeTuning {
 
 /// The chosen settings of a schema's decided attributes and what they were chosen on.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 pub struct Tuning {
     /// The crate version that chose them ([`VERSION`]).
     pub version: String,
@@ -51,6 +55,8 @@ pub struct Tuning {
 
 /// Why a tuning no longer stands.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum Stale {
     /// Chosen by another version of this crate.
     Version { chosen: String },

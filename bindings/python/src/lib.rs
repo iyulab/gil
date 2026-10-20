@@ -4,8 +4,6 @@
 //! `gil` package around it reads that text into dictionaries. Records are gathered and returned whole rather than
 //! passed to a Python callback, which would cost a call back into the interpreter per lookup.
 
-use std::collections::BTreeMap;
-
 use gil::decision_record::{DecisionRecord, KeyLook, SimilarLook};
 use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
@@ -14,12 +12,10 @@ use gil::replay::{
     ThresholdReplay, TypedKeyThresholds, select_coarse_with, select_key_concentrations,
     select_key_fields, select_layers_with,
 };
-use gil::schema::{
-    Attribute, AttributePolicy, AttributeRole, CoarseLevel, Record, Schema, SettlementKind,
-};
+use gil::schema::{AttributeRole, Record, Schema, SettlementKind};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 
 type Parsed<T> = Result<T, String>;
 
@@ -29,151 +25,11 @@ fn invalid(message: String) -> PyErr {
 
 // ---- reading ----
 
-fn object<'a>(value: &'a Value, what: &str) -> Parsed<&'a Map<String, Value>> {
-    value
-        .as_object()
-        .ok_or_else(|| format!("{what} must be an object"))
-}
-
-fn string(value: &Value, what: &str) -> Parsed<String> {
-    value
-        .as_str()
-        .map(str::to_owned)
-        .ok_or_else(|| format!("{what} must be a string"))
-}
-
-fn strings(value: &Value, what: &str) -> Parsed<Vec<String>> {
-    value
-        .as_array()
-        .ok_or_else(|| format!("{what} must be a list"))?
-        .iter()
-        .map(|v| string(v, what))
-        .collect()
-}
-
-fn number(value: &Value, what: &str) -> Parsed<f64> {
-    value
-        .as_f64()
-        .ok_or_else(|| format!("{what} must be a number"))
-}
-
-fn optional_number(value: &Value, what: &str) -> Parsed<Option<f64>> {
-    if value.is_null() {
-        Ok(None)
-    } else {
-        number(value, what).map(Some)
-    }
-}
-
-fn count(value: &Value, what: &str) -> Parsed<usize> {
-    value
-        .as_u64()
-        .map(|n| n as usize)
-        .ok_or_else(|| format!("{what} must be a whole number"))
-}
-
-fn coarse(value: &Value) -> Parsed<CoarseLevel> {
-    let mut level = CoarseLevel::by_prefix(0);
-    for (name, v) in object(value, "coarse")? {
-        match name.as_str() {
-            "prefix" => level.prefix = count(v, "coarse.prefix")?,
-            "classes" => {
-                level.classes = Some(
-                    object(v, "coarse.classes")?
-                        .iter()
-                        .map(|(value, class)| Ok((value.clone(), string(class, "a class")?)))
-                        .collect::<Parsed<_>>()?,
-                );
-            }
-            "key_threshold" => level.key_threshold = optional_number(v, "coarse.key_threshold")?,
-            "memory_threshold" => {
-                level.memory_threshold = optional_number(v, "coarse.memory_threshold")?;
-            }
-            "memory_floor" => {
-                level.memory_floor = optional_number(v, "coarse.memory_similarity_floor")?;
-            }
-            other => return Err(format!("unknown coarse setting '{other}'")),
-        }
-    }
-    Ok(level)
-}
-
-fn attribute(value: &Value) -> Parsed<Attribute> {
-    let settings = object(value, "an attribute")?;
-    let name = string(
-        settings.get("name").ok_or("an attribute needs a name")?,
-        "an attribute's name",
-    )?;
-    let role = match settings.get("role").and_then(Value::as_str) {
-        Some("observed") => AttributeRole::Observed,
-        Some("decided") => AttributeRole::Decided,
-        _ => return Err(format!("field '{name}' needs a role: observed or decided")),
-    };
-    let mut f = Attribute::new(&name, role);
-    for (setting, v) in settings {
-        let what = format!("{name}.{setting}");
-        match setting.as_str() {
-            "name" | "role" => {}
-            "multiple" => {
-                f.multiple = v.as_bool().ok_or(format!("{what} must be true or false"))?
-            }
-            "use_as_evidence" => {
-                f.use_as_evidence = v.as_bool().ok_or(format!("{what} must be true or false"))?;
-            }
-            "depends_on" => f.depends_on = (!v.is_null()).then(|| strings(v, &what)).transpose()?,
-            "key_fields" => f.key_fields = (!v.is_null()).then(|| strings(v, &what)).transpose()?,
-            "key_concentrations" => {
-                f.key_concentrations = object(v, &what)?
-                    .iter()
-                    .map(|(k, c)| Ok((k.clone(), number(c, &what)?)))
-                    .collect::<Parsed<_>>()?;
-            }
-            "key_threshold" => f.key_threshold = optional_number(v, &what)?,
-            "similar_votes" => f.similar_votes = count(v, &what)?,
-            "memory_threshold" => f.memory_threshold = optional_number(v, &what)?,
-            "memory_floor" => f.memory_floor = optional_number(v, &what)?,
-            "coarse" => f.coarse = (!v.is_null()).then(|| coarse(v)).transpose()?,
-            "candidates" => f.candidates = (!v.is_null()).then(|| strings(v, &what)).transpose()?,
-            "candidates_from" => {
-                f.candidates_from = (!v.is_null()).then(|| string(v, &what)).transpose()?;
-            }
-            "must_catch" => f.must_catch = (!v.is_null()).then(|| strings(v, &what)).transpose()?,
-            "policy" => {
-                f.policy = match v.as_str() {
-                    Some("suggest") => AttributePolicy::Suggest,
-                    Some("confirm_required") => AttributePolicy::ConfirmRequired,
-                    Some("off") => AttributePolicy::Off,
-                    _ => {
-                        return Err(format!(
-                            "{what}: a policy is \"suggest\", \"confirm_required\" or \"off\""
-                        ));
-                    }
-                }
-            }
-            other => return Err(format!("unknown setting '{other}' on attribute '{name}'")),
-        }
-    }
-    Ok(f)
-}
-
+/// A schema as the core's `serde` form reads it — the settings an attribute leaves out take `Attribute::new`'s defaults —
+/// checked as the reference implementation checks one.
 fn schema(text: &str) -> Parsed<Schema> {
-    let value: Value = serde_json::from_str(text).map_err(|e| format!("a schema is JSON: {e}"))?;
-    let settings = object(&value, "a schema")?;
-    let name = string(
-        settings.get("name").ok_or("a schema needs a name")?,
-        "a schema's name",
-    )?;
-    let attributes = settings
-        .get("attributes")
-        .and_then(Value::as_array)
-        .ok_or("a schema needs a list of attributes")?
-        .iter()
-        .map(attribute)
-        .collect::<Parsed<Vec<_>>>()?;
-    if let Some(other) = settings.keys().find(|k| *k != "name" && *k != "attributes") {
-        return Err(format!("unknown schema setting '{other}'"));
-    }
-    let schema = Schema { name, attributes };
+    let schema: Schema =
+        serde_json::from_str(text).map_err(|e| format!("a schema does not read: {e}"))?;
     schema.check()?;
     Ok(schema)
 }
@@ -215,72 +71,19 @@ fn settlement(name: &str) -> Parsed<SettlementKind> {
     SettlementKind::parse(name).ok_or_else(|| format!("unknown settlement kind '{name}'"))
 }
 
+/// A record as the core's `serde` form reads it, with `settled_at` given as ticks or as a time and an entry given as null
+/// left out.
 fn record(value: &Value) -> Parsed<Record> {
-    let record = object(value, "a record")?;
-    let id = string(
-        record.get("id").ok_or("a record needs an id")?,
-        "a record's id",
-    )?;
-    let at = record
-        .get("settled_at")
-        .ok_or(format!("record '{id}' needs settled_at"))?;
-    let settled_at = match at {
-        Value::String(text) => ticks(text)?,
-        Value::Number(n) => n
-            .as_i64()
-            .ok_or(format!("record '{id}': settled_at ticks must be whole"))?,
-        _ => return Err(format!("record '{id}': settled_at is a time or ticks")),
-    };
-    let map = |name: &str| -> Parsed<Map<String, Value>> {
-        match record.get(name) {
-            None | Some(Value::Null) => Ok(Map::new()),
-            Some(v) => object(v, name).cloned(),
-        }
-    };
-    let values = map("values")?
-        .iter()
-        .map(|(f, v)| Ok((f.clone(), string(v, "a value")?)))
-        .collect::<Parsed<BTreeMap<_, _>>>()?;
-    let sets = map("sets")?
-        .iter()
-        .map(|(f, v)| Ok((f.clone(), strings(v, "a set")?)))
-        .collect::<Parsed<BTreeMap<_, _>>>()?;
-    let settlements = map("settlements")?
-        .iter()
-        .map(|(f, v)| Ok((f.clone(), settlement(&string(v, "a settlement kind")?)?)))
-        .collect::<Parsed<BTreeMap<_, _>>>()?;
-    let probabilities = map("probabilities")?
-        .iter()
-        .map(|(f, v)| Ok((f.clone(), number(v, "a probability")?)))
-        .collect::<Parsed<BTreeMap<_, _>>>()?;
-    let arrival = match record.get("arrival") {
-        None | Some(Value::Null) => None,
-        Some(v) => Some(strings(v, "arrival")?),
-    };
-    for key in record.keys() {
-        if ![
-            "id",
-            "settled_at",
-            "values",
-            "sets",
-            "settlements",
-            "probabilities",
-            "arrival",
-        ]
-        .contains(&key.as_str())
-        {
-            return Err(format!("record '{id}': unknown entry '{key}'"));
-        }
+    let mut value = value.clone();
+    // An entry given as null is one left out, as Python's None reads.
+    if let Value::Object(entries) = &mut value {
+        entries.retain(|_, v| !v.is_null());
     }
-    Ok(Record {
-        id,
-        values,
-        sets,
-        settled_at,
-        settlements,
-        probabilities,
-        arrival,
-    })
+    if let Some(Value::String(text)) = value.get("settled_at") {
+        let ticks = ticks(text)?;
+        value["settled_at"] = json!(ticks);
+    }
+    serde_json::from_value(value).map_err(|e| format!("a record does not read: {e}"))
 }
 
 // ---- writing ----

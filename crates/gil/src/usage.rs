@@ -33,6 +33,7 @@ pub struct Decision<'a> {
 
 /// One attribute's counts.
 #[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct AttributeUsage {
     /// Decisions asked about.
     pub decisions: usize,

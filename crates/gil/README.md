@@ -38,6 +38,12 @@ The core does no I/O: records come in as values and decision records go out thro
 is the host's business. Text is compared after the normalization specified in
 [docs/text-normalization.md](https://github.com/iyulab/gil/blob/main/docs/text-normalization.md).
 
+With the `serde` feature (`iyulab-gil = { version = "…", features = ["serde"] }`), what a host keeps or sends on —
+schemas, records, settlements, tunings, usage counts — implements `Serialize` and `Deserialize`. Field names are the
+Rust ones; roles and policies are written in snake case (`"decided"`, `"confirm_required"`), settlement kinds by name
+(`"Accept"`), times in ticks; an attribute's settings left out take `Attribute::new`'s defaults, and an unknown one does
+not read.
+
 Python bindings are published on PyPI as `iyulab-gil` (`pip install iyulab-gil`, then `import gil`; Python 3.11 or
 later).
 

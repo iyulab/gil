@@ -4,6 +4,8 @@ use std::collections::BTreeMap;
 
 /// Whether an attribute is read (observed) or decided (decided).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum AttributeRole {
     Observed,
     Decided,
@@ -11,6 +13,8 @@ pub enum AttributeRole {
 
 /// How answers for a decided attribute are offered.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum AttributePolicy {
     /// Answer when a layer is confident enough.
     #[default]
@@ -24,44 +28,71 @@ pub enum AttributePolicy {
 
 /// One attribute of a schema, with the settings that govern how it is answered.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 pub struct Attribute {
     pub name: String,
     pub role: AttributeRole,
     /// A set of values rather than one.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub multiple: bool,
     /// False keeps the attribute out of every other attribute's evidence.
+    #[cfg_attr(feature = "serde", serde(default = "crate::schema::yes"))]
     pub use_as_evidence: bool,
     /// The attributes this attribute's suggestions may rest on; `None` is every other attribute that is evidence.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub depends_on: Option<Vec<String>>,
     /// The attributes that key this attribute in the key memory; `None` is every attribute it rests on.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub key_fields: Option<Vec<String>>,
     /// How readily each key attribute's keys are believed; an attribute not named takes 1.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub key_concentrations: BTreeMap<String, f64>,
     /// The score the first keyed value must reach to be trusted; `None` trusts none.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub key_threshold: Option<f64>,
     /// How many of the most similar records vote on the attribute's value; at least 1.
+    #[cfg_attr(feature = "serde", serde(default = "crate::schema::ten"))]
     pub similar_votes: usize,
     /// The vote's score at or above which the similar record layer is trusted; `None` trusts none.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub memory_threshold: Option<f64>,
     /// The similarity the nearest record voting for the value must also reach when more than one voted.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub memory_floor: Option<f64>,
     /// The attribute's coarse level, offered when neither layer answers the value.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub coarse: Option<CoarseLevel>,
     /// The values the attribute may take; `None` is any. A value settled outside them is remembered but never offered.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub candidates: Option<Vec<String>>,
     /// Another attribute of the schema whose value in the same record bounds this attribute's domain — for an attribute
     /// that takes several values, the values chosen in it: the main topic among a record's topics, a subcategory within
     /// its category. Once that attribute has a value, no layer offers this one a value outside it, as with `candidates`,
     /// which still applies; while it is empty, the domain is not narrowed. A value settled outside it is still remembered,
     /// and offered for records whose domain admits it.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub candidates_from: Option<String>,
     /// Values the attribute must not miss: the key layer does not answer for a record whose keys have ever had one.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub must_catch: Option<Vec<String>>,
     /// The score the first keyed value that begins with the typed text must reach, for one, two, … characters typed;
     /// `None` (or a length beyond the list) trusts none.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub typed_key_thresholds: Option<Vec<Option<f64>>>,
     /// How answers for the attribute are offered; an open record never answers an attribute that is off.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub policy: AttributePolicy,
+}
+
+#[cfg(feature = "serde")]
+fn yes() -> bool {
+    true
+}
+
+#[cfg(feature = "serde")]
+fn ten() -> usize {
+    10
 }
 
 impl Attribute {
@@ -142,6 +173,8 @@ impl Attribute {
 /// The coarse level of a decided attribute: the class of each of its values — its first `prefix` characters, or what a
 /// table of `classes` says — and the thresholds at which the class the two layers back is trusted.
 #[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default, deny_unknown_fields))]
 pub struct CoarseLevel {
     /// How many leading characters (Unicode scalar values) of a value name its class; 0 for a level made from a table.
     pub prefix: usize,
@@ -180,6 +213,8 @@ impl CoarseLevel {
 
 /// A schema: its name scopes memory, its attributes are in order.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 pub struct Schema {
     pub name: String,
     pub attributes: Vec<Attribute>,
@@ -382,6 +417,7 @@ impl Schema {
 /// What happened to a decided attribute when it was settled — the names the reference implementation uses, and two it
 /// does not have yet ([`SettlementKind::AcceptOther`], [`SettlementKind::CorrectOther`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SettlementKind {
     /// The suggested value was taken as it was.
     Accept,
@@ -438,6 +474,8 @@ impl SettlementKind {
 /// corrects it. An attribute that takes several values is settled with [`Settlement::set`], restored with
 /// [`Settlement::restore_set`], and rejected or reverted as any other.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 pub struct Settlement {
     pub kind: SettlementKind,
     /// The settled value of a single-valued attribute; `None` for a reject, a revert and settlements of a set.
@@ -560,18 +598,25 @@ impl Settlement {
 
 /// A record's values as last settled. `settled_at` is in 100-nanosecond ticks since the Unix epoch, UTC.
 #[derive(Clone, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 pub struct Record {
     pub id: String,
+    #[cfg_attr(feature = "serde", serde(default))]
     pub values: BTreeMap<String, String>,
+    #[cfg_attr(feature = "serde", serde(default))]
     pub sets: BTreeMap<String, Vec<String>>,
     pub settled_at: i64,
     /// How each decided attribute was settled, where known.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub settlements: BTreeMap<String, SettlementKind>,
     /// For an attribute settled as a check, the probability it was drawn with.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub probabilities: BTreeMap<String, f64>,
     /// The attributes with a value, in the order their current values arrived, oldest first; an attribute the list leaves out
     /// counts as there from the start. `None` when the order is unknown: the observed values are then taken as there from
     /// the start and the decided ones as settled in the schema's order.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub arrival: Option<Vec<String>>,
 }
 

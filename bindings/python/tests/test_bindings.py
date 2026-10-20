@@ -161,11 +161,11 @@ def test_the_golden_layers_choice_comes_back() -> None:
 
 
 def test_bad_input_is_a_value_error() -> None:
-    with pytest.raises(ValueError, match="unknown setting 'colour'"):
+    with pytest.raises(ValueError, match="unknown field `colour`"):
         gil.Schema.from_dict(
             {"name": "f", "attributes": [{"name": "a", "role": "decided", "colour": 1}]}
         )
-    with pytest.raises(ValueError, match="needs a role"):
+    with pytest.raises(ValueError, match="missing field `role`"):
         gil.Schema.from_dict({"name": "f", "attributes": [{"name": "a"}]})
     with pytest.raises(ValueError, match="settled_at"):
         gil.records([{"id": "1", "settled_at": "yesterday", "values": {}}])

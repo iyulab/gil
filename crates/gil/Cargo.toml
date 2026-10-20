@@ -12,12 +12,20 @@ categories = ["algorithms", "text-processing"]
 # The golden tests read the shared fixtures at the repository root, which a packaged crate does not carry.
 exclude = ["tests/"]
 
+[package.metadata.docs.rs]
+all-features = true
+
 [lib]
 # Published as iyulab-gil; imported as gil.
 name = "gil"
 
 [dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
 unicode-normalization = "0.1"
+
+[features]
+# Serialize and Deserialize for the data a host keeps or sends on: schemas, records, settlements, tunings, usage counts.
+serde = ["dep:serde"]
 
 [dev-dependencies]
 serde_json = { version = "1", features = ["float_roundtrip"] }
