@@ -4,6 +4,24 @@ The Rust crate (crates.io) and the Python package (PyPI), both published as `iyu
 Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the repository's root `CHANGELOG.md`.
 
+## Unreleased
+
+### Breaking
+
+- `SettlementKind` has two more variants (below): a `match` over it that names every kind needs arms for
+  `AcceptOther` and `CorrectOther`.
+
+### Added
+
+- **A value a person settled over a suggestion that was not the decider's.** A host may show its own suggestion — its
+  own model's, a rule's, a default — in place of an answer. `SettlementKind::AcceptOther` (kept) and
+  `SettlementKind::CorrectOther` (changed), with `Settlement::accept_other` and `Settlement::correct_other`: memory
+  learns the value and choosing thresholds counts it as it counts the others, but it grades no answer. Settling such a
+  value as `Enter` would put it among the values settled with nothing in view, and as `Fill` would keep it out of
+  memory. A value the host's model gave the decider through `offer_external` comes back in the answer, and taking that
+  answer stays an `Accept`. `usage` counts the two on their own (`accepted_other`, `corrected_other`), outside the
+  realized precision. Python reads both names in a record's `settlements`.
+
 ## 0.4.0
 
 ### Breaking

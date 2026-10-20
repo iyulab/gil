@@ -379,7 +379,8 @@ impl Schema {
     }
 }
 
-/// What happened to a decided attribute when it was settled — the names the reference implementation uses.
+/// What happened to a decided attribute when it was settled — the names the reference implementation uses, and two it
+/// does not have yet ([`SettlementKind::AcceptOther`], [`SettlementKind::CorrectOther`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SettlementKind {
     /// The suggested value was taken as it was.
@@ -402,6 +403,15 @@ pub enum SettlementKind {
     /// A value settled again by someone who did not see the answer, drawn at random with a known probability; choosing
     /// thresholds counts it as one ÷ that probability decisions.
     Check,
+    /// A person kept a value suggested by something other than this decider — the host's own model, a rule, a default —
+    /// shown in place of an answer. Memory learns it and choosing thresholds counts it as it counts the others; it says
+    /// nothing about the answers, none having been in view. A value the host's model gave the decider as an external
+    /// judgement ([`crate::decider::Decider::offer_external`]) comes back in the answer: taking that answer is an
+    /// [`SettlementKind::Accept`].
+    AcceptOther,
+    /// A person settled another value than one suggested by something other than this decider, shown in place of an
+    /// answer — as [`SettlementKind::AcceptOther`], with the suggestion changed.
+    CorrectOther,
 }
 
 impl SettlementKind {
@@ -417,6 +427,8 @@ impl SettlementKind {
             "Enter" => Self::Enter,
             "Fill" => Self::Fill,
             "Check" => Self::Check,
+            "AcceptOther" => Self::AcceptOther,
+            "CorrectOther" => Self::CorrectOther,
             _ => return None,
         })
     }
@@ -475,6 +487,17 @@ impl Settlement {
     /// A value other than the answered one.
     pub fn correct(value: &str) -> Self {
         Self::one(SettlementKind::Correct, value)
+    }
+
+    /// A value suggested by something other than this decider, shown in place of an answer and kept by a person.
+    pub fn accept_other(value: &str) -> Self {
+        Self::one(SettlementKind::AcceptOther, value)
+    }
+
+    /// A value a person settled in place of one suggested by something other than this decider, shown in place of an
+    /// answer.
+    pub fn correct_other(value: &str) -> Self {
+        Self::one(SettlementKind::CorrectOther, value)
     }
 
     /// A value a person settled with no answer in view.

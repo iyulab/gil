@@ -6,7 +6,9 @@
 //! send on. The counting follows the settlement kinds' meaning: an accepted answer was right and a corrected one wrong; a
 //! check — settled again by someone who did not see the answer, drawn with a known probability — was right when it agrees
 //! with the answer, and counts as one ÷ that probability decisions; a fill (settled by the host without a person) and a
-//! reject (turned down, no value) say nothing about whether the answer was right and are left out of the precision.
+//! reject (turned down, no value) say nothing about whether the answer was right and are left out of the precision, as
+//! is a value settled over a suggestion that was not this decider's (kept or changed — counted on their own, answered or
+//! not, so a host sees how its other suggestions fare in the same form).
 
 use std::collections::BTreeMap;
 
@@ -54,6 +56,12 @@ pub struct AttributeUsage {
     /// entry; such decisions would grade the answers on themselves. Left out of every other count but this one: it
     /// should stay 0.
     pub entered_over_answer: usize,
+    /// Settled by a person who kept a suggestion that was not this decider's, shown in place of an answer — answered or
+    /// not; left out of the precision.
+    pub accepted_other: usize,
+    /// Settled by a person as another value than a suggestion that was not this decider's, shown in place of an answer —
+    /// answered or not; left out of the precision.
+    pub corrected_other: usize,
     /// Answered with a promise: their number and the promises' sum.
     pub promised: usize,
     pub promise_sum: f64,
@@ -94,6 +102,11 @@ pub fn usage<'a>(
     for d in decisions {
         let u = out.entry(d.attribute.to_owned()).or_default();
         u.decisions += 1;
+        match d.settlement {
+            Some(SettlementKind::AcceptOther) => u.accepted_other += 1,
+            Some(SettlementKind::CorrectOther) => u.corrected_other += 1,
+            _ => {}
+        }
         let Some(answer) = d.answer else {
             if d.settlement == Some(SettlementKind::Enter) {
                 u.entered += 1;

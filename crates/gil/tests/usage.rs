@@ -1,7 +1,9 @@
 //! Usage counts: each settlement kind lands where its meaning puts it, and the realized precision rests only on the
 //! settlements that say whether the answer was right.
 
-use gil::schema::SettlementKind::{self, Accept, Check, Correct, Enter, Fill, Reject};
+use gil::schema::SettlementKind::{
+    self, Accept, AcceptOther, Check, Correct, CorrectOther, Enter, Fill, Reject,
+};
 use gil::usage::{Decision, usage};
 
 fn d<'a>(
@@ -56,4 +58,41 @@ fn nothing_judged_realizes_nothing() {
     let counts = usage([d(Some("network"), Some("network"), Some(Fill), 1.0)]);
     assert_eq!(counts["team"].realized(), None);
     assert!(usage(std::iter::empty()).is_empty());
+}
+
+#[test]
+fn a_value_settled_over_another_suggestion_is_counted_on_its_own_and_grades_no_answer() {
+    let counts = usage([
+        d(Some("network"), Some("network"), Some(Accept), 1.0),
+        // The host showed its own suggestion: in place of an abstention, and once in place of an answer.
+        d(None, Some("facilities"), Some(AcceptOther), 1.0),
+        d(None, Some("security"), Some(CorrectOther), 1.0),
+        d(Some("network"), Some("security"), Some(AcceptOther), 1.0),
+    ]);
+    let team = &counts["team"];
+    assert_eq!((team.accepted_other, team.corrected_other), (2, 1));
+    assert_eq!((team.decisions, team.answered), (4, 2));
+    assert_eq!((team.accepted, team.corrected, team.entered), (1, 0, 0));
+    assert_eq!(team.entered_over_answer, 0);
+    assert_eq!(team.realized(), Some(1.0));
+}
+
+#[test]
+fn every_kind_reads_back_from_its_name() {
+    for kind in [
+        Accept,
+        Correct,
+        Reject,
+        SettlementKind::Revert,
+        SettlementKind::Restore,
+        SettlementKind::Set,
+        Enter,
+        Fill,
+        Check,
+        AcceptOther,
+        CorrectOther,
+    ] {
+        assert_eq!(SettlementKind::parse(&format!("{kind:?}")), Some(kind));
+    }
+    assert_eq!(SettlementKind::parse("Other"), None);
 }

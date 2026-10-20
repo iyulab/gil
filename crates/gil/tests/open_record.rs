@@ -429,3 +429,34 @@ fn an_attribute_that_is_off_is_never_answered() {
             .is_empty()
     );
 }
+
+#[test]
+fn a_value_kept_or_changed_over_another_suggestion_is_remembered_and_moves_the_time() {
+    let monday = 20_000 * DAY;
+    let mut decider = Decider::new(KeyMemory::default(), None);
+    let mut open = OpenRecord::new(settled_ticket(), "d1", monday - 3 * DAY);
+    open.observe(&mut decider, "summary", Some("vpn drops"));
+
+    open.settle(
+        &mut decider,
+        "team",
+        &Settlement::accept_other("network"),
+        monday,
+    );
+    let snapshot = open.snapshot();
+    assert_eq!(snapshot.settlements["team"], SettlementKind::AcceptOther);
+    assert_eq!(snapshot.settled_at, monday);
+    // Unlike a fill, a person settled it: memory keeps the value.
+    assert_eq!(snapshot.remembered().values["team"], "network");
+
+    open.settle(
+        &mut decider,
+        "team",
+        &Settlement::correct_other("security"),
+        monday + DAY,
+    );
+    let snapshot = open.snapshot();
+    assert_eq!(snapshot.settlements["team"], SettlementKind::CorrectOther);
+    assert_eq!(snapshot.settled_at, monday + DAY);
+    assert_eq!(snapshot.remembered().values["team"], "security");
+}
