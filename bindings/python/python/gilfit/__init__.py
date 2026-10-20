@@ -17,20 +17,29 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
-from gilfit._gilfit import Documents, check_form, select_layers_json
+from gilfit._gilfit import (
+    Documents,
+    check_form,
+    select_key_fields_json,
+    select_layers_json,
+)
 
 __all__ = [
     "DecisionRecord",
     "Documents",
     "Form",
+    "KeyFieldsChoice",
+    "KeyFieldsTrial",
     "KeyLook",
     "KeyState",
     "LayerThresholds",
     "SimilarLook",
     "ThresholdChoice",
     "ThresholdReplay",
+    "TypedKeyThresholds",
     "documents",
     "read_records",
+    "select_key_fields",
     "select_layers",
 ]
 
@@ -77,6 +86,34 @@ class LayerThresholds(TypedDict):
 
     key: ThresholdReplay
     memory: ThresholdReplay
+
+
+class TypedKeyThresholds(TypedDict):
+    """The key layer's replays while a person types: one for each length typed, from one character up."""
+
+    by_length: list[ThresholdReplay]
+
+
+class KeyFieldsTrial(TypedDict):
+    """One set of fields tried as a judged field's key fields, and how its key layer replayed."""
+
+    key_fields: list[str]
+    replay: ThresholdReplay
+    typed: TypedKeyThresholds | None
+
+
+class KeyFieldsChoice(TypedDict):
+    """The fields that should key a judged field, chosen by replaying its key layer.
+
+    ``key_fields`` is ``None`` when no narrower set gained more than every field the judged field rests on — leave the
+    field's key fields unset then.
+    """
+
+    key_fields: list[str] | None
+    chosen: ThresholdReplay
+    all_fields: ThresholdReplay
+    trials: list[KeyFieldsTrial]
+    typed: TypedKeyThresholds | None
 
 
 class KeyLook(TypedDict):
@@ -186,3 +223,36 @@ def select_layers(
         else [cast(DecisionRecord, json.loads(line)) for line in lines.splitlines()]
     )
     return cast(LayerThresholds, json.loads(thresholds)), out
+
+
+def select_key_fields(
+    form: Form,
+    field: str,
+    documents: Documents,
+    target_precision: float = 0.8,
+    minimum_answered: int = 10,
+    counting: Iterable[str] | None = None,
+    typed_longest: int = 0,
+) -> KeyFieldsChoice:
+    """Chooses the fields that should key ``field`` in the settled field memory by replaying its key layer.
+
+    Each field ``field`` rests on is tried alone, then the best are added one at a time while the key layer's gain over
+    the target — (precision − target) × answers — grows. A field that happened to settle with one value for a while
+    keys every later document that shares it; narrowing the key fields keeps such a field from answering. Set the
+    choice as the field's ``key_fields`` before choosing its thresholds with :func:`select_layers`. With
+    ``typed_longest`` above zero the typed key thresholds that go with the choice come back too.
+    """
+    return cast(
+        KeyFieldsChoice,
+        json.loads(
+            select_key_fields_json(
+                form.json,
+                field,
+                documents,
+                target_precision,
+                minimum_answered,
+                None if counting is None else list(counting),
+                typed_longest,
+            )
+        ),
+    )

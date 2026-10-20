@@ -182,3 +182,75 @@ def test_results_carry_exactly_the_typed_keys() -> None:
             assert set(record["key"]) == set(gilfit.KeyLook.__annotations__)
         if record["similar"] is not None:
             assert set(record["similar"]) == set(gilfit.SimilarLook.__annotations__)
+
+
+def declared_form() -> dict:
+    """The golden's form as declared, before any line chose a setting."""
+    return {
+        "name": "ticket",
+        "fields": [
+            {"name": "channel", "role": "observed"},
+            {"name": "product", "role": "observed"},
+            {"name": "summary", "role": "observed"},
+            {"name": "team", "role": "judged"},
+            {"name": "code", "role": "judged", "coarse": {"prefix": 2}},
+            {"name": "tags", "role": "judged", "multiple": True},
+        ],
+    }
+
+
+def same_replay(have: dict, want: dict, where: str) -> None:
+    for side in ("chosen", "most_precise"):
+        h, w = have[side], want[side]
+        assert (h is None) == (w is None), (where, side)
+        if w is not None:
+            for name in ("threshold", "precision", "answered", "promise"):
+                assert h[name] == w[name], (where, side, name)
+    assert have["lookups"] == want["lookups"], where
+
+
+def test_the_golden_key_fields_choice_comes_back() -> None:
+    first = gilfit.documents(lines("records.jsonl")[:CHOSEN])
+    form = gilfit.Form.from_dict(declared_form())
+    wanted = {line["world"]: line for line in lines("key_fields.jsonl")}
+    for world, typed_longest in (("ticket", 0), ("ticket-typed", 2)):
+        want = wanted[world]
+        have = gilfit.select_key_fields(
+            form, "team", first, 0.8, 10, counting=COUNTED, typed_longest=typed_longest
+        )
+        assert have["key_fields"] == want["fields"], world
+        same_replay(have["chosen"], want["chosen"], world)
+        same_replay(have["all_fields"], want["all_fields"], world)
+        assert [t["key_fields"] for t in have["trials"]] == [
+            t["fields"] for t in want["trials"]
+        ], world
+        for i, (h, w) in enumerate(zip(have["trials"], want["trials"], strict=True)):
+            same_replay(h["replay"], w["replay"], f"{world} trial {i}")
+        if typed_longest:
+            assert have["typed"] is not None
+            assert len(have["typed"]["by_length"]) == len(want["typed"])
+            for i, (h, w) in enumerate(
+                zip(have["typed"]["by_length"], want["typed"], strict=True)
+            ):
+                same_replay(h, w, f"{world} typed {i + 1}")
+        else:
+            assert have["typed"] is None
+    # The choice goes on the form as the field's key fields.
+    keyed = declared_form()
+    keyed["fields"][3]["key_fields"] = wanted["ticket"]["fields"]
+    gilfit.Form.from_dict(keyed)
+
+
+def test_key_fields_choice_carries_exactly_the_typed_keys() -> None:
+    form = gilfit.Form.from_dict(declared_form())
+    choice = gilfit.select_key_fields(
+        form, "team", gilfit.documents(lines("records.jsonl")[:CHOSEN]), typed_longest=2
+    )
+    assert set(choice) == set(gilfit.KeyFieldsChoice.__annotations__)
+    for trial in choice["trials"]:
+        assert set(trial) == set(gilfit.KeyFieldsTrial.__annotations__)
+        assert set(trial["replay"]) == set(gilfit.ThresholdReplay.__annotations__)
+    assert choice["typed"] is not None
+    assert set(choice["typed"]) == set(gilfit.TypedKeyThresholds.__annotations__)
+    with pytest.raises(ValueError, match="several values"):
+        gilfit.select_key_fields(form, "tags", gilfit.documents([]), typed_longest=1)

@@ -33,6 +33,26 @@ thresholds, records = gilfit.select_layers(
 print(thresholds["key"]["chosen"], len(records))
 ```
 
+Before choosing thresholds, narrow the fields that key the judged field. A field that happened to settle with one
+value for a while would otherwise key every later document that shares it:
+
+```python
+choice = gilfit.select_key_fields(form, "team", documents, target_precision=0.8, minimum_answered=30)
+definition = {
+    "name": "ticket",
+    "fields": [
+        {"name": "product", "role": "observed"},
+        {"name": "summary", "role": "observed"},
+        {"name": "team", "role": "judged", "key_fields": choice["key_fields"]},
+    ],
+}
+thresholds, records = gilfit.select_layers(
+    gilfit.Form.from_dict(definition), "team", documents, target_precision=0.8
+)
+```
+
+`key_fields` is `None` when no narrower set did better than every field — leave it unset then.
+
 **Status: early.** The API may change within 0.x — each change is listed in
 [CHANGELOG.md](https://github.com/iyulab/gilfit/blob/rust-core/crates/gilfit/CHANGELOG.md) with what to do about it.
 

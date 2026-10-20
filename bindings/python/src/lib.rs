@@ -11,7 +11,8 @@ use gilfit::field_memory::FieldMemory;
 use gilfit::form::{CoarseLevel, Document, Field, Form, Role, SettlementKind};
 use gilfit::lexical_memory::LexicalMemory;
 use gilfit::threshold_selection::{
-    Choice, KeyState, LayerThresholds, ThresholdChoice, ThresholdReplay, select_layers_with,
+    Choice, KeyFieldsChoice, KeyFieldsTrial, KeyState, LayerThresholds, ThresholdChoice,
+    ThresholdReplay, TypedKeyThresholds, select_key_fields, select_layers_with,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -306,6 +307,28 @@ fn layers_json(l: &LayerThresholds) -> Value {
     json!({ "key": replay_json(&l.key), "memory": replay_json(&l.memory) })
 }
 
+fn typed_json(t: &TypedKeyThresholds) -> Value {
+    json!({ "by_length": t.by_length.iter().map(replay_json).collect::<Vec<_>>() })
+}
+
+fn trial_json(t: &KeyFieldsTrial) -> Value {
+    json!({
+        "key_fields": t.key_fields,
+        "replay": replay_json(&t.replay),
+        "typed": t.typed.as_ref().map(typed_json),
+    })
+}
+
+fn key_fields_json(c: &KeyFieldsChoice) -> Value {
+    json!({
+        "key_fields": c.key_fields,
+        "chosen": replay_json(&c.chosen),
+        "all_fields": replay_json(&c.all_fields),
+        "trials": c.trials.iter().map(trial_json).collect::<Vec<_>>(),
+        "typed": c.typed.as_ref().map(typed_json),
+    })
+}
+
 fn record_json(r: &DecisionRecord) -> Value {
     json!({
         "record": r.record,
@@ -371,19 +394,14 @@ fn check_form(form_json: &str) -> PyResult<()> {
     form(form_json).map(|_| ()).map_err(invalid)
 }
 
-/// Replays the documents in order and chooses the field's key and memory thresholds, as `select_layers` does. Returns
-/// the thresholds as JSON and, when `records` is true, the decision records as JSON lines.
-#[pyfunction]
-#[pyo3(signature = (form_json, field, documents, target_precision, minimum_answered, counting=None, records=true))]
-fn select_layers_json(
+/// The form, checked to judge `field`, and the counted settlement kinds, from the arguments every selection takes.
+fn selection_input(
     form_json: &str,
     field: &str,
-    documents: &Documents,
     target_precision: f64,
     minimum_answered: usize,
     counting: Option<Vec<String>>,
-    records: bool,
-) -> PyResult<(String, Option<String>)> {
+) -> PyResult<(Form, Option<Vec<SettlementKind>>)> {
     let form = form(form_json).map_err(invalid)?;
     match form.fields.iter().find(|f| f.name == field) {
         Some(f) if f.role == Role::Judged => {}
@@ -404,6 +422,29 @@ fn select_layers_json(
         })
         .transpose()
         .map_err(invalid)?;
+    Ok((form, counting))
+}
+
+/// Replays the documents in order and chooses the field's key and memory thresholds, as `select_layers` does. Returns
+/// the thresholds as JSON and, when `records` is true, the decision records as JSON lines.
+#[pyfunction]
+#[pyo3(signature = (form_json, field, documents, target_precision, minimum_answered, counting=None, records=true))]
+fn select_layers_json(
+    form_json: &str,
+    field: &str,
+    documents: &Documents,
+    target_precision: f64,
+    minimum_answered: usize,
+    counting: Option<Vec<String>>,
+    records: bool,
+) -> PyResult<(String, Option<String>)> {
+    let (form, counting) = selection_input(
+        form_json,
+        field,
+        target_precision,
+        minimum_answered,
+        counting,
+    )?;
     let choice = Choice {
         target_precision,
         minimum_answered,
@@ -427,10 +468,45 @@ fn select_layers_json(
     Ok((layers_json(&layers).to_string(), lines))
 }
 
+/// Chooses the fields that should key the judged field, as `select_key_fields` does: each field it rests on alone, then
+/// greedy additions while the key layer's gain over the target grows. Returns the choice as JSON.
+#[pyfunction]
+#[pyo3(signature = (form_json, field, documents, target_precision, minimum_answered, counting=None, typed_longest=0))]
+fn select_key_fields_json(
+    form_json: &str,
+    field: &str,
+    documents: &Documents,
+    target_precision: f64,
+    minimum_answered: usize,
+    counting: Option<Vec<String>>,
+    typed_longest: usize,
+) -> PyResult<String> {
+    let (form, counting) = selection_input(
+        form_json,
+        field,
+        target_precision,
+        minimum_answered,
+        counting,
+    )?;
+    if typed_longest > 0 && form.field(field).multiple {
+        return Err(invalid(format!(
+            "'{field}' takes several values; typing is not counted for it"
+        )));
+    }
+    let choice = Choice {
+        target_precision,
+        minimum_answered,
+        counting: counting.as_deref(),
+    };
+    let chosen = select_key_fields(&form, field, &documents.documents, choice, typed_longest);
+    Ok(key_fields_json(&chosen).to_string())
+}
+
 #[pymodule]
 fn _gilfit(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Documents>()?;
     m.add_function(wrap_pyfunction!(check_form, m)?)?;
     m.add_function(wrap_pyfunction!(select_layers_json, m)?)?;
+    m.add_function(wrap_pyfunction!(select_key_fields_json, m)?)?;
     Ok(())
 }

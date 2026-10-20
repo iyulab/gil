@@ -4,6 +4,18 @@ The Rust crate `gilfit` (crates.io) and the Python package `gilfit` (PyPI) share
 `0.x`: a minor release may change the public API, and each such change is listed under **Breaking** with what to do.
 The .NET library on NuGet (`Gil`) keeps its own line in the repository's root `CHANGELOG.md`.
 
+## Unreleased
+
+### Python package
+
+- **Added** `gilfit.select_key_fields`: chooses the fields that should key a judged field by replaying its key layer —
+  each field alone, then greedy additions while the gain over the target precision grows — the same choice the core's
+  `select_key_fields` and the .NET `ThresholdSelection.SelectKeyFields` make. Set its `key_fields` on the judged field
+  before `select_layers`. Without it a field that happened to settle with one value for a while keys every later
+  document that shares the value, and the key layer can answer below the promise its replay made. Results are typed
+  (`KeyFieldsChoice`, `KeyFieldsTrial`, `TypedKeyThresholds`); `typed_longest` counts the answers while a person types,
+  as in the core.
+
 ## 0.1.0
 
 First release.
