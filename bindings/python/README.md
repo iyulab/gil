@@ -53,6 +53,10 @@ thresholds, records = gilfit.select_layers(
 
 `key_fields` is `None` when no narrower set did better than every field — leave it unset then.
 
+The other settings follow the same pattern — choose, then set on the field: `select_key_concentrations` (set as
+`key_concentrations`, after `key_fields`) and, for a field with a coarse level (`"coarse": {"prefix": 2}`),
+`select_coarse` once its value thresholds are set.
+
 **Status: early.** The API may change within 0.x — each change is listed in
 [CHANGELOG.md](https://github.com/iyulab/gilfit/blob/rust-core/crates/gilfit/CHANGELOG.md) with what to do about it.
 

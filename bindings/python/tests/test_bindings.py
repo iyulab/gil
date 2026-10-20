@@ -19,15 +19,15 @@ def lines(name: str) -> list[dict]:
     return [json.loads(line) for line in text.splitlines() if line]
 
 
-def golden_form(stop_field: str) -> dict:
-    """The golden's form with the settings its lines chose before the `layers` line of `stop_field`."""
+def golden_form(stop_field: str, stop_kind: str = "layers") -> dict:
+    """The golden's form with the settings its lines chose before the `stop_kind` line of `stop_field`."""
     team = {"name": "team", "role": "judged"}
     code = {"name": "code", "role": "judged", "coarse": {"prefix": 2}}
     tags = {"name": "tags", "role": "judged", "multiple": True}
     targets = {"team": team, "code": code, "tags": tags}
     for line in lines("golden.jsonl"):
         if line["kind"] == "decision" or (
-            line["kind"] == "layers" and line["field"] == stop_field
+            line["kind"] == stop_kind and line["field"] == stop_field
         ):
             break
         target = targets.get(line.get("field"))
@@ -72,11 +72,11 @@ def settled_again() -> list[dict]:
     return again
 
 
-def as_golden(record: dict) -> dict:
+def as_golden(record: dict, kind: str = "record") -> dict:
     """A record in the golden's shape (lists in place of objects)."""
-    key, similar = record["key"], record["similar"]
+    key, similar, coarse = record["key"], record["similar"], record["coarse"]
     return {
-        "kind": "record",
+        "kind": kind,
         "field": record["field"],
         "record": record["record"],
         "order": record["order"],
@@ -95,7 +95,22 @@ def as_golden(record: dict) -> dict:
         "settled": record["settled"],
         "settlement": record["settlement"],
         "probability": record["probability"],
-        "coarse": None,
+        "coarse": None
+        if coarse is None
+        else [
+            coarse["value_answered"],
+            None
+            if coarse["keys"] is None
+            else [coarse["keys"]["strength"], coarse["keys"]["correct"]],
+            None
+            if coarse["vote"] is None
+            else [
+                coarse["vote"]["score"],
+                coarse["vote"]["correct"],
+                coarse["vote"]["nearest"],
+                coarse["vote"]["voted"],
+            ],
+        ],
     }
 
 
@@ -182,6 +197,7 @@ def test_results_carry_exactly_the_typed_keys() -> None:
             assert set(record["key"]) == set(gilfit.KeyLook.__annotations__)
         if record["similar"] is not None:
             assert set(record["similar"]) == set(gilfit.SimilarLook.__annotations__)
+        assert record["coarse"] is None
 
 
 def declared_form() -> dict:
@@ -254,3 +270,38 @@ def test_key_fields_choice_carries_exactly_the_typed_keys() -> None:
     assert set(choice["typed"]) == set(gilfit.TypedKeyThresholds.__annotations__)
     with pytest.raises(ValueError, match="several values"):
         gilfit.select_key_fields(form, "tags", gilfit.documents([]), typed_longest=1)
+
+
+def test_the_golden_coarse_choice_and_records_come_back() -> None:
+    first = gilfit.documents(lines("records.jsonl")[:CHOSEN])
+    form = gilfit.Form.from_dict(golden_form("code", stop_kind="coarse"))
+    want = next(
+        line
+        for line in lines("golden.jsonl")
+        if line["kind"] == "coarse" and line["field"] == "code"
+    )
+    thresholds, records = gilfit.select_coarse(form, "code", first, 0.8, 10, counting=COUNTED)
+    for layer in ("key", "memory"):
+        same_replay(thresholds[layer], want[layer], f"coarse {layer}")
+    bare, none = gilfit.select_coarse(
+        form, "code", first, 0.8, 10, counting=COUNTED, records=False
+    )
+    assert none is None and bare == thresholds
+    expected = [line for line in lines("records-out.jsonl") if line["kind"] == "coarse_record"]
+    assert records is not None and len(records) == len(expected)
+    for i, (record, line) in enumerate(zip(records, expected, strict=True)):
+        assert set(record["coarse"]) == set(gilfit.CoarseLook.__annotations__)
+        assert json.loads(
+            json.dumps(as_golden(record, "coarse_record")), parse_int=float
+        ) == json.loads(json.dumps(line), parse_int=float), f"coarse record line {i + 1}"
+    with pytest.raises(ValueError, match="no coarse level"):
+        gilfit.select_coarse(gilfit.Form.from_dict(declared_form()), "team", first)
+
+
+def test_the_golden_key_concentrations_come_back() -> None:
+    first = gilfit.documents(lines("records.jsonl")[:CHOSEN])
+    keyed = declared_form()
+    want = {line["kind"]: line for line in lines("golden.jsonl")[:2]}
+    keyed["fields"][3]["key_fields"] = want["key_fields"]["fields"]
+    found = gilfit.select_key_concentrations(gilfit.Form.from_dict(keyed), "team", first)
+    assert found == want["key_concentrations"]["concentrations"]

@@ -6,13 +6,14 @@
 
 use std::collections::BTreeMap;
 
-use gilfit::decision_record::DecisionRecord;
+use gilfit::decision_record::{DecisionRecord, KeyLook, SimilarLook};
 use gilfit::field_memory::FieldMemory;
 use gilfit::form::{CoarseLevel, Document, Field, Form, Role, SettlementKind};
 use gilfit::lexical_memory::LexicalMemory;
 use gilfit::threshold_selection::{
     Choice, KeyFieldsChoice, KeyFieldsTrial, KeyState, LayerThresholds, ThresholdChoice,
-    ThresholdReplay, TypedKeyThresholds, select_key_fields, select_layers_with,
+    ThresholdReplay, TypedKeyThresholds, select_coarse_with, select_key_concentrations,
+    select_key_fields, select_layers_with,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -329,26 +330,39 @@ fn key_fields_json(c: &KeyFieldsChoice) -> Value {
     })
 }
 
+fn key_look_json(k: &KeyLook) -> Value {
+    json!({
+        "strength": k.strength,
+        "value": k.value,
+        "correct": k.correct,
+        "key": k.key,
+        "caught": k.caught,
+    })
+}
+
+fn similar_look_json(s: &SimilarLook) -> Value {
+    json!({
+        "score": s.score,
+        "value": s.value,
+        "document": s.document,
+        "correct": s.correct,
+        "nearest": s.nearest,
+        "voted": s.voted,
+    })
+}
+
 fn record_json(r: &DecisionRecord) -> Value {
     json!({
         "record": r.record,
         "field": r.field,
         "order": r.order,
         "weight": r.weight,
-        "key": r.key.as_ref().map(|k| json!({
-            "strength": k.strength,
-            "value": k.value,
-            "correct": k.correct,
-            "key": k.key,
-            "caught": k.caught,
-        })),
-        "similar": r.similar.as_ref().map(|s| json!({
-            "score": s.score,
-            "value": s.value,
-            "document": s.document,
-            "correct": s.correct,
-            "nearest": s.nearest,
-            "voted": s.voted,
+        "key": r.key.as_ref().map(key_look_json),
+        "similar": r.similar.as_ref().map(similar_look_json),
+        "coarse": r.coarse.as_ref().map(|c| json!({
+            "value_answered": c.value_answered,
+            "keys": c.keys.as_ref().map(key_look_json),
+            "vote": c.vote.as_ref().map(similar_look_json),
         })),
         "settled": r.settled,
         "settlement": r.settlement.map(|k| format!("{k:?}")),
@@ -394,6 +408,16 @@ fn check_form(form_json: &str) -> PyResult<()> {
     form(form_json).map(|_| ()).map_err(invalid)
 }
 
+/// The form, checked to have `field` as a judged field.
+fn judging(form_json: &str, field: &str) -> PyResult<Form> {
+    let form = form(form_json).map_err(invalid)?;
+    match form.fields.iter().find(|f| f.name == field) {
+        Some(f) if f.role == Role::Judged => Ok(form),
+        Some(_) => Err(invalid(format!("field '{field}' is not judged"))),
+        None => Err(invalid(format!("the form has no field '{field}'"))),
+    }
+}
+
 /// The form, checked to judge `field`, and the counted settlement kinds, from the arguments every selection takes.
 fn selection_input(
     form_json: &str,
@@ -402,12 +426,7 @@ fn selection_input(
     minimum_answered: usize,
     counting: Option<Vec<String>>,
 ) -> PyResult<(Form, Option<Vec<SettlementKind>>)> {
-    let form = form(form_json).map_err(invalid)?;
-    match form.fields.iter().find(|f| f.name == field) {
-        Some(f) if f.role == Role::Judged => {}
-        Some(_) => return Err(invalid(format!("field '{field}' is not judged"))),
-        None => return Err(invalid(format!("the form has no field '{field}'"))),
-    }
+    let form = judging(form_json, field)?;
     if !(target_precision > 0.0 && target_precision <= 1.0) || minimum_answered == 0 {
         return Err(invalid(
             "target_precision is in (0, 1] and minimum_answered at least 1".to_owned(),
@@ -458,14 +477,82 @@ fn select_layers_json(
         field,
         &documents.documents,
         choice,
-        &mut |r| {
-            if let Some(out) = lines.as_mut() {
-                out.push_str(&record_json(r).to_string());
-                out.push('\n');
-            }
-        },
+        &mut |r| push_record(&mut lines, r),
     );
     Ok((layers_json(&layers).to_string(), lines))
+}
+
+fn push_record(lines: &mut Option<String>, r: &DecisionRecord) {
+    if let Some(out) = lines.as_mut() {
+        out.push_str(&record_json(r).to_string());
+        out.push('\n');
+    }
+}
+
+/// Replays the documents in order and chooses the thresholds of the field's coarse level, as `select_coarse` does — on
+/// the lookups the value layers leave at the field's thresholds. Returns them as JSON and, when `records` is true, the
+/// decision records with what the coarse level made of each lookup as JSON lines.
+#[pyfunction]
+#[pyo3(signature = (form_json, field, documents, target_precision, minimum_answered, counting=None, records=true))]
+fn select_coarse_json(
+    form_json: &str,
+    field: &str,
+    documents: &Documents,
+    target_precision: f64,
+    minimum_answered: usize,
+    counting: Option<Vec<String>>,
+    records: bool,
+) -> PyResult<(String, Option<String>)> {
+    let (form, counting) = selection_input(
+        form_json,
+        field,
+        target_precision,
+        minimum_answered,
+        counting,
+    )?;
+    let definition = form.field(field);
+    if definition.multiple {
+        return Err(invalid(format!(
+            "'{field}' takes several values; it has no coarse level"
+        )));
+    }
+    if definition.coarse.is_none() {
+        return Err(invalid(format!("'{field}' has no coarse level")));
+    }
+    let choice = Choice {
+        target_precision,
+        minimum_answered,
+        counting: counting.as_deref(),
+    };
+    let mut lines = records.then(String::new);
+    let layers = select_coarse_with(
+        &mut FieldMemory::default(),
+        &mut LexicalMemory::default(),
+        &form,
+        field,
+        &documents.documents,
+        choice,
+        &mut |r| push_record(&mut lines, r),
+    );
+    Ok((layers_json(&layers).to_string(), lines))
+}
+
+/// Chooses, for each field that keys the judged field, how readily its keys are believed after only a few settlements,
+/// as `select_key_concentrations` does. Returns the concentrations as a JSON object of field to concentration.
+#[pyfunction]
+fn select_key_concentrations_json(
+    form_json: &str,
+    field: &str,
+    documents: &Documents,
+) -> PyResult<String> {
+    let form = judging(form_json, field)?;
+    let found = select_key_concentrations(
+        &mut FieldMemory::default(),
+        &form,
+        field,
+        &documents.documents,
+    );
+    Ok(json!(found).to_string())
 }
 
 /// Chooses the fields that should key the judged field, as `select_key_fields` does: each field it rests on alone, then
@@ -508,5 +595,7 @@ fn _gilfit(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(check_form, m)?)?;
     m.add_function(wrap_pyfunction!(select_layers_json, m)?)?;
     m.add_function(wrap_pyfunction!(select_key_fields_json, m)?)?;
+    m.add_function(wrap_pyfunction!(select_coarse_json, m)?)?;
+    m.add_function(wrap_pyfunction!(select_key_concentrations_json, m)?)?;
     Ok(())
 }

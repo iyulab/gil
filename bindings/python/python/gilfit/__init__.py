@@ -20,11 +20,14 @@ from typing import Any, TypedDict, cast
 from gilfit._gilfit import (
     Documents,
     check_form,
+    select_coarse_json,
+    select_key_concentrations_json,
     select_key_fields_json,
     select_layers_json,
 )
 
 __all__ = [
+    "CoarseLook",
     "DecisionRecord",
     "Documents",
     "Form",
@@ -39,6 +42,8 @@ __all__ = [
     "TypedKeyThresholds",
     "documents",
     "read_records",
+    "select_coarse",
+    "select_key_concentrations",
     "select_key_fields",
     "select_layers",
 ]
@@ -137,6 +142,15 @@ class SimilarLook(TypedDict):
     voted: bool
 
 
+class CoarseLook(TypedDict):
+    """On a coarse replay, what the field's coarse level made of a lookup: the class the keys back and the class the
+    similar documents vote for (each as ``value``), and whether the value layers answered at the field's thresholds."""
+
+    value_answered: bool
+    keys: KeyLook | None
+    vote: SimilarLook | None
+
+
 class DecisionRecord(TypedDict):
     """One document asked about on a replay: what each layer made of it and what it was settled as."""
 
@@ -146,6 +160,7 @@ class DecisionRecord(TypedDict):
     weight: float
     key: KeyLook | None
     similar: SimilarLook | None
+    coarse: CoarseLook | None
     settled: str | None
     settlement: str | None
     probability: float | None
@@ -255,4 +270,50 @@ def select_key_fields(
                 typed_longest,
             )
         ),
+    )
+
+
+def select_coarse(
+    form: Form,
+    field: str,
+    documents: Documents,
+    target_precision: float = 0.8,
+    minimum_answered: int = 10,
+    counting: Iterable[str] | None = None,
+    records: bool = True,
+) -> tuple[LayerThresholds, list[DecisionRecord] | None]:
+    """Replays ``documents`` and chooses the thresholds of ``field``'s coarse level.
+
+    The coarse level answers with a class (``{"coarse": {"prefix": 2}}`` or a ``classes`` map) where the value layers
+    did not answer at the field's thresholds — set the field's ``key_threshold`` and ``memory_threshold`` from
+    :func:`select_layers` first. Returns the level's key and similar document replays and, unless ``records`` is false,
+    the decision records with what the level made of each lookup (``coarse``).
+    """
+    thresholds, lines = select_coarse_json(
+        form.json,
+        field,
+        documents,
+        target_precision,
+        minimum_answered,
+        None if counting is None else list(counting),
+        records,
+    )
+    out = (
+        None
+        if lines is None
+        else [cast(DecisionRecord, json.loads(line)) for line in lines.splitlines()]
+    )
+    return cast(LayerThresholds, json.loads(thresholds)), out
+
+
+def select_key_concentrations(form: Form, field: str, documents: Documents) -> dict[str, float]:
+    """Chooses, for each field that keys ``field``, how readily its keys are believed after only a few settlements.
+
+    A key field whose keys point at one document's value (a reference number, an outlet) is believed after one or two
+    settlements; a broad one only after many. Set the result as the field's ``key_concentrations``. Fields whose keys
+    were never seen again are left out; a field that takes several values gets none.
+    """
+    return cast(
+        dict[str, float],
+        json.loads(select_key_concentrations_json(form.json, field, documents)),
     )

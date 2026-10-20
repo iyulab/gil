@@ -15,6 +15,13 @@ The .NET library on NuGet (`Gil`) keeps its own line in the repository's root `C
   document that shares the value, and the key layer can answer below the promise its replay made. Results are typed
   (`KeyFieldsChoice`, `KeyFieldsTrial`, `TypedKeyThresholds`); `typed_longest` counts the answers while a person types,
   as in the core.
+- **Added** `gilfit.select_key_concentrations` (how readily each key field's keys are believed after a few
+  settlements — set as the field's `key_concentrations`) and `gilfit.select_coarse` (the coarse level's thresholds on
+  the lookups the value layers leave, with decision records). With `select_key_fields` and `select_layers` the Python
+  package now covers each step of choosing a field's settings that the core and the .NET library offer, except typed
+  key thresholds on their own (`select_key_fields(typed_longest=…)` returns them with the key fields).
+- Decision records carry `coarse` (`CoarseLook`): on a coarse replay, the class the keys back, the class the similar
+  documents vote for and whether the value layers answered; `None` on other replays.
 
 ## 0.1.0
 
