@@ -25,3 +25,5 @@ Changelog = "https://github.com/iyulab/gilfit/blob/rust-core/crates/gilfit/CHANG
 python-source = "python"
 module-name = "gilfit._gilfit"
 features = ["pyo3/extension-module"]
+# maturin lays the sdist out from the workspace root, so the license file the metadata names must be placed at its root.
+include = [{ path = "LICENSE", format = "sdist" }]
