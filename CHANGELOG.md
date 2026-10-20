@@ -5,6 +5,18 @@ with what to do.
 
 ## Unreleased
 
+### Added
+
+- **`ThresholdRule.Pooled`: choose a field's two thresholds for a target on its answers together.** A new
+  `ThresholdSelection.SelectLayersAsync` overload takes a `ThresholdRule`. `EveryBand`, the rule of every other
+  overload, is unchanged. `Pooled` chooses the key and similar document thresholds as the pair that answers the most
+  of the field's latest `PooledRecentLookups` lookups while the precision of all those answers holds the target at the
+  bottom of its Wilson interval at `PooledStandardErrors` (1.645) standard errors, reaching back while the field's
+  current thresholds answered fewer than `PooledRecentAnswers` of them. Some bands of its answers fall below the target
+  where others are above it. See "A target can be read two ways" in the README.
+
+### Changed
+
 - The repository is https://github.com/iyulab/gil again; `iyulab/gilfit` redirects. The NuGet package ID and
   namespace stay `Gil`. The Rust crate and the Python package are published as `iyulab-gil` from 0.3.0 (imported as
   `gil`); `gilfit` 0.1.0 and 0.2.0 are yanked.

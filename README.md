@@ -597,6 +597,24 @@ biological sample records with costs counted this way, thresholds chosen for 0.8
 loss once a wrong value costs ten entries; chosen for a target at or above 1 − 1/ρ, they cost less than asking at every
 ρ from 2 to 20. When you do not know ρ, time how long undoing a wrong value takes against entering one.
 
+A target can be read two ways. By default (`ThresholdRule.EveryBand`) each layer's threshold is the lowest down to
+which every band of its answers meets the target, so no band of weak answers rides on good ones above it — a floor
+under every kind of answer. When the target is a share of all the field's answers instead, ask for
+`ThresholdRule.Pooled`: it chooses the two thresholds together, as the pair that answers the most of the field's latest
+`ThresholdSelection.PooledRecentLookups` lookups while the precision of all those answers taken together stays at or
+above the target at the bottom of its Wilson interval at `PooledStandardErrors` (1.645) standard errors. Where the
+field's thresholds as they stand would have answered fewer than `PooledRecentAnswers` of those lookups, it reaches
+further back. In eight forward replays on seven public collections — medical device product codes, bug components,
+aircraft fault codes, patent groups and the attributes of three kinds of biological samples — each on records the rule was not tuned on, it kept a 0.8 target every time and
+answered 0.92–1.80 times as often as `EveryBand` (1.52 in the middle); holding the bound at one standard error instead
+broke the target on a field answered a few hundred times. Each layer's `Chosen` still reports that layer's own
+precision and `Promise` (one standard error, its own answers); the bound the pair was chosen under is on the answers
+together, and is the one to show:
+
+```csharp
+var pooled = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "team", saved, targetPrecision: 0.8, minimumAnswered: 30, counting: null, ThresholdRule.Pooled);
+```
+
 A value a person accepted with the suggestion in view may be right because it was suggested. A value the application
 filled was never checked. To know how right a layer is on its own, count only the settlements that saw no suggestion.
 Every document is still replayed into memory; only the lookups counted change. A document that does not say how a field

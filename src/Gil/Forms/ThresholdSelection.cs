@@ -144,6 +144,30 @@ public sealed record TypedKeyThresholds(IReadOnlyList<ThresholdReplay> ByLength)
     public IReadOnlyList<double?> Thresholds => [.. ByLength.Select(r => r.Chosen?.Threshold)];
 }
 
+/// <summary>How <see cref="ThresholdSelection.SelectLayersAsync(FieldMemory, LexicalMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, ThresholdRule, CancellationToken)"/> chooses a field's two thresholds.</summary>
+public enum ThresholdRule
+{
+    /// <summary>
+    /// Each layer on its own: the lowest threshold down to which every band of its answers meets the target precision. No
+    /// band of weak answers is admitted on the strength of good ones above it, so the field answers less than it could
+    /// while keeping its promise. The default.
+    /// </summary>
+    EveryBand,
+
+    /// <summary>
+    /// The two thresholds together, as the pair that answers the most of the field's latest lookups while the precision of
+    /// all those answers taken together stays at or above the target at the low end of its Wilson score interval at
+    /// <see cref="ThresholdSelection.PooledStandardErrors"/> standard errors — a promise about the answers on average, not
+    /// about every band of them. The lookups are the field's latest <see cref="ThresholdSelection.PooledRecentLookups"/>,
+    /// reaching further back while the field's thresholds as they stand would have answered fewer than
+    /// <see cref="ThresholdSelection.PooledRecentAnswers"/> of them. In eight forward replays on seven public collections,
+    /// each on records the rule was not tuned on, it kept a 0.8 target every time and answered 0.92–1.80 times as often as
+    /// <see cref="EveryBand"/>, 1.52 in the middle. Some bands of its answers fall below the target where others are above
+    /// it: choose it when the target is a share of all answers, not a floor under each kind of answer.
+    /// </summary>
+    Pooled,
+}
+
 /// <summary>The replays of a field's two memory layers, in the order the form resolver consults them.</summary>
 /// <param name="Key">For <see cref="FieldDefinition.KeyThreshold"/>, replayed on every lookup.</param>
 /// <param name="Memory">For <see cref="FieldDefinition.MemoryThreshold"/>, replayed on the lookups the chosen key threshold would not have answered.</param>
@@ -164,6 +188,22 @@ public static class ThresholdSelection
     /// (<see cref="ThresholdReplay.Keys"/>) shows one sooner.
     /// </summary>
     public const int RecentDocuments = 5_000;
+
+    /// <summary>
+    /// How many standard errors below the measured precision <see cref="ThresholdRule.Pooled"/> holds the target at.
+    /// More than the one <see cref="ThresholdChoice.Promise"/> is lowered by: at one, thin fields answered on a few hundred
+    /// lookups fell below the target in replays the rule had not been chosen on; at this many none did.
+    /// </summary>
+    public const double PooledStandardErrors = 1.645;
+
+    /// <summary>How many of the field's latest lookups <see cref="ThresholdRule.Pooled"/> chooses on, at the least.</summary>
+    public const int PooledRecentLookups = 5_000;
+
+    /// <summary>
+    /// How many answers, under the field's thresholds as they stand, <see cref="ThresholdRule.Pooled"/> reaches back for
+    /// when its latest lookups hold fewer — a field answered rarely has too few in them to rest a pooled precision on.
+    /// </summary>
+    public const int PooledRecentAnswers = 1_000;
 
     /// <summary>As <see cref="SelectAsync(LexicalMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>, counting every settlement.</summary>
     public static Task<ThresholdReplay> SelectAsync(
@@ -315,7 +355,7 @@ public static class ThresholdSelection
         int minimumAnswered,
         IReadOnlyCollection<SettlementKind>? counting,
         CancellationToken cancellationToken = default) =>
-        LayersAsync(fieldMemory, memory, form, field, documents, targetPrecision, minimumAnswered, counting, cancellationToken);
+        LayersAsync(fieldMemory, memory, form, field, documents, targetPrecision, minimumAnswered, counting, ThresholdRule.EveryBand, cancellationToken);
 
     /// <summary>As the overload taking <c>counting</c>, counting every settlement. Experimental (GIL0004).</summary>
     [Experimental(Stability.DocumentMemory, UrlFormat = Stability.Url)]
@@ -345,7 +385,58 @@ public static class ThresholdSelection
         int minimumAnswered,
         IReadOnlyCollection<SettlementKind>? counting,
         CancellationToken cancellationToken = default) =>
-        LayersAsync(fieldMemory, memory, form, field, documents, targetPrecision, minimumAnswered, counting, cancellationToken);
+        LayersAsync(fieldMemory, memory, form, field, documents, targetPrecision, minimumAnswered, counting, ThresholdRule.EveryBand, cancellationToken);
+
+    /// <summary>
+    /// As <see cref="SelectLayersAsync(FieldMemory, LexicalMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>,
+    /// by the rule given. With <see cref="ThresholdRule.Pooled"/> each layer's <see cref="ThresholdReplay.Chosen"/> is
+    /// that layer's half of the pair, null when the pair leaves the layer silent; its precision, answer rate and promise
+    /// are the layer's own, over the whole replay, and the precision of the two layers' answers together held the target
+    /// on the lookups the pair was chosen on. <see cref="ThresholdReplay.MostPrecise"/> is as under
+    /// <see cref="ThresholdRule.EveryBand"/>. The field's thresholds as they stand (<see cref="FieldDefinition.KeyThreshold"/>,
+    /// <see cref="FieldDefinition.MemoryThreshold"/>) decide only how far back the rule reaches.
+    /// </summary>
+    /// <param name="fieldMemory">An empty field memory configured as the one in use; the replay fills it. Never the one serving suggestions.</param>
+    /// <param name="memory">An empty memory of the kind in use; the replay fills it. Never the one serving suggestions.</param>
+    /// <param name="form">The form, with the field's thresholds as they stand.</param>
+    /// <param name="field">A judged field of the form.</param>
+    /// <param name="documents">Settled documents, in any order.</param>
+    /// <param name="targetPrecision">The share of answers that must match, in (0, 1].</param>
+    /// <param name="minimumAnswered">The fewest answers a precision may rest on; the application's call.</param>
+    /// <param name="counting">The kinds of settlement whose lookups are counted; null counts every settlement.</param>
+    /// <param name="rule">How the two thresholds are chosen.</param>
+    /// <param name="cancellationToken">Cancels the replay.</param>
+    /// <returns>A replay of each layer.</returns>
+    public static Task<LayerThresholds> SelectLayersAsync(
+        FieldMemory fieldMemory,
+        LexicalMemory memory,
+        FormDefinition form,
+        string field,
+        IEnumerable<SettledDocument> documents,
+        double targetPrecision,
+        int minimumAnswered,
+        IReadOnlyCollection<SettlementKind>? counting,
+        ThresholdRule rule,
+        CancellationToken cancellationToken = default) =>
+        LayersAsync(fieldMemory, memory, form, field, documents, targetPrecision, minimumAnswered, counting, rule, cancellationToken);
+
+    /// <summary>
+    /// As <see cref="SelectLayersAsync(FieldMemory, LexicalMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, ThresholdRule, CancellationToken)"/>,
+    /// replaying a document memory of another kind. Experimental, as for <see cref="SelectAsync(IMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>.
+    /// </summary>
+    [Experimental(Stability.DocumentMemory, UrlFormat = Stability.Url)]
+    public static Task<LayerThresholds> SelectLayersAsync(
+        FieldMemory fieldMemory,
+        IMemory memory,
+        FormDefinition form,
+        string field,
+        IEnumerable<SettledDocument> documents,
+        double targetPrecision,
+        int minimumAnswered,
+        IReadOnlyCollection<SettlementKind>? counting,
+        ThresholdRule rule,
+        CancellationToken cancellationToken = default) =>
+        LayersAsync(fieldMemory, memory, form, field, documents, targetPrecision, minimumAnswered, counting, rule, cancellationToken);
 
     private static async Task<LayerThresholds> LayersAsync(
         FieldMemory fieldMemory,
@@ -356,6 +447,7 @@ public static class ThresholdSelection
         double targetPrecision,
         int minimumAnswered,
         IReadOnlyCollection<SettlementKind>? counting,
+        ThresholdRule rule,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(fieldMemory);
@@ -364,16 +456,160 @@ public static class ThresholdSelection
         ArgumentNullException.ThrowIfNull(documents);
         Check(form, field, targetPrecision, minimumAnswered);
         NotASet(form, field);
+        if (!Enum.IsDefined(rule))
+        {
+            throw new ArgumentOutOfRangeException(nameof(rule), rule, "Not a threshold rule.");
+        }
 
+        var definition = form.Field(field);
         var (steps, latest) = await ReplayAsync(fieldMemory, memory, form, field, documents, counting, cancellationToken).ConfigureAwait(false);
         var keyed = steps.Where(s => s.KeyLooked).ToList();
         var answers = keyed.Where(s => s.Key is not null).Select(s => new Answer(s.Key!.Value.Score, s.Key!.Value.Matches, s.Weight, s.Order, s.Key!.Value.Key, s.Key!.Value.Caught)).ToList();
-        var key = WithKeys(Fit([.. answers.Where(a => !a.Caught)], keyed, latest, targetPrecision, minimumAnswered), answers);
+        List<Answer> uncaught = [.. answers.Where(a => !a.Caught)];
+        var keyReplay = Fit(uncaught, keyed, latest, targetPrecision, minimumAnswered);
+        double? memoryThreshold = null;
+        if (rule == ThresholdRule.Pooled)
+        {
+            var (keyThreshold, similarThreshold) = Pooled(steps, definition, targetPrecision, minimumAnswered);
+            keyReplay = keyReplay with { Chosen = keyThreshold is { } k ? At(uncaught, keyed.Count, keyed.Sum(s => s.Weight), latest, k, minimumAnswered) : null };
+            memoryThreshold = similarThreshold;
+        }
+
+        var key = WithKeys(keyReplay, answers);
         // Left to the similar document layer: what the chosen key threshold does not answer — but not a lookup under a key
         // that settled a value to catch, which no layer answers.
         var left = steps.Where(s => s.Looked && s.Key is not { Caught: true } && !(key.Chosen is { } chosen && s.Key is { } first && first.Score >= chosen.Threshold));
-        return new LayerThresholds(key, Similarity(left, latest, form.Field(field), targetPrecision, minimumAnswered));
+        return new LayerThresholds(key, Similarity(left, latest, definition, targetPrecision, minimumAnswered, rule, memoryThreshold));
     }
+
+    /// <summary>
+    /// <see cref="ThresholdRule.Pooled"/>: of the field's latest lookups, reaching back for answers as the rule says, the key
+    /// and similar document thresholds that answer the most while the precision of their answers together holds the target
+    /// at <see cref="PooledStandardErrors"/> standard errors, on at least the minimum number of answers. Key thresholds are
+    /// tried from none down through the key scores seen (at most <see cref="PooledKeyCandidates"/> of them, evenly spread),
+    /// and for each, every similarity score at which ties end; the first pair to answer the most wins. Null for a layer the
+    /// pair leaves silent — both when no pair holds the target.
+    /// </summary>
+    private static (double? Key, double? Similar) Pooled(List<Step> steps, FieldDefinition definition, double targetPrecision, int minimumAnswered)
+    {
+        var lookups = steps.Where(s => s.KeyLooked || s.Looked).ToList();
+        var start = Math.Max(lookups.Count - PooledRecentLookups, 0);
+        if (start > 0)
+        {
+            // Reach back while the field's thresholds as they stand answer fewer than the answers to rest on.
+            var answered = 0;
+            var reach = 0;
+            for (var i = lookups.Count - 1; i >= 0; i--)
+            {
+                answered += AnsweredAsItStands(lookups[i], definition) ? 1 : 0;
+                if (answered >= PooledRecentAnswers)
+                {
+                    reach = i;
+                    break;
+                }
+            }
+
+            start = Math.Min(start, reach);
+        }
+
+        var window = lookups.GetRange(start, lookups.Count - start);
+        var keys = window.Where(s => s.KeyLooked && s.Key is { Caught: false }).Select(s => s.Key!.Value.Score).Distinct().Order().ToList();
+        var similar = window
+            .Where(s => s.Looked && s.Match is not null && s.Key is not { Caught: true })
+            .OrderByDescending(s => s.Match!.Value.Score)
+            .ToList();
+        (int Count, double Key, double Similar)? best = null;
+        foreach (var keyThreshold in KeyCandidates(keys))
+        {
+            bool KeyAnswers(Step s) => s.KeyLooked && s.Key is { Caught: false } k && k.Score >= keyThreshold;
+            var (count, weight, correct, squares) = (0, 0.0, 0.0, 0.0);
+            foreach (var s in window.Where(KeyAnswers))
+            {
+                count++;
+                weight += s.Weight;
+                correct += s.Key!.Value.Matches ? s.Weight : 0;
+                squares += s.Weight * s.Weight;
+            }
+
+            var holds = Holds(weight, correct, squares, targetPrecision, minimumAnswered);
+            var (keyCount, most, at) = (count, holds ? count : -1, double.PositiveInfinity);
+            for (var i = 0; i < similar.Count; i++)
+            {
+                var s = similar[i];
+                if (!KeyAnswers(s))
+                {
+                    count++;
+                    weight += s.Weight;
+                    correct += s.Match!.Value.Correct ? s.Weight : 0;
+                    squares += s.Weight * s.Weight;
+                }
+
+                var tieEnds = i == similar.Count - 1 || similar[i + 1].Match!.Value.Score != s.Match!.Value.Score;
+                if (tieEnds && count > keyCount && count > most && Holds(weight, correct, squares, targetPrecision, minimumAnswered))
+                {
+                    (most, at) = (count, s.Match!.Value.Score);
+                }
+            }
+
+            if (most > 0 && (best is null || most > best.Value.Count))
+            {
+                best = (most, keyThreshold, at);
+            }
+        }
+
+        return best is { } b
+            ? (double.IsPositiveInfinity(b.Key) ? null : b.Key, double.IsPositiveInfinity(b.Similar) ? null : b.Similar)
+            : (null, null);
+    }
+
+    /// <summary>How many key scores <see cref="ThresholdRule.Pooled"/> tries as thresholds, at most, besides none.</summary>
+    private const int PooledKeyCandidates = 200;
+
+    /// <summary>
+    /// None, then the key scores seen from the highest down — or, when there are more than
+    /// <see cref="PooledKeyCandidates"/>, that many evenly spread between the lowest and the highest, interpolated linearly
+    /// between neighbouring scores.
+    /// </summary>
+    private static IEnumerable<double> KeyCandidates(List<double> ascending)
+    {
+        yield return double.PositiveInfinity;
+        IEnumerable<double> spread = ascending;
+        if (ascending.Count > PooledKeyCandidates)
+        {
+            var last = ascending.Count - 1;
+            spread = Enumerable.Range(0, PooledKeyCandidates)
+                .Select(i =>
+                {
+                    var position = (double)i * last / (PooledKeyCandidates - 1);
+                    var below = (int)Math.Floor(position);
+                    return below >= last ? ascending[last] : ascending[below] + ((position - below) * (ascending[below + 1] - ascending[below]));
+                })
+                .Distinct();
+        }
+
+        foreach (var threshold in spread.OrderDescending())
+        {
+            yield return threshold;
+        }
+    }
+
+    /// <summary>Whether answers of this weight hold the target at the low end of their Wilson interval at <see cref="PooledStandardErrors"/>, resting on at least the minimum number.</summary>
+    private static bool Holds(double weight, double correct, double squares, double targetPrecision, int minimumAnswered)
+    {
+        if (weight <= 0)
+        {
+            return false;
+        }
+
+        var effective = weight * weight / squares;
+        return effective >= minimumAnswered && Lower(correct / weight, effective, PooledStandardErrors) >= targetPrecision;
+    }
+
+    /// <summary>Whether the field's thresholds as they stand would have answered the lookup, as a suggestion does.</summary>
+    private static bool AnsweredAsItStands(Step step, FieldDefinition definition) =>
+        step.KeyLooked && step.Key is { Caught: false } k && k.Score >= definition.KeyThreshold
+        || step.Looked && step.Key is not { Caught: true } && step.Match is { } m && m.Score >= definition.MemoryThreshold
+            && !(m.Voted && definition.MemorySimilarityFloor is { } floor && m.Nearest < floor);
 
     /// <summary>As <see cref="SelectCoarseAsync(FieldMemory, LexicalMemory, FormDefinition, string, IEnumerable{SettledDocument}, double, int, IReadOnlyCollection{SettlementKind}?, CancellationToken)"/>, counting every settlement.</summary>
     public static Task<LayerThresholds> SelectCoarseAsync(
@@ -1174,11 +1410,16 @@ public static class ThresholdSelection
     /// The similarity choice over the given lookups: every one counts, answered or not. With more than one voter each
     /// threshold carries the similarity floor of the answers it rests on (<see cref="ThresholdChoice.SimilarityFloor"/>).
     /// </summary>
-    private static ThresholdReplay Similarity(IEnumerable<Step> looked, int latest, FieldDefinition definition, double targetPrecision, int minimumAnswered)
+    private static ThresholdReplay Similarity(IEnumerable<Step> looked, int latest, FieldDefinition definition, double targetPrecision, int minimumAnswered, ThresholdRule rule = ThresholdRule.EveryBand, double? pooled = null)
     {
         var steps = looked.ToList();
         var matches = steps.Where(s => s.Match is not null).Select(s => s.Match!.Value).ToList();
-        var replay = Fit([.. steps.Where(s => s.Match is not null).Select(s => new Answer(s.Match!.Value.Score, s.Match!.Value.Correct, s.Weight, s.Order))], steps, latest, targetPrecision, minimumAnswered);
+        List<Answer> answers = [.. steps.Where(s => s.Match is not null).Select(s => new Answer(s.Match!.Value.Score, s.Match!.Value.Correct, s.Weight, s.Order))];
+        var replay = Fit(answers, steps, latest, targetPrecision, minimumAnswered);
+        if (rule == ThresholdRule.Pooled)
+        {
+            replay = replay with { Chosen = pooled is { } t ? At(answers, steps.Count, steps.Sum(s => s.Weight), latest, t, minimumAnswered) : null };
+        }
         if (definition.SimilarDocumentVotes == 1)
         {
             return replay;
@@ -1258,29 +1499,46 @@ public static class ThresholdSelection
     private static ThresholdReplay Fit(List<Answer> matches, int lookups, double lookupWeight, int latest, double targetPrecision, int minimumAnswered)
     {
         var replay = Fit(matches, lookups, lookupWeight, targetPrecision, minimumAnswered);
-        var recent = matches.Where(m => m.Order > latest - RecentDocuments).ToList();
-        ThresholdChoice? Promised(ThresholdChoice? choice)
+        return replay with { Chosen = Promised(replay.Chosen, matches, latest, minimumAnswered), MostPrecise = Promised(replay.MostPrecise, matches, latest, minimumAnswered) };
+    }
+
+    /// <summary>The choice with its <see cref="ThresholdChoice.Promise"/>, taken over the answers of the latest <see cref="RecentDocuments"/> documents.</summary>
+    private static ThresholdChoice? Promised(ThresholdChoice? choice, List<Answer> matches, int latest, int minimumAnswered)
+    {
+        if (choice is null)
         {
-            if (choice is null)
-            {
-                return null;
-            }
-
-            var (weight, correct, squares) = (0.0, 0.0, 0.0);
-            foreach (var m in recent.Where(m => m.Score >= choice.Threshold))
-            {
-                weight += m.Weight;
-                correct += m.Correct ? m.Weight : 0;
-                squares += m.Weight * m.Weight;
-            }
-
-            var effective = weight > 0 ? weight * weight / squares : 0;
-            return effective >= minimumAnswered
-                ? choice with { Promise = Lower(correct / weight, effective), PromiseAnswered = effective }
-                : choice with { Promise = Lower(choice.Precision, choice.EffectiveAnswered), PromiseAnswered = choice.EffectiveAnswered };
+            return null;
         }
 
-        return replay with { Chosen = Promised(replay.Chosen), MostPrecise = Promised(replay.MostPrecise) };
+        var (weight, correct, squares) = (0.0, 0.0, 0.0);
+        foreach (var m in matches.Where(m => m.Order > latest - RecentDocuments && m.Score >= choice.Threshold))
+        {
+            weight += m.Weight;
+            correct += m.Correct ? m.Weight : 0;
+            squares += m.Weight * m.Weight;
+        }
+
+        var effective = weight > 0 ? weight * weight / squares : 0;
+        return effective >= minimumAnswered
+            ? choice with { Promise = Lower(correct / weight, effective), PromiseAnswered = effective }
+            : choice with { Promise = Lower(choice.Precision, choice.EffectiveAnswered), PromiseAnswered = choice.EffectiveAnswered };
+    }
+
+    /// <summary>The choice of a threshold given: how the answers at or above it did over the whole replay, and its promise; null when none is.</summary>
+    private static ThresholdChoice? At(List<Answer> matches, int lookups, double lookupWeight, int latest, double threshold, int minimumAnswered)
+    {
+        var (count, weight, correct, squares) = (0, 0.0, 0.0, 0.0);
+        foreach (var m in matches.Where(m => m.Score >= threshold))
+        {
+            count++;
+            weight += m.Weight;
+            correct += m.Correct ? m.Weight : 0;
+            squares += m.Weight * m.Weight;
+        }
+
+        return weight > 0
+            ? Promised(new ThresholdChoice(threshold, correct / weight, weight / lookupWeight, count, lookups) { AnsweredWeight = weight, EffectiveAnswered = weight * weight / squares }, matches, latest, minimumAnswered)
+            : null;
     }
 
     /// <summary>
@@ -1289,16 +1547,17 @@ public static class ThresholdSelection
     /// where the threshold, chosen on those same answers, flatters them most. One standard error is what a replay of three
     /// small public forms called for: the promise there ran 9 points above the answers that followed, its lower end 1.5.
     /// </summary>
-    private static double Lower(double precision, double answered)
+    private static double Lower(double precision, double answered, double standardErrors = 1)
     {
         if (answered <= 0)
         {
             return precision;
         }
 
-        var centre = precision + (1 / (2 * answered));
-        var margin = Math.Sqrt((precision * (1 - precision) / answered) + (1 / (4 * answered * answered)));
-        return (centre - margin) / (1 + (1 / answered));
+        var z2 = standardErrors * standardErrors;
+        var centre = precision + (z2 / (2 * answered));
+        var margin = standardErrors * Math.Sqrt((precision * (1 - precision) / answered) + (z2 / (4 * answered * answered)));
+        return (centre - margin) / (1 + (z2 / answered));
     }
 
     /// <summary>
