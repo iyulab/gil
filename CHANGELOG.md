@@ -32,6 +32,12 @@ with what to do.
   place apart from one operating system to another. Similarities are now the same everywhere; where they moved, they
   moved by that much.
 
+### Documentation
+
+- How to count what an upgrade changes in your own suggestions: replay saved documents once with each version and
+  compare each suggestion's first candidate, whether it was answered and its coarse class (README, under choosing
+  thresholds again). Measured on two public streams, 0.21.0 through 0.24.0 answered the same.
+
 ## 0.23.0
 
 ### Breaking

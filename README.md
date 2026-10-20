@@ -657,6 +657,15 @@ var gilVersion = typeof(FormResolver).Assembly
     .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
 ```
 
+What an upgrade moves can be counted before you take it. Replay your saved documents once with each version — two small
+programs that differ only in the version of the `Gil` package — choosing thresholds on the earlier documents and asking
+for each later one before putting it into memory, and write down each suggestion's first candidate, whether it was
+answered and its coarse class. Compare the two lists document by document. A release marked **Breaking** changes a
+contract, not necessarily your answers: replaying two public streams (medical device recalls and aircraft fault
+reports, ten thousand suggestions each after ten thousand to choose from), 0.21.0, 0.22.0, 0.23.0 and 0.24.0 answered
+every one of the twenty thousand the same way. Choosing again after an upgrade is still the rule; the count says what
+it will move.
+
 The replay looks each field up with the values that had arrived before it was settled — what its last suggestion was
 made from. `Snapshot()` records that order in `SettledDocument.Arrival`; save it with the document. Without it, observed
 values count as there from the start and judged fields as settled in the form's order. Even so, the precision a replay
