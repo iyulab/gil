@@ -6,6 +6,31 @@ with what to do. The Rust crate and Python package `gilfit` keep their own line 
 
 ## Unreleased
 
+### Breaking
+
+- `SettlementKind` has two more members, `AcceptOther` and `CorrectOther` (below): a `switch` over it that names every
+  kind needs cases for them.
+
+### Added
+
+- **A value a person settled over a suggestion that was not the form resolver's.** An application may show its own
+  suggestion — its own model's, a rule's, a default — in place of the resolver's. `Settlement.AcceptOther` (kept) and
+  `Settlement.CorrectOther` (changed), recorded as `SettlementKind.AcceptOther` and `SettlementKind.CorrectOther`:
+  memory learns the value and choosing thresholds counts it as it counts the others, but it says nothing about the
+  resolver's suggestions. Settled as `Enter` such a value would count among the values settled with nothing in view, and
+  as `Fill` it would be kept out of memory. The Rust crate and Python package `iyulab-gil` have had the same two kinds
+  since 0.5.0.
+- **`ThresholdRule.Pooled`: choose a field's two thresholds for a target on its answers together.** A new
+  `ThresholdSelection.SelectLayersAsync` overload takes a `ThresholdRule`. `EveryBand`, the rule of every other
+  overload, is unchanged. `Pooled` chooses the key and similar document thresholds as the pair that answers the most
+  of the field's latest `PooledRecentLookups` lookups while the precision of all those answers holds the target at the
+  bottom of its Wilson interval at `PooledStandardErrors` (1.645) standard errors, reaching back while the field's
+  current thresholds answered fewer than `PooledRecentAnswers` of them. Some bands of its answers fall below the target
+  where others are above it. See "A target can be read two ways" in the README. The Rust crate and Python package
+  `iyulab-gil` have the same rule (`replay::select_layers_by_rule`, `select_layers(..., rule="pooled")`).
+
+### Documentation
+
 - The repository is https://github.com/iyulab/gil again; `iyulab/gilfit` redirects. The NuGet package ID and
   namespace stay `Gil`. The Rust crate and the Python package are published as `iyulab-gil` from 0.3.0 (imported as
   `gil`); `gilfit` 0.1.0 and 0.2.0 are yanked.

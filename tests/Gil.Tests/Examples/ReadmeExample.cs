@@ -142,6 +142,7 @@ internal static class ReadmeExample
             MemorySimilarityFloor = layers.Memory.Chosen?.SimilarityFloor,
         };
         var tuned = form.WithField(team);
+        var pooled = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "team", saved, targetPrecision: 0.8, minimumAnswered: 30, counting: null, ThresholdRule.Pooled);
         var unprompted = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30, counting: [SettlementKind.Enter]);
 
         var planner = new AskPlanner(form, "team", askable: ["component"], budget: 0.5);

@@ -379,13 +379,17 @@ var document = session.Snapshot();
 Say how a value was settled. `Settlement.Accept` and `Settlement.Correct` are for a person who had the suggestion in
 view. `Settlement.Enter` is for a person who settled the field with no suggestion shown — because the application
 withheld it, kept it below the threshold it shows, or had none. `Settlement.Fill` is for the application settling the
-suggested value on its own, with no person confirming it. The snapshot keeps the kind of each judged value in
-`SettledDocument.Settlements`; save it with the document. A value put back with `Settlement.Restore` is not known to have
-been settled any way. A filled value stays in the document, but memory does not learn it and choosing thresholds does not
-ask about it. Remembered, a suggestion's own answer would come back as evidence for itself. Replaying a public stream
-with nine in ten trusted answers filled, a replay that learned from them promised 0.97 where 0.73 was right, and one
-stream's key layer ended up answering every document with 0.11 right. Learning only from what a person settled kept the
-promise within a few points of what was right.
+suggested value on its own, with no person confirming it. `Settlement.AcceptOther` and `Settlement.CorrectOther` are for
+a person who kept or changed a value the application suggested some other way — its own model, a rule, a default — shown
+in place of the resolver's suggestion: memory learns it as any value a person settled, and it says nothing about the
+resolver's suggestions. Settled as entered it would count among the values chosen with nothing in view, and as filled it
+would be kept out of memory. The snapshot keeps the kind of each judged value in `SettledDocument.Settlements`; save it
+with the document. A value put back with `Settlement.Restore` is not known to have been settled any way. A filled value
+stays in the document, but memory does not learn it and choosing thresholds does not ask about it. Remembered, a
+suggestion's own answer would come back as evidence for itself. Replaying a public stream with nine in ten trusted
+answers filled, a replay that learned from them promised 0.97 where 0.73 was right, and one stream's key layer ended up
+answering every document with 0.11 right. Learning only from what a person settled kept the promise within a few points
+of what was right.
 
 A field left empty is not settled: leave it out of the document rather than settling an empty string. An empty string
 is a value like any other, so memory would learn it and suggest it to the next similar document; a field the document
@@ -596,6 +600,24 @@ that keeps its promise still loses — each answer it adds costs more than it sa
 biological sample records with costs counted this way, thresholds chosen for 0.8 answered right 0.88 of the time — a
 loss once a wrong value costs ten entries; chosen for a target at or above 1 − 1/ρ, they cost less than asking at every
 ρ from 2 to 20. When you do not know ρ, time how long undoing a wrong value takes against entering one.
+
+A target can be read two ways. By default (`ThresholdRule.EveryBand`) each layer's threshold is the lowest down to
+which every band of its answers meets the target, so no band of weak answers rides on good ones above it — a floor
+under every kind of answer. When the target is a share of all the field's answers instead, ask for
+`ThresholdRule.Pooled`: it chooses the two thresholds together, as the pair that answers the most of the field's latest
+`ThresholdSelection.PooledRecentLookups` lookups while the precision of all those answers taken together stays at or
+above the target at the bottom of its Wilson interval at `PooledStandardErrors` (1.645) standard errors. Where the
+field's thresholds as they stand would have answered fewer than `PooledRecentAnswers` of those lookups, it reaches
+further back. In eight forward replays on seven public collections — medical device product codes, bug components,
+aircraft fault codes, patent groups and the attributes of three kinds of biological samples — each on records the rule was not tuned on, it kept a 0.8 target every time and
+answered 0.92–1.80 times as often as `EveryBand` (1.52 in the middle); holding the bound at one standard error instead
+broke the target on a field answered a few hundred times. Each layer's `Chosen` still reports that layer's own
+precision and `Promise` (one standard error, its own answers); the bound the pair was chosen under is on the answers
+together, and is the one to show:
+
+```csharp
+var pooled = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "team", saved, targetPrecision: 0.8, minimumAnswered: 30, counting: null, ThresholdRule.Pooled);
+```
 
 A value a person accepted with the suggestion in view may be right because it was suggested. A value the application
 filled was never checked. To know how right a layer is on its own, count only the settlements that saw no suggestion.
