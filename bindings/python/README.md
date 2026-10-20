@@ -91,6 +91,26 @@ When an answer carries `needs_external`, no memory had evidence: ask your model 
 and pass its ranked values back with `record.offer_external(decider, "team", [{"value": ..., "probability": ...,
 "trusted": ...}])`.
 
+## Which field to ask for first (experimental)
+
+When a decided attribute goes unanswered, asking the person for one observed attribute first may let the decider answer
+it. `gil.AskPlanner` learns, from settled records in settlement order, what asking each attribute gained per character
+typed, and advises an open record's missing attributes within a budget — a share of the typing asking every time would
+take. The decider it learns beside may hold the record learned, but none settled after it.
+
+```python
+planner = gil.AskPlanner(schema, "team", ["product", "channel"], budget=0.3)
+for settled in later:  # in settlement order, after the records the decider was made with
+    decider.put(schema, gil.records([settled]))
+    planner.learn(decider, settled)
+
+values = {"summary": "vpn drops every hour"}
+answer = decider.answer(schema, "t9", "team", values)  # writes nothing to memory
+for advice in planner.advise(answer, values):  # the open attributes, highest gain first
+    if advice["ask"]:
+        ...  # ask the person for advice["attribute"]
+```
+
 ## Keeping a tuning
 
 `gil.capture_tuning(schema, settled, target_precision)` keeps the chosen settings (`gil.record_promise` adds what each

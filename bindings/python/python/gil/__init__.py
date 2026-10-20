@@ -21,10 +21,11 @@ An open record answers while its values arrive, from a decider whose memories ho
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any, Literal, TypedDict, cast
 
+from gil._gil import AskPlanner as _AskPlanner
 from gil._gil import Decider as _Decider
 from gil._gil import OpenRecord as _OpenRecord
 from gil._gil import (
@@ -44,6 +45,8 @@ from gil._gil import (
 __all__ = [
     "Answer",
     "Answered",
+    "AskAdvice",
+    "AskPlanner",
     "AttributeUsage",
     "Candidate",
     "CoarseLook",
@@ -421,6 +424,90 @@ class Decider:
         similar_records: bool = True,
     ) -> None:
         self._inner = _Decider(schema.json, records, similar_records)
+
+    def put(self, schema: Schema, records: Records) -> None:
+        """Puts ``records`` — settled later than those the memories hold, in settlement order — into the memories."""
+        self._inner.put(schema.json, records)
+
+    def answer(
+        self,
+        schema: Schema,
+        id: str,
+        attribute: str,
+        values: Mapping[str, str],
+        sets: Mapping[str, Iterable[str]] | None = None,
+    ) -> Answer:
+        """The answer for one open decided attribute of record ``id`` from the ``values`` (and ``sets``) given, writing
+        nothing to memory. The saved version of the record, if the memories hold one, is not evidence for itself."""
+        return cast(
+            Answer,
+            json.loads(
+                self._inner.answer(
+                    schema.json,
+                    id,
+                    attribute,
+                    json.dumps(dict(values), ensure_ascii=False),
+                    None
+                    if sets is None
+                    else json.dumps(
+                        {k: list(v) for k, v in sets.items()}, ensure_ascii=False
+                    ),
+                )
+            ),
+        )
+
+
+class AskAdvice(TypedDict):
+    """Whether to ask a person for one attribute of an open record: what asking it has gained per character typed in
+    records whose answer showed the same coarse class, whether it is worth asking within the budget, and the gain per
+    character asking must reach now (``None`` before anything is learned)."""
+
+    attribute: str
+    gain: float
+    ask: bool
+    threshold: float | None
+
+
+class AskPlanner:
+    """Which observed attribute to ask a person for first, so that ``attribute`` (decided, one value) gets answered.
+    Experimental, as in the .NET library.
+
+    It learns from settled records, in the order they were settled, what asking each of the ``askable`` observed
+    attributes gained per character typed — the answer without the attribute against the answer with it, where no layer
+    answered without it — and advises an open record's missing attributes by that gain, marking those worth asking within
+    ``budget``, the share (above 0, at most 1) of the typing asking every time would take::
+
+        planner = gil.AskPlanner(schema, "team", ["product", "channel"], budget=0.3)
+        for record in settled:                      # in settlement order
+            decider.put(schema, gil.records([record]))
+            planner.learn(decider, record)
+        answer = decider.answer(schema, "t9", "team", values)
+        advice = planner.advise(answer, values)     # the open attributes, highest gain first
+    """
+
+    __slots__ = ("_inner",)
+
+    def __init__(
+        self, schema: Schema, attribute: str, askable: Iterable[str], budget: float
+    ) -> None:
+        self._inner = _AskPlanner(schema.json, attribute, list(askable), budget)
+
+    def learn(self, decider: Decider, record: dict[str, Any]) -> None:
+        """Learns from a settled record. ``decider``'s memories may hold it, but none settled after it."""
+        self._inner.learn(decider._inner, json.dumps(record, ensure_ascii=False))
+
+    def advise(self, answer: Answer, values: Mapping[str, str]) -> list[AskAdvice]:
+        """Advice for an open record: every askable attribute it has no value for, by gain per character, highest first
+        (in the order given where gains tie), each marked whether to ask."""
+        return cast(
+            list[AskAdvice],
+            json.loads(
+                self._inner.advise(
+                    json.dumps(answer, ensure_ascii=False),
+                    json.dumps(dict(values), ensure_ascii=False),
+                )
+            ),
+        )
 
 
 class OpenRecord:

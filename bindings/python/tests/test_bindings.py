@@ -363,3 +363,73 @@ def test_the_golden_key_concentrations_come_back() -> None:
     keyed["attributes"][3]["key_fields"] = want["key_fields"]["fields"]
     found = gil.select_key_concentrations(gil.Schema.from_dict(keyed), "team", first)
     assert found == want["key_concentrations"]["concentrations"]
+
+
+def final_form() -> dict:
+    """The golden's schema with every setting its lines chose, the coarse level's thresholds included."""
+    form = golden_form("", stop_kind="")
+    code = next(a for a in form["attributes"] if a["name"] == "code")
+    line = next(
+        l for l in lines("golden.jsonl") if l["kind"] == "coarse" and l["field"] == "code"
+    )
+    memory = line["memory"]["chosen"] or {}
+    code["coarse"] |= {
+        "key_threshold": (line["key"]["chosen"] or {}).get("threshold"),
+        "memory_threshold": memory.get("threshold"),
+        "memory_floor": memory.get("similarity_floor"),
+    }
+    return form
+
+
+def test_the_ask_planner_golden_comes_back() -> None:
+    """The ask planner's golden (ask.jsonl), written by the .NET implementation, read through Python to the bit."""
+    schema = gil.Schema.from_dict(final_form())
+    settled = lines("records.jsonl")
+    decider = gil.Decider(schema, gil.records(settled[:CHOSEN]))
+    askable = ["product", "channel", "summary"]
+    planners = {a: gil.AskPlanner(schema, a, askable, 0.3) for a in ("team", "code")}
+    observed = {"channel", "product", "summary"}
+    got = []
+    for i, record in enumerate(settled[CHOSEN:]):
+        values = {
+            k: v
+            for k, v in record["values"].items()
+            if k in observed
+            and not (
+                (k == "product" and i % 2 == 0)
+                or (k == "channel" and i % 3 == 1)
+                or (k == "summary" and i % 5 == 0)
+            )
+        }
+        for attribute, planner in planners.items():
+            answer = decider.answer(schema, record["id"], attribute, values)
+            coarse = answer["coarse"]
+            got.append(
+                {
+                    "kind": "ask",
+                    "doc": record["id"],
+                    "field": attribute,
+                    "answered": answer["answered"],
+                    "coarse": None if coarse is None else [coarse["value"], coarse["trusted"]],
+                    "advice": [
+                        [a["attribute"], a["gain"], a["ask"], a["threshold"]]
+                        for a in planner.advise(answer, values)
+                    ],
+                }
+            )
+        decider.put(schema, gil.records([record]))
+        for planner in planners.values():
+            planner.learn(decider, record)
+    # JSON numbers: the golden writes whole doubles without a fraction.
+    want = [json.loads(json.dumps(l), parse_float=float, parse_int=float) for l in lines("ask.jsonl")]
+    assert [json.loads(json.dumps(g), parse_int=float) for g in got] == want
+
+
+def test_an_ask_planner_refuses_what_the_core_refuses() -> None:
+    schema = gil.Schema.from_dict(final_form())
+    with pytest.raises(ValueError, match="budget"):
+        gil.AskPlanner(schema, "team", ["product"], 0.0)
+    with pytest.raises(ValueError, match="observed"):
+        gil.AskPlanner(schema, "team", ["code"], 0.3)
+    with pytest.raises(ValueError, match="decided"):
+        gil.AskPlanner(schema, "tags", ["product"], 0.3)

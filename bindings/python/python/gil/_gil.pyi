@@ -3,6 +3,7 @@
 from typing import final
 
 __all__ = [
+    "AskPlanner",
     "Decider",
     "OpenRecord",
     "Records",
@@ -80,6 +81,31 @@ class Decider:
         records: Records | None = None,
         similar_records: bool = True,
     ) -> Decider: ...
+    def put(self, schema_json: str, records: Records) -> None:
+        """Puts `records` (settled records of the schema, in settlement order, later than those it holds) into the memories."""
+
+    def answer(
+        self,
+        schema_json: str,
+        id: str,
+        attribute: str,
+        values_json: str,
+        sets_json: str | None = None,
+    ) -> str:
+        """The answer for one open decided attribute of record `id` from the values given, writing nothing to memory, as JSON."""
+
+@final
+class AskPlanner:
+    """Which observed attribute to ask a person for first, so that a decided attribute gets answered. Experimental."""
+
+    def __new__(
+        cls, schema_json: str, attribute: str, askable: list[str], budget: float
+    ) -> AskPlanner: ...
+    def learn(self, decider: Decider, record_json: str) -> None:
+        """Learns from a settled record (JSON, as records are read), in settlement order."""
+
+    def advise(self, answer_json: str, values_json: str) -> str:
+        """Advice for an open record from the decided attribute's answer and the record's values, as JSON."""
 
 @final
 class OpenRecord:

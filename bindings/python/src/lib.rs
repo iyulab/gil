@@ -4,8 +4,10 @@
 //! `gil` package around it reads that text into dictionaries. Records are gathered and returned whole rather than
 //! passed to a Python callback, which would cost a call back into the interpreter per lookup.
 
+use std::collections::BTreeMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
+use gil::ask_planner;
 use gil::decider::{Answer, ExternalCandidate};
 use gil::decision_record::DecisionRecord;
 use gil::key_memory::KeyMemory;
@@ -377,6 +379,84 @@ impl Decider {
         }
         Ok(Self { inner })
     }
+
+    /// Puts `records` (settled records of the schema, in settlement order, later than those it holds) into the memories.
+    fn put(&mut self, schema_json: &str, records: &Records) -> PyResult<()> {
+        let schema = schema(schema_json).map_err(invalid)?;
+        let inner = &mut self.inner;
+        guarded(|| inner.rebuild(&schema, &records.records))
+    }
+
+    /// The answer for one open decided attribute of record `id` from the values given (a JSON object, and the sets of
+    /// the attributes that take several as another), writing nothing to memory; the saved version of the record, if
+    /// memory holds one, is not evidence for itself. As JSON.
+    #[pyo3(signature = (schema_json, id, attribute, values_json, sets_json=None))]
+    fn answer(
+        &self,
+        schema_json: &str,
+        id: &str,
+        attribute: &str,
+        values_json: &str,
+        sets_json: Option<&str>,
+    ) -> PyResult<String> {
+        let schema = schema(schema_json).map_err(invalid)?;
+        let values: BTreeMap<String, String> = serde_json::from_str(values_json)
+            .map_err(|e| invalid(format!("values are an object of strings: {e}")))?;
+        let sets: BTreeMap<String, Vec<String>> = match sets_json {
+            Some(text) => serde_json::from_str(text)
+                .map_err(|e| invalid(format!("sets are an object of string lists: {e}")))?,
+            None => BTreeMap::new(),
+        };
+        guarded(|| {
+            self.inner
+                .answer_one(&schema, id, attribute, &values, &sets, None)
+        })
+        .map(|a| answer_json(&a).to_string())
+    }
+}
+
+/// Which observed attribute to ask a person for first, so that a decided attribute gets answered. Experimental.
+#[pyclass(module = "gil._gil", unsendable)]
+struct AskPlanner {
+    schema: Schema,
+    inner: ask_planner::AskPlanner,
+}
+
+#[pymethods]
+impl AskPlanner {
+    /// A planner for the decided single-valued attribute `attribute`, the observed attributes `askable` a person could
+    /// be asked for, and the share `budget` of the typing asking every time would take that asking may spend.
+    #[new]
+    fn new(
+        schema_json: &str,
+        attribute: &str,
+        askable: Vec<String>,
+        budget: f64,
+    ) -> PyResult<Self> {
+        let schema = schema(schema_json).map_err(invalid)?;
+        let inner =
+            ask_planner::AskPlanner::new(&schema, attribute, askable, budget).map_err(invalid)?;
+        Ok(Self { schema, inner })
+    }
+
+    /// Learns from a settled record (JSON, as records are read), in settlement order, asking `decider` — whose memories
+    /// may hold the record but none settled after it.
+    fn learn(&mut self, decider: PyRef<'_, Decider>, record_json: &str) -> PyResult<()> {
+        let value: Value = serde_json::from_str(record_json).map_err(|e| invalid(e.to_string()))?;
+        let settled = record(&value).map_err(invalid)?;
+        let (inner, schema) = (&mut self.inner, &self.schema);
+        guarded(|| inner.learn(&decider.inner, schema, &settled))
+    }
+
+    /// Advice for an open record from the decided attribute's answer (JSON, as an answer is given) and the record's
+    /// values (a JSON object), as JSON.
+    fn advise(&self, answer_json: &str, values_json: &str) -> PyResult<String> {
+        let answer: Answer = serde_json::from_str(answer_json)
+            .map_err(|e| invalid(format!("an answer does not read: {e}")))?;
+        let values: BTreeMap<String, String> = serde_json::from_str(values_json)
+            .map_err(|e| invalid(format!("values are an object of strings: {e}")))?;
+        guarded(|| self.inner.advise(&answer, &values)).map(|a| to_json(&a))
+    }
 }
 
 fn settlement_of(
@@ -648,6 +728,7 @@ fn _gil(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Records>()?;
     m.add_class::<Decider>()?;
     m.add_class::<OpenRecord>()?;
+    m.add_class::<AskPlanner>()?;
     m.add_function(wrap_pyfunction!(tuning_capture_json, m)?)?;
     m.add_function(wrap_pyfunction!(tuning_apply_json, m)?)?;
     m.add_function(wrap_pyfunction!(tuning_promise_json, m)?)?;

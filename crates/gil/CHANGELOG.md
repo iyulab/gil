@@ -12,7 +12,12 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   answered.** It learns from settled records, in settlement order, what asking each attribute gained per character typed
   (`learn`), and advises an open record's missing attributes by that gain, marking those worth asking within a budget
   of the typing asking every time would take (`advise` → `AskAdvice`). Experimental, as in the .NET library, whose
-  `AskPlanner` it reproduces to the bit (a new golden, `tests/fixtures/core/ask.jsonl`).
+  `AskPlanner` it reproduces to the bit (a new golden, `tests/fixtures/core/ask.jsonl`). Python: `gil.AskPlanner`
+  (`learn(decider, record)` · `advise(answer, values)`).
+- **Python: `Decider.put(schema, records)` and `Decider.answer(schema, id, attribute, values, sets=None)`.** `put` adds
+  records settled later than those the memories hold — what learning in settlement order needs. `answer` is one open
+  decided attribute's answer from the values given, writing nothing to memory (the core's `Decider::answer_one`); an
+  `OpenRecord` puts its record into memory with each change.
 
 ## 0.6.0
 
