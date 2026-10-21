@@ -81,4 +81,13 @@ mod tests {
         assert_eq!(keystrokes("ㄳ a"), "ㄱㅅ a");
         assert!(has("바") && has("ㅂ") && !has("bar"));
     }
+
+    #[test]
+    fn keystrokes_split_syllables_and_compound_letters() {
+        assert_eq!(keystrokes("박"), "ㅂㅏㄱ");
+        assert_eq!(keystrokes("왔"), "ㅇㅗㅏㅆ");
+        assert_eq!(keystrokes("닭"), "ㄷㅏㄹㄱ");
+        assert_eq!(keystrokes("ㅘ"), "ㅗㅏ");
+        assert_eq!(keystrokes("Gil 길"), "Gil ㄱㅣㄹ");
+    }
 }

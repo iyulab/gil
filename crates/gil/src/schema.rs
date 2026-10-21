@@ -729,4 +729,58 @@ mod tests {
         assert_eq!(level.of("K123"), "panel");
         assert_eq!(level.of("K999"), "K999");
     }
+
+    #[test]
+    fn a_typed_threshold_follows_the_key_threshold_by_characters_typed() {
+        let mut attribute = Attribute::new("team", AttributeRole::Decided);
+        attribute.key_threshold = Some(0.9);
+        attribute.typed_key_thresholds = Some(vec![Some(0.3), None]);
+
+        assert_eq!(attribute.key_threshold_for(0), Some(0.9));
+        assert_eq!(attribute.key_threshold_for(1), Some(0.3));
+        assert_eq!(attribute.key_threshold_for(2), None);
+        assert_eq!(attribute.key_threshold_for(3), None);
+        attribute.typed_key_thresholds = None;
+        assert_eq!(attribute.key_threshold_for(1), None);
+    }
+
+    #[test]
+    fn a_character_beyond_the_basic_plane_typed_is_one_character_typed() {
+        let mut attribute = Attribute::new("f", AttributeRole::Decided);
+        attribute.key_threshold = Some(9.0);
+        attribute.typed_key_thresholds = Some(vec![Some(0.1), Some(0.2)]);
+
+        assert_eq!(crate::text::scalars("😀"), 1);
+        assert_eq!(
+            attribute.key_threshold_for(crate::text::scalars("😀")),
+            Some(0.1)
+        );
+    }
+
+    #[test]
+    fn an_attribute_is_supported_by_other_evidence_limited_to_its_declared_dependencies() {
+        let mut reporter = Attribute::new("reporter", AttributeRole::Observed);
+        reporter.use_as_evidence = false;
+        let mut severity = Attribute::new("severity", AttributeRole::Decided);
+        severity.depends_on = Some(vec!["component".to_owned()]);
+        let schema = Schema {
+            name: "ticket".to_owned(),
+            attributes: vec![
+                reporter,
+                Attribute::new("component", AttributeRole::Observed),
+                Attribute::new("summary", AttributeRole::Observed),
+                Attribute::new("team", AttributeRole::Decided),
+                severity,
+            ],
+        };
+        assert_eq!(schema.check(), Ok(()));
+
+        assert!(schema.supports("component", "team"));
+        assert!(schema.supports("severity", "team")); // a settled decided attribute is evidence too
+        assert!(!schema.supports("reporter", "team"));
+        assert!(!schema.supports("team", "team"));
+        assert!(schema.supports("component", "severity"));
+        assert!(!schema.supports("summary", "severity"));
+        assert!(std::panic::catch_unwind(|| schema.supports("owner", "team")).is_err());
+    }
 }

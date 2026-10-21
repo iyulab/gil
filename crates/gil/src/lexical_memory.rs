@@ -345,3 +345,156 @@ fn tally(frequency: &mut [i64], ids: &[usize], delta: i64) {
         frequency[id] += delta;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lookup(memory: &LexicalMemory, task: &str, state: &str) -> Option<Match> {
+        memory.nearest(task, state, 1).into_iter().next()
+    }
+
+    #[test]
+    fn nearest_on_an_empty_memory_is_empty() {
+        let memory = LexicalMemory::default();
+        assert!(memory.nearest("task", "anything", 3).is_empty());
+        assert_eq!(memory.count("task"), 0);
+    }
+
+    #[test]
+    fn weights_are_taken_afresh_once_the_memory_has_grown_by_a_tenth() {
+        let mut memory = LexicalMemory::default();
+        for i in 0..20 {
+            memory.remember(
+                "task",
+                &format!("r{i}"),
+                &format!("row{i:02} common"),
+                &format!("a{i}"),
+            );
+        }
+
+        let taken = lookup(&memory, "task", "common").unwrap();
+        memory.remember("task", "r20", "row20 common", "a20");
+        let within = lookup(&memory, "task", "common").unwrap();
+        memory.remember("task", "r21", "row21 common", "a21");
+        let refreshed = lookup(&memory, "task", "common").unwrap();
+
+        // 21 rows: not yet a tenth more than 20.
+        assert_eq!(within.similarity.to_bits(), taken.similarity.to_bits());
+        // 22 rows: an n-gram every row shares counts for less.
+        assert!(refreshed.similarity < taken.similarity);
+        assert_eq!(
+            (
+                taken.source.as_str(),
+                within.source.as_str(),
+                refreshed.source.as_str()
+            ),
+            ("r0", "r0", "r0")
+        );
+    }
+
+    #[test]
+    fn forgetting_a_row_keeps_the_remembered_order_of_the_rest_for_ties() {
+        let mut memory = LexicalMemory::default();
+        for key in ["a", "b", "c", "d"] {
+            memory.remember("task", key, "same words", key);
+        }
+
+        memory.forget("task", "b"); // the last row takes its place
+        memory.forget("task", "a");
+        let tie = lookup(&memory, "task", "same words").unwrap();
+        memory.remember("task", "c", "same words", "c again"); // keeps its place in the order
+        memory.remember("task", "a", "same words", "a again"); // remembered anew: last
+        let ranked: Vec<(String, String)> = memory
+            .nearest("task", "same words", 3)
+            .into_iter()
+            .map(|m| (m.source, m.answer))
+            .collect();
+
+        assert_eq!(tie.source, "c");
+        assert_eq!(
+            ranked,
+            [("c", "c again"), ("d", "d"), ("a", "a again")]
+                .map(|(s, a)| (s.to_owned(), a.to_owned()))
+        );
+    }
+
+    #[test]
+    fn empty_or_one_character_text_is_handled() {
+        for text in ["", "   ", "a"] {
+            let mut memory = LexicalMemory::default();
+            memory.remember("task", "t1", text, "answer");
+            memory.remember("task", "t2", "a longer request", "other");
+
+            let found =
+                lookup(&memory, "task", text).expect("a lookup in a non-empty memory finds a row");
+            assert!(
+                (0.0..=1.0 + 1e-9).contains(&found.similarity),
+                "{text:?}: {}",
+                found.similarity
+            );
+        }
+    }
+
+    #[test]
+    fn rows_replaced_and_forgotten_many_times_leave_no_trace_in_lookups() {
+        let mut memory = LexicalMemory::default();
+        memory.remember(
+            "task",
+            "kept",
+            "my card was blocked at the shop",
+            "cards_block",
+        );
+        for i in 0..40 {
+            memory.remember(
+                "task",
+                "moving",
+                &format!("refund order number {i} please"),
+                &format!("answer_{i}"),
+            );
+            memory.remember(
+                "task",
+                &format!("brief_{i}"),
+                &format!("where is parcel {i}"),
+                "tracking",
+            );
+            memory.forget("task", &format!("brief_{i}"));
+        }
+
+        let all = memory.nearest("task", "refund order number 39 please", 10);
+        let stale = memory.nearest("task", "refund order number 0 please", 10);
+
+        let sources = |m: &[Match]| m.iter().map(|m| m.source.clone()).collect::<Vec<_>>();
+        assert_eq!(sources(&all), ["moving", "kept"]);
+        assert_eq!(all[0].answer, "answer_39");
+        assert!((all[0].similarity - 1.0).abs() < 1e-12);
+        // The old text is gone with the row it was in.
+        assert_eq!(sources(&stale), ["moving", "kept"]);
+        assert_eq!(stale[0].answer, "answer_39");
+        assert_eq!(memory.count("task"), 2);
+    }
+
+    #[test]
+    fn korean_text_matches_without_a_tokenizer_and_decomposed_hangul_is_composed_first() {
+        use unicode_normalization::UnicodeNormalization;
+
+        let mut memory = LexicalMemory::default();
+        memory.remember(
+            "task",
+            "t1",
+            "로그인 화면에서 비밀번호 오류가 납니다",
+            "auth",
+        );
+        memory.remember("task", "t2", "결제 금액이 두 번 청구되었어요", "billing");
+
+        let found = lookup(&memory, "task", "비밀번호 오류로 로그인이 안 돼요").unwrap();
+        // The same sentence typed as conjoining jamo (NFD) reads as the composed syllables.
+        let nfd: String = "결제 금액이 두 번 청구되었어요".nfd().collect();
+        assert_ne!(nfd, "결제 금액이 두 번 청구되었어요");
+        let decomposed = lookup(&memory, "task", &nfd).unwrap();
+
+        assert_eq!(found.answer, "auth");
+        assert_eq!(decomposed.answer, "billing");
+        assert!((decomposed.similarity - 1.0).abs() < 1e-9);
+    }
+}
