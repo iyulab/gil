@@ -16,15 +16,15 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
   | Before | Now |
   |---|---|
-  | `FormDefinition` | `Schema` (`new Schema(name, attributes)`, `Find`, `FromJson`/`ToJson`; `IDisposable`) |
-  | `FieldDefinition`, `FieldRole`, `FieldPolicy` | `Attribute` (settings as `init` properties), `AttributeRole` (`Observed`, `Decided`), `AttributePolicy` |
+  | `FormDefinition` | `Schema` (`new Schema(name, attributes)`, `Find`, `FromJson`/`ToJson`; `IDisposable`): `Fields` is `Attributes`, `Field(name)` is `Find(name)`; `Keys`, `Supports`, `WithField` and `Language` are gone — build a new schema from changed attributes |
+  | `FieldDefinition`, `FieldRole`, `FieldPolicy` | `Attribute` (settings as `init` properties, same names but `MemorySimilarityFloor` is `MemoryFloor` and `SimilarDocumentVotes` is `SimilarVotes`; `Admits` and `KeyThresholdFor` are gone — the core applies them), `AttributeRole` (`Observed`, and `Judged` is `Decided`), `AttributePolicy` (unchanged) |
   | `CoarseLevel` | `CoarseLevel` — `new CoarseLevel(prefix)` / `new CoarseLevel(classes)` and `Of(value)` as before, or set `Prefix` / `Classes` as `init` properties; `MemorySimilarityFloor` is `MemoryFloor` |
-  | `SettledDocument` | `Record` (`SettledAt` is a `DateTimeOffset`); a batch is `SettledRecords.From(records)` |
+  | `SettledDocument` | `Record` (`DocumentId` is `Id`; `SettledAt` is a `DateTimeOffset`; `Validate(form)` is gone — a `Decider` refuses a record that does not fit its schema); a batch is `SettledRecords.From(records)` |
   | `Settlement`, `SettlementKind` | `OpenRecord.Settle(decider, attribute, kind, now, value, values, probability)`; `SettlementKind` unchanged |
   | `FormResolver`, `FieldMemory`, `LexicalMemory` (as document memory) | `Decider` (`Put`, `Remove`, `Answer`), which holds both memories |
   | `FormSession` | `OpenRecord` (`Open`, `Reopen`, `Observe`, `Settle`, `Answer`, `AnswerPartial`, `OfferExternal`, `Snapshot`) |
-  | `FieldSuggestion` | `Answer` (with `Decision` when asked for); while typing, `PartialAnswer` |
-  | `FieldCandidate`, `FieldSource` | `Candidate` (`Evidence` is `KeyEvidence` or `RecordEvidence`), `Source` |
+  | `FieldSuggestion` | `Answer` (`Field` is `Attribute`; with `Decision` when asked for); while typing, `PartialAnswer`. `SimilarDocuments` is gone: a candidate from the similar record layer names its nearest voter in `Evidence` (`RecordEvidence`: id and similarity), and the decision record's `Similar` holds the vote. `Confidence`, `Elapsed`, `Energy` and `TraceId` belonged to the model path and are gone |
+  | `FieldCandidate`, `FieldSource` | `Candidate` (same members; `Evidence` is `KeyEvidence` or `RecordEvidence`), `Source` (`Model` is `External`; JSON still writes `Model`) |
   | `IFieldModel`, `FieldModelResult` | `IExternalJudge.JudgeAsync(attribute, evidence, ct)` returning ranked `ExternalCandidate`s (empty abstains), called by `OpenRecord.AnswerAsync(decider, judge, ct)` |
   | `ThresholdSelection` | `Replay` (`SelectLayers`, `SelectCoarse`, `SelectKeyFields`, `SelectKeyConcentrations`), synchronous, over `SettledRecords` and `SelectionOptions` |
   | `ThresholdSelection.RecentDocuments`, `PooledStandardErrors`, `PooledRecentLookups`, `PooledRecentAnswers` | `Replay.RecentRecords`, `Replay.PooledStandardErrors`, `Replay.PooledRecentLookups`, `Replay.PooledRecentAnswers` (same values) |
