@@ -54,6 +54,8 @@ public sealed record Tuning(
     }
 
     /// <summary>A new schema: <paramref name="schema"/> with these settings put back on its attributes.</summary>
+    /// <exception cref="ArgumentException">The schema they make breaks a schema rule — settings chosen for another schema
+    /// may name key attributes this one does not have.</exception>
     public Schema Apply(Schema schema) => TuningJson.Apply(ToJson(), schema);
 
     /// <summary>Why the tuning no longer stands for <paramref name="schema"/> with <paramref name="settled"/> records —

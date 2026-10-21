@@ -211,24 +211,73 @@ impl CoarseLevel {
     }
 }
 
-/// A schema: its name scopes memory, its attributes are in order.
+/// A schema: its name scopes memory, its attributes are in order. A schema is checked when it is made
+/// ([`Schema::new`], or deserializing one), so every schema in hand keeps the rules.
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Schema {
-    pub name: String,
-    pub attributes: Vec<Attribute>,
+    name: String,
+    attributes: Vec<Attribute>,
+}
+
+/// A schema as it reads, before it is checked.
+#[cfg(feature = "serde")]
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SchemaParts {
+    name: String,
+    attributes: Vec<Attribute>,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Schema {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let parts = SchemaParts::deserialize(deserializer)?;
+        Schema::new(parts.name, parts.attributes).map_err(serde::de::Error::custom)
+    }
 }
 
 impl Schema {
-    /// Checks the schema as the reference implementation does when one is made: a name, unique attribute names, at least
-    /// one decided attribute, and settings that fit their attribute — several values only for a decided attribute and
-    /// then no memory threshold or typed key thresholds, at least one similar-record vote, a coarse level (with a prefix
-    /// of at least one, or a table of at least one value and no blank class) and values to catch only on a decided
-    /// single-valued attribute, dependencies and key attributes that name other attributes that are evidence (key
-    /// attributes among the dependencies when those are given), key concentrations for known attributes that are finite
-    /// and above 0, and candidates taken from another attribute. The error names the first rule broken.
-    pub fn check(&self) -> Result<(), String> {
+    /// A schema named `name` with `attributes` in order, checked as the reference implementation checks one when it is
+    /// made: a name, unique attribute names, at least one decided attribute, and settings that fit their attribute —
+    /// several values only for a decided attribute and then no memory threshold or typed key thresholds, at least one
+    /// similar-record vote, a coarse level (with a prefix of at least one, or a table of at least one value and no blank
+    /// class) and values to catch only on a decided single-valued attribute, dependencies and key attributes that name
+    /// other attributes that are evidence (key attributes among the dependencies when those are given), key
+    /// concentrations for known attributes that are finite and above 0, and candidates taken from another attribute. The
+    /// error names the first rule broken.
+    pub fn new(name: impl Into<String>, attributes: Vec<Attribute>) -> Result<Self, String> {
+        let schema = Self {
+            name: name.into(),
+            attributes,
+        };
+        schema.check()?;
+        Ok(schema)
+    }
+
+    /// The schema's name, which scopes memory.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// The schema's attributes, in order.
+    pub fn attributes(&self) -> &[Attribute] {
+        &self.attributes
+    }
+
+    /// The schema with `change` made to the attribute named `attribute`, unchecked — only for a change that keeps the
+    /// schema valid (a debug build checks it). A change that might not goes through [`Schema::new`].
+    pub(crate) fn derived(&self, attribute: &str, change: impl FnOnce(&mut Attribute)) -> Self {
+        let mut schema = self.clone();
+        if let Some(a) = schema.attributes.iter_mut().find(|a| a.name == attribute) {
+            change(a);
+        }
+        debug_assert_eq!(schema.check(), Ok(()), "a derived schema stays valid");
+        schema
+    }
+
+    /// The rules [`Schema::new`] checks.
+    fn check(&self) -> Result<(), String> {
         if self.name.trim().is_empty() {
             return Err("a schema needs a name".into());
         }
@@ -803,17 +852,17 @@ mod tests {
         reporter.use_as_evidence = false;
         let mut severity = Attribute::new("severity", AttributeRole::Decided);
         severity.depends_on = Some(vec!["component".to_owned()]);
-        let schema = Schema {
-            name: "ticket".to_owned(),
-            attributes: vec![
+        let schema = Schema::new(
+            "ticket",
+            vec![
                 reporter,
                 Attribute::new("component", AttributeRole::Observed),
                 Attribute::new("summary", AttributeRole::Observed),
                 Attribute::new("team", AttributeRole::Decided),
                 severity,
             ],
-        };
-        assert_eq!(schema.check(), Ok(()));
+        )
+        .expect("a valid schema");
 
         assert!(schema.supports("component", "team"));
         assert!(schema.supports("severity", "team")); // a settled decided attribute is evidence too

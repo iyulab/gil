@@ -26,10 +26,11 @@ fn ticket() -> Schema {
     let mut team = Attribute::new("team", AttributeRole::Decided);
     team.memory_threshold = Some(0.3);
     team.similar_votes = 1;
-    Schema {
-        name: "ticket".into(),
-        attributes: vec![Attribute::new("summary", AttributeRole::Observed), team],
-    }
+    Schema::new(
+        "ticket",
+        vec![Attribute::new("summary", AttributeRole::Observed), team],
+    )
+    .expect("a valid schema")
 }
 
 fn doc(id: &str, summary: &str, team: Option<&str>, settled_at: i64) -> Record {

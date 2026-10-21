@@ -79,10 +79,10 @@ impl AskPlanner {
         }
 
         let definition = schema
-            .attributes
+            .attributes()
             .iter()
             .find(|a| a.name == attribute)
-            .ok_or_else(|| format!("schema '{}' has no attribute '{attribute}'", schema.name))?;
+            .ok_or_else(|| format!("schema '{}' has no attribute '{attribute}'", schema.name()))?;
         if definition.role != AttributeRole::Decided
             || definition.multiple
             || definition.policy == AttributePolicy::Off
@@ -100,7 +100,7 @@ impl AskPlanner {
         let mut ledgers = HashMap::new();
         for name in &askable {
             let observed = schema
-                .attributes
+                .attributes()
                 .iter()
                 .find(|a| &a.name == name)
                 .is_some_and(|a| a.role == AttributeRole::Observed);

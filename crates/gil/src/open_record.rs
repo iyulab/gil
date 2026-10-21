@@ -97,7 +97,7 @@ impl OpenRecord {
         let arrival: Vec<String> = saved.arrival.clone().unwrap_or_else(|| {
             let by_role = |role| {
                 open.schema
-                    .attributes
+                    .attributes()
                     .iter()
                     .filter(move |a| a.role == role)
                     .map(|a| a.name.clone())
@@ -127,7 +127,7 @@ impl OpenRecord {
         for (attribute, kind) in &saved.settlements {
             let decided = open
                 .schema
-                .attributes
+                .attributes()
                 .iter()
                 .any(|a| &a.name == attribute && a.role == AttributeRole::Decided);
             if open.has(attribute) && decided {
@@ -247,7 +247,7 @@ impl OpenRecord {
         sink: &mut dyn FnMut(&DecisionRecord),
     ) -> Vec<Answer> {
         self.schema
-            .attributes
+            .attributes()
             .iter()
             .filter(|a| self.is_open(a))
             .map(|a| decider.answer_one_with(&self.lookup(&a.name, None), sink))
@@ -406,7 +406,7 @@ impl OpenRecord {
     fn changed(&self, decider: &mut Decider, changed: &str, reopened: bool) -> Vec<Answer> {
         decider.rebuild(&self.schema, std::slice::from_ref(&self.snapshot()));
         self.schema
-            .attributes
+            .attributes()
             .iter()
             .filter(|a| self.is_open(a))
             // A set's own chosen values are evidence for the rest of it.

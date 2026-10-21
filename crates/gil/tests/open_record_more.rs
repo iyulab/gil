@@ -57,10 +57,7 @@ fn observed(name: &str) -> Attribute {
 }
 
 fn schema(name: &str, attributes: Vec<Attribute>) -> Schema {
-    Schema {
-        name: name.into(),
-        attributes,
-    }
+    Schema::new(name, attributes).expect("a valid schema")
 }
 
 fn values(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {

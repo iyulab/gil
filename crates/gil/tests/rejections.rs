@@ -38,9 +38,9 @@ fn ticket() -> Schema {
     topics.multiple = true;
     let mut internal = Attribute::new("internal", AttributeRole::Decided);
     internal.policy = AttributePolicy::Off;
-    Schema {
-        name: "ticket".into(),
-        attributes: vec![
+    Schema::new(
+        "ticket",
+        vec![
             Attribute::new("channel", AttributeRole::Observed),
             Attribute::new("component", AttributeRole::Observed),
             team,
@@ -48,7 +48,8 @@ fn ticket() -> Schema {
             Attribute::new("code", AttributeRole::Decided),
             internal,
         ],
-    }
+    )
+    .expect("a valid schema")
 }
 
 fn records() -> Vec<Record> {
@@ -336,13 +337,14 @@ fn a_lookup_for_no_matches_is_refused() {
 #[test]
 #[should_panic(expected = "'nonexistent'")]
 fn a_lookup_of_an_unknown_attribute_is_refused_while_memory_is_empty() {
-    let schema = Schema {
-        name: "ticket".into(),
-        attributes: vec![
+    let schema = Schema::new(
+        "ticket",
+        vec![
             Attribute::new("component", AttributeRole::Observed),
             Attribute::new("team", AttributeRole::Decided),
         ],
-    };
+    )
+    .expect("a valid schema");
     let known = BTreeMap::new();
     let _ = Lookup::new(&schema, "nonexistent", &known);
 }

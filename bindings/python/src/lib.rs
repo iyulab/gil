@@ -32,13 +32,10 @@ fn invalid(message: String) -> PyErr {
 
 // ---- reading ----
 
-/// A schema as the core's `serde` form reads it — the settings an attribute leaves out take `Attribute::new`'s defaults —
-/// checked as the reference implementation checks one.
+/// A schema as the core's `serde` form reads it — the settings an attribute leaves out take `Attribute::new`'s defaults;
+/// reading checks it as the reference implementation checks one, so a schema that breaks a rule does not read.
 fn schema(text: &str) -> Parsed<Schema> {
-    let schema: Schema =
-        serde_json::from_str(text).map_err(|e| format!("a schema does not read: {e}"))?;
-    schema.check()?;
-    Ok(schema)
+    serde_json::from_str(text).map_err(|e| format!("a schema does not read: {e}"))
 }
 
 /// `yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM` → 100-nanosecond ticks since the Unix epoch, UTC.
@@ -693,8 +690,9 @@ fn tuning_promise_json(tuning_json: &str, attribute: &str, layers_json: &str) ->
 /// The schema with the tuning's settings put back on its attributes, as JSON.
 #[pyfunction]
 fn tuning_apply_json(tuning_json: &str, schema_json: &str) -> PyResult<String> {
-    let mut schema = schema(schema_json).map_err(invalid)?;
-    tuning(tuning_json)?.apply(&mut schema);
+    let schema = tuning(tuning_json)?
+        .apply(&schema(schema_json).map_err(invalid)?)
+        .map_err(invalid)?;
     Ok(serde_json::to_string(&schema).expect("a schema serializes"))
 }
 

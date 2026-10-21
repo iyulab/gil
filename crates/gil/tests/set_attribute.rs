@@ -26,14 +26,15 @@ fn paper_with(topics_key_threshold: Option<f64>) -> Schema {
     let mut topics = Attribute::new("topics", AttributeRole::Decided);
     topics.multiple = true;
     topics.key_threshold = topics_key_threshold;
-    Schema {
-        name: "paper".into(),
-        attributes: vec![
+    Schema::new(
+        "paper",
+        vec![
             Attribute::new("area", AttributeRole::Observed),
             topics,
             Attribute::new("lead", AttributeRole::Decided),
         ],
-    }
+    )
+    .expect("a valid schema")
 }
 
 /// Record `d<n>`, settled `n` minutes after the epoch: records settle in the order of their numbers, a minute apart.

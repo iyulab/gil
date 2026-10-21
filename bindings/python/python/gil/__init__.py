@@ -662,7 +662,9 @@ def record_promise(
 
 
 def apply_tuning(tuning: dict[str, Any], schema: Schema) -> Schema:
-    """``schema`` with the tuning's chosen settings put back on its attributes of the same names."""
+    """``schema`` with the tuning's chosen settings put back on its attributes of the same names; raises ``ValueError``
+    when the result breaks a schema rule — a tuning chosen for another schema may name key attributes this one does not
+    have."""
     return Schema(tuning_apply_json(json.dumps(tuning), schema.json))
 
 

@@ -226,7 +226,7 @@ impl Decider {
 
     /// The task an attribute's record memory is kept under.
     pub fn task(schema: &Schema, attribute: &str) -> String {
-        format!("{}/{attribute}", schema.name)
+        format!("{}/{attribute}", schema.name())
     }
 
     /// Puts settled records into memory, each replacing what it contributed before.
@@ -242,13 +242,13 @@ impl Decider {
     /// as they can after any change: the lexical memory takes its n-gram frequencies afresh only once its row count has
     /// moved by a tenth.
     pub fn remove(&mut self, schema: &Schema, record: &str) {
-        self.key_memory.remove(&schema.name, record);
+        self.key_memory.remove(schema.name(), record);
         let Some(memory) = self.record_memory.as_mut() else {
             return;
         };
 
         for attribute in schema
-            .attributes
+            .attributes()
             .iter()
             .filter(|f| f.role == AttributeRole::Decided)
         {
@@ -277,7 +277,7 @@ impl Decider {
         };
 
         for attribute in schema
-            .attributes
+            .attributes()
             .iter()
             .filter(|f| f.role == AttributeRole::Decided)
         {
@@ -337,7 +337,7 @@ impl Decider {
             panic!("{misplaced}");
         }
         schema
-            .attributes
+            .attributes()
             .iter()
             .filter(|f| {
                 f.role == AttributeRole::Decided

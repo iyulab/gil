@@ -147,7 +147,7 @@ fn a_refusal_is_a_status_and_a_message() {
     assert!(last_error().starts_with("a schema does not read"));
     assert!(out.is_null());
 
-    // A schema that reads but does not check: an evidence attribute it does not hold.
+    // A schema that breaks a rule does not read, and the message names the rule: an evidence attribute it does not hold.
     let mut bad: Value = serde_json::from_str(&golden_schema()).unwrap();
     let decided = bad["attributes"]
         .as_array_mut()
@@ -158,7 +158,12 @@ fn a_refusal_is_a_status_and_a_message() {
     decided["depends_on"] = json!(["no-such-attribute"]);
     let status = unsafe { gil_schema_new(s(&bad.to_string()), &mut out) };
     assert_eq!(status, GIL_INVALID_INPUT, "{}", last_error());
-    assert!(!last_error().is_empty());
+    assert!(
+        last_error().starts_with("a schema does not read")
+            && last_error().contains("depends on 'no-such-attribute'"),
+        "{}",
+        last_error()
+    );
 
     let schema = new_schema(&golden_schema());
     let decider = new_decider();

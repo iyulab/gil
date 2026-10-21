@@ -36,7 +36,7 @@ fn the_ask_planner_reproduces_its_golden() {
     let mut resolver = Decider::new(KeyMemory::default(), Some(LexicalMemory::default()));
     resolver.rebuild(&schema, &records[..CHOSEN]);
     let mut planners: Vec<(String, AskPlanner)> = schema
-        .attributes
+        .attributes()
         .iter()
         .filter(|a| a.role == AttributeRole::Decided && !a.multiple)
         .map(|a| {

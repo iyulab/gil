@@ -157,7 +157,7 @@ internal static class TuningJson
     }
 
     /// <summary>A new schema: <paramref name="schema"/> with the tuning's settings put back on its attributes.</summary>
-    /// <exception cref="ArgumentException">The tuning does not read.</exception>
+    /// <exception cref="ArgumentException">The tuning does not read, or the schema it makes breaks a schema rule.</exception>
     internal static unsafe Schema Apply(string tuningJson, Schema schema)
     {
         ArgumentNullException.ThrowIfNull(tuningJson);

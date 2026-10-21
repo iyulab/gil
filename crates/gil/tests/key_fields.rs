@@ -51,19 +51,26 @@ fn names(names: &[&str]) -> Option<Vec<String>> {
 /// The code follows from the part. The model is drawn from many values, each seen a few times: a key seen rarely lends
 /// its few codes most of their strength, so it pushes wrong codes up. The place and the shift are drawn from a few.
 fn report(key_fields: Option<Vec<String>>, depends_on: Option<Vec<String>>) -> Schema {
+    try_report(key_fields, depends_on).expect("a valid schema")
+}
+
+fn try_report(
+    key_fields: Option<Vec<String>>,
+    depends_on: Option<Vec<String>>,
+) -> Result<Schema, String> {
     let mut code = Attribute::new("code", AttributeRole::Decided);
     code.key_fields = key_fields;
     code.depends_on = depends_on;
-    Schema {
-        name: "report".into(),
-        attributes: vec![
+    Schema::new(
+        "report",
+        vec![
             Attribute::new("part", AttributeRole::Observed),
             Attribute::new("place", AttributeRole::Observed),
             Attribute::new("model", AttributeRole::Observed),
             Attribute::new("shift", AttributeRole::Observed),
             code,
         ],
-    }
+    )
 }
 
 fn record(i: usize, values: &[(&str, String)]) -> Record {
@@ -234,8 +241,7 @@ fn the_attributes_own_key_attributes_are_ignored_and_its_dependencies_bound_the_
 fn key_attributes_must_be_attributes_the_attribute_rests_on() {
     // The attribute itself, not an attribute of the schema, and one outside those it rests on.
     for key in ["code", "missing", "place"] {
-        let error = report(names(&[key]), names(&["part", "model"]))
-            .check()
+        let error = try_report(names(&[key]), names(&["part", "model"]))
             .expect_err("a key attribute it does not rest on");
         assert!(
             error.contains(&format!("keyed by '{key}'")),
@@ -250,18 +256,15 @@ fn an_attribute_that_is_not_evidence_cannot_key_another() {
     reporter.use_as_evidence = false;
     let mut code = Attribute::new("code", AttributeRole::Decided);
     code.key_fields = names(&["reporter"]);
-    let schema = Schema {
-        name: "report".into(),
-        attributes: vec![
+    let error = Schema::new(
+        "report",
+        vec![
             Attribute::new("part", AttributeRole::Observed),
             reporter,
             code,
         ],
-    };
-
-    let error = schema
-        .check()
-        .expect_err("a key attribute that is not evidence");
+    )
+    .expect_err("a key attribute that is not evidence");
     assert!(error.contains("keyed by 'reporter'"), "{error}");
 }
 
@@ -297,15 +300,16 @@ fn an_attribute_naming_what_is_described_is_kept_though_a_broad_attribute_alone_
     let inspection = |concentrations: BTreeMap<String, f64>| {
         let mut risk = Attribute::new("risk", AttributeRole::Decided);
         risk.key_concentrations = concentrations;
-        Schema {
-            name: "inspection".into(),
-            attributes: vec![
+        Schema::new(
+            "inspection",
+            vec![
                 Attribute::new("outlet", AttributeRole::Observed),
                 Attribute::new("kind", AttributeRole::Observed),
                 Attribute::new("inspector", AttributeRole::Observed),
                 risk,
             ],
-        }
+        )
+        .expect("a valid schema")
     };
     let schema = inspection(select_key_concentrations(
         &mut KeyMemory::default(),
@@ -337,14 +341,15 @@ fn an_attribute_naming_what_is_described_is_kept_though_a_broad_attribute_alone_
 #[test]
 fn where_no_narrower_set_gains_more_the_key_attributes_stay_unset() {
     // One attribute decides the code on its own and the other carries the same information: narrowing gains nothing.
-    let schema = Schema {
-        name: "pair".into(),
-        attributes: vec![
+    let schema = Schema::new(
+        "pair",
+        vec![
             Attribute::new("part", AttributeRole::Observed),
             Attribute::new("alias", AttributeRole::Observed),
             Attribute::new("code", AttributeRole::Decided),
         ],
-    };
+    )
+    .expect("a valid schema");
     let records: Vec<Record> = (0..400)
         .map(|i| {
             let n = i % PARTS.len();
@@ -369,14 +374,15 @@ fn where_no_narrower_set_gains_more_the_key_attributes_stay_unset() {
 fn an_attribute_that_is_not_evidence_is_never_tried() {
     let mut reporter = Attribute::new("reporter", AttributeRole::Observed);
     reporter.use_as_evidence = false;
-    let schema = Schema {
-        name: "report".into(),
-        attributes: vec![
+    let schema = Schema::new(
+        "report",
+        vec![
             Attribute::new("part", AttributeRole::Observed),
             reporter,
             Attribute::new("code", AttributeRole::Decided),
         ],
-    };
+    )
+    .expect("a valid schema");
     let records: Vec<Record> = reports(200, 5)
         .into_iter()
         .map(|mut r| {
@@ -422,10 +428,12 @@ fn counting_typing_brings_the_typed_thresholds_for_the_choice() {
     );
 
     // The typed thresholds that come with the choice are those chosen on the schema keyed by it, with its key threshold.
-    let mut keyed = report(typed.key_fields.clone(), None);
-    for a in keyed.attributes.iter_mut().filter(|a| a.name == "code") {
+    let keyed = report(typed.key_fields.clone(), None);
+    let mut attributes = keyed.attributes().to_vec();
+    for a in attributes.iter_mut().filter(|a| a.name == "code") {
         a.key_threshold = typed.chosen.chosen.as_ref().map(|c| c.threshold);
     }
+    let keyed = Schema::new(keyed.name(), attributes).expect("a valid schema");
     let again = select_typed_key_thresholds(
         &mut KeyMemory::default(),
         &keyed,
@@ -442,10 +450,11 @@ fn counting_typing_brings_the_typed_thresholds_for_the_choice() {
 fn typing_is_not_counted_for_an_attribute_that_takes_several_values() {
     let mut topics = Attribute::new("topics", AttributeRole::Decided);
     topics.multiple = true;
-    let schema = Schema {
-        name: "paper".into(),
-        attributes: vec![Attribute::new("venue", AttributeRole::Observed), topics],
-    };
+    let schema = Schema::new(
+        "paper",
+        vec![Attribute::new("venue", AttributeRole::Observed), topics],
+    )
+    .expect("a valid schema");
 
     select_key_fields(&schema, "topics", &[], choice(5), 1);
 }

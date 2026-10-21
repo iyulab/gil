@@ -1,18 +1,15 @@
-//! `Schema::check` refuses what the reference implementation refuses when a form is defined — names, dependencies, the
+//! `Schema::new` refuses what the reference implementation refuses when a form is defined — names, dependencies, the
 //! settings only a decided single-valued attribute takes, those a set-valued attribute does not, and a coarse level's
 //! prefix or table — and names the attribute and the rule it breaks.
 
 use gil::schema::{Attribute, AttributeRole, CoarseLevel, Schema};
 
-fn schema(attributes: Vec<Attribute>) -> Schema {
-    Schema {
-        name: "form".into(),
-        attributes,
-    }
+fn checks(attributes: Vec<Attribute>) -> Result<(), String> {
+    Schema::new("form", attributes).map(|_| ())
 }
 
 fn refused(attributes: Vec<Attribute>) -> String {
-    schema(attributes).check().expect_err("a refused schema")
+    checks(attributes).expect_err("a refused schema")
 }
 
 fn decided(name: &str) -> Attribute {
@@ -68,20 +65,24 @@ fn contradictory_or_dangling_declarations_are_refused() {
             .contains("'team' depends on 'reporter', which is not evidence")
     );
     assert_eq!(
-        schema(vec![observed("component"), depending("component")]).check(),
+        checks(vec![observed("component"), depending("component")]),
         Ok(())
     );
 }
 
 #[test]
 fn a_schema_and_each_of_its_attributes_need_a_name() {
-    let mut unnamed = schema(vec![decided("team")]);
-    unnamed.name = " ".into();
-    assert_eq!(unnamed.check(), Err("a schema needs a name".into()));
+    for blank in ["", " "] {
+        assert_eq!(
+            Schema::new(blank, vec![decided("team")]).map(|_| ()),
+            Err("a schema needs a name".into()),
+            "{blank:?}"
+        );
+    }
 
     for blank in ["", "  "] {
         assert_eq!(
-            schema(vec![observed(blank), decided("team")]).check(),
+            checks(vec![observed(blank), decided("team")]),
             Err("an attribute needs a name".into()),
             "{blank:?}"
         );
@@ -92,7 +93,7 @@ fn a_schema_and_each_of_its_attributes_need_a_name() {
 fn only_a_decided_attribute_takes_several_values() {
     let tags = with(observed("tags"), |a| a.multiple = true);
     assert!(refused(vec![tags, decided("lead")]).contains("'tags' is observed"));
-    assert_eq!(schema(vec![set("tags"), decided("lead")]).check(), Ok(()));
+    assert_eq!(checks(vec![set("tags"), decided("lead")]), Ok(()));
 }
 
 #[test]
@@ -106,14 +107,14 @@ fn a_set_takes_no_memory_threshold_and_no_typed_key_thresholds() {
 
     let typed = |a: Attribute| with(a, |a| a.typed_key_thresholds = Some(vec![Some(0.3)]));
     assert!(refused(vec![typed(set("tags"))]).contains("takes no typed key thresholds"));
-    assert_eq!(schema(vec![typed(decided("lead"))]).check(), Ok(()));
+    assert_eq!(checks(vec![typed(decided("lead"))]), Ok(()));
 }
 
 #[test]
 fn a_class_needs_one_character_and_a_single_valued_decided_attribute() {
     let coarse =
         |a: Attribute, prefix: usize| with(a, |a| a.coarse = Some(CoarseLevel::by_prefix(prefix)));
-    assert_eq!(schema(vec![coarse(decided("code"), 2)]).check(), Ok(()));
+    assert_eq!(checks(vec![coarse(decided("code"), 2)]), Ok(()));
 
     assert!(
         refused(vec![coarse(decided("code"), 0)])
@@ -134,7 +135,7 @@ fn a_table_of_classes_needs_a_value_and_no_blank_class() {
     let coarse = |level: CoarseLevel| with(decided("code"), |a| a.coarse = Some(level));
     // A table needs no prefix.
     assert_eq!(
-        schema(vec![coarse(table(&[("2710", "flight controls")]))]).check(),
+        checks(vec![coarse(table(&[("2710", "flight controls")]))]),
         Ok(())
     );
 
@@ -163,10 +164,10 @@ fn only_a_single_valued_decided_attribute_names_values_to_catch() {
     assert!(refused(vec![catching(observed("template")), decided("risk")]).contains(message));
     assert!(refused(vec![observed("template"), catching(set("tags"))]).contains(message));
     assert_eq!(
-        schema(vec![observed("template"), catching(decided("risk"))]).check(),
+        checks(vec![observed("template"), catching(decided("risk"))]),
         Ok(())
     );
     // Naming no value is naming none.
     let none = with(observed("template"), |a| a.must_catch = Some(vec![]));
-    assert_eq!(schema(vec![none, decided("risk")]).check(), Ok(()));
+    assert_eq!(checks(vec![none, decided("risk")]), Ok(()));
 }

@@ -201,10 +201,10 @@ impl KeyMemory {
         if let Err(misplaced) = schema.check_placement(&record.values, &record.sets) {
             panic!("record '{}': {misplaced}", record.id);
         }
-        self.remove(&schema.name, &record.id);
+        self.remove(schema.name(), &record.id);
         let mut tallies = Vec::new();
         for attribute in schema
-            .attributes
+            .attributes()
             .iter()
             .filter(|f| f.role == AttributeRole::Decided)
         {
@@ -277,7 +277,7 @@ impl KeyMemory {
             return;
         }
 
-        let index = self.schemas.entry(schema.name.clone()).or_default();
+        let index = self.schemas.entry(schema.name().to_owned()).or_default();
         for (slot, settled) in &tallies {
             index
                 .values
@@ -319,7 +319,7 @@ impl KeyMemory {
         let q = q.typed(q.typed);
         let (typed, excluding) = (q.typed, q.excluding);
         let definition = q.definition();
-        let Some(index) = self.schemas.get(&q.schema.name) else {
+        let Some(index) = self.schemas.get(q.schema.name()) else {
             return Vec::new();
         };
 
@@ -393,7 +393,7 @@ impl KeyMemory {
     /// under the known keys ([`First::caught`]). `None` when no known key was seen. Reads the lookup's schema, attribute, known
     /// values and sets; its typed text and excluded record are not taken into account.
     pub fn first(&self, q: &Lookup, value: &str) -> Option<First> {
-        let index = self.schemas.get(&q.schema.name)?;
+        let index = self.schemas.get(q.schema.name())?;
         let q = q.typed(None).excluding(None);
         let caught = self.caught(index, &q);
         let ranked = self.keyed(index, &q);
@@ -412,7 +412,7 @@ impl KeyMemory {
     /// known values and sets; its own typed text and excluded record are not taken into account.
     pub fn typed(&self, q: &Lookup, value: &str, longest: usize) -> Vec<Option<(f64, String)>> {
         let mut best = vec![None; longest.min(text::scalars(value)) + 1];
-        let Some(index) = self.schemas.get(&q.schema.name) else {
+        let Some(index) = self.schemas.get(q.schema.name()) else {
             return best;
         };
         let q = q.typed(None).excluding(None);
@@ -437,7 +437,7 @@ impl KeyMemory {
     /// settlements of the record the lookup excludes, one asked about again, are left out; its typed text is not
     /// taken into account.
     pub fn keyed_values(&self, q: &Lookup) -> Vec<(String, f64, Key)> {
-        let Some(index) = self.schemas.get(&q.schema.name) else {
+        let Some(index) = self.schemas.get(q.schema.name()) else {
             return Vec::new();
         };
         let q = q.typed(None);
@@ -453,7 +453,7 @@ impl KeyMemory {
     /// key is predicted from. Reads the lookup's schema, attribute and known values only: its sets, typed text and excluded
     /// record are not taken into account.
     pub fn key_totals(&self, q: &Lookup, value: &str) -> Vec<(String, f64, f64)> {
-        let Some(index) = self.schemas.get(&q.schema.name) else {
+        let Some(index) = self.schemas.get(q.schema.name()) else {
             return Vec::new();
         };
 
@@ -484,7 +484,7 @@ impl KeyMemory {
     /// Reads the lookup's schema, attribute, known values and sets; its typed text and excluded record are not taken into
     /// account.
     pub fn scored(&self, q: &Lookup) -> Vec<(String, f64)> {
-        let Some(index) = self.schemas.get(&q.schema.name) else {
+        let Some(index) = self.schemas.get(q.schema.name()) else {
             return Vec::new();
         };
         let chosen = elements(q.known_sets, q.attribute);
@@ -500,7 +500,7 @@ impl KeyMemory {
     /// account.
     pub fn catches(&self, q: &Lookup) -> bool {
         self.schemas
-            .get(&q.schema.name)
+            .get(q.schema.name())
             .is_some_and(|index| self.caught(index, q))
     }
 
@@ -615,7 +615,7 @@ impl KeyMemory {
             }
         };
         for evidence in schema
-            .attributes
+            .attributes()
             .iter()
             .filter(|e| schema.keys(&e.name, &attribute.name))
         {

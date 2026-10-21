@@ -21,15 +21,16 @@ fn paper(main_key_threshold: Option<f64>, main_memory_threshold: Option<f64>) ->
     main.key_threshold = main_key_threshold;
     main.memory_threshold = main_memory_threshold;
     main.depends_on = Some(vec!["area".into(), "abstract".into()]);
-    Schema {
-        name: "paper".into(),
-        attributes: vec![
+    Schema::new(
+        "paper",
+        vec![
             Attribute::new("area", AttributeRole::Observed),
             Attribute::new("abstract", AttributeRole::Observed),
             topics,
             main,
         ],
-    }
+    )
+    .expect("a valid schema")
 }
 
 fn record(number: i64, area: &str, topics: &[&str], main: &str, text: Option<&str>) -> Record {
@@ -228,10 +229,11 @@ fn a_key_threshold_replay_narrows_as_answers_do() {
         })
         .collect();
     let schema = paper(Some(0.3), None);
-    let mut open = schema.clone();
-    for a in &mut open.attributes {
+    let mut attributes = schema.attributes().to_vec();
+    for a in &mut attributes {
         a.candidates_from = None;
     }
+    let open = Schema::new(schema.name(), attributes).expect("a valid schema");
     let choice = Choice {
         target_precision: 0.95,
         minimum_answered: 5,
@@ -249,43 +251,34 @@ fn a_key_threshold_replay_narrows_as_answers_do() {
 
 #[test]
 fn a_schema_is_checked_as_the_reference_checks_a_form() {
-    assert_eq!(paper(Some(0.3), None).check(), Ok(()));
-    let broken = |edit: &dyn Fn(&mut Schema)| {
-        let mut s = paper(Some(0.3), None);
-        edit(&mut s);
-        s.check().expect_err("a broken schema")
+    let valid = paper(Some(0.3), None); // made, so it checks
+    let broken = |edit: &dyn Fn(&mut Vec<Attribute>)| {
+        let mut attributes = valid.attributes().to_vec();
+        edit(&mut attributes);
+        Schema::new(valid.name(), attributes).expect_err("a broken schema")
     };
     assert!(
-        broken(&|s| s.attributes[3].candidates_from = Some("subjects".into()))
+        broken(&|s| s[3].candidates_from = Some("subjects".into()))
             .contains("'main' takes its candidates from 'subjects'")
     );
     assert!(
-        broken(&|s| s.attributes[3].candidates_from = Some("main".into()))
+        broken(&|s| s[3].candidates_from = Some("main".into()))
             .contains("'main' takes its candidates from 'main'")
     );
+    assert!(broken(&|s| s[1].name = "area".into()).contains("'area' appears more than once"));
     assert!(
-        broken(&|s| s.attributes[1].name = "area".into()).contains("'area' appears more than once")
-    );
-    assert!(
-        broken(&|s| s.attributes[0].multiple = true)
+        broken(&|s| s[0].multiple = true)
             .contains("only a decided attribute can take several values")
     );
+    assert!(broken(&|s| s[2].memory_threshold = Some(0.5)).contains("takes no memory threshold"));
+    assert!(broken(&|s| s[3].depends_on = Some(vec!["main".into()])).contains("depends on 'main'"));
     assert!(
-        broken(&|s| s.attributes[2].memory_threshold = Some(0.5))
-            .contains("takes no memory threshold")
+        broken(&|s| s[3].key_fields = Some(vec!["topics".into()])).contains("is keyed by 'topics'")
     );
-    assert!(
-        broken(&|s| s.attributes[3].depends_on = Some(vec!["main".into()]))
-            .contains("depends on 'main'")
-    );
-    assert!(
-        broken(&|s| s.attributes[3].key_fields = Some(vec!["topics".into()]))
-            .contains("is keyed by 'topics'")
-    );
-    assert!(broken(&|s| s.attributes[3].similar_votes = 0).contains("at least one must"));
+    assert!(broken(&|s| s[3].similar_votes = 0).contains("at least one must"));
     assert!(
         broken(&|s| {
-            for a in &mut s.attributes {
+            for a in s.iter_mut() {
                 a.role = AttributeRole::Observed;
                 a.multiple = false;
             }

@@ -71,7 +71,7 @@ impl Tuning {
     /// `target_precision`. The promises are left unrecorded; [`Tuning::promise`] records a layer replay's.
     pub fn capture(schema: &Schema, settled: usize, target_precision: f64) -> Self {
         let attributes = schema
-            .attributes
+            .attributes()
             .iter()
             .filter(|a| a.role == AttributeRole::Decided)
             .map(|a| AttributeTuning {
@@ -112,15 +112,14 @@ impl Tuning {
         tuned.memory_promise = layers.memory.chosen.as_ref().map(|c| c.promise);
     }
 
-    /// Puts the chosen settings back on `schema`'s attributes of the same names; attributes the tuning does not name are
-    /// left as they are. A coarse threshold goes on an attribute that has a coarse level, and is dropped otherwise.
-    pub fn apply(&self, schema: &mut Schema) {
+    /// `schema` with the chosen settings put back on its attributes of the same names; attributes the tuning does not
+    /// name are left as they are. A coarse threshold goes on an attribute that has a coarse level, and is dropped
+    /// otherwise. The result is checked as [`Schema::new`] checks one — a tuning chosen for another schema may name key
+    /// attributes this one does not have — and the error names the first rule broken.
+    pub fn apply(&self, schema: &Schema) -> Result<Schema, String> {
+        let mut attributes = schema.attributes().to_vec();
         for tuned in &self.attributes {
-            let Some(a) = schema
-                .attributes
-                .iter_mut()
-                .find(|a| a.name == tuned.attribute)
-            else {
+            let Some(a) = attributes.iter_mut().find(|a| a.name == tuned.attribute) else {
                 continue;
             };
             a.key_fields.clone_from(&tuned.key_fields);
@@ -136,6 +135,7 @@ impl Tuning {
                 level.memory_floor = tuned.coarse_memory_floor;
             }
         }
+        Schema::new(schema.name(), attributes)
     }
 
     /// Why the tuning no longer stands for `schema` with `settled` records, or `None` while it does: another crate
@@ -177,9 +177,9 @@ pub fn fingerprint(schema: &Schema) -> u64 {
     }
 
     let mut text = String::new();
-    text.push_str(&schema.name);
+    text.push_str(schema.name());
     text.push('\n');
-    for a in &schema.attributes {
+    for a in schema.attributes() {
         text.push_str(&a.name);
         text.push('\u{1e}');
         text.push_str(match a.role {

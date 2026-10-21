@@ -11,30 +11,38 @@ fn schema() -> Schema {
     team.candidates = Some(vec!["network".into(), "security".into()]);
     let mut code = Attribute::new("code", AttributeRole::Decided);
     code.coarse = Some(CoarseLevel::by_prefix(2));
-    Schema {
-        name: "ticket".into(),
-        attributes: vec![
+    Schema::new(
+        "ticket",
+        vec![
             Attribute::new("product", AttributeRole::Observed),
             Attribute::new("summary", AttributeRole::Observed),
             team,
             code,
         ],
-    }
+    )
+    .expect("a valid schema")
+}
+
+/// `schema` with `edit` made to its attributes.
+fn changed(schema: &Schema, edit: impl FnOnce(&mut [Attribute])) -> Schema {
+    let mut attributes = schema.attributes().to_vec();
+    edit(&mut attributes);
+    Schema::new(schema.name(), attributes).expect("a valid schema")
 }
 
 fn tuned() -> Schema {
-    let mut s = schema();
-    let team = &mut s.attributes[2];
-    team.key_fields = Some(vec!["product".into()]);
-    team.key_concentrations = BTreeMap::from([("product".to_owned(), 0.5)]);
-    team.key_threshold = Some(1.25);
-    team.typed_key_thresholds = Some(vec![None, Some(2.0)]);
-    team.memory_threshold = Some(0.6);
-    team.memory_floor = Some(0.3);
-    let level = s.attributes[3].coarse.as_mut().unwrap();
-    level.key_threshold = Some(1.5);
-    level.memory_threshold = Some(0.4);
-    s
+    changed(&schema(), |s| {
+        let team = &mut s[2];
+        team.key_fields = Some(vec!["product".into()]);
+        team.key_concentrations = BTreeMap::from([("product".to_owned(), 0.5)]);
+        team.key_threshold = Some(1.25);
+        team.typed_key_thresholds = Some(vec![None, Some(2.0)]);
+        team.memory_threshold = Some(0.6);
+        team.memory_floor = Some(0.3);
+        let level = s[3].coarse.as_mut().unwrap();
+        level.key_threshold = Some(1.5);
+        level.memory_threshold = Some(0.4);
+    })
 }
 
 fn choice(threshold: f64, promise: f64) -> ThresholdReplay {
@@ -84,9 +92,8 @@ fn a_tuning_puts_back_on_a_fresh_schema_exactly_what_was_chosen() {
         (Some(0.86), Some(0.82))
     );
 
-    let mut fresh = schema();
-    tuning.apply(&mut fresh);
-    for (a, b) in fresh.attributes.iter().zip(&chosen.attributes) {
+    let fresh = tuning.apply(&schema()).expect("a valid schema");
+    for (a, b) in fresh.attributes().iter().zip(chosen.attributes()) {
         assert_eq!(a.key_fields, b.key_fields);
         assert_eq!(a.key_concentrations, b.key_concentrations);
         assert_eq!(a.key_threshold, b.key_threshold);
@@ -129,8 +136,7 @@ fn the_choice_stands_until_the_version_the_schema_or_the_settled_records_move() 
         })
     );
 
-    let mut narrowed = chosen.clone();
-    narrowed.attributes[2].candidates = Some(vec!["network".into()]);
+    let narrowed = changed(&chosen, |a| a[2].candidates = Some(vec!["network".into()]));
     assert_eq!(tuning.stale(&narrowed, 1_000), Some(Stale::Schema));
 }
 
@@ -138,16 +144,26 @@ fn the_choice_stands_until_the_version_the_schema_or_the_settled_records_move() 
 fn the_fingerprint_ignores_what_the_replays_choose_and_is_the_same_in_every_run() {
     assert_eq!(fingerprint(&schema()), fingerprint(&tuned()));
 
-    let mut votes = schema();
-    votes.attributes[2].similar_votes = 5;
-    let mut depends = schema();
-    depends.attributes[2].depends_on = Some(vec!["product".into()]);
-    let mut from = schema();
-    from.attributes[3].candidates_from = Some("team".into());
+    let votes = changed(&schema(), |a| a[2].similar_votes = 5);
+    let depends = changed(&schema(), |a| {
+        a[2].depends_on = Some(vec!["product".into()])
+    });
+    let from = changed(&schema(), |a| a[3].candidates_from = Some("team".into()));
     for changed in [votes, depends, from] {
         assert_ne!(fingerprint(&changed), fingerprint(&schema()));
     }
 
     // Pinned: a change to the fingerprint makes every stored tuning stale at once, so it must be deliberate.
     assert_eq!(fingerprint(&schema()), 0x90ce_eea9_3c01_9a43);
+}
+
+#[test]
+fn a_tuning_that_would_break_the_schema_is_refused() {
+    let tuning = Tuning::capture(&tuned(), 1_000, 0.8);
+    let elsewhere = changed(&schema(), |a| a[0].name = "model".into());
+
+    assert_eq!(
+        tuning.apply(&elsewhere).map(|_| ()),
+        Err("attribute 'team' is keyed by 'product', which is not an attribute it rests on".into())
+    );
 }

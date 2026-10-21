@@ -124,13 +124,13 @@ fn suggestions_hand_over_records_that_agree_with_them() {
     );
     // As configured the code's value layers never answer; let its key layer answer every key it finds, and the class is
     // withheld wherever a value is answered.
-    let mut eager = configured.clone();
-    let code = eager
-        .attributes
+    let mut attributes = configured.attributes().to_vec();
+    let code = attributes
         .iter_mut()
         .find(|f| f.name == "code")
         .expect("code");
     code.key_threshold = Some(0.0);
+    let eager = gil::schema::Schema::new(configured.name(), attributes).expect("a valid schema");
     let [.., withheld] = suggest_and_check(&eager);
     assert!(withheld > 0, "{withheld}");
 }

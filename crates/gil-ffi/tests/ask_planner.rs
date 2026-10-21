@@ -92,7 +92,7 @@ fn the_ask_planner_reproduces_its_golden_through_the_c_abi() {
     ok(unsafe { gil_decider_put(decider, schema, early) });
     unsafe { gil_records_free(early) };
     let planners: Vec<(String, *mut GilAskPlanner)> = core
-        .attributes
+        .attributes()
         .iter()
         .filter(|a| a.role == AttributeRole::Decided && !a.multiple)
         .map(|a| {

@@ -152,9 +152,9 @@ pub fn schema(golden: &str, stop: impl Fn(&Value) -> bool) -> Schema {
         }
     }
 
-    Schema {
-        name: "ticket".to_owned(),
-        attributes: vec![
+    Schema::new(
+        "ticket",
+        vec![
             Attribute::new("channel", AttributeRole::Observed),
             Attribute::new("product", AttributeRole::Observed),
             Attribute::new("summary", AttributeRole::Observed),
@@ -162,7 +162,8 @@ pub fn schema(golden: &str, stop: impl Fn(&Value) -> bool) -> Schema {
             code,
             tags,
         ],
-    }
+    )
+    .expect("a valid schema")
 }
 
 /// The settlement kinds the golden counts.

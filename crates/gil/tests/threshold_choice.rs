@@ -95,13 +95,14 @@ fn strength(n: usize) -> f64 {
 
 /// A component observed, a team decided by it.
 fn ticket() -> Schema {
-    Schema {
-        name: "ticket".into(),
-        attributes: vec![
+    Schema::new(
+        "ticket",
+        vec![
             Attribute::new("component", AttributeRole::Observed),
             Attribute::new("team", AttributeRole::Decided),
         ],
-    }
+    )
+    .expect("a valid schema")
 }
 
 /// One answer per scenario entry: under a component of its own, `priors` entries of team `a` (not counted), then one
@@ -248,10 +249,11 @@ fn the_promise_falls_back_to_the_whole_replay_when_the_latest_records_answer_too
 fn summarized() -> Schema {
     let mut team = Attribute::new("team", AttributeRole::Decided);
     team.memory_threshold = Some(0.3);
-    Schema {
-        name: "ticket".into(),
-        attributes: vec![Attribute::new("summary", AttributeRole::Observed), team],
-    }
+    Schema::new(
+        "ticket",
+        vec![Attribute::new("summary", AttributeRole::Observed), team],
+    )
+    .expect("a valid schema")
 }
 
 /// A vpn ticket settled `day` days in, its team settled as `kind`.
@@ -428,10 +430,11 @@ fn log(must_catch: Option<&[&str]>) -> Schema {
     let mut risk = Attribute::new("risk", AttributeRole::Decided);
     risk.key_threshold = Some(0.5);
     risk.must_catch = must_catch.map(|m| m.iter().map(|v| (*v).to_owned()).collect());
-    Schema {
-        name: "log".into(),
-        attributes: vec![Attribute::new("template", AttributeRole::Observed), risk],
-    }
+    Schema::new(
+        "log",
+        vec![Attribute::new("template", AttributeRole::Observed), risk],
+    )
+    .expect("a valid schema")
 }
 
 fn line(n: i64, template: &str, risk: &str) -> Record {
@@ -552,14 +555,15 @@ fn written(must_catch: Option<&[&str]>) -> Schema {
         memory_threshold: Some(0.0),
         ..CoarseLevel::default()
     });
-    Schema {
-        name: "log".into(),
-        attributes: vec![
+    Schema::new(
+        "log",
+        vec![
             Attribute::new("template", AttributeRole::Observed),
             Attribute::new("message", AttributeRole::Observed),
             risk,
         ],
-    }
+    )
+    .expect("a valid schema")
 }
 
 fn written_lines() -> Vec<Record> {
@@ -613,10 +617,11 @@ impl Draws {
 fn intake(votes: usize) -> Schema {
     let mut category = Attribute::new("category", AttributeRole::Decided);
     category.similar_votes = votes;
-    Schema {
-        name: "intake".into(),
-        attributes: vec![Attribute::new("summary", AttributeRole::Observed), category],
-    }
+    Schema::new(
+        "intake",
+        vec![Attribute::new("summary", AttributeRole::Observed), category],
+    )
+    .expect("a valid schema")
 }
 
 /// Requests whose category mostly follows the first word of their summary.

@@ -76,15 +76,17 @@ fn intake(votes: usize, candidates: Option<&[&str]>) -> Schema {
     category.memory_threshold = Some(0.0);
     category.similar_votes = votes;
     category.candidates = candidates.map(|c| c.iter().map(|v| (*v).to_owned()).collect());
-    Schema {
-        name: "intake".into(),
-        attributes: vec![Attribute::new("note", AttributeRole::Observed), category],
-    }
+    Schema::new(
+        "intake",
+        vec![Attribute::new("note", AttributeRole::Observed), category],
+    )
+    .expect("a valid schema")
 }
 
-fn with_floor(mut schema: Schema, floor: f64) -> Schema {
-    schema.attributes[1].memory_floor = Some(floor);
-    schema
+fn with_floor(schema: Schema, floor: f64) -> Schema {
+    let mut attributes = schema.attributes().to_vec();
+    attributes[1].memory_floor = Some(floor);
+    Schema::new(schema.name(), attributes).expect("a valid schema")
 }
 
 /// The nearest record says "billing"; the three after it, a little less similar, say "outage".
@@ -135,7 +137,7 @@ fn nearest(schema: &Schema) -> Vec<Match> {
     memory
         .nearest(&task, &asked, 10)
         .into_iter()
-        .filter(|m| schema.attributes[1].admits(&m.answer))
+        .filter(|m| schema.attributes()[1].admits(&m.answer))
         .collect()
 }
 
@@ -315,14 +317,15 @@ fn report(coarse: Option<CoarseLevel>, key_threshold: Option<f64>) -> Schema {
     let mut code = Attribute::new("code", AttributeRole::Decided);
     code.coarse = coarse;
     code.key_threshold = key_threshold;
-    Schema {
-        name: "report".into(),
-        attributes: vec![
+    Schema::new(
+        "report",
+        vec![
             Attribute::new("part", AttributeRole::Observed),
             Attribute::new("note", AttributeRole::Observed),
             code,
         ],
-    }
+    )
+    .expect("a valid schema")
 }
 
 fn level(prefix: usize, edit: impl FnOnce(&mut CoarseLevel)) -> Option<CoarseLevel> {
@@ -610,16 +613,17 @@ fn session(judged_as_evidence: bool) -> Schema {
         a.use_as_evidence = judged_as_evidence;
         a
     };
-    Schema {
-        name: "session".into(),
-        attributes: vec![
+    Schema::new(
+        "session",
+        vec![
             Attribute::new("narrative", AttributeRole::Observed),
             Attribute::new("grade", AttributeRole::Observed),
             topic("topic0"),
             topic("topic1"),
             topic("topic2"),
         ],
-    }
+    )
+    .expect("a valid schema")
 }
 
 #[test]

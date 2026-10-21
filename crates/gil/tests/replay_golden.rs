@@ -13,7 +13,7 @@ use gil::replay::{
     Choice, ThresholdRule, select_coarse, select_key_threshold, select_layers,
     select_layers_by_rule,
 };
-use gil::schema::Record;
+use gil::schema::{Record, Schema};
 use serde_json::{Value, json};
 
 #[test]
@@ -226,15 +226,15 @@ fn the_pooled_rule_reproduces_its_golden() {
         let layers_line = lines(&golden)
             .find(|l| l["kind"] == "layers" && l["field"] == attribute)
             .expect("the attribute's layers line");
-        let mut chosen = standing.clone();
-        let definition = chosen
-            .attributes
+        let mut attributes = standing.attributes().to_vec();
+        let definition = attributes
             .iter_mut()
             .find(|a| a.name == attribute)
             .expect("the attribute");
         definition.key_threshold = layers_line["key"]["chosen"]["threshold"].as_f64();
         definition.memory_threshold = layers_line["memory"]["chosen"]["threshold"].as_f64();
         definition.memory_floor = layers_line["memory"]["chosen"]["similarity_floor"].as_f64();
+        let chosen = Schema::new(standing.name(), attributes).expect("a valid schema");
 
         for (as_it_stands, schema) in [("none", &standing), ("chosen", &chosen)] {
             let layers = select_layers_by_rule(

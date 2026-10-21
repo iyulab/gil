@@ -68,22 +68,23 @@ fn choice(world: &str, attribute: &str, choice: &KeyFieldsChoice) -> Value {
 fn inspection(concentrations: BTreeMap<String, f64>) -> Schema {
     let mut risk = Attribute::new("risk", AttributeRole::Decided);
     risk.key_concentrations = concentrations;
-    Schema {
-        name: "inspection".to_owned(),
-        attributes: vec![
+    Schema::new(
+        "inspection",
+        vec![
             Attribute::new("outlet", AttributeRole::Observed),
             Attribute::new("kind", AttributeRole::Observed),
             Attribute::new("inspector", AttributeRole::Observed),
             risk,
         ],
-    }
+    )
+    .expect("a valid schema")
 }
 
 #[test]
 fn the_form_paths_key_fields_and_concentrations_reproduce_its_golden() {
     let early = early();
     let golden = fixture("golden.jsonl");
-    let mut schema = schema(&golden, |_| true); // the schema as declared
+    let schema = schema(&golden, |_| true); // the schema as declared
     let mut golden_out = Golden::part("golden.jsonl", &["key_fields", "key_concentrations"]);
 
     let chosen = select_key_fields(
@@ -105,9 +106,11 @@ fn the_form_paths_key_fields_and_concentrations_reproduce_its_golden() {
     });
     golden_out.check(actual, "key_fields team");
 
-    for f in schema.attributes.iter_mut().filter(|f| f.name == "team") {
+    let mut attributes = schema.attributes().to_vec();
+    for f in attributes.iter_mut().filter(|f| f.name == "team") {
         f.key_fields = chosen.key_fields.clone();
     }
+    let schema = Schema::new(schema.name(), attributes).expect("a valid schema");
     let found = select_key_concentrations(&mut KeyMemory::default(), &schema, "team", &early);
     let actual = json!({
         "kind": "key_concentrations",

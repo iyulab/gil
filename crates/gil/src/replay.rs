@@ -242,9 +242,9 @@ pub fn select_key_threshold(
             continue;
         }
 
-        memory.remove(&schema.name, &record.id); // a record settled again is not its own evidence
+        memory.remove(schema.name(), &record.id); // a record settled again is not its own evidence
         let weight = weight(record, attribute, choice.counting);
-        if memory.count(&schema.name) > 0 && weight > 0.0 {
+        if memory.count(schema.name()) > 0 && weight > 0.0 {
             let before = arrived(schema, record, attribute, &record.values);
             let before_sets = arrived(schema, record, attribute, &record.sets);
             let asked = Lookup::new(schema, attribute, &before).sets(&before_sets);
@@ -454,9 +454,9 @@ pub fn select_typed_key_thresholds_with(
             continue;
         };
 
-        memory.remove(&schema.name, &record.id); // a record settled again is not its own evidence
+        memory.remove(schema.name(), &record.id); // a record settled again is not its own evidence
         let weight = weight(record, attribute, choice.counting);
-        if memory.count(&schema.name) > 0 && weight > 0.0 {
+        if memory.count(schema.name()) > 0 && weight > 0.0 {
             let before = arrived(schema, record, attribute, &record.values);
             let before_sets = arrived(schema, record, attribute, &record.sets);
             let best = memory.typed(
@@ -579,8 +579,10 @@ fn arrived<T: Clone>(
         }
 
         // A value of no attribute of the schema is no evidence anyway.
-        match schema.attributes.iter().position(|f| f.name == name) {
-            Some(index) if schema.attributes[index].role != AttributeRole::Observed => index as i64,
+        match schema.attributes().iter().position(|f| f.name == name) {
+            Some(index) if schema.attributes()[index].role != AttributeRole::Observed => {
+                index as i64
+            }
             _ => -1,
         }
     };
@@ -1423,7 +1425,7 @@ fn replay(
         Replaying::Values(sink) => (false, sink),
         Replaying::Coarse(sink) => (true, sink),
     };
-    let task = format!("{}/{attribute}", schema.name);
+    let task = format!("{}/{attribute}", schema.name());
     let definition = schema.attribute(attribute);
     let votes = definition.similar_votes;
     let mut ordered: Vec<Record> = records.iter().map(Record::remembered).collect();
@@ -1445,7 +1447,7 @@ fn replay(
         };
 
         // A record settled again is not its own evidence.
-        key_memory.remove(&schema.name, &record.id);
+        key_memory.remove(schema.name(), &record.id);
         if let Some(own) = case_of.remove(&record.id) {
             memory.forget(&task, &record.id);
             cases.remove(&own);
@@ -1455,7 +1457,7 @@ fn replay(
         // Asked with what the attribute's last suggestion saw; remembered, below, with everything.
         let before = arrived(schema, record, attribute, &record.values);
         let before_sets = arrived(schema, record, attribute, &record.sets);
-        let key_looked = key_memory.count(&schema.name) > 0;
+        let key_looked = key_memory.count(schema.name()) > 0;
         let asked = Lookup::new(schema, attribute, &before).sets(&before_sets);
         let first = if key_looked {
             key_memory.first(&asked, settled)
@@ -1717,13 +1719,10 @@ pub struct KeyFieldsChoice {
     pub typed: Option<TypedKeyThresholds>,
 }
 
-/// The schema with `attribute` keyed by `key_fields` (every attribute it rests on when `None`).
+/// The schema with `attribute` keyed by `key_fields` (every attribute it rests on when `None`) — attributes that support
+/// it, so the schema stays valid.
 fn keyed_by(schema: &Schema, attribute: &str, key_fields: Option<Vec<String>>) -> Schema {
-    let mut schema = schema.clone();
-    for f in schema.attributes.iter_mut().filter(|f| f.name == attribute) {
-        f.key_fields = key_fields.clone();
-    }
-    schema
+    schema.derived(attribute, |f| f.key_fields = key_fields)
 }
 
 /// Chooses the attributes that should key `attribute` by the gain their chosen key threshold gives over the target precision —
@@ -1748,7 +1747,7 @@ pub fn select_key_fields(
         "'{attribute}' takes several values; typing is not counted for it"
     );
     let replay = |key_fields: Option<Vec<String>>| {
-        let mut resting = keyed_by(schema, attribute, key_fields.clone());
+        let resting = keyed_by(schema, attribute, key_fields.clone());
         let replay = select_key_threshold(
             &mut KeyMemory::default(),
             &resting,
@@ -1757,13 +1756,10 @@ pub fn select_key_fields(
             choice,
         );
         let typed = (typed_longest > 0).then(|| {
-            for f in resting
-                .attributes
-                .iter_mut()
-                .filter(|f| f.name == attribute)
-            {
+            // Any key threshold keeps the schema valid.
+            let resting = resting.derived(attribute, |f| {
                 f.key_threshold = replay.chosen.as_ref().map(|c| c.threshold);
-            }
+            });
             select_typed_key_thresholds(
                 &mut KeyMemory::default(),
                 &resting,
@@ -1797,7 +1793,7 @@ pub fn select_key_fields(
     let mut trials: Vec<KeyFieldsTrial> = Vec::new();
     let all = replay(None);
     let evidence: Vec<String> = schema
-        .attributes
+        .attributes()
         .iter()
         .filter(|f| schema.supports(&f.name, attribute))
         .map(|f| f.name.clone())
@@ -1887,10 +1883,8 @@ pub fn select_key_concentrations(
         return concentrations;
     }
 
-    let mut schema = schema.clone();
-    for f in schema.attributes.iter_mut().filter(|f| f.name == attribute) {
-        f.key_concentrations.clear();
-    }
+    // No key concentrations keeps the schema valid.
+    let schema = schema.derived(attribute, |f| f.key_concentrations.clear());
     let mut ordered: Vec<Record> = records.iter().map(Record::remembered).collect();
     ordered.sort_by(|a, b| {
         a.settled_at
@@ -1905,7 +1899,7 @@ pub fn select_key_concentrations(
             continue;
         };
 
-        memory.remove(&schema.name, &record.id); // a record settled again is not its own evidence
+        memory.remove(schema.name(), &record.id); // a record settled again is not its own evidence
         let before = arrived(&schema, record, attribute, &record.values);
         for (key_field, total, weight) in
             memory.key_totals(&Lookup::new(&schema, attribute, &before), settled)

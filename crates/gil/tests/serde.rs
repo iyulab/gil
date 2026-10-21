@@ -29,16 +29,16 @@ fn a_schema_with_only_the_settings_it_needs_takes_the_defaults() {
               "coarse": { "prefix": 2 } },
         ],
     }))
-    .expect("a schema");
-    schema.check().expect("a valid schema");
+    .expect("a valid schema");
 
     let mut team = Attribute::new("team", AttributeRole::Decided);
     team.policy = AttributePolicy::ConfirmRequired;
     team.coarse = Some(CoarseLevel::by_prefix(2));
-    let expected = Schema {
-        name: "ticket".into(),
-        attributes: vec![Attribute::new("summary", AttributeRole::Observed), team],
-    };
+    let expected = Schema::new(
+        "ticket",
+        vec![Attribute::new("summary", AttributeRole::Observed), team],
+    )
+    .expect("a valid schema");
     assert_eq!(
         serde_json::to_value(&schema).unwrap(),
         serde_json::to_value(&expected).unwrap()
@@ -63,6 +63,26 @@ fn an_unknown_setting_or_role_does_not_read() {
         "attributes": [{ "name": "team", "role": "judged" }],
     }));
     assert!(role.unwrap_err().to_string().contains("judged"));
+}
+
+#[test]
+fn a_schema_that_breaks_a_rule_does_not_read() {
+    let unknown_field = serde_json::from_value::<Schema>(json!({
+        "name": "ticket",
+        "attributes": [{ "name": "team", "role": "decided" }],
+        "colour": "red",
+    }));
+    assert!(unknown_field.unwrap_err().to_string().contains("colour"));
+
+    let undecided = serde_json::from_str::<Schema>(
+        r#"{ "name": "ticket", "attributes": [{ "name": "summary", "role": "observed" }] }"#,
+    );
+    assert!(
+        undecided
+            .unwrap_err()
+            .to_string()
+            .starts_with("a schema needs at least one decided attribute"),
+    );
 }
 
 #[test]

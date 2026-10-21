@@ -60,7 +60,7 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   `Decider.put`, `OpenRecord.observe` and `OpenRecord.settle` check their contract first (still `ValueError`, after
   which both objects are as they were); if the core then fails partway, they raise `RuntimeError`, and every later call
   on the decider and the record raises `RuntimeError` too — build them again.
-- **`Schema::check` refuses a coarse level whose class table is empty or gives a value a blank class**, as the
+- **A schema whose coarse level has an empty class table or gives a value a blank class is refused**, as the
   reference implementation does. Such a schema used to be accepted; the Python `Schema` and the .NET native binding's
   schema refuse it too, since both check through the core.
 - **Breaking: `AskPlanner` keeps the schema it was made for; `learn(decider, record)` no longer takes one.** A planner
@@ -68,6 +68,25 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   the first. Drop the schema argument: `planner.learn(&decider, &schema, &record)` becomes
   `planner.learn(&decider, &record)`; `AskPlanner::schema()` reads it back. The Python and .NET bindings' calls are
   unchanged.
+- **Breaking: a `Schema` is checked when it is made.** Its fields were public and nothing in the crate called
+  `Schema::check`, so a schema built in Rust that broke a rule (a key attribute it does not rest on, no decided
+  attribute, a dependency on an attribute it does not have, …) was used as it was and failed later or behaved oddly.
+  Now no invalid schema can exist:
+  - `Schema { name, attributes }` becomes `Schema::new(name, attributes)?`, which returns the message of the first rule
+    broken — the same messages `check` gave.
+  - `schema.check()` is gone: a schema in hand has passed it.
+  - The fields are private: read them with `schema.name()` and `schema.attributes()`. To change a schema, build the
+    attributes again (`schema.attributes().to_vec()`, edit, `Schema::new(schema.name(), attributes)?`).
+  - Deserializing (feature `serde`) refuses a schema that breaks a rule, with the same message; the JSON form is
+    unchanged.
+  - `Tuning::apply(&self, schema: &Schema) -> Result<Schema, String>` returns the tuned schema instead of changing one
+    in place, and refuses a result that breaks a rule — a tuning chosen for another schema may name key attributes this
+    one does not have.
+
+  The Python and .NET bindings already checked every schema they read; a schema that breaks a rule is still refused
+  (`ValueError`, `ArgumentException`), now with the message prefixed by `a schema does not read:` and followed by where
+  in the JSON reading stopped. Applying a tuning that would break the schema still raises `ValueError` in Python, and
+  now throws `ArgumentException` in .NET, where the tuned schema used to be handed out unchecked.
 
 ## 0.7.0
 

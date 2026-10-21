@@ -202,7 +202,7 @@ fn open_records_through_the_c_abi_answer_as_the_core_does() {
 
     for log in records[CHOSEN..].iter().take(60) {
         let (mut core, handle) = open(&pair, &log.id, log.settled_at);
-        let attributes = pair.schema.attributes.clone();
+        let attributes = pair.schema.attributes();
 
         for a in attributes
             .iter()
@@ -337,7 +337,7 @@ fn an_external_judgement_offered_back_answers_as_the_core_does() {
     let mut offered = 0;
     for log in &records[5..40] {
         let (mut core, handle) = open(&pair, &log.id, log.settled_at);
-        for a in pair.schema.attributes.clone().iter() {
+        for a in pair.schema.attributes() {
             if a.role != AttributeRole::Observed {
                 continue;
             }
@@ -403,7 +403,7 @@ fn an_external_judgement_offered_back_answers_as_the_core_does() {
 
 fn decided_single(pair: &Pair) -> String {
     pair.schema
-        .attributes
+        .attributes()
         .iter()
         .find(|a| a.role == AttributeRole::Decided && !a.multiple)
         .unwrap()
@@ -471,7 +471,7 @@ fn refused_settlements_and_contract_violations_come_back_as_statuses() {
     let attribute = decided_single(&pair);
     let observed = pair
         .schema
-        .attributes
+        .attributes()
         .iter()
         .find(|a| a.role == AttributeRole::Observed)
         .unwrap()

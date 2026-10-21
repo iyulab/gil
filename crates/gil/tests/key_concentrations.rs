@@ -37,19 +37,23 @@ impl Draws {
 /// Each place has one risk, drawn mostly high; each visit has a kind drawn from a few. The kind does not decide the risk —
 /// its keys mix all three — while a place seen once already names it.
 fn inspection(concentrations: &[(&str, f64)]) -> Schema {
+    try_inspection(concentrations).expect("a valid schema")
+}
+
+fn try_inspection(concentrations: &[(&str, f64)]) -> Result<Schema, String> {
     let mut risk = Attribute::new("risk", AttributeRole::Decided);
     risk.key_concentrations = concentrations
         .iter()
         .map(|(k, c)| ((*k).to_owned(), *c))
         .collect();
-    Schema {
-        name: "inspection".into(),
-        attributes: vec![
+    Schema::new(
+        "inspection",
+        vec![
             Attribute::new("place", AttributeRole::Observed),
             Attribute::new("kind", AttributeRole::Observed),
             risk,
         ],
-    }
+    )
 }
 
 fn record(i: usize, values: &[(&str, &str)]) -> Record {
@@ -162,10 +166,11 @@ fn a_key_seen_again_once_with_its_value_moves_only_part_of_the_way_from_one() {
 fn an_attribute_that_takes_several_values_gets_no_concentrations() {
     let mut tags = Attribute::new("tags", AttributeRole::Decided);
     tags.multiple = true;
-    let schema = Schema {
-        name: "tags".into(),
-        attributes: vec![Attribute::new("place", AttributeRole::Observed), tags],
-    };
+    let schema = Schema::new(
+        "tags",
+        vec![Attribute::new("place", AttributeRole::Observed), tags],
+    )
+    .expect("a valid schema");
     let records: Vec<Record> = (0..5)
         .map(|i| Record {
             sets: BTreeMap::from([("tags".to_owned(), vec!["a".to_owned(), "b".to_owned()])]),
@@ -184,7 +189,7 @@ fn an_observed_attribute_is_not_chosen_for() {
 
 #[test]
 fn a_concentration_for_an_unknown_attribute_or_not_above_zero_is_refused() {
-    assert!(inspection(&[("place", 0.5), ("kind", 2.0)]).check().is_ok());
+    assert!(try_inspection(&[("place", 0.5), ("kind", 2.0)]).is_ok());
     for (key, concentration) in [
         ("nowhere", 0.5),
         ("place", 0.0),
@@ -193,7 +198,7 @@ fn a_concentration_for_an_unknown_attribute_or_not_above_zero_is_refused() {
         ("place", f64::INFINITY),
     ] {
         assert!(
-            inspection(&[(key, concentration)]).check().is_err(),
+            try_inspection(&[(key, concentration)]).is_err(),
             "{key}: {concentration}"
         );
     }

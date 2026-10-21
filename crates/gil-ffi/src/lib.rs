@@ -320,8 +320,9 @@ pub unsafe extern "C" fn gil_last_result(buffer: *mut u8, capacity: usize) -> us
     unsafe { gil_ffi_support::copy_last_result(buffer, capacity) }
 }
 
-/// Reads a schema from JSON in the core's `serde` form — the settings an attribute leaves out take their defaults —
-/// checks it as the reference implementation checks one, and hands it out through `out`.
+/// Reads a schema from JSON in the core's `serde` form — the settings an attribute leaves out take their defaults — and
+/// hands it out through `out`. Reading checks it as the reference implementation checks one; a schema that breaks a rule
+/// does not read, and the error names the rule.
 ///
 /// # Safety
 /// `json` is valid for the call; `out` points to one writable pointer.
@@ -335,7 +336,6 @@ pub unsafe extern "C" fn gil_schema_new(json: GilStr, out: *mut *mut GilSchema) 
         let json = unsafe { text(json, "json") }?;
         let schema: Schema = serde_json::from_str(json)
             .map_err(|e| input(format!("a schema does not read: {e}")))?;
-        schema.check().map_err(input)?;
         // SAFETY: forwarded from the caller.
         unsafe { hand_out(out, GilSchema(schema), "out") }
     })
@@ -1188,7 +1188,9 @@ pub unsafe extern "C" fn gil_tuning_promise(
     })
 }
 
-/// Hands out through `out` a new schema: `schema` with the tuning's settings put back on its attributes.
+/// Hands out through `out` a new schema: `schema` with the tuning's settings put back on its attributes. A result that
+/// breaks a schema rule — a tuning chosen for another schema may name key attributes this one does not have — is refused
+/// as input, and the error names the rule.
 ///
 /// # Safety
 /// `tuning_json` is valid for the call; `schema` is a live handle; `out` points to one writable pointer.
@@ -1204,8 +1206,9 @@ pub unsafe extern "C" fn gil_tuning_apply(
         }
         // SAFETY: forwarded from the caller, for every pointer below.
         let tuned = unsafe { tuning(tuning_json) }?;
-        let mut schema = unsafe { handle(schema, "schema") }?.0.clone();
-        tuned.apply(&mut schema);
+        let schema = tuned
+            .apply(&unsafe { handle(schema, "schema") }?.0)
+            .map_err(input)?;
         unsafe { hand_out(out, GilSchema(schema), "out") }
     })
 }

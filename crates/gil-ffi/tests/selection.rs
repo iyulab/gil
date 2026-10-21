@@ -252,8 +252,7 @@ fn the_other_selections_and_a_tuning_come_back_as_the_core_gives_them() {
 
     let mut applied = ptr::null_mut();
     ok(unsafe { gil_tuning_apply(s(&promised.to_string()), handles.schema, &mut applied) });
-    let mut core_applied = schema.clone();
-    core_tuning.apply(&mut core_applied);
+    let core_applied = core_tuning.apply(&schema).expect("a valid schema");
     let status = unsafe { gil_schema_json(applied, &mut len) };
     assert_eq!(
         result(status, len),

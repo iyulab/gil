@@ -95,9 +95,9 @@ fn note_form(golden: &str, stop: impl Fn(&Value) -> bool) -> Schema {
         }
     }
 
-    Schema {
-        name: "note".to_owned(),
-        attributes: vec![
+    Schema::new(
+        "note",
+        vec![
             Attribute::new("desk", AttributeRole::Observed),
             Attribute::new("body", AttributeRole::Observed),
             Attribute::new("ref", AttributeRole::Observed),
@@ -105,7 +105,8 @@ fn note_form(golden: &str, stop: impl Fn(&Value) -> bool) -> Schema {
             labels,
             owner,
         ],
-    }
+    )
+    .expect("a valid schema")
 }
 
 fn notes() -> Vec<Record> {

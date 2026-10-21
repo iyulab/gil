@@ -23,16 +23,17 @@ fn ticket() -> Schema {
     reporter.use_as_evidence = false;
     let mut severity = attribute("severity", AttributeRole::Decided);
     severity.candidates = Some(vec!["low".into(), "medium".into(), "high".into()]);
-    Schema {
-        name: "ticket".into(),
-        attributes: vec![
+    Schema::new(
+        "ticket",
+        vec![
             reporter,
             attribute("component", AttributeRole::Observed),
             attribute("summary", AttributeRole::Observed),
             severity,
             attribute("team", AttributeRole::Decided),
         ],
-    }
+    )
+    .expect("a valid schema")
 }
 
 fn values(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
@@ -300,10 +301,7 @@ fn a_schema_with_another_name_has_an_empty_memory() {
         &schema,
         &doc(1, &[("component", "vpn"), ("severity", "high")]),
     );
-    let elsewhere = Schema {
-        name: "elsewhere".into(),
-        ..schema.clone()
-    };
+    let elsewhere = Schema::new("elsewhere", schema.attributes().to_vec()).expect("a valid schema");
 
     assert_eq!(memory.count("ticket"), 1);
     assert_eq!(memory.count("elsewhere"), 0);
@@ -325,10 +323,11 @@ fn a_schema_with_another_name_has_an_empty_memory() {
 fn support() -> Schema {
     let mut team = attribute("team", AttributeRole::Decided);
     team.memory_threshold = Some(0.3);
-    Schema {
-        name: "ticket".into(),
-        attributes: vec![attribute("summary", AttributeRole::Observed), team],
-    }
+    Schema::new(
+        "ticket",
+        vec![attribute("summary", AttributeRole::Observed), team],
+    )
+    .expect("a valid schema")
 }
 
 fn settled(id: &str, summary: &str, team: &str, at: i64) -> Record {
@@ -466,10 +465,11 @@ fn log(must_catch: Option<&[&str]>) -> Schema {
     let mut risk = attribute("risk", AttributeRole::Decided);
     risk.key_threshold = Some(0.5);
     risk.must_catch = must_catch.map(|m| m.iter().map(|v| (*v).to_owned()).collect());
-    Schema {
-        name: "log".into(),
-        attributes: vec![attribute("template", AttributeRole::Observed), risk],
-    }
+    Schema::new(
+        "log",
+        vec![attribute("template", AttributeRole::Observed), risk],
+    )
+    .expect("a valid schema")
 }
 
 fn line(number: i64, template: &str, risk: &str) -> Record {
@@ -530,14 +530,15 @@ fn written(must_catch: Option<&[&str]>) -> Schema {
         memory_threshold: Some(0.0),
         ..CoarseLevel::default()
     });
-    Schema {
-        name: "log".into(),
-        attributes: vec![
+    Schema::new(
+        "log",
+        vec![
             attribute("template", AttributeRole::Observed),
             attribute("message", AttributeRole::Observed),
             risk,
         ],
-    }
+    )
+    .expect("a valid schema")
 }
 
 fn written_answer(schema: &Schema, template: &str) -> Answer {

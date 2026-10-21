@@ -28,15 +28,16 @@ fn attribute(name: &str, role: AttributeRole) -> Attribute {
 fn ticket() -> Schema {
     let mut reporter = attribute("reporter", AttributeRole::Observed);
     reporter.use_as_evidence = false;
-    Schema {
-        name: "ticket".into(),
-        attributes: vec![
+    Schema::new(
+        "ticket",
+        vec![
             reporter,
             attribute("component", AttributeRole::Observed),
             attribute("summary", AttributeRole::Observed),
             attribute("team", AttributeRole::Decided),
         ],
-    }
+    )
+    .expect("a valid schema")
 }
 
 fn record(id: &str, values: &[(&str, &str)]) -> Record {
@@ -119,8 +120,9 @@ fn an_external_judgement_is_asked_for_only_where_no_memory_has_evidence_and_then
 #[test]
 fn a_judgement_offered_where_memory_had_evidence_changes_nothing_and_one_outside_the_domain_is_left_out()
  {
-    let mut schema = ticket();
-    schema.attributes[3].candidates = Some(vec!["network".into(), "security".into()]);
+    let mut attributes = ticket().attributes().to_vec();
+    attributes[3].candidates = Some(vec!["network".into(), "security".into()]);
+    let schema = Schema::new("ticket", attributes).expect("a valid schema");
     let mut decider = Decider::new(KeyMemory::default(), None);
     decider.rebuild(
         &schema,
@@ -184,10 +186,11 @@ fn an_open_record_hands_its_evidence_over_in_arrival_order_and_a_changed_value_m
 fn settled_ticket() -> Schema {
     let mut team = attribute("team", AttributeRole::Decided);
     team.memory_threshold = Some(0.3);
-    Schema {
-        name: "ticket".into(),
-        attributes: vec![attribute("summary", AttributeRole::Observed), team],
-    }
+    Schema::new(
+        "ticket",
+        vec![attribute("summary", AttributeRole::Observed), team],
+    )
+    .expect("a valid schema")
 }
 
 #[test]
@@ -309,14 +312,15 @@ fn paper() -> Schema {
     let mut topics = attribute("topics", AttributeRole::Decided);
     topics.multiple = true;
     topics.key_threshold = Some(0.3);
-    Schema {
-        name: "paper".into(),
-        attributes: vec![
+    Schema::new(
+        "paper",
+        vec![
             attribute("area", AttributeRole::Observed),
             topics,
             attribute("lead", AttributeRole::Decided),
         ],
-    }
+    )
+    .expect("a valid schema")
 }
 
 fn paper_record(id: &str, area: &str, topics: &[&str], lead: &str) -> Record {
@@ -449,8 +453,10 @@ fn the_checks_tell_beforehand_what_observe_and_settle_refuse() {
 
 #[test]
 fn an_attribute_that_is_off_is_never_answered() {
-    let mut schema = settled_ticket();
-    schema.attributes[1].policy = AttributePolicy::Off;
+    let schema = settled_ticket();
+    let mut attributes = schema.attributes().to_vec();
+    attributes[1].policy = AttributePolicy::Off;
+    let schema = Schema::new(schema.name(), attributes).expect("a valid schema");
     let mut decider = Decider::new(KeyMemory::default(), None);
     let mut open = OpenRecord::new(schema.clone(), "d1", 0);
     assert!(
@@ -510,9 +516,9 @@ fn intake() -> Schema {
     team.key_threshold = Some(0.5);
     let mut assessment = attribute("assessment", AttributeRole::Decided);
     assessment.policy = AttributePolicy::Off;
-    Schema {
-        name: "ticket".into(),
-        attributes: vec![
+    Schema::new(
+        "ticket",
+        vec![
             reporter,
             attribute("component", AttributeRole::Observed),
             attribute("summary", AttributeRole::Observed),
@@ -520,7 +526,8 @@ fn intake() -> Schema {
             team,
             assessment,
         ],
-    }
+    )
+    .expect("a valid schema")
 }
 
 fn intake_history() -> Vec<Record> {
@@ -1147,14 +1154,15 @@ fn typed_ticket() -> Schema {
     team.key_threshold = Some(0.9);
     team.typed_key_thresholds = Some(vec![Some(0.25)]);
     team.depends_on = Some(vec!["channel".into()]);
-    Schema {
-        name: "ticket".into(),
-        attributes: vec![
+    Schema::new(
+        "ticket",
+        vec![
             attribute("channel", AttributeRole::Observed),
             attribute("summary", AttributeRole::Observed),
             team,
         ],
-    }
+    )
+    .expect("a valid schema")
 }
 
 fn phone_history() -> Vec<Record> {
