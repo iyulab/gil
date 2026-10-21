@@ -2,7 +2,9 @@ name: Publish
 
 # Publishes to NuGet.org when the version in Directory.Build.props changes on main.
 # Packing is switched on in Directory.Build.props (IsPackable); while it is off this workflow
-# builds and tests, finds no packages, and ends without publishing.
+# builds and tests, finds no packages, and ends without publishing. The Gil package carries the
+# decision core's native library for six runtimes: the native workflow builds them first, and its
+# consumers must pass before anything is published.
 
 on:
   push:
@@ -18,7 +20,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  native:
+    uses: ./.github/workflows/native.yml
+
   publish:
+    needs: native
     runs-on: ubuntu-latest
     # A publish run takes about a minute (restore, build, test, pack, push).
     timeout-minutes: 15
@@ -26,8 +32,16 @@ jobs:
       # Keeps first-run notices out of the output the version step captures.
       DOTNET_NOLOGO: true
       DOTNET_CLI_TELEMETRY_OPTOUT: true
+      # Every MSBuild call reads it as a property: Gil packs the libraries under it (and is packable only with it).
+      GilNativeRoot: ${{ github.workspace }}/native
     steps:
       - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: native-*
+          path: native
+          merge-multiple: true
 
       - uses: actions/setup-dotnet@v6
         with:

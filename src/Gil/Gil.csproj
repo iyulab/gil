@@ -4,8 +4,9 @@
     <Description>Suggests the decided attributes of a record from the records already settled, and says how often a suggestion it trusts is right: values settled together, similar settled records, thresholds chosen by replaying them. No model needed. The decision core is native (Rust) and called through its C ABI; schemas, records and answers are typed .NET values.</Description>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsAotCompatible>true</IsAotCompatible>
-    <!-- Not packed yet: the package carries the native library of each runtime, which packing has to gather first. -->
+    <!-- Packed only when the per-runtime native libraries are given (GilNativeRoot, below). -->
     <IsPackable>false</IsPackable>
+    <IsPackable Condition="'$(GilNativeRoot)' != ''">true</IsPackable>
   </PropertyGroup>
 
   <!-- Local builds take the native library cargo built in this repository (`cargo build -p gil-ffi`). -->
@@ -17,6 +18,24 @@
     <None Include="$(GilNativeDirectory)libgil_native.so" Condition="Exists('$(GilNativeDirectory)libgil_native.so')" Link="libgil_native.so" CopyToOutputDirectory="PreserveNewest" Visible="false" />
     <None Include="$(GilNativeDirectory)gil_native.dll" Condition="Exists('$(GilNativeDirectory)gil_native.dll')" Link="gil_native.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
+
+  <!--
+    Packing: GilNativeRoot holds one folder per runtime identifier with that runtime's native library, as the release
+    build assembles them — <root>/<rid>/{libgil_native.so|libgil_native.dylib|gil_native.dll}. Each lands in
+    runtimes/<rid>/native/, where the .NET host finds it for the running platform; packing fails if one is missing.
+  -->
+  <ItemGroup Condition="'$(GilNativeRoot)' != ''">
+    <GilNativeLibrary Include="$(GilNativeRoot)/linux-x64/libgil_native.so" Rid="linux-x64" />
+    <GilNativeLibrary Include="$(GilNativeRoot)/linux-arm64/libgil_native.so" Rid="linux-arm64" />
+    <GilNativeLibrary Include="$(GilNativeRoot)/osx-x64/libgil_native.dylib" Rid="osx-x64" />
+    <GilNativeLibrary Include="$(GilNativeRoot)/osx-arm64/libgil_native.dylib" Rid="osx-arm64" />
+    <GilNativeLibrary Include="$(GilNativeRoot)/win-x64/gil_native.dll" Rid="win-x64" />
+    <GilNativeLibrary Include="$(GilNativeRoot)/win-arm64/gil_native.dll" Rid="win-arm64" />
+    <None Include="@(GilNativeLibrary)" Pack="true" PackagePath="runtimes/%(Rid)/native/" Visible="false" />
+  </ItemGroup>
+  <Target Name="CheckGilNativeLibraries" BeforeTargets="GenerateNuspec" Condition="'$(GilNativeRoot)' != ''">
+    <Error Condition="!Exists('%(GilNativeLibrary.Identity)')" Text="GilNativeRoot lacks the %(GilNativeLibrary.Rid) library: %(GilNativeLibrary.Identity)" />
+  </Target>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Gil.Core.Tests" />

@@ -47,6 +47,13 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   - `Gil.Tree` references `Gil`; `Gil` references none of `Gil.Tree`, `Gil.Abstractions`, YamlDotNet or
     Microsoft.Extensions.AI.
 
+### Added
+
+- The `Gil` package carries the native library for `linux-x64`, `linux-arm64` (glibc 2.28 or later), `osx-x64`,
+  `osx-arm64` (macOS 11 or later), `win-x64` and `win-arm64` under `runtimes/<rid>/native/`. On any other runtime the
+  first call throws a `DllNotFoundException` naming the runtime and the supported ones; build the library with
+  `cargo build --release -p gil-ffi` and put it next to the application.
+
 ## 0.25.0
 
 ### Breaking

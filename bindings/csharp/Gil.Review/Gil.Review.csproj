@@ -25,16 +25,21 @@
   <!--
     Packing: GilReviewNativeRoot holds one folder per runtime identifier with that runtime's native library, as the
     release build assembles them — <root>/<rid>/{libgil_review_native.so|libgil_review_native.dylib|gil_review_native.dll}.
-    Each lands in runtimes/<rid>/native/, where the .NET host finds it for the running platform.
+    Each lands in runtimes/<rid>/native/, where the .NET host finds it for the running platform; packing fails if one
+    is missing.
   -->
   <ItemGroup Condition="'$(GilReviewNativeRoot)' != ''">
-    <None Include="$(GilReviewNativeRoot)/linux-x64/*gil_review_native.*" Pack="true" PackagePath="runtimes/linux-x64/native/" Visible="false" />
-    <None Include="$(GilReviewNativeRoot)/linux-arm64/*gil_review_native.*" Pack="true" PackagePath="runtimes/linux-arm64/native/" Visible="false" />
-    <None Include="$(GilReviewNativeRoot)/osx-x64/*gil_review_native.*" Pack="true" PackagePath="runtimes/osx-x64/native/" Visible="false" />
-    <None Include="$(GilReviewNativeRoot)/osx-arm64/*gil_review_native.*" Pack="true" PackagePath="runtimes/osx-arm64/native/" Visible="false" />
-    <None Include="$(GilReviewNativeRoot)/win-x64/*gil_review_native.*" Pack="true" PackagePath="runtimes/win-x64/native/" Visible="false" />
-    <None Include="$(GilReviewNativeRoot)/win-arm64/*gil_review_native.*" Pack="true" PackagePath="runtimes/win-arm64/native/" Visible="false" />
+    <GilReviewNativeLibrary Include="$(GilReviewNativeRoot)/linux-x64/libgil_review_native.so" Rid="linux-x64" />
+    <GilReviewNativeLibrary Include="$(GilReviewNativeRoot)/linux-arm64/libgil_review_native.so" Rid="linux-arm64" />
+    <GilReviewNativeLibrary Include="$(GilReviewNativeRoot)/osx-x64/libgil_review_native.dylib" Rid="osx-x64" />
+    <GilReviewNativeLibrary Include="$(GilReviewNativeRoot)/osx-arm64/libgil_review_native.dylib" Rid="osx-arm64" />
+    <GilReviewNativeLibrary Include="$(GilReviewNativeRoot)/win-x64/gil_review_native.dll" Rid="win-x64" />
+    <GilReviewNativeLibrary Include="$(GilReviewNativeRoot)/win-arm64/gil_review_native.dll" Rid="win-arm64" />
+    <None Include="@(GilReviewNativeLibrary)" Pack="true" PackagePath="runtimes/%(Rid)/native/" Visible="false" />
   </ItemGroup>
+  <Target Name="CheckGilReviewNativeLibraries" BeforeTargets="GenerateNuspec" Condition="'$(GilReviewNativeRoot)' != ''">
+    <Error Condition="!Exists('%(GilReviewNativeLibrary.Identity)')" Text="GilReviewNativeRoot lacks the %(GilReviewNativeLibrary.Rid) library: %(GilReviewNativeLibrary.Identity)" />
+  </Target>
 
   <!-- The package's own README, in place of the repository's. -->
   <ItemGroup>
