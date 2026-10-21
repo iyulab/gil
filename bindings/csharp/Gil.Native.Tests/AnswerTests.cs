@@ -97,6 +97,103 @@ public sealed class AnswerTests
         settled.Should().NotContain(a => a.Attribute == asking.Attribute, "a settled attribute is not open");
     }
 
+    [Fact]
+    public async Task AnswerAsync_asks_the_judge_only_where_an_answer_asks_for_one()
+    {
+        var (schema, decider) = CoreTests.Filled();
+        using var _ = schema;
+        using var __ = decider;
+        using var record = Unknown(schema, decider);
+        var asking = record.Answer(decider).Where(a => a.NeedsExternal is not null).Select(a => a.Attribute).ToList();
+        asking.Should().NotBeEmpty();
+        var judge = new Judge(_ => [new ExternalCandidate("judged", 0.9, true)]);
+
+        var answers = await record.AnswerAsync(decider, judge, TestContext.Current.CancellationToken);
+
+        judge.Asked.Should().BeEquivalentTo(asking);
+        judge.Seen.Should().AllSatisfy(a => a.Role.Should().Be(AttributeRole.Decided));
+        answers.Where(a => asking.Contains(a.Attribute)).Should().AllSatisfy(a =>
+        {
+            a.Source.Should().Be(Source.External);
+            a.Candidates[0].Value.Should().Be("judged");
+        });
+        answers.Select(a => a.Attribute).Should().Equal(record.Answer(decider).Select(a => a.Attribute));
+    }
+
+    [Fact]
+    public async Task An_abstaining_or_outdated_judgement_leaves_the_answer_as_the_record_gives_it()
+    {
+        var (schema, decider) = CoreTests.Filled();
+        using var _ = schema;
+        using var __ = decider;
+        using var record = Unknown(schema, decider);
+        var before = record.Answer(decider);
+
+        var abstained = await record.AnswerAsync(decider, new Judge(_ => []), TestContext.Current.CancellationToken);
+        abstained.Should().BeEquivalentTo(before);
+
+        var observed = CoreTests.Observed().First();
+        var changing = new Judge(_ =>
+        {
+            record.Observe(decider, observed, "changed-while-judging");
+            return [new ExternalCandidate("stale", 0.9, true)];
+        });
+        var after = await record.AnswerAsync(decider, changing, TestContext.Current.CancellationToken);
+        after.SelectMany(a => a.Candidates).Should().NotContain(c => c.Value == "stale",
+            "the judgement read values the record no longer has");
+    }
+
+    [Fact]
+    public async Task A_canceled_answer_throws_and_a_failing_judge_fails_it()
+    {
+        var (schema, decider) = CoreTests.Filled();
+        using var _ = schema;
+        using var __ = decider;
+        using var record = Unknown(schema, decider);
+        using var canceled = new CancellationTokenSource();
+        await canceled.CancelAsync();
+
+        await record.Invoking(r => r.AnswerAsync(decider, new Judge(_ => []), canceled.Token))
+            .Should().ThrowAsync<OperationCanceledException>();
+        await record.Invoking(r => r.AnswerAsync(decider, new Judge(_ => throw new InvalidOperationException("down")),
+                TestContext.Current.CancellationToken))
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("down");
+    }
+
+    /// <summary>A record whose observed values no settled record has, so that nothing backs an answer.</summary>
+    private static OpenRecord Unknown(Schema schema, Decider decider)
+    {
+        var record = OpenRecord.Open(schema, "x", DateTimeOffset.UnixEpoch);
+        foreach (var name in CoreTests.Observed())
+        {
+            record.Observe(decider, name, "never-seen-" + name);
+        }
+
+        return record;
+    }
+
+    private sealed class Judge(Func<Attribute, IReadOnlyList<ExternalCandidate>> rank) : IExternalJudge
+    {
+        private readonly Lock _gate = new();
+
+        public List<string> Asked { get; } = [];
+
+        public List<Attribute> Seen { get; } = [];
+
+        public ValueTask<IReadOnlyList<ExternalCandidate>> JudgeAsync(
+            Attribute attribute, IReadOnlyList<ObservedValue> evidence, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            lock (_gate)
+            {
+                Asked.Add(attribute.Name);
+                Seen.Add(attribute);
+            }
+
+            return ValueTask.FromResult(rank(attribute));
+        }
+    }
+
     /// <summary>The core writes nulls the binding leaves out, and whole doubles without a fraction.</summary>
     private static JsonNode? Comparable(JsonNode? node) => CoreTests.Doubles(node switch
     {

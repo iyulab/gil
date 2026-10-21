@@ -233,9 +233,16 @@ public sealed class OpenRecord : IDisposable
     private Native.Candidate[] _slots = new Native.Candidate[8];
     private byte[] _bytes = new byte[256];
 
-    private OpenRecord(OpenRecordHandle handle) => Handle = handle;
+    private OpenRecord(OpenRecordHandle handle, Schema schema)
+    {
+        Handle = handle;
+        Schema = schema;
+    }
 
     internal OpenRecordHandle Handle { get; }
+
+    /// <summary>The schema the record is of.</summary>
+    public Schema Schema { get; }
 
     /// <summary>A new record <paramref name="id"/> of <paramref name="schema"/>, starting at
     /// <paramref name="settledAt"/> — the present for a new record.</summary>
@@ -251,7 +258,7 @@ public sealed class OpenRecord : IDisposable
             Native.Check(Native.OpenRecordNew(schema.Handle, text.At(p), Time.Ticks(settledAt), &output));
         }
 
-        return new OpenRecord(OpenRecordHandle.Of(output));
+        return new OpenRecord(OpenRecordHandle.Of(output), schema);
     }
 
     /// <summary>A saved record — as <see cref="Snapshot"/> gives it — reopened as it was left.</summary>
@@ -273,7 +280,7 @@ public sealed class OpenRecord : IDisposable
             Native.Check(Native.OpenRecordReopen(schema.Handle, text.At(p), &output));
         }
 
-        return new OpenRecord(OpenRecordHandle.Of(output));
+        return new OpenRecord(OpenRecordHandle.Of(output), schema);
     }
 
     /// <summary>Sets an observed attribute's value — or clears it, given null — and returns the fresh answers it
@@ -367,6 +374,38 @@ public sealed class OpenRecord : IDisposable
 
     /// <summary>The answers for every open decided attribute.</summary>
     public IReadOnlyList<Answer> Answer(Decider decider) => Answers.Read(AnswerJson(decider));
+
+    /// <summary>The answers for every open decided attribute, with <paramref name="judge"/>'s judgement in those that
+    /// ask for one (<see cref="Answer.NeedsExternal"/>): it is asked for each of them at once, and what it ranks is offered
+    /// back (<see cref="OfferExternal"/>) — unless it abstains, or the record changed meanwhile so that the attribute no
+    /// longer asks on the same values, when the answer is left as the record now gives it. The core's work is
+    /// synchronous; only the judge is awaited.</summary>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    public async Task<IReadOnlyList<Answer>> AnswerAsync(
+        Decider decider, IExternalJudge judge, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(decider);
+        ArgumentNullException.ThrowIfNull(judge);
+        var asking = Answer(decider).Where(a => a.NeedsExternal is not null).ToList();
+        if (asking.Count == 0)
+        {
+            return Answer(decider);
+        }
+
+        var judged = await Task.WhenAll(asking.Select(async a =>
+        {
+            var attribute = Schema.Find(a.Attribute)!;
+            var ranked = await judge.JudgeAsync(attribute, a.NeedsExternal!, cancellationToken).ConfigureAwait(false);
+            return (a.Attribute, Evidence: a.NeedsExternal!, Ranked: ranked);
+        })).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var byAttribute = judged.Where(j => j.Ranked.Count > 0).ToDictionary(j => j.Attribute);
+        return [.. Answer(decider).Select(a =>
+            byAttribute.TryGetValue(a.Attribute, out var j) && a.NeedsExternal is { } now && now.SequenceEqual(j.Evidence)
+                ? OfferExternal(decider, a.Attribute, j.Ranked)
+                : a)];
+    }
 
     /// <summary>The answers for every open decided attribute, as a JSON array in the core's form.</summary>
     public unsafe string AnswerJson(Decider decider)

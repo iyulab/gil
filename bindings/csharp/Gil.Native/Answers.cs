@@ -209,3 +209,17 @@ internal sealed class EvidenceConverter : JsonConverter<Evidence>
         writer.WriteEndObject();
     }
 }
+
+/// <summary>A judgement made outside the core — a model, a rule engine, a service — for an attribute neither memory had
+/// evidence for.</summary>
+public interface IExternalJudge
+{
+    /// <summary>The values <paramref name="attribute"/> may take, best first, ranked from <paramref name="evidence"/>;
+    /// empty to abstain.</summary>
+    /// <param name="attribute">The decided attribute to judge, as its schema defines it.</param>
+    /// <param name="evidence">The values it may rest on, in the order they arrived — a changed value moving to the end.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the judgement.</param>
+    ValueTask<IReadOnlyList<ExternalCandidate>> JudgeAsync(
+        Attribute attribute, IReadOnlyList<ObservedValue> evidence, CancellationToken cancellationToken);
+}
