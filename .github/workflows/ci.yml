@@ -14,6 +14,14 @@ permissions:
   contents: read
 
 jobs:
+  # Relative links in the Markdown resolve, and the READMEs that ship in packages link other files by URL.
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 scripts/check-doc-links.py
+
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
