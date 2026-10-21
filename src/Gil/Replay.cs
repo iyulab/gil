@@ -47,7 +47,7 @@ public static class Replay
         Read(SelectKeyFieldsJson(schema, attribute, records, options), CoreJson.Default.KeyFieldsChoice);
 
     /// <summary>How concentrated <paramref name="attribute"/>'s values are under each observed attribute's keys — what
-    /// <see cref="Attribute.KeyConcentrations"/> takes.</summary>
+    /// <see cref="AttributeDefinition.KeyConcentrations"/> takes.</summary>
     /// <exception cref="ArgumentException">The attribute is not decided.</exception>
     public static IReadOnlyDictionary<string, double> SelectKeyConcentrations(
         Schema schema, string attribute, SettledRecords records) =>

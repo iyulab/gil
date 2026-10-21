@@ -9,9 +9,9 @@ namespace Gil.Core.Tests;
 public sealed class ShapeTests
 {
     private static Schema Ticket() => new("ticket", [
-        new Attribute("channel", AttributeRole.Observed),
-        new Attribute("summary", AttributeRole.Observed) { UseAsEvidence = true },
-        new Attribute("team", AttributeRole.Decided)
+        new AttributeDefinition("channel", AttributeRole.Observed),
+        new AttributeDefinition("summary", AttributeRole.Observed) { UseAsEvidence = true },
+        new AttributeDefinition("team", AttributeRole.Decided)
         {
             KeyThreshold = 0.8,
             MemoryThreshold = 0.6,
@@ -20,7 +20,7 @@ public sealed class ShapeTests
             KeyConcentrations = new Dictionary<string, double> { ["channel"] = 0.5 },
             TypedKeyThresholds = [0.9, null, 0.7],
         },
-        new Attribute("tags", AttributeRole.Decided) { Multiple = true, Candidates = ["refund", "outage"] },
+        new AttributeDefinition("tags", AttributeRole.Decided) { Multiple = true, Candidates = ["refund", "outage"] },
     ]);
 
     [Fact]
@@ -52,8 +52,8 @@ public sealed class ShapeTests
     public void A_schema_that_does_not_check_is_refused()
     {
         var build = () => new Schema("ticket", [
-            new Attribute("team", AttributeRole.Decided),
-            new Attribute("team", AttributeRole.Observed),
+            new AttributeDefinition("team", AttributeRole.Decided),
+            new AttributeDefinition("team", AttributeRole.Observed),
         ]);
 
         build.Should().Throw<ArgumentException>().Which.Message.Should().Contain("team");

@@ -18,7 +18,7 @@ public sealed class Schema : IDisposable
 
     /// <summary>A schema named <paramref name="name"/> with <paramref name="attributes"/>, in order.</summary>
     /// <exception cref="ArgumentException">The schema does not check; the message says why.</exception>
-    public Schema(string name, IEnumerable<Attribute> attributes)
+    public Schema(string name, IEnumerable<AttributeDefinition> attributes)
         : this(Check(name, attributes))
     {
     }
@@ -29,10 +29,10 @@ public sealed class Schema : IDisposable
     public string Name { get; }
 
     /// <summary>The schema's attributes, in order, as the core keeps them.</summary>
-    public IReadOnlyList<Attribute> Attributes { get; }
+    public IReadOnlyList<AttributeDefinition> Attributes { get; }
 
     /// <summary>The attribute named <paramref name="name"/>, or null when the schema has none.</summary>
-    public Attribute? Find(string name) => Attributes.FirstOrDefault(a => a.Name == name);
+    public AttributeDefinition? Find(string name) => Attributes.FirstOrDefault(a => a.Name == name);
 
     /// <summary>A schema from JSON in the core's form; the settings an attribute leaves out take their defaults.</summary>
     /// <exception cref="ArgumentException">The JSON does not read as a schema, or the schema does not check.</exception>
@@ -54,7 +54,7 @@ public sealed class Schema : IDisposable
     /// <inheritdoc/>
     public void Dispose() => Handle.Dispose();
 
-    private static SchemaHandle Check(string name, IEnumerable<Attribute> attributes)
+    private static SchemaHandle Check(string name, IEnumerable<AttributeDefinition> attributes)
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(attributes);

@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
 namespace Gil;
@@ -103,11 +102,7 @@ public sealed record CoarseLevel
 /// core's default.</summary>
 /// <param name="Name">The attribute's name, unique in its schema.</param>
 /// <param name="Role">Whether it is read or decided.</param>
-[SuppressMessage(
-    "Naming",
-    "CA1711:Identifiers should not have incorrect suffix",
-    Justification = "The core's vocabulary names it so in every binding; not a .NET attribute.")]
-public sealed record Attribute(string Name, AttributeRole Role)
+public sealed record AttributeDefinition(string Name, AttributeRole Role)
 {
     /// <summary>A set of values rather than one.</summary>
     public bool Multiple { get; init; }

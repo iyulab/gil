@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace Gil;
 
 /// <summary>A schema in the core's form.</summary>
-internal sealed record SchemaForm(string Name, IReadOnlyList<Attribute> Attributes);
+internal sealed record SchemaForm(string Name, IReadOnlyList<AttributeDefinition> Attributes);
 
 /// <summary>The core's JSON form of schemas and records, written and read without reflection: snake_case names, settings
 /// left out where they are null, and time in 100-nanosecond ticks since the Unix epoch, UTC.</summary>

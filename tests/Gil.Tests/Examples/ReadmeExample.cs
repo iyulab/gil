@@ -92,11 +92,11 @@ internal static class ReadmeExample
         IReadOnlyList<Record> savedRecords = [];
         using var schema = new Schema("ticket",
         [
-            new Attribute("reporter", AttributeRole.Observed) { UseAsEvidence = false },
-            new Attribute("component", AttributeRole.Observed),
-            new Attribute("summary", AttributeRole.Observed),
-            new Attribute("team", AttributeRole.Decided) { KeyThreshold = 0.6, MemoryThreshold = 0.5 },
-            new Attribute("severity", AttributeRole.Decided) { Candidates = ["low", "medium", "high"], Policy = AttributePolicy.ConfirmRequired },
+            new AttributeDefinition("reporter", AttributeRole.Observed) { UseAsEvidence = false },
+            new AttributeDefinition("component", AttributeRole.Observed),
+            new AttributeDefinition("summary", AttributeRole.Observed),
+            new AttributeDefinition("team", AttributeRole.Decided) { KeyThreshold = 0.6, MemoryThreshold = 0.5 },
+            new AttributeDefinition("severity", AttributeRole.Decided) { Candidates = ["low", "medium", "high"], Policy = AttributePolicy.ConfirmRequired },
         ]);
 
         using var decider = new Decider();

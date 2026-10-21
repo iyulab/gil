@@ -46,7 +46,7 @@ UTF-16 code units. Text with fewer scalars than `minGram` is one n-gram, itself.
 
 Text typed into an attribute and the prefixes cut from values are counted in **Unicode scalar values**, as n-grams are:
 
-- **How much is typed** — the length that picks an entry of `Attribute.TypedKeyThresholds` — is the number of
+- **How much is typed** — the length that picks an entry of `AttributeDefinition.TypedKeyThresholds` — is the number of
   scalars typed. A character beyond U+FFFF is one.
 - **A prefix of a value** — the first *n* characters, as a coarse level's `Prefix` names a class and as replaying
   typed text cuts the settled value — is its first *n* scalars, or all of it when shorter. A prefix never ends inside

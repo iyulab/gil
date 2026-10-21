@@ -197,16 +197,16 @@ public sealed class AnswerTests
         return record;
     }
 
-    private sealed class Judge(Func<Attribute, IReadOnlyList<ExternalCandidate>> rank) : IExternalJudge
+    private sealed class Judge(Func<AttributeDefinition, IReadOnlyList<ExternalCandidate>> rank) : IExternalJudge
     {
         private readonly Lock _gate = new();
 
         public List<string> Asked { get; } = [];
 
-        public List<Attribute> Seen { get; } = [];
+        public List<AttributeDefinition> Seen { get; } = [];
 
         public ValueTask<IReadOnlyList<ExternalCandidate>> JudgeAsync(
-            Attribute attribute, IReadOnlyList<ObservedValue> evidence, CancellationToken cancellationToken)
+            AttributeDefinition attribute, IReadOnlyList<ObservedValue> evidence, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             lock (_gate)

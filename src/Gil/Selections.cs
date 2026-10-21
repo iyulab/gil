@@ -79,7 +79,7 @@ public sealed record KeyState(
 /// <param name="ByLength">The replay for one, two, … characters typed.</param>
 public sealed record TypedKeyThresholds(IReadOnlyList<ThresholdReplay> ByLength)
 {
-    /// <summary>The thresholds to set as the attribute's <see cref="Attribute.TypedKeyThresholds"/>: each replay's chosen
+    /// <summary>The thresholds to set as the attribute's <see cref="AttributeDefinition.TypedKeyThresholds"/>: each replay's chosen
     /// one, null where none was.</summary>
     [JsonIgnore]
     public IReadOnlyList<double?> Thresholds => [.. ByLength.Select(r => r.Chosen?.Threshold)];

@@ -27,7 +27,7 @@ public sealed class ResolverJudge : IExternalJudge
 
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<ExternalCandidate>> JudgeAsync(
-        Attribute attribute, IReadOnlyList<ObservedValue> evidence, CancellationToken cancellationToken)
+        AttributeDefinition attribute, IReadOnlyList<ObservedValue> evidence, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(attribute);
         ArgumentNullException.ThrowIfNull(evidence);

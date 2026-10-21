@@ -17,7 +17,7 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   | Before | Now |
   |---|---|
   | `FormDefinition` | `Schema` (`new Schema(name, attributes)`, `Find`, `FromJson`/`ToJson`; `IDisposable`): `Fields` is `Attributes`, `Field(name)` is `Find(name)`; `Keys`, `Supports`, `WithField` and `Language` are gone — build a new schema from changed attributes |
-  | `FieldDefinition`, `FieldRole`, `FieldPolicy` | `Attribute` (settings as `init` properties, same names but `MemorySimilarityFloor` is `MemoryFloor` and `SimilarDocumentVotes` is `SimilarVotes`; `Admits` and `KeyThresholdFor` are gone — the core applies them), `AttributeRole` (`Observed`, and `Judged` is `Decided`), `AttributePolicy` (unchanged) |
+  | `FieldDefinition`, `FieldRole`, `FieldPolicy` | `AttributeDefinition` (`Attribute` in Rust and Python — the .NET name keeps clear of `System.Attribute`; settings as `init` properties, same names but `MemorySimilarityFloor` is `MemoryFloor` and `SimilarDocumentVotes` is `SimilarVotes`; `Admits` and `KeyThresholdFor` are gone — the core applies them), `AttributeRole` (`Observed`, and `Judged` is `Decided`), `AttributePolicy` (unchanged) |
   | `CoarseLevel` | `CoarseLevel` — `new CoarseLevel(prefix)` / `new CoarseLevel(classes)` and `Of(value)` as before, or set `Prefix` / `Classes` as `init` properties; `MemorySimilarityFloor` is `MemoryFloor` |
   | `SettledDocument` | `Record` (`DocumentId` is `Id`; `SettledAt` is a `DateTimeOffset`; `Validate(form)` is gone — a `Decider` refuses a record that does not fit its schema); a batch is `SettledRecords.From(records)` |
   | `Settlement`, `SettlementKind` | `OpenRecord.Settle(decider, attribute, kind, now, value, values, probability)`; `SettlementKind` unchanged |

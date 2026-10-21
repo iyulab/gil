@@ -343,17 +343,16 @@ from the model client, not from Gil, and nest under `gil.call`.
 A form is a `Schema`: the attributes a host reads in (`Observed`) and those the decider answers (`Decided`), each with
 the settings that govern its answers. A `Decider` holds the memories — values settled together, similar settled
 records — and an `OpenRecord` is one record while its values arrive: each change answers again and goes into the
-decider's memories. With implicit usings, `Attribute` also names `System.Attribute`; add
-`using Attribute = Gil.Attribute;` to a file that is not itself in a `Gil` namespace.
+decider's memories.
 
 ```csharp
 using var schema = new Schema("ticket",
 [
-    new Attribute("reporter", AttributeRole.Observed) { UseAsEvidence = false },
-    new Attribute("component", AttributeRole.Observed),
-    new Attribute("summary", AttributeRole.Observed),
-    new Attribute("team", AttributeRole.Decided) { KeyThreshold = 0.6, MemoryThreshold = 0.5 },
-    new Attribute("severity", AttributeRole.Decided) { Candidates = ["low", "medium", "high"], Policy = AttributePolicy.ConfirmRequired },
+    new AttributeDefinition("reporter", AttributeRole.Observed) { UseAsEvidence = false },
+    new AttributeDefinition("component", AttributeRole.Observed),
+    new AttributeDefinition("summary", AttributeRole.Observed),
+    new AttributeDefinition("team", AttributeRole.Decided) { KeyThreshold = 0.6, MemoryThreshold = 0.5 },
+    new AttributeDefinition("severity", AttributeRole.Decided) { Candidates = ["low", "medium", "high"], Policy = AttributePolicy.ConfirmRequired },
 ]);
 
 using var decider = new Decider();
@@ -469,7 +468,7 @@ The decision core has a C ABI of its own, `crates/gil-ffi` (native library `gil_
 schema, settled records read once, a decider, an open record and an ask planner, with definitions and batch results as
 JSON in the core's serde form and the answer asked for while a person types written into flat structures and caller
 buffers. Its .NET binding, the `Gil` project (`src/Gil`), builds schemas and settled records as typed values
-(`Schema`, `Attribute`, `Record`, with time as `DateTimeOffset`) or reads them as JSON, hands answers back typed
+(`Schema`, `AttributeDefinition`, `Record`, with time as `DateTimeOffset`) or reads them as JSON, hands answers back typed
 (`Answer`, with each candidate's evidence and, when asked, the lookup's `DecisionRecord`), reproduces the decision
 golden and the ask planner's golden through it, and its threshold selections, tuning round trip and usage counts give
 what the C ABI gives (`tests/fixtures/core/native/selections.json`). Calls that only read a handle may run on several

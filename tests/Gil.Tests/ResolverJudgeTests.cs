@@ -12,13 +12,13 @@ public sealed class ResolverJudgeTests
     private static Schema Ticket() => new(
         "ticket",
         [
-            new Attribute("reporter", AttributeRole.Observed) { UseAsEvidence = false },
-            new Attribute("component", AttributeRole.Observed),
-            new Attribute("summary", AttributeRole.Observed),
-            new Attribute("team", AttributeRole.Decided) { KeyThreshold = 0.5 },
+            new AttributeDefinition("reporter", AttributeRole.Observed) { UseAsEvidence = false },
+            new AttributeDefinition("component", AttributeRole.Observed),
+            new AttributeDefinition("summary", AttributeRole.Observed),
+            new AttributeDefinition("team", AttributeRole.Decided) { KeyThreshold = 0.5 },
         ]);
 
-    private static readonly Attribute Team = new("team", AttributeRole.Decided);
+    private static readonly AttributeDefinition Team = new("team", AttributeRole.Decided);
 
     /// <summary>A task for <c>team</c> whose bare tree never judges: only the resolver's memory answers it.</summary>
     private static TaskDefinition TeamTask() => new(

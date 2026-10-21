@@ -168,7 +168,6 @@ jobs:
           dotnet add package Gil.Review --version "$review"
           cat > Program.cs <<'EOF'
           using Gil;
-          using Attribute = Gil.Attribute;
 
           var floor = Gil.Review.ReviewSampler.MinimumDesignDeviation;
           var counts = Gil.Review.ReviewSampler.AllocateNeyman([new(600, 0.5), new(400, 0.1)], 50);
@@ -180,8 +179,8 @@ jobs:
 
           using var schema = new Schema("ticket",
           [
-              new Attribute("component", AttributeRole.Observed),
-              new Attribute("team", AttributeRole.Decided) { KeyThreshold = 0.6 },
+              new AttributeDefinition("component", AttributeRole.Observed),
+              new AttributeDefinition("team", AttributeRole.Decided) { KeyThreshold = 0.6 },
           ]);
           using var decider = new Decider();
           for (var i = 0; i < 20; i++)

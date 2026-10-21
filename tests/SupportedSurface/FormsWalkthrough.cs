@@ -1,5 +1,4 @@
 using Gil;
-using Attribute = Gil.Attribute;
 
 namespace SupportedSurface;
 
@@ -14,11 +13,11 @@ public static class FormsWalkthrough
     {
         using var schema = new Schema("ticket",
         [
-            new Attribute("reporter", AttributeRole.Observed) { UseAsEvidence = false },
-            new Attribute("component", AttributeRole.Observed),
-            new Attribute("summary", AttributeRole.Observed),
-            new Attribute("team", AttributeRole.Decided) { MemoryThreshold = 0.5, KeyThreshold = 0.6 },
-            new Attribute("severity", AttributeRole.Decided) { Candidates = ["low", "medium", "high"], Policy = AttributePolicy.ConfirmRequired },
+            new AttributeDefinition("reporter", AttributeRole.Observed) { UseAsEvidence = false },
+            new AttributeDefinition("component", AttributeRole.Observed),
+            new AttributeDefinition("summary", AttributeRole.Observed),
+            new AttributeDefinition("team", AttributeRole.Decided) { MemoryThreshold = 0.5, KeyThreshold = 0.6 },
+            new AttributeDefinition("severity", AttributeRole.Decided) { Candidates = ["low", "medium", "high"], Policy = AttributePolicy.ConfirmRequired },
         ]);
 
         // Filling records puts each change into the decider's memories as it happens.
@@ -84,8 +83,8 @@ public static class FormsWalkthrough
         // A coarse level: the class of a coded value, offered when no layer answers the value itself.
         using var coded = new Schema("ticket-coded",
         [
-            new Attribute("component", AttributeRole.Observed),
-            new Attribute("team", AttributeRole.Decided) { Coarse = new CoarseLevel { Prefix = 1 } },
+            new AttributeDefinition("component", AttributeRole.Observed),
+            new AttributeDefinition("team", AttributeRole.Decided) { Coarse = new CoarseLevel { Prefix = 1 } },
         ]);
         var coarse = Replay.SelectCoarse(coded, "team", replayed, options);
 
@@ -99,7 +98,7 @@ public static class FormsWalkthrough
     private sealed class FixedJudge(string value) : IExternalJudge
     {
         public ValueTask<IReadOnlyList<ExternalCandidate>> JudgeAsync(
-            Attribute attribute, IReadOnlyList<ObservedValue> evidence, CancellationToken cancellationToken) =>
+            AttributeDefinition attribute, IReadOnlyList<ObservedValue> evidence, CancellationToken cancellationToken) =>
             ValueTask.FromResult<IReadOnlyList<ExternalCandidate>>([new ExternalCandidate(value, 0.8, Trusted: true)]);
     }
 }

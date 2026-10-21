@@ -221,5 +221,5 @@ public interface IExternalJudge
     /// </param>
     /// <param name="cancellationToken">Cancels the judgement.</param>
     ValueTask<IReadOnlyList<ExternalCandidate>> JudgeAsync(
-        Attribute attribute, IReadOnlyList<ObservedValue> evidence, CancellationToken cancellationToken);
+        AttributeDefinition attribute, IReadOnlyList<ObservedValue> evidence, CancellationToken cancellationToken);
 }
