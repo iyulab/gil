@@ -372,8 +372,10 @@ public sealed class OpenRecord : IDisposable
         }
     }
 
-    /// <summary>The answers for every open decided attribute.</summary>
-    public IReadOnlyList<Answer> Answer(Decider decider) => Answers.Read(AnswerJson(decider));
+    /// <summary>The answers for every open decided attribute — each with its lookup's decision record when
+    /// <paramref name="decisions"/> is true.</summary>
+    public IReadOnlyList<Answer> Answer(Decider decider, bool decisions = false) =>
+        Answers.Read(AnswerJson(decider, decisions));
 
     /// <summary>The answers for every open decided attribute, with <paramref name="judge"/>'s judgement in those that
     /// ask for one (<see cref="Answer.NeedsExternal"/>): it is asked for each of them at once, and what it ranks is offered
@@ -407,15 +409,16 @@ public sealed class OpenRecord : IDisposable
                 : a)];
     }
 
-    /// <summary>The answers for every open decided attribute, as a JSON array in the core's form.</summary>
-    public unsafe string AnswerJson(Decider decider)
+    /// <summary><see cref="Answer(Decider, bool)"/> as a JSON array in the core's form.</summary>
+    public unsafe string AnswerJson(Decider decider, bool decisions = false)
     {
         ArgumentNullException.ThrowIfNull(decider);
         nuint length;
         lock (_gate)
         using (decider.Gate.Reading())
         {
-            return Native.Result(Native.OpenRecordAnswer(Handle, decider.Handle, &length));
+            return Native.Result(
+                Native.OpenRecordAnswer(Handle, decider.Handle, decisions ? (byte)1 : (byte)0, &length));
         }
     }
 

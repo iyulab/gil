@@ -228,10 +228,24 @@ fn open_records_through_the_c_abi_answer_as_the_core_does() {
             );
         }
 
-        let status = unsafe { gil_open_record_answer(handle, pair.decider_handle, &mut len) };
+        let status =
+            unsafe { gil_open_record_answer(handle, pair.decider_handle, false, &mut len) };
         assert_eq!(
             result(status, len),
             answers_json(&core.answer(&pair.decider))
+        );
+        let mut records = Vec::new();
+        let with = core.answer_with(&pair.decider, &mut |r| records.push(r.clone()));
+        let status = unsafe { gil_open_record_answer(handle, pair.decider_handle, true, &mut len) };
+        let mut expected = answers_json(&with);
+        for (item, record) in expected.as_array_mut().unwrap().iter_mut().zip(&records) {
+            item["decision"] = serde_json::to_value(record).unwrap();
+        }
+        assert_eq!(
+            result(status, len),
+            expected,
+            "{} answer with decisions",
+            log.id
         );
 
         for a in attributes
@@ -295,7 +309,8 @@ fn open_records_through_the_c_abi_answer_as_the_core_does() {
         ok(unsafe { gil_open_record_reopen(pair.schema_handle, s(&text), &mut reopened) });
         let saved: Record = serde_json::from_value(snapshot).unwrap();
         let core_reopened = OpenRecord::reopen(pair.schema.clone(), &saved);
-        let status = unsafe { gil_open_record_answer(reopened, pair.decider_handle, &mut len) };
+        let status =
+            unsafe { gil_open_record_answer(reopened, pair.decider_handle, false, &mut len) };
         assert_eq!(
             result(status, len),
             answers_json(&core_reopened.answer(&pair.decider))

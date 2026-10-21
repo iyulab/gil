@@ -13,6 +13,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::decider::{Answer, Decider, ExternalCandidate};
+use crate::decision_record::DecisionRecord;
 use crate::key_memory::Lookup;
 use crate::schema::{
     Attribute, AttributePolicy, AttributeRole, Record, Schema, Settlement, SettlementKind,
@@ -243,11 +244,22 @@ impl OpenRecord {
 
     /// Answers for every open decided attribute: not settled (unless it takes several), not rejected, and not off.
     pub fn answer(&self, decider: &Decider) -> Vec<Answer> {
+        self.answer_with(decider, &mut |_| {})
+    }
+
+    /// As [`OpenRecord::answer`], handing `sink` the decision record of each attribute's lookup, in the answers' order —
+    /// what the key layer and the similar record layer found whatever the thresholds, and what was answered — for a host
+    /// that keeps them to recount its thresholds later.
+    pub fn answer_with(
+        &self,
+        decider: &Decider,
+        sink: &mut dyn FnMut(&DecisionRecord),
+    ) -> Vec<Answer> {
         self.schema
             .attributes
             .iter()
             .filter(|a| self.is_open(a))
-            .map(|a| decider.answer_one_with(&self.lookup(&a.name, None), &mut |_| {}))
+            .map(|a| decider.answer_one_with(&self.lookup(&a.name, None), sink))
             .collect()
     }
 

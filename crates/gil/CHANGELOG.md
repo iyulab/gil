@@ -32,10 +32,14 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   (its similarities follow the lexical memory's periodic refresh, so they can differ slightly from a rebuild's).
 - **`Decider::answer_with`: `Decider::answer` with each lookup's decision record handed to a sink**, in the answers'
   order — for a host that keeps them to recount its thresholds later.
+- **`OpenRecord::answer_with`: `OpenRecord::answer` with each lookup's decision record handed to a sink**, as
+  `Decider::answer_with` does for a stateless answer.
 - **`AskPlanner::attribute`: the decided attribute a planner plans for** — so that a host holding several planners can
   hand each answer to its own.
 - **Python: `Decider.remove(schema, record_id)` and `Decider.answer_with_decision(...)`** — the same two in the Python
   package: a deleted record taken out without a rebuild, and an answer returned with its lookup's decision record.
+- **Python: `OpenRecord.answer_with_decisions(decider)`** — an open record's answers, each with its lookup's decision
+  record.
 
 ### Changed
 

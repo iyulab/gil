@@ -601,6 +601,13 @@ class OpenRecord:
         """Answers for every open decided attribute."""
         return cast(list[Answer], json.loads(self._inner.answer(decider._inner)))
 
+    def answer_with_decisions(self, decider: Decider) -> list[tuple[Answer, DecisionRecord]]:
+        """As :meth:`answer`, each with its lookup's decision record — what the key layer and the similar record layer
+        found whatever the thresholds, and what was answered — for a host that keeps them to recount its thresholds
+        later."""
+        found = json.loads(self._inner.answer(decider._inner, True))
+        return [(cast(Answer, a), cast(DecisionRecord, a.pop("decision"))) for a in found]
+
     def answer_partial(
         self, decider: Decider, attribute: str, partial: str | None = None
     ) -> Answer:

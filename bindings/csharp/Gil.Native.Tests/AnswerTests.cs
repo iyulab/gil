@@ -98,6 +98,31 @@ public sealed class AnswerTests
     }
 
     [Fact]
+    public void An_open_record_s_answers_carry_decision_records_when_asked()
+    {
+        var (schema, decider) = CoreTests.Filled();
+        using var _ = schema;
+        using var __ = decider;
+        var log = JsonNode.Parse(CoreTests.RecordLines()[200])!;
+        using var record = OpenRecord.Open(schema, (string)log["id"]!, DateTimeOffset.UnixEpoch);
+        foreach (var name in CoreTests.Observed())
+        {
+            record.Observe(decider, name, (string?)log["values"]![name]);
+        }
+
+        record.Answer(decider).Should().AllSatisfy(a => a.Decision.Should().BeNull());
+        var with = record.Answer(decider, decisions: true);
+        with.Should().NotBeEmpty().And.AllSatisfy(a =>
+        {
+            a.Decision.Should().NotBeNull();
+            a.Decision!.Attribute.Should().Be(a.Attribute);
+            a.Decision.Record.Should().Be((string)log["id"]!);
+            a.Decision.Weight.Should().Be(1, "an answer counts as one lookup");
+        });
+        with.Select(a => a with { Decision = null }).Should().BeEquivalentTo(record.Answer(decider));
+    }
+
+    [Fact]
     public async Task AnswerAsync_asks_the_judge_only_where_an_answer_asks_for_one()
     {
         var (schema, decider) = CoreTests.Filled();

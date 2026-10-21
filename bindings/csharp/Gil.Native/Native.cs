@@ -121,7 +121,8 @@ internal static unsafe partial class Native
         nuint valuesLen, double probability, nuint* resultLen);
 
     [LibraryImport(Library, EntryPoint = "gil_open_record_answer")]
-    internal static partial int OpenRecordAnswer(OpenRecordHandle record, DeciderHandle decider, nuint* resultLen);
+    internal static partial int OpenRecordAnswer(
+        OpenRecordHandle record, DeciderHandle decider, byte decisions, nuint* resultLen);
 
     [LibraryImport(Library, EntryPoint = "gil_open_record_answer_partial")]
     internal static partial int OpenRecordAnswerPartial(

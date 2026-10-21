@@ -581,11 +581,25 @@ impl OpenRecord {
         }
     }
 
-    /// Answers for every open decided attribute, as JSON.
-    fn answer(&self, decider: PyRef<'_, Decider>) -> PyResult<String> {
+    /// Answers for every open decided attribute, as JSON — each with `decision`, its lookup's decision record, when
+    /// `decisions` is true.
+    #[pyo3(signature = (decider, decisions=false))]
+    fn answer(&self, decider: PyRef<'_, Decider>, decisions: bool) -> PyResult<String> {
         usable(self.broken, "record")?;
         usable(decider.broken, "decider")?;
-        guarded(|| self.inner.answer(&decider.inner)).map(|a| answers_json(&a))
+        let mut kept: Vec<Value> = Vec::new();
+        let found = guarded(|| {
+            self.inner.answer_with(&decider.inner, &mut |r| {
+                if decisions {
+                    kept.push(serde_json::to_value(r).expect("a decision record serializes"));
+                }
+            })
+        })?;
+        let mut items: Vec<Value> = found.iter().map(answer_json).collect();
+        for (item, record) in items.iter_mut().zip(kept) {
+            item["decision"] = record;
+        }
+        Ok(Value::Array(items).to_string())
     }
 
     /// The answer for one open decided attribute alone — with `partial`, the text typed into it so far — as JSON.

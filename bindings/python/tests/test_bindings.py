@@ -442,6 +442,23 @@ def test_an_ask_planner_refuses_what_the_core_refuses() -> None:
         gil.AskPlanner(schema, "tags", ["product"], 0.3)
 
 
+def test_an_open_record_s_answers_with_their_decision_records() -> None:
+    """Each open answer comes with its lookup's decision record, for the record being filled."""
+    schema = gil.Schema.from_dict(final_form())
+    settled = lines("records.jsonl")
+    decider = gil.Decider(schema, gil.records(settled[:CHOSEN]))
+    log = settled[CHOSEN]
+    record = gil.OpenRecord(schema, log["id"], 0)
+    for name in ("channel", "product", "summary"):
+        record.observe(decider, name, log["values"].get(name))
+    pairs = record.answer_with_decisions(decider)
+    assert [a for a, _ in pairs] == record.answer(decider)
+    assert pairs
+    for answer, decision in pairs:
+        assert set(decision) == set(gil.DecisionRecord.__annotations__)
+        assert (decision["attribute"], decision["record"]) == (answer["attribute"], log["id"])
+
+
 def test_an_answer_with_its_decision_record_and_a_removed_record() -> None:
     """The decision record comes with the answer it was made for; a removed record is never offered again."""
     schema = gil.Schema.from_dict(final_form())

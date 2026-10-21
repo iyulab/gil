@@ -279,6 +279,17 @@ unsafe fn answers(answers: &[Answer], result_len: *mut usize) -> Result<(), Fail
     unsafe { result(&value, result_len) }
 }
 
+/// Answers as a JSON array, each with `decision` — its lookup's decision record, in the same order — when kept.
+fn with_decisions(found: &[Answer], kept: Option<Vec<Value>>) -> Value {
+    let mut value = Value::Array(found.iter().map(answer_json).collect());
+    if let (Some(kept), Value::Array(items)) = (kept, &mut value) {
+        for (item, record) in items.iter_mut().zip(kept) {
+            item["decision"] = record;
+        }
+    }
+    value
+}
+
 /// An answer in the core's `serde` form, with `answered` (whether the first candidate is trusted) beside it.
 fn answer_json(a: &Answer) -> Value {
     let mut value = serde_json::to_value(a).expect("an answer serializes");
@@ -493,14 +504,8 @@ pub unsafe extern "C" fn gil_decider_answer(
         let found = decider.answer_with(&schema.0, record_id, &values, &sets, &mut |r| {
             keep(&mut kept, r)
         });
-        let mut value = Value::Array(found.iter().map(answer_json).collect());
-        if let (Some(kept), Value::Array(items)) = (kept, &mut value) {
-            for (item, record) in items.iter_mut().zip(kept) {
-                item["decision"] = record;
-            }
-        }
         // SAFETY: forwarded from the caller.
-        unsafe { result(&value, result_len) }
+        unsafe { result(&with_decisions(&found, kept), result_len) }
     })
 }
 
@@ -729,7 +734,8 @@ pub unsafe extern "C" fn gil_open_record_settle(
 }
 
 /// Keeps as the result the answers for every open decided attribute — not settled (unless it takes several), not
-/// rejected, and not off — as a JSON array.
+/// rejected, and not off — as a JSON array, as `gil_decider_answer`'s: each with `decision`, the lookup's decision
+/// record, when `decisions` is true.
 ///
 /// # Safety
 /// `record` and `decider` are live handles; `result_len` points to one writable `usize`.
@@ -737,6 +743,7 @@ pub unsafe extern "C" fn gil_open_record_settle(
 pub unsafe extern "C" fn gil_open_record_answer(
     record: *const GilOpenRecord,
     decider: *const GilDecider,
+    decisions: bool,
     result_len: *mut usize,
 ) -> i32 {
     call(|| {
@@ -746,8 +753,9 @@ pub unsafe extern "C" fn gil_open_record_answer(
         // SAFETY: forwarded from the caller, for every pointer below.
         let record = &unsafe { live(record) }?.record;
         let decider = &unsafe { live(decider) }?.decider;
-        let found = record.answer(decider);
-        unsafe { answers(&found, result_len) }
+        let mut kept = decisions.then(Vec::new);
+        let found = record.answer_with(decider, &mut |r| keep(&mut kept, r));
+        unsafe { result(&with_decisions(&found, kept), result_len) }
     })
 }
 

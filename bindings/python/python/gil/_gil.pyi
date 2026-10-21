@@ -138,8 +138,9 @@ class OpenRecord:
     ) -> str:
         """Settles a decided attribute at `now` (ticks) — `kind` by name, with the value, values or probability it needs; the answers it changes, as JSON."""
 
-    def answer(self, decider: Decider) -> str:
-        """Answers for every open decided attribute, as JSON."""
+    def answer(self, decider: Decider, decisions: bool = False) -> str:
+        """Answers for every open decided attribute, as JSON — each with ``decision``, its lookup's decision record,
+        when ``decisions`` is true."""
 
     def answer_partial(
         self, decider: Decider, attribute: str, partial: str | None = None
