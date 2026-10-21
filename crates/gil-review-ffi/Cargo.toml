@@ -1,0 +1,17 @@
+[package]
+name = "gil-review-ffi"
+version = "0.1.0"
+description = "C ABI over iyulab-gil-review, for the .NET binding."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+# The native side of the .NET package; it ships inside NuGet, never to crates.io.
+publish = false
+
+[lib]
+name = "gil_review_native"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+gil-review = { package = "iyulab-gil-review", path = "../gil-review", version = "0.1.0" }
