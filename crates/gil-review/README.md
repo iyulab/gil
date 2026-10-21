@@ -29,4 +29,6 @@ assert_eq!(sample.selected_count(), 5); // both strata are smaller than the pilo
 # Ok::<(), gil_review::ReviewError>(())
 ```
 
+From .NET, the `Gil.Review` package binds this crate with the same results (`bindings/csharp` in the repository).
+
 Licensed under Apache-2.0.

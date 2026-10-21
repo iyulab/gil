@@ -905,9 +905,10 @@ statistics for checking decisions by hand — a seeded stratified sample, Neyman
 estimate with normal and bootstrap intervals, agreement between two reviewers. It depends on nothing, the decision core
 included, and its golden is `tests/fixtures/review/golden.jsonl`, for a binding to reproduce.
 
-Its .NET binding, `bindings/csharp/Gil.Review` (not yet packed), calls the crate through a flat C ABI
-(`crates/gil-review-ffi`) and reproduces that golden bit for bit. Build the native library first; the test project
-copies it from `target/debug`:
+Its .NET binding, `bindings/csharp/Gil.Review` (not yet published), calls the crate through a flat C ABI
+(`crates/gil-review-ffi`) and reproduces that golden bit for bit. Packing it takes the native library of each runtime
+(`-p:GilReviewNativeRoot=<folder>`, one `<rid>/` subfolder per runtime), which the package carries under
+`runtimes/<rid>/native/`. Build the native library first; the test project copies it from `target/debug`:
 
 ```
 cargo build -p gil-review-ffi

@@ -1,8 +1,9 @@
 # Changelog
 
 Versions follow `0.x`: a minor release may change the public API. Each such change is listed under **Breaking**
-with what to do. The Rust crate and Python package `gilfit` keep their own line in
-[crates/gilfit/CHANGELOG.md](crates/gilfit/CHANGELOG.md).
+with what to do. The Rust crate and Python package `iyulab-gil` keep their own line in
+[crates/gil/CHANGELOG.md](crates/gil/CHANGELOG.md), and the review statistics (`iyulab-gil-review` and its .NET binding
+`Gil.Review`) theirs in [crates/gil-review/CHANGELOG.md](crates/gil-review/CHANGELOG.md).
 
 ## 0.25.0
 

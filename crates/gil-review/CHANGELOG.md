@@ -1,12 +1,16 @@
-# Changelog — Gil review (`iyulab-gil-review`)
+# Changelog — Gil review (`iyulab-gil-review`, .NET `Gil.Review`)
 
-Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
+The Rust crate and its .NET binding share this version line. Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do.
 
 ## Unreleased
 
 ### Added
 
+- **.NET binding `Gil.Review`** (`bindings/csharp`): `ReviewSampler`, `ReviewEstimator` and `ReviewAgreement` over a
+  flat C ABI (`crates/gil-review-ffi` — strings as UTF-8, results in caller buffers, a status and a message for every
+  refusal, no panic across the boundary), AOT compatible. It reproduces the review golden bit for bit; the package
+  carries the native library under `runtimes/<rid>/native/`.
 - **The sample**: `draw_pilot` (a seeded pilot draw over caller-formed strata — ids in ordinal order, a partial
   Fisher–Yates shuffle, a stratum no larger than the request taken whole), `allocate_neyman` (capped Neyman
   allocation with largest-remainder rounding, planned against `minimum_design_deviation()`), the `SAMPLE_*` caveats.
