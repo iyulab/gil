@@ -3,6 +3,15 @@
 version = 4
 
 [[package]]
+name = "gil-ffi"
+version = "0.7.0"
+dependencies = [
+ "gil-ffi-support",
+ "iyulab-gil",
+ "serde_json",
+]
+
+[[package]]
 name = "gil-ffi-support"
 version = "0.1.0"
 

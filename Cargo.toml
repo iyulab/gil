@@ -4,6 +4,7 @@ members = [
     "crates/gil-review",
     "crates/gil-ffi-support",
     "crates/gil-review-ffi",
+    "crates/gil-ffi",
     "bindings/python",
 ]
 # The bindings build through maturin (they need a Python); plain cargo commands check the core.
@@ -12,6 +13,7 @@ default-members = [
     "crates/gil-review",
     "crates/gil-ffi-support",
     "crates/gil-review-ffi",
+    "crates/gil-ffi",
 ]
 resolver = "3"
 

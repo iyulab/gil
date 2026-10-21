@@ -1,0 +1,19 @@
+[package]
+name = "gil-ffi"
+version = "0.7.0"
+description = "C ABI over the iyulab-gil decision core, for the .NET binding."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+# The native side of the .NET package; it ships inside NuGet, never to crates.io.
+publish = false
+
+[lib]
+name = "gil_native"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+gil = { package = "iyulab-gil", path = "../gil", version = "0.7.0", features = ["serde"] }
+gil-ffi-support = { path = "../gil-ffi-support" }
+serde_json = { version = "1", features = ["float_roundtrip"] }
