@@ -1,6 +1,6 @@
 [package]
 name = "gil-review-ffi"
-version = "0.1.0"
+version = "0.0.0"
 description = "C ABI over iyulab-gil-review, for the .NET binding."
 edition.workspace = true
 license.workspace = true
@@ -15,4 +15,4 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 gil-ffi-support = { path = "../gil-ffi-support" }
-gil-review = { package = "iyulab-gil-review", path = "../gil-review", version = "0.1.0" }
+gil-review = { package = "iyulab-gil-review", path = "../gil-review", version = "0.0.0" }

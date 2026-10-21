@@ -28,7 +28,7 @@ dependencies = [
 
 [[package]]
 name = "gil-review-ffi"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "gil-ffi-support",
  "iyulab-gil-review",
@@ -57,7 +57,7 @@ dependencies = [
 
 [[package]]
 name = "iyulab-gil-review"
-version = "0.1.0"
+version = "0.0.0"
 
 [[package]]
 name = "libc"

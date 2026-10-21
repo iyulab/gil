@@ -1,6 +1,6 @@
 [package]
 name = "iyulab-gil-review"
-version = "0.1.0"
+version = "0.0.0"
 description = "Review statistics for checking automated decisions by hand: stratified samples, Neyman allocation, weighted estimates with intervals, agreement between reviewers."
 edition.workspace = true
 license.workspace = true

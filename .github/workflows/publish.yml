@@ -1,15 +1,16 @@
 name: Publish
 
-# Publishes to NuGet.org when the version in Directory.Build.props changes on main.
-# Packing is switched on in Directory.Build.props (IsPackable); while it is off this workflow
-# builds and tests, finds no packages, and ends without publishing. The Gil package carries the
-# decision core's native library for six runtimes: the native workflow builds them first, and its
-# consumers must pass before anything is published.
+# Publishes to NuGet.org when the version in Directory.Build.props changes on main, and Gil.Review when its
+# version changes (it shares a version line with the iyulab-gil-review crate, published from publish-gil.yml;
+# 0.0.0 is the unreleased placeholder and publishes nothing). Packing is switched on in Directory.Build.props
+# (IsPackable); while it is off this workflow builds and tests, finds no packages, and ends without publishing.
+# Gil and Gil.Review carry their native libraries for six runtimes: the native workflow builds them first, and
+# its consumers must pass before anything is published. A version already on NuGet.org is skipped.
 
 on:
   push:
     branches: [main]
-    paths: [Directory.Build.props]
+    paths: [Directory.Build.props, bindings/csharp/Gil.Review/Gil.Review.csproj]
   workflow_dispatch:
 
 permissions:
@@ -34,6 +35,7 @@ jobs:
       DOTNET_CLI_TELEMETRY_OPTOUT: true
       # Every MSBuild call reads it as a property: Gil packs the libraries under it (and is packable only with it).
       GilNativeRoot: ${{ github.workspace }}/native
+      GilReviewNativeRoot: ${{ github.workspace }}/native
     steps:
       - uses: actions/checkout@v7
 
@@ -61,11 +63,27 @@ jobs:
 
       # The Gil project copies the decision core's native library from target/debug; the tests load it.
       - run: rustup toolchain install stable --profile minimal && rustup default stable
-      - run: cargo build -p gil-ffi --locked
+      - run: cargo build -p gil-ffi -p gil-review-ffi --locked
 
       - run: dotnet build Gil.slnx --no-restore --configuration Release
       - run: dotnet test --solution Gil.slnx --no-build --configuration Release
       - run: dotnet pack Gil.slnx --no-build --configuration Release --output packages
+
+      # Gil.Review, unless its version line is still the placeholder.
+      - name: Gil.Review
+        run: |
+          review=$(dotnet msbuild bindings/csharp/Gil.Review/Gil.Review.csproj -getProperty:Version)
+          crate=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/gil-review/Cargo.toml)
+          if [ "$review" != "$crate" ]; then
+            echo "::error::Gil.Review is $review but crates/gil-review is $crate; they share one version line."
+            exit 1
+          fi
+          if [ "$review" = "0.0.0" ]; then
+            echo "Gil.Review is unreleased (0.0.0); not packed."
+            exit 0
+          fi
+          dotnet test --solution bindings/csharp/Gil.Review.slnx --configuration Release
+          dotnet pack bindings/csharp/Gil.Review/Gil.Review.csproj --configuration Release --output packages
 
       # Every packable project under src/ must produce a package of this version; none at all means packing is off.
       - name: Check the packages
