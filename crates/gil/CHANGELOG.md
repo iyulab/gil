@@ -6,6 +6,14 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ## Unreleased
 
+### Fixed
+
+- **The key layer no longer slows down with the square of an attribute's distinct values.** Gathering each value's score
+  under the known keys, and filling the candidates from the attribute's overall values, each searched a growing list
+  for every value; an attribute with thousands of values (a product code, say) spent most of an answer there. Answers
+  and threshold selections are unchanged — the same values, scores and order — and on two public replays of 10,000
+  decisions each, a replay of answers took 38% and 67% of the time it did.
+
 ### Added
 
 - **`Settlement::new(kind, value, values, probability)`: a settlement of a kind known only at run time, from the parts it

@@ -351,8 +351,13 @@ impl KeyMemory {
             attribute: q.attribute.to_owned(),
             key: None,
         };
-        if let Some(settled) = index.values.get(&overall) {
+        if let Some(settled) = index.values.get(&overall)
+            && candidates.len() < count
+        {
             for share in self.shares(settled, excluding) {
+                if candidates.len() == count {
+                    break; // the rest would be cut off below — and checking each against the list made this quadratic
+                }
                 if definition.admits_in(&share.value, q.known, q.known_sets)
                     && begins(&share.value, typed)
                     && !chosen.contains(&&share.value)
@@ -520,8 +525,10 @@ impl KeyMemory {
     fn keyed(&self, index: &SchemaIndex, q: &Lookup) -> Vec<(String, f64, Key)> {
         let attribute = q.definition();
         let (typed, excluding) = (q.typed, q.excluding);
-        // value → (score, strongest, backing key, latest); summed in the order the keys come.
+        // value → (score, strongest, backing key, latest); summed in the order the keys come. `at` finds a value's entry —
+        // a linear search made this quadratic in the attribute's distinct values.
         let mut scores: Vec<(String, f64, f64, Key, i64)> = Vec::new();
+        let mut at: HashMap<String, usize> = HashMap::new();
         let mut keys = self.keys(q.schema, attribute, q.known, q.known_sets);
         if attribute.multiple {
             // An attribute that takes several values: its chosen values are keys for the rest.
@@ -549,8 +556,9 @@ impl KeyMemory {
                 attribute.admits_in(&s.value, q.known, q.known_sets) && begins(&s.value, typed)
             }) {
                 let strength = share.weight / (share.total + concentration);
-                match scores.iter_mut().find(|s| s.0 == share.value) {
-                    Some(entry) => {
+                match at.get(&share.value) {
+                    Some(&i) => {
+                        let entry = &mut scores[i];
                         if strength > entry.2 {
                             entry.2 = strength;
                             entry.3 = key.clone();
@@ -559,7 +567,8 @@ impl KeyMemory {
                         entry.4 = entry.4.max(share.latest);
                     }
                     None => {
-                        scores.push((share.value, strength, strength, key.clone(), share.latest))
+                        at.insert(share.value.clone(), scores.len());
+                        scores.push((share.value, strength, strength, key.clone(), share.latest));
                     }
                 }
             }
