@@ -75,7 +75,7 @@ public static class FormsWalkthrough
             MemoryThreshold = layers.Thresholds.Memory.Chosen?.Threshold,
             MemoryFloor = layers.Thresholds.Memory.Chosen?.SimilarityFloor,
             KeyFields = narrowed.KeyFields,
-            TypedKeyThresholds = narrowed.Typed?.Thresholds(),
+            TypedKeyThresholds = narrowed.Typed?.Thresholds,
         }));
         var kept = Tuning.Capture(tuned, saved.Count, options.TargetPrecision).Promise("team", layers.Thresholds).ToJson();
         var tuning = Tuning.FromJson(kept);

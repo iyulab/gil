@@ -93,4 +93,20 @@ public sealed class ShapeTests
         fresh.AnswerPartial(decider, "team").Candidates.Select(c => c.Value).Should()
             .Contain("billing", "the memories hold the two records");
     }
+
+    [Fact]
+    public void A_coarse_level_is_made_from_a_prefix_or_a_table_and_names_a_value_s_class_as_the_core_does()
+    {
+        new CoarseLevel(2) { KeyThreshold = 0.9 }.Should().Be(new CoarseLevel { Prefix = 2, KeyThreshold = 0.9 });
+        var table = new Dictionary<string, string> { ["vpn"] = "network" };
+        new CoarseLevel(table).Classes.Should().BeSameAs(table);
+
+        // The core's own cases (schema.rs): scalars, not UTF-16 units.
+        new CoarseLevel(2).Of("25-40").Should().Be("25");
+        new CoarseLevel(2).Of("가나다").Should().Be("가나");
+        new CoarseLevel(9).Of("short").Should().Be("short");
+        new CoarseLevel(1).Of("😀a").Should().Be("😀");
+        new CoarseLevel(table).Of("vpn").Should().Be("network");
+        new CoarseLevel(table).Of("printer").Should().Be("printer");
+    }
 }

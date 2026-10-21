@@ -18,7 +18,7 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   |---|---|
   | `FormDefinition` | `Schema` (`new Schema(name, attributes)`, `Find`, `FromJson`/`ToJson`; `IDisposable`) |
   | `FieldDefinition`, `FieldRole`, `FieldPolicy` | `Attribute` (settings as `init` properties), `AttributeRole` (`Observed`, `Decided`), `AttributePolicy` |
-  | `CoarseLevel` | `CoarseLevel` (`Prefix` or `Classes`, with its thresholds) |
+  | `CoarseLevel` | `CoarseLevel` — `new CoarseLevel(prefix)` / `new CoarseLevel(classes)` and `Of(value)` as before, or set `Prefix` / `Classes` as `init` properties; `MemorySimilarityFloor` is `MemoryFloor` |
   | `SettledDocument` | `Record` (`SettledAt` is a `DateTimeOffset`); a batch is `SettledRecords.From(records)` |
   | `Settlement`, `SettlementKind` | `OpenRecord.Settle(decider, attribute, kind, now, value, values, probability)`; `SettlementKind` unchanged |
   | `FormResolver`, `FieldMemory`, `LexicalMemory` (as document memory) | `Decider` (`Put`, `Remove`, `Answer`), which holds both memories |
@@ -28,7 +28,7 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   | `IFieldModel`, `FieldModelResult` | `IExternalJudge.JudgeAsync(attribute, evidence, ct)` returning ranked `ExternalCandidate`s (empty abstains), called by `OpenRecord.AnswerAsync(decider, judge, ct)` |
   | `ThresholdSelection` | `Replay` (`SelectLayers`, `SelectCoarse`, `SelectKeyFields`, `SelectKeyConcentrations`), synchronous, over `SettledRecords` and `SelectionOptions` |
   | `ThresholdSelection.RecentDocuments`, `PooledStandardErrors`, `PooledRecentLookups`, `PooledRecentAnswers` | `Replay.RecentRecords`, `Replay.PooledStandardErrors`, `Replay.PooledRecentLookups`, `Replay.PooledRecentAnswers` (same values) |
-  | `ThresholdChoice`, `LayerThresholds`, `TypedKeyThresholds`, `KeyFieldsChoice`, `KeyFieldsTrial`, `KeyState`, `ThresholdRule` | Same names (a layers selection returns `LayerSelection`); chosen settings are kept as a `Tuning` (`Capture`, `Promise`, `Apply`, `Stale`, `ToJson`/`FromJson`) |
+  | `ThresholdChoice`, `LayerThresholds`, `TypedKeyThresholds`, `KeyFieldsChoice`, `KeyFieldsTrial`, `KeyState`, `ThresholdRule` | Same names and members (a layers selection returns `LayerSelection`); chosen settings are kept as a `Tuning` (`Capture`, `Promise`, `Apply`, `Stale`, `ToJson`/`FromJson`). Members that were `init` properties are now positional — `ThresholdChoice` (`AnsweredWeight`, `EffectiveAnswered`, `SimilarityFloor`, `Promise`, `PromiseAnswered`), `ThresholdReplay` (`Keys`), `KeyState` (`AnsweredWeight`, `EffectiveAnswered`), `KeyFieldsChoice` and `KeyFieldsTrial` (`Typed`) — which matters only when building one by hand |
   | `AskPlanner`, `AskAdvice` (`GIL0005`) | `AskPlanner(schema, attribute, askable, budget)` with `Learn` and `Advise`, still `GIL0005` |
   | `GilDiagnostics` | Removed; answers carry their decision records, and `Usage.Count` reports how they fared |
   | `IEmbeddingPrefetch` | Removed |

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Gil;
 
 /// <summary>What a layers or coarse selection chose: the two layers' replays and, when asked for, the replay's decision
@@ -79,7 +81,8 @@ public sealed record TypedKeyThresholds(IReadOnlyList<ThresholdReplay> ByLength)
 {
     /// <summary>The thresholds to set as the attribute's <see cref="Attribute.TypedKeyThresholds"/>: each replay's chosen
     /// one, null where none was.</summary>
-    public IReadOnlyList<double?> Thresholds() => [.. ByLength.Select(r => r.Chosen?.Threshold)];
+    [JsonIgnore]
+    public IReadOnlyList<double?> Thresholds => [.. ByLength.Select(r => r.Chosen?.Threshold)];
 }
 
 /// <summary>The attributes that should key a decided attribute in the key memory, chosen by replaying its key layer, and

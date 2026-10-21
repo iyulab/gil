@@ -41,6 +41,17 @@ public enum AttributePolicy : byte
 /// the two layers back is trusted.</summary>
 public sealed record CoarseLevel
 {
+    /// <summary>A level with neither a prefix nor a table yet — set one of them.</summary>
+    public CoarseLevel()
+    {
+    }
+
+    /// <summary>A level whose classes are the first <paramref name="prefix"/> characters of a value.</summary>
+    public CoarseLevel(int prefix) => Prefix = prefix;
+
+    /// <summary>A level whose classes a table names: value to class.</summary>
+    public CoarseLevel(IReadOnlyDictionary<string, string> classes) => Classes = classes;
+
     /// <summary>How many leading characters (Unicode scalar values) of a value name its class; 0 for a level made from a
     /// table.</summary>
     public int Prefix { get; init; }
@@ -60,6 +71,32 @@ public sealed record CoarseLevel
     /// <summary>The similarity the nearest record voting for the class must also reach when more than one
     /// voted.</summary>
     public double? MemoryFloor { get; init; }
+
+    /// <summary>The class of <paramref name="value"/>: what the table says, the value itself when the table does not list
+    /// it; without a table, its first <see cref="Prefix"/> Unicode scalar values, or all of it when shorter.</summary>
+    public string Of(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        if (Classes is not null)
+        {
+            return Classes.TryGetValue(value, out var found) ? found : value;
+        }
+
+        var end = 0;
+        var taken = 0;
+        foreach (var rune in value.EnumerateRunes())
+        {
+            if (taken == Prefix)
+            {
+                break;
+            }
+
+            end += rune.Utf16SequenceLength;
+            taken++;
+        }
+
+        return value[..end];
+    }
 }
 
 /// <summary>One attribute of a schema, with the settings that govern how it is answered; a setting left out takes the

@@ -106,7 +106,7 @@ public sealed class SelectionTests
         var pooled = Replay.SelectLayers(schema, "code", records, new(0.7, 5) { Rule = ThresholdRule.Pooled, Decisions = true });
         pooled.Decisions.Should().NotBeEmpty().And.AllSatisfy(d => d.Attribute.Should().Be("code"));
         var keyFields = Replay.SelectKeyFields(schema, "team", records, new(0.8, 10) { TypedLongest = 3 });
-        keyFields.Typed!.Thresholds().Should().HaveCount(keyFields.Typed.ByLength.Count);
+        keyFields.Typed!.Thresholds.Should().HaveCount(keyFields.Typed.ByLength.Count);
     }
 
     private static JsonNode? Write<T>(T value, JsonTypeInfo<T> type) => JsonNode.Parse(JsonSerializer.Serialize(value, type));
