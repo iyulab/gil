@@ -1,4 +1,4 @@
-//! The key threshold golden (`tests/fixtures/core/replay.jsonl`), written by the .NET implementation: the key layer's
+//! The key threshold golden (`tests/fixtures/core/replay.jsonl`): the key layer's
 //! threshold replay for each single-valued decided attribute on the first 200 logs, with the schema as the golden had
 //! configured it when that attribute's layers were chosen, must come out the same here — every count, every number to the
 //! bit, and the state under each key — the golden's own replays of the attribute that takes several values and of both layers
@@ -6,7 +6,7 @@
 
 mod common;
 
-use common::{CHOSEN, COUNTED, doubles, fixture, lines, replay, schema, to_record};
+use common::{CHOSEN, COUNTED, Golden, doubles, fixture, lines, replay, schema, to_record};
 use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::replay::{
@@ -23,11 +23,8 @@ fn the_key_threshold_replay_reproduces_its_golden() {
         .map(|r| to_record(&r))
         .collect();
     let golden = fixture("golden.jsonl");
-    let expected: Vec<Value> = lines(&fixture("replay.jsonl")).collect();
-
-    let attributes = ["team", "code"];
-    assert_eq!(expected.len(), attributes.len());
-    for (attribute, expected) in attributes.into_iter().zip(expected) {
+    let mut golden_out = Golden::open("replay.jsonl");
+    for attribute in ["team", "code"] {
         // As configured when the attribute's layers were chosen: every setting chosen before its `layers` line.
         let schema = schema(&golden, |l| {
             l["kind"] == "layers" && l["field"] == attribute
@@ -45,8 +42,9 @@ fn the_key_threshold_replay_reproduces_its_golden() {
         );
         let actual =
             json!({ "kind": "key_threshold", "field": attribute, "replay": self::replay(&replay) });
-        assert_eq!(doubles(actual), doubles(expected), "attribute {attribute}");
+        golden_out.check(actual, attribute);
     }
+    golden_out.finish();
 }
 
 /// The golden's own line for the attribute that takes several values (`golden.jsonl`, kind `key`): chosen after every other
@@ -171,9 +169,8 @@ fn the_layers_replay_with_documents_settled_again_reproduces_its_golden() {
     }
 
     let golden = fixture("golden.jsonl");
-    let expected: Vec<Value> = lines(&fixture("layers.jsonl")).collect();
-    assert_eq!(expected.len(), 2);
-    for (attribute, expected) in ["team", "code"].into_iter().zip(expected) {
+    let mut golden_out = Golden::open("layers.jsonl");
+    for attribute in ["team", "code"] {
         let schema = schema(&golden, |l| {
             l["kind"] == "layers" && l["field"] == attribute
         });
@@ -195,8 +192,9 @@ fn the_layers_replay_with_documents_settled_again_reproduces_its_golden() {
             "key": replay(&layers.key),
             "memory": replay(&layers.memory),
         });
-        assert_eq!(doubles(actual), doubles(expected), "attribute {attribute}");
+        golden_out.check(actual, attribute);
     }
+    golden_out.finish();
 }
 
 /// The pooled golden (`tests/fixtures/core/pooled.jsonl`): [`ThresholdRule::Pooled`] on the records laid end to end
@@ -221,9 +219,7 @@ fn the_pooled_rule_reproduces_its_golden() {
     }
 
     let golden = fixture("golden.jsonl");
-    let expected: Vec<Value> = lines(&fixture("pooled.jsonl")).collect();
-    assert_eq!(expected.len(), 4);
-    let mut expected = expected.into_iter();
+    let mut golden_out = Golden::open("pooled.jsonl");
     for attribute in ["team", "code"] {
         let standing = schema(&golden, |l| {
             l["kind"] == "layers" && l["field"] == attribute
@@ -262,11 +258,11 @@ fn the_pooled_rule_reproduces_its_golden() {
                 "key": replay(&layers.key),
                 "memory": replay(&layers.memory),
             });
-            assert_eq!(
-                doubles(actual),
-                doubles(expected.next().expect("a golden line")),
-                "attribute {attribute}, thresholds as they stand: {as_it_stands}"
+            golden_out.check(
+                actual,
+                format!("{attribute}, thresholds as they stand: {as_it_stands}"),
             );
         }
     }
+    golden_out.finish();
 }
