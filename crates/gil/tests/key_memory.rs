@@ -294,6 +294,54 @@ fn a_long_history_weighs_the_same_to_the_bit_whatever_order_it_was_put_in() {
 }
 
 #[test]
+fn ranking_between_puts_sees_every_put_and_every_replacement() {
+    // A memory read after each put — its shares kept between reads — against one built afresh, in reverse, from the
+    // records as they stand at that point.
+    let schema = ticket();
+    let mut random = Lcg(5);
+    let teams = ["network", "desk", "finance"];
+    let records: Vec<Record> = (1..=120)
+        .map(|i| {
+            doc(
+                i,
+                &[
+                    ("component", "vpn"),
+                    ("team", teams[random.below(3) as usize]),
+                ],
+            )
+        })
+        .collect();
+    let known = [("component", "vpn")];
+
+    let mut live = KeyMemory::default();
+    let mut current: Vec<Record> = Vec::new();
+    for (n, record) in records.iter().enumerate() {
+        live.put(&schema, record);
+        current.push(record.clone());
+        if n % 10 == 3 {
+            // An earlier record settled again with another team, later than everything so far.
+            let mut again = current[n / 2].clone();
+            again.values.insert("team".into(), "desk".into());
+            again.settled_at = record.settled_at + 1;
+            live.put(&schema, &again);
+            current[n / 2] = again;
+
+            let mut afresh = KeyMemory::default();
+            for r in current.iter().rev() {
+                afresh.put(&schema, r);
+            }
+            assert_eq!(
+                rank(&live, &schema, "team", &known, 3),
+                rank(&afresh, &schema, "team", &known, 3),
+                "after d{}",
+                n + 1
+            );
+        }
+        let _ = rank(&live, &schema, "team", &known, 3);
+    }
+}
+
+#[test]
 fn a_schema_with_another_name_has_an_empty_memory() {
     let schema = ticket();
     let mut memory = KeyMemory::default();

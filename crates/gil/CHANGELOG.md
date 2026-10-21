@@ -33,6 +33,12 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   ones, and the lists are rebuilt in order. Answers are unchanged to the bit. Over 20,000 remembered texts, remembering
   each again took 1.2 s instead of 14.6 s, and 10,000 lookups after that took 19.5 s instead of 29.8 s (17.1 s instead
   of 22.8 s on a memory remembered once).
+- **The key layer folds each key's settlements as they arrive instead of again on every look.** Every score sorted all
+  the settlements under each of the record's keys and weighed them from the earliest, so a replay that chooses
+  thresholds — a look per record for every record before it — spent most of its time sorting. Each key now keeps its
+  weights folded as settlements arrive in order and its shares until the next change; one that arrives out of order or
+  is taken away has the fold run again once, on the next look. Scores are unchanged to the bit. On two public replays
+  of 10,000 decisions each, choosing the thresholds took 74% and 80% of the time it did.
 
 ### Added
 

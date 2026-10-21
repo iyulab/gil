@@ -4,8 +4,10 @@
 //! Recent settlements weigh more: under each key, a settlement counts `recency_decay` to the power of the settlements
 //! made under the same key after it.
 
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
+use std::sync::OnceLock;
 
 use crate::schema::{Attribute, AttributeRole, Record, Schema};
 use crate::{hangul, text};
@@ -161,7 +163,7 @@ pub struct KeyMemory {
 #[derive(Default)]
 struct SchemaIndex {
     records: HashMap<String, Vec<(Slot, Settled)>>,
-    values: HashMap<Slot, Vec<Settled>>,
+    values: HashMap<Slot, Counts>,
 }
 
 impl Default for KeyMemory {
@@ -277,13 +279,14 @@ impl KeyMemory {
             return;
         }
 
+        let decay = self.recency_decay;
         let index = self.schemas.entry(schema.name().to_owned()).or_default();
         for (slot, settled) in &tallies {
             index
                 .values
                 .entry(slot.clone())
-                .or_default()
-                .push(settled.clone());
+                .or_insert_with(|| Counts::new(decay))
+                .add(settled.clone());
         }
         index.records.insert(record.id.clone(), tallies);
     }
@@ -297,11 +300,9 @@ impl KeyMemory {
             return;
         };
         for (slot, settled) in tallies {
-            if let Some(list) = index.values.get_mut(&slot) {
-                if let Some(at) = list.iter().position(|s| *s == settled) {
-                    list.remove(at);
-                }
-                if list.is_empty() {
+            if let Some(counts) = index.values.get_mut(&slot) {
+                counts.subtract(&settled);
+                if counts.settled.is_empty() {
                     index.values.remove(&slot);
                 }
             }
@@ -362,10 +363,10 @@ impl KeyMemory {
             attribute: q.attribute.to_owned(),
             key: None,
         };
-        if let Some(settled) = index.values.get(&overall)
+        if let Some(counts) = index.values.get(&overall)
             && candidates.len() < count
         {
-            for share in self.shares(settled, excluding) {
+            for share in counts.shares(excluding).iter() {
                 if candidates.len() == count {
                     break; // the rest would be cut off below — and checking each against the list made this quadratic
                 }
@@ -375,7 +376,7 @@ impl KeyMemory {
                     && !candidates.iter().any(|c| c.value == share.value)
                 {
                     candidates.push(Candidate {
-                        value: share.value,
+                        value: share.value.clone(),
                         score: share.share,
                         evidence: None,
                         trusted: false,
@@ -463,10 +464,10 @@ impl KeyMemory {
                 attribute: q.attribute.to_owned(),
                 key: Some(key.clone()),
             };
-            let Some(settled) = index.values.get(&slot) else {
+            let Some(counts) = index.values.get(&slot) else {
                 continue;
             };
-            let shares = self.shares(settled, None);
+            let shares = counts.shares(None);
             if let Some(first) = shares.first() {
                 let own = shares
                     .iter()
@@ -522,8 +523,9 @@ impl KeyMemory {
                     attribute: attribute.name.clone(),
                     key: Some(key),
                 };
-                index.values.get(&slot).is_some_and(|settled| {
-                    self.shares(settled, q.excluding)
+                index.values.get(&slot).is_some_and(|counts| {
+                    counts
+                        .shares(q.excluding)
                         .iter()
                         .any(|s| must_catch.contains(&s.value))
                 })
@@ -557,13 +559,13 @@ impl KeyMemory {
                 attribute: attribute.name.clone(),
                 key: Some(key.clone()),
             };
-            let Some(settled) = index.values.get(&slot) else {
+            let Some(counts) = index.values.get(&slot) else {
                 continue;
             };
             let concentration = attribute.concentration(&key.attribute);
             // A value outside the domain, or not beginning with the typed text, is not offered, but it still counts
             // towards its key's total.
-            for share in self.shares(settled, excluding).into_iter().filter(|s| {
+            for share in counts.shares(excluding).iter().filter(|s| {
                 attribute.admits_in(&s.value, q.known, q.known_sets) && begins(&s.value, typed)
             }) {
                 let strength = share.weight / (share.total + concentration);
@@ -579,7 +581,13 @@ impl KeyMemory {
                     }
                     None => {
                         at.insert(share.value.clone(), scores.len());
-                        scores.push((share.value, strength, strength, key.clone(), share.latest));
+                        scores.push((
+                            share.value.clone(),
+                            strength,
+                            strength,
+                            key.clone(),
+                            share.latest,
+                        ));
                     }
                 }
             }
@@ -637,72 +645,193 @@ impl KeyMemory {
             value,
         })
     }
+}
+
+/// One slot's settlements and their weights. Settlements arriving in order — later than the latest, or settled together
+/// with it — are folded in as they come, and the shares are kept until the next change; one arriving out of order, or
+/// one taken away, has the fold run again from the earliest on the next look. Either way the same settlements reach the
+/// same weights to the bit. A record settles at most once under a slot ([`KeyMemory::put`] replaces what it
+/// contributed) — with one value, or with several of an attribute that takes several, which weigh alike as one.
+struct Counts {
+    recency_decay: f64,
+    settled: Vec<Settled>,
+    /// Settlements per record, to tell whether leaving one out changes anything.
+    records: HashMap<String, usize>,
+    /// The fold of every settlement, while settlements arrive in order; none once one did not.
+    fold: Option<Fold>,
+    /// The fold run again from the earliest, when one was needed since the last change.
+    refolded: OnceLock<Fold>,
+    shares: OnceLock<Vec<Share>>,
+}
+
+impl Counts {
+    fn new(recency_decay: f64) -> Self {
+        Self {
+            recency_decay,
+            settled: Vec::new(),
+            records: HashMap::new(),
+            fold: Some(Fold::new(recency_decay)),
+            refolded: OnceLock::new(),
+            shares: OnceLock::new(),
+        }
+    }
+
+    fn add(&mut self, settled: Settled) {
+        self.shares = OnceLock::new();
+        if self.fold.is_none() {
+            self.fold = self.refolded.take();
+        }
+        *self.records.entry(settled.record.clone()).or_default() += 1;
+        match &mut self.fold {
+            Some(fold) if fold.takes_next(&settled) => fold.add(&settled),
+            _ => self.forget_fold(),
+        }
+        self.settled.push(settled);
+    }
+
+    fn subtract(&mut self, settled: &Settled) {
+        let Some(at) = self.settled.iter().position(|s| s == settled) else {
+            return;
+        };
+        self.settled.remove(at);
+        if let Some(count) = self.records.get_mut(&settled.record) {
+            *count -= 1;
+            if *count == 0 {
+                self.records.remove(&settled.record);
+            }
+        }
+        self.shares = OnceLock::new();
+        self.forget_fold();
+    }
+
+    fn forget_fold(&mut self) {
+        self.fold = None;
+        self.refolded = OnceLock::new();
+    }
 
     /// Each value's share of the weighted total, largest first; ties to the one settled most recently, then to the
     /// smaller value in scalar order. Settlements are folded from the earliest: each one leaves every earlier weight one
     /// step lighter and adds its own at 1 — always the same operations in the same order, so the shares come out the same
-    /// to the bit wherever they are computed.
-    fn shares(&self, settled: &[Settled], excluding: Option<&str>) -> Vec<Share> {
-        let mut ordered: Vec<&Settled> = settled
-            .iter()
-            .filter(|s| excluding != Some(s.record.as_str()))
-            .collect();
-        ordered.sort_by(|a, b| a.at.cmp(&b.at).then_with(|| a.record.cmp(&b.record)));
-
-        let mut raw: BTreeMap<String, (f64, i64)> = BTreeMap::new();
-        let mut newest: Vec<&Settled> = Vec::new();
-        let (mut raw_total, mut scale) = (0.0_f64, 1.0_f64);
-        for s in ordered {
-            if let Some(last) = newest.last()
-                && last.at == s.at
-                && last.record == s.record
-            {
-                newest.push(s); // one record's values settled together weigh alike
-                continue;
-            }
-
-            if !newest.is_empty() {
-                let amount = 1.0 / scale;
-                for previous in &newest {
-                    let entry = raw
-                        .entry(previous.value.clone())
-                        .or_insert((0.0, previous.at));
-                    *entry = (entry.0 + amount, previous.at);
-                    raw_total += amount;
-                }
-
-                newest.clear();
-                scale *= self.recency_decay;
-                if scale < 1e-150 {
-                    for entry in raw.values_mut() {
-                        entry.0 *= scale;
-                    }
-                    raw_total *= scale;
-                    scale = 1.0;
-                }
-            }
-
-            newest.push(s);
+    /// to the bit wherever they are computed. Leaving out a record that settled here folds the rest afresh, uncached.
+    fn shares(&self, excluding: Option<&str>) -> Cow<'_, [Share]> {
+        if let Some(excluded) = excluding.filter(|e| self.records.contains_key(*e)) {
+            let rest: Vec<&Settled> = self
+                .settled
+                .iter()
+                .filter(|s| s.record != excluded)
+                .collect();
+            return Cow::Owned(Fold::weigh(rest, self.recency_decay).shares());
         }
 
-        if newest.is_empty() {
+        Cow::Borrowed(self.shares.get_or_init(|| {
+            match &self.fold {
+                Some(fold) => fold.shares(),
+                None => self
+                    .refolded
+                    .get_or_init(|| Fold::weigh(self.settled.iter().collect(), self.recency_decay))
+                    .shares(),
+            }
+        }))
+    }
+}
+
+/// The weights of settlements added from the earliest. The latest settlement weighs exactly 1 and is held apart — all of
+/// it, when a record settled several values together; every earlier one is a raw amount times a common scale, so making
+/// them all one step lighter is one multiplication of the scale. The raw amounts are folded back into the scale before
+/// it gets too small to hold.
+#[derive(Clone)]
+struct Fold {
+    recency_decay: f64,
+    raw: HashMap<String, (f64, i64)>,
+    /// The latest settlement: one record's values, settled together.
+    newest: Vec<Settled>,
+    raw_total: f64,
+    scale: f64,
+}
+
+impl Fold {
+    fn new(recency_decay: f64) -> Self {
+        Self {
+            recency_decay,
+            raw: HashMap::new(),
+            newest: Vec::new(),
+            raw_total: 0.0,
+            scale: 1.0,
+        }
+    }
+
+    /// Folds the settlements in the order they are weighed in: by time, then by record id.
+    fn weigh(mut settled: Vec<&Settled>, recency_decay: f64) -> Self {
+        settled.sort_by(|a, b| a.at.cmp(&b.at).then_with(|| a.record.cmp(&b.record)));
+        let mut fold = Self::new(recency_decay);
+        for s in settled {
+            fold.add(s);
+        }
+        fold
+    }
+
+    /// Whether `settled` may be added next: later than the latest settlement, or settled together with it.
+    fn takes_next(&self, settled: &Settled) -> bool {
+        self.newest.last().is_none_or(|last| {
+            settled.at > last.at
+                || (settled.at == last.at && settled.record.as_str() >= last.record.as_str())
+        })
+    }
+
+    fn add(&mut self, s: &Settled) {
+        if let Some(last) = self.newest.last()
+            && last.at == s.at
+            && last.record == s.record
+        {
+            self.newest.push(s.clone()); // one record's values settled together weigh alike
+            return;
+        }
+
+        if !self.newest.is_empty() {
+            let amount = 1.0 / self.scale;
+            for previous in &self.newest {
+                let entry = self
+                    .raw
+                    .entry(previous.value.clone())
+                    .or_insert((0.0, previous.at));
+                *entry = (entry.0 + amount, previous.at);
+                self.raw_total += amount;
+            }
+
+            self.newest.clear();
+            self.scale *= self.recency_decay;
+            if self.scale < 1e-150 {
+                for entry in self.raw.values_mut() {
+                    entry.0 *= self.scale;
+                }
+                self.raw_total *= self.scale;
+                self.scale = 1.0;
+            }
+        }
+
+        self.newest.push(s.clone());
+    }
+
+    fn shares(&self) -> Vec<Share> {
+        if self.newest.is_empty() {
             return Vec::new();
         }
 
-        let mut weights: BTreeMap<String, (f64, i64)> = raw
-            .into_iter()
-            .map(|(v, (r, at))| (v, (r * scale, at)))
+        let mut weights: HashMap<&str, (f64, i64)> = self
+            .raw
+            .iter()
+            .map(|(v, &(r, at))| (v.as_str(), (r * self.scale, at)))
             .collect();
-        for s in &newest {
-            let own = weights.get(&s.value).map_or(0.0, |w| w.0);
-            weights.insert(s.value.clone(), (own + 1.0, s.at));
+        for s in &self.newest {
+            let own = weights.get(s.value.as_str()).map_or(0.0, |w| w.0);
+            weights.insert(&s.value, (own + 1.0, s.at));
         }
 
-        let total = raw_total * scale + newest.len() as f64;
+        let total = self.raw_total * self.scale + self.newest.len() as f64;
         let mut shares: Vec<Share> = weights
             .into_iter()
             .map(|(value, (weight, latest))| Share {
-                value,
+                value: value.to_owned(),
                 share: weight / total,
                 weight,
                 total,
