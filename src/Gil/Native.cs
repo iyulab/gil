@@ -195,6 +195,7 @@ internal static unsafe partial class Native
     /// <summary>Makes sure the native library speaks the interface this binding was built for — once, before the first
     /// object is made.</summary>
     /// <exception cref="InvalidOperationException">The library speaks another version.</exception>
+    /// <exception cref="DllNotFoundException">No library for the running platform was found.</exception>
     internal static void EnsureCompatible()
     {
         if (_compatible)
@@ -202,7 +203,16 @@ internal static unsafe partial class Native
             return;
         }
 
-        var found = LibraryAbiVersion();
+        uint found;
+        try
+        {
+            found = LibraryAbiVersion();
+        }
+        catch (DllNotFoundException e)
+        {
+            throw NotFound(e);
+        }
+
         if (found != AbiVersion)
         {
             throw new InvalidOperationException(
@@ -212,6 +222,16 @@ internal static unsafe partial class Native
 
         _compatible = true;
     }
+
+    /// <summary>The runtimes whose native library the Gil package carries.</summary>
+    internal static readonly string[] SupportedRuntimes =
+        ["linux-x64", "linux-arm64", "osx-x64", "osx-arm64", "win-x64", "win-arm64"];
+
+    /// <summary>The library was not found: says which platform asked and which ones the package carries it for.</summary>
+    internal static DllNotFoundException NotFound(DllNotFoundException inner) =>
+        new($"The native library {Library} was not found for {RuntimeInformation.RuntimeIdentifier}. The Gil package " +
+            $"carries it for {string.Join(", ", SupportedRuntimes)}; on another platform, build it from the repository " +
+            "(cargo build --release -p gil-ffi) and put it next to the application.", inner);
 
     /// <summary>Throws for a refused call, with the native message: a refused input, or a call that only reads and that
     /// the core's contract rules out, is the caller's <see cref="ArgumentException"/>; a malformed call is a defect of
