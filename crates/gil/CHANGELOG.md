@@ -4,6 +4,15 @@ The Rust crate (crates.io) and the Python package (PyPI), both published as `iyu
 Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the repository's root `CHANGELOG.md`.
 
+## Unreleased
+
+### Added
+
+- **`Settlement::new(kind, value, values, probability)`: a settlement of a kind known only at run time, from the parts it
+  needs.** It refuses, with a message, a part the kind needs and lacks and a check's probability outside (0, 1] — the
+  rules a binding used to repeat. The Python package's `OpenRecord.settle` now builds its settlements with it (no change
+  in what it accepts).
+
 ## 0.7.0
 
 ### Added

@@ -465,36 +465,10 @@ fn settlement_of(
     values: Option<Vec<String>>,
     probability: Option<f64>,
 ) -> Parsed<Settlement> {
-    let kind = settlement(kind)?;
-    let one = || value.ok_or_else(|| format!("a {kind:?} settlement needs a value"));
-    let many = || {
-        values
-            .clone()
-            .ok_or_else(|| format!("a {kind:?} settlement needs values"))
-    };
-    Ok(match kind {
-        SettlementKind::Accept => Settlement::accept(one()?),
-        SettlementKind::Correct => Settlement::correct(one()?),
-        SettlementKind::Enter => Settlement::enter(one()?),
-        SettlementKind::Fill => Settlement::fill(one()?),
-        SettlementKind::AcceptOther => Settlement::accept_other(one()?),
-        SettlementKind::CorrectOther => Settlement::correct_other(one()?),
-        SettlementKind::Restore if values.is_some() => {
-            Settlement::restore_set(many()?.iter().map(String::as_str))
-        }
-        SettlementKind::Restore => Settlement::restore(one()?),
-        SettlementKind::Set => Settlement::set(many()?.iter().map(String::as_str)),
-        SettlementKind::Check => {
-            let p =
-                probability.ok_or("a Check settlement needs the probability it was drawn with")?;
-            if !(p > 0.0 && p <= 1.0) {
-                return Err("a check is drawn with a probability above 0 and at most 1".to_owned());
-            }
-            Settlement::check(one()?, p)
-        }
-        SettlementKind::Reject => Settlement::reject(),
-        SettlementKind::Revert => Settlement::revert(),
-    })
+    let values: Option<Vec<&str>> = values
+        .as_ref()
+        .map(|v| v.iter().map(String::as_str).collect());
+    Settlement::new(settlement(kind)?, value, values.as_deref(), probability)
 }
 
 /// One record of a schema while its values arrive. Each change puts it into the decider's memory again and returns the

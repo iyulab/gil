@@ -589,6 +589,46 @@ impl Settlement {
         Self::none(SettlementKind::Revert)
     }
 
+    /// A settlement of a kind known only at run time — a binding's, say — from the parts it needs: a value for the
+    /// kinds that settle one, values for [`SettlementKind::Set`] (and for [`SettlementKind::Restore`] of an attribute
+    /// that takes several, which is chosen by giving values), and for [`SettlementKind::Check`] the probability it was
+    /// drawn with. Parts a kind does not need are ignored; a part it needs and lacks, or a probability out of (0, 1], is
+    /// refused with a message.
+    pub fn new(
+        kind: SettlementKind,
+        value: Option<&str>,
+        values: Option<&[&str]>,
+        probability: Option<f64>,
+    ) -> Result<Self, String> {
+        let one = || value.ok_or_else(|| format!("a {kind:?} settlement needs a value"));
+        let many = || values.ok_or_else(|| format!("a {kind:?} settlement needs values"));
+        Ok(match kind {
+            SettlementKind::Accept => Self::accept(one()?),
+            SettlementKind::Correct => Self::correct(one()?),
+            SettlementKind::Enter => Self::enter(one()?),
+            SettlementKind::Fill => Self::fill(one()?),
+            SettlementKind::AcceptOther => Self::accept_other(one()?),
+            SettlementKind::CorrectOther => Self::correct_other(one()?),
+            SettlementKind::Restore if values.is_some() => {
+                Self::restore_set(many()?.iter().copied())
+            }
+            SettlementKind::Restore => Self::restore(one()?),
+            SettlementKind::Set => Self::set(many()?.iter().copied()),
+            SettlementKind::Check => {
+                let p = probability
+                    .ok_or("a Check settlement needs the probability it was drawn with")?;
+                if !(p > 0.0 && p <= 1.0) {
+                    return Err(
+                        "a check is drawn with a probability above 0 and at most 1".to_owned()
+                    );
+                }
+                Self::check(one()?, p)
+            }
+            SettlementKind::Reject => Self::reject(),
+            SettlementKind::Revert => Self::revert(),
+        })
+    }
+
     /// Whether this settles an attribute that takes several values.
     pub fn is_set(&self) -> bool {
         self.values.is_some()
