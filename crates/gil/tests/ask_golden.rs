@@ -1,4 +1,4 @@
-//! The ask planner's golden (`tests/fixtures/core/ask.jsonl`), written by the .NET implementation: with the settings the
+//! The ask planner's golden (`tests/fixtures/core/ask.jsonl`): with the settings the
 //! schema path's golden chose and a resolver rebuilt from the first 200 records, a planner for each decided
 //! single-valued attribute, asked for advice on every later record with some askable attributes left open — the product
 //! every other record, the channel every third, the summary every fifth — before the record is put, and learning from
@@ -9,7 +9,7 @@ mod common;
 
 use std::collections::BTreeMap;
 
-use common::{CHOSEN, doubles, fixture, lines, schema, to_record};
+use common::{CHOSEN, Golden, fixture, lines, schema, to_record};
 use gil::ask_planner::AskPlanner;
 use gil::decider::Decider;
 use gil::key_memory::KeyMemory;
@@ -31,7 +31,7 @@ fn the_ask_planner_reproduces_its_golden() {
         .map(|r| to_record(&r))
         .collect();
     let schema = schema(&fixture("golden.jsonl"), |_| false);
-    let expected: Vec<Value> = lines(&fixture("ask.jsonl")).collect();
+    let mut golden = Golden::open("ask.jsonl");
 
     let mut resolver = Decider::new(KeyMemory::default(), Some(LexicalMemory::default()));
     resolver.rebuild(&schema, &records[..CHOSEN]);
@@ -44,7 +44,6 @@ fn the_ask_planner_reproduces_its_golden() {
             (a.name.clone(), planner)
         })
         .collect();
-    let mut at = 0;
     for (i, record) in records[CHOSEN..].iter().enumerate() {
         let values: BTreeMap<String, String> = record
             .values
@@ -76,13 +75,7 @@ fn the_ask_planner_reproduces_its_golden() {
                 "coarse": answer.coarse.as_ref().map(|c| json!([c.value, c.trusted])),
                 "advice": advice,
             });
-            assert_eq!(
-                doubles(actual),
-                doubles(expected[at].clone()),
-                "ask line {}",
-                at + 1
-            );
-            at += 1;
+            golden.check(actual, format!("{} {attribute}", record.id));
         }
 
         resolver.rebuild(&schema, std::slice::from_ref(record));
@@ -91,7 +84,7 @@ fn the_ask_planner_reproduces_its_golden() {
         }
     }
 
-    assert_eq!(at, expected.len());
+    golden.finish();
 }
 
 #[test]

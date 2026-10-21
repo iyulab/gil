@@ -220,3 +220,70 @@ pub fn doubles(value: Value) -> Value {
         other => other,
     }
 }
+
+/// A golden output: checked line by line against its fixture or — with `GIL_WRITE_CORE_GOLDEN` set to a folder — written
+/// afresh there, one JSON line per line, so that a change the golden turns on is reviewed as a diff of the fixture.
+pub struct Golden {
+    name: &'static str,
+    expected: Option<Vec<Value>>,
+    written: Vec<Value>,
+}
+
+impl Golden {
+    /// The golden `name`, its fixture read unless it is being written.
+    pub fn open(name: &'static str) -> Self {
+        let expected = std::env::var_os("GIL_WRITE_CORE_GOLDEN")
+            .is_none()
+            .then(|| lines(&fixture(name)).collect());
+        Self {
+            name,
+            expected,
+            written: Vec::new(),
+        }
+    }
+
+    /// The next line: the same as the fixture's (numbers compared as doubles, exactly), or kept to write.
+    pub fn check(&mut self, actual: Value, what: impl std::fmt::Display) {
+        if let Some(expected) = &self.expected {
+            let at = self.written.len();
+            assert!(
+                at < expected.len(),
+                "{}: more lines than the golden ({what})",
+                self.name
+            );
+            assert_eq!(
+                doubles(actual.clone()),
+                doubles(expected[at].clone()),
+                "{} line {}: {what}",
+                self.name,
+                at + 1
+            );
+        }
+        self.written.push(actual);
+    }
+
+    /// How many lines were checked or kept.
+    pub fn len(&self) -> usize {
+        self.written.len()
+    }
+
+    /// Checks that every line of the fixture came, or writes the file.
+    pub fn finish(self) {
+        match self.expected {
+            Some(expected) => assert_eq!(
+                self.written.len(),
+                expected.len(),
+                "{}: fewer lines than the golden",
+                self.name
+            ),
+            None => {
+                let folder =
+                    std::env::var_os("GIL_WRITE_CORE_GOLDEN").expect("a folder to write to");
+                std::fs::create_dir_all(&folder).expect("the folder");
+                let text: String = self.written.iter().map(|l| format!("{l}\n")).collect();
+                std::fs::write(std::path::Path::new(&folder).join(self.name), text)
+                    .expect("the golden written");
+            }
+        }
+    }
+}

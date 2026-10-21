@@ -1,7 +1,10 @@
-//! The text golden (`tests/fixtures/core/text.jsonl`), written by the .NET implementation: every line's normalized
-//! text, key and n-grams must come out the same here.
+//! The text golden (`tests/fixtures/core/text.jsonl`): every line's normalized text, key and n-grams must come out the
+//! same; with `GIL_WRITE_CORE_GOLDEN` set the lines are written afresh from the texts the fixture holds.
 
-use serde_json::{Value, json};
+mod common;
+
+use common::{Golden, fixture, lines};
+use serde_json::json;
 
 const MAX_KEY_LENGTH: usize = 60;
 const MIN_GRAM: usize = 2;
@@ -9,16 +12,12 @@ const MAX_GRAM: usize = 3;
 
 #[test]
 fn the_text_normalization_reproduces_its_golden() {
-    let path = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../tests/fixtures/core/text.jsonl"
-    );
-    let golden = std::fs::read_to_string(path).expect("the text golden");
-    let mut lines = 0;
-    for line in golden.lines().filter(|l| !l.is_empty()) {
-        let expected: Value = serde_json::from_str(line).expect("a JSON line");
-        let text = expected["text"].as_str().expect("text");
-        let grams: Vec<Value> = gil::text::grams(text, MIN_GRAM, MAX_GRAM)
+    let texts: Vec<String> = lines(&fixture("text.jsonl"))
+        .map(|l| l["text"].as_str().expect("text").to_owned())
+        .collect();
+    let mut golden = Golden::open("text.jsonl");
+    for text in &texts {
+        let grams: Vec<_> = gil::text::grams(text, MIN_GRAM, MAX_GRAM)
             .into_iter()
             .map(|(gram, count)| json!([gram, count]))
             .collect();
@@ -28,9 +27,9 @@ fn the_text_normalization_reproduces_its_golden() {
             "key": gil::text::key(text, MAX_KEY_LENGTH),
             "grams": grams,
         });
-        assert_eq!(actual, expected, "line {}", lines + 1);
-        lines += 1;
+        golden.check(actual, text);
     }
 
-    assert_eq!(lines, 23);
+    assert_eq!(golden.len(), 23);
+    golden.finish();
 }

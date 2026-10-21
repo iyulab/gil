@@ -1,4 +1,4 @@
-//! The key layer golden (`tests/fixtures/core/keys.jsonl`), written by the .NET implementation: the settled attribute
+//! The key layer golden (`tests/fixtures/core/keys.jsonl`): the settled attribute
 //! memory's ranking for each single-valued decided attribute of every log after the first 200, with the settings the
 //! golden chose (`golden.jsonl`), must come out the same here — values, scores to the bit, evidence and trust.
 
@@ -6,7 +6,7 @@ mod common;
 
 use std::collections::BTreeMap;
 
-use common::{CHOSEN, fixture, lines, schema, ticks, to_record};
+use common::{CHOSEN, Golden, fixture, lines, schema, ticks, to_record};
 use gil::key_memory::{KeyMemory, Lookup};
 use gil::schema::AttributeRole;
 use serde_json::{Value, json};
@@ -15,14 +15,13 @@ use serde_json::{Value, json};
 fn the_key_layer_reproduces_its_golden() {
     let logs: Vec<Value> = lines(&fixture("records.jsonl")).collect();
     let schema = schema(&fixture("golden.jsonl"), |_| false);
-    let expected: Vec<Value> = lines(&fixture("keys.jsonl")).collect();
+    let mut golden = Golden::open("keys.jsonl");
 
     let mut memory = KeyMemory::default();
     for log in &logs[..CHOSEN] {
         memory.put(&schema, &to_record(log).remembered());
     }
 
-    let mut at = 0;
     for log in &logs[CHOSEN..] {
         let observed: BTreeMap<String, String> = log["values"]
             .as_object()
@@ -55,14 +54,13 @@ fn the_key_layer_reproduces_its_golden() {
                 "field": attribute,
                 "candidates": candidates,
             });
-            assert_eq!(actual, expected[at], "line {}", at + 1);
-            at += 1;
+            golden.check(actual, "keys");
         }
 
         memory.put(&schema, &to_record(log).remembered());
     }
 
-    assert_eq!(at, expected.len());
+    golden.finish();
 }
 
 #[test]

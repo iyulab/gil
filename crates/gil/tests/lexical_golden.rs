@@ -1,4 +1,4 @@
-//! The similar record memory golden (`tests/fixtures/core/lexical.jsonl`), written by the .NET implementation: for each
+//! The similar record memory golden (`tests/fixtures/core/lexical.jsonl`): for each
 //! single-valued decided attribute, the first 200 logs remembered by their evidence, then for every later log the 11
 //! records most like its observed values — before it is remembered, with some records forgotten and some remembered
 //! again along the way — must come out the same here: sources, similarities to the bit, answers and the order of ties.
@@ -7,7 +7,7 @@ mod common;
 
 use std::collections::BTreeMap;
 
-use common::{CHOSEN, fixture, lines, schema, to_record};
+use common::{CHOSEN, Golden, fixture, lines, schema, to_record};
 use gil::lexical_memory::LexicalMemory;
 use gil::schema::{AttributeRole, Record, Schema};
 use serde_json::{Value, json};
@@ -45,14 +45,13 @@ fn the_similar_document_memory_reproduces_its_golden() {
         .map(|r| to_record(&r))
         .collect();
     let schema = schema(&fixture("golden.jsonl"), |_| true); // the schema as declared: evidence needs no chosen setting
-    let expected: Vec<Value> = lines(&fixture("lexical.jsonl")).collect();
+    let mut golden = Golden::open("lexical.jsonl");
 
     let mut memory = LexicalMemory::default();
     for record in &records[..CHOSEN] {
         put(&mut memory, &schema, record);
     }
 
-    let mut at = 0;
     for i in CHOSEN..records.len() {
         let record = &records[i];
         let observed: BTreeMap<String, String> = record
@@ -75,8 +74,7 @@ fn the_similar_document_memory_reproduces_its_golden() {
                 "count": memory.count(&task(attribute)),
                 "matches": matches,
             });
-            assert_eq!(actual, expected[at], "line {}", at + 1);
-            at += 1;
+            golden.check(actual, format!("{} {attribute}", record.id));
         }
 
         put(&mut memory, &schema, record);
@@ -90,7 +88,7 @@ fn the_similar_document_memory_reproduces_its_golden() {
         }
     }
 
-    assert_eq!(at, expected.len());
+    golden.finish();
 }
 
 #[test]
