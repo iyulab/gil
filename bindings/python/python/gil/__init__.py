@@ -429,6 +429,12 @@ class Decider:
         """Puts ``records`` — settled later than those the memories hold, in settlement order — into the memories."""
         self._inner.put(schema.json, records)
 
+    def remove(self, schema: Schema, record_id: str) -> None:
+        """Takes record ``record_id`` out of the memories — a record the host deleted; nothing happens when they do not
+        hold it. The key memory is then as if the record had never been put, and the similar record memory never offers
+        it again."""
+        self._inner.remove(schema.json, record_id)
+
     def answer(
         self,
         schema: Schema,
@@ -439,21 +445,38 @@ class Decider:
     ) -> Answer:
         """The answer for one open decided attribute of record ``id`` from the ``values`` (and ``sets``) given, writing
         nothing to memory. The saved version of the record, if the memories hold one, is not evidence for itself."""
-        return cast(
-            Answer,
-            json.loads(
-                self._inner.answer(
-                    schema.json,
-                    id,
-                    attribute,
-                    json.dumps(dict(values), ensure_ascii=False),
-                    None
-                    if sets is None
-                    else json.dumps(
-                        {k: list(v) for k, v in sets.items()}, ensure_ascii=False
-                    ),
-                )
-            ),
+        return cast(Answer, json.loads(self._answer(schema, id, attribute, values, sets, False)))
+
+    def answer_with_decision(
+        self,
+        schema: Schema,
+        id: str,
+        attribute: str,
+        values: Mapping[str, str],
+        sets: Mapping[str, Iterable[str]] | None = None,
+    ) -> tuple[Answer, DecisionRecord]:
+        """As :meth:`answer`, with the lookup's decision record — what the key layer and the similar record layer found
+        whatever the thresholds, and what was answered — for a host that keeps them to recount its thresholds later."""
+        found = json.loads(self._answer(schema, id, attribute, values, sets, True))
+        record = found.pop("decision")
+        return cast(Answer, found), cast(DecisionRecord, record)
+
+    def _answer(
+        self,
+        schema: Schema,
+        id: str,
+        attribute: str,
+        values: Mapping[str, str],
+        sets: Mapping[str, Iterable[str]] | None,
+        decisions: bool,
+    ) -> str:
+        return self._inner.answer(
+            schema.json,
+            id,
+            attribute,
+            json.dumps(dict(values), ensure_ascii=False),
+            None if sets is None else json.dumps({k: list(v) for k, v in sets.items()}, ensure_ascii=False),
+            decisions,
         )
 
 

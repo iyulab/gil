@@ -84,6 +84,9 @@ class Decider:
     def put(self, schema_json: str, records: Records) -> None:
         """Puts `records` (settled records of the schema, in settlement order, later than those it holds) into the memories."""
 
+    def remove(self, schema_json: str, record_id: str) -> None:
+        """Takes record `record_id` out of the memories — a record the host deleted; nothing happens when they do not hold it."""
+
     def answer(
         self,
         schema_json: str,
@@ -91,8 +94,10 @@ class Decider:
         attribute: str,
         values_json: str,
         sets_json: str | None = None,
+        decisions: bool = False,
     ) -> str:
-        """The answer for one open decided attribute of record `id` from the values given, writing nothing to memory, as JSON."""
+        """The answer for one open decided attribute of record `id` from the values given, writing nothing to memory, as JSON
+        — with `decision`, the lookup's decision record, when `decisions` is true."""
 
 @final
 class AskPlanner:

@@ -377,10 +377,24 @@ impl Decider {
         })
     }
 
+    /// Takes record `record_id` out of the memories — a record the host deleted; nothing happens when they do not hold
+    /// it. The key memory is then as if the record had never been put, and the similar record memory never offers it
+    /// again.
+    fn remove(&mut self, schema_json: &str, record_id: &str) -> PyResult<()> {
+        usable(self.broken, "decider")?;
+        let schema = schema(schema_json).map_err(invalid)?;
+        let inner = &mut self.inner;
+        changing(|| inner.remove(&schema, record_id)).map_err(|m| {
+            self.broken = true;
+            defect("decider", m)
+        })
+    }
+
     /// The answer for one open decided attribute of record `id` from the values given (a JSON object, and the sets of
     /// the attributes that take several as another), writing nothing to memory; the saved version of the record, if
-    /// memory holds one, is not evidence for itself. As JSON.
-    #[pyo3(signature = (schema_json, id, attribute, values_json, sets_json=None))]
+    /// memory holds one, is not evidence for itself. As JSON — with `decision`, the lookup's decision record, when
+    /// `decisions` is true.
+    #[pyo3(signature = (schema_json, id, attribute, values_json, sets_json=None, decisions=false))]
     fn answer(
         &self,
         schema_json: &str,
@@ -388,6 +402,7 @@ impl Decider {
         attribute: &str,
         values_json: &str,
         sets_json: Option<&str>,
+        decisions: bool,
     ) -> PyResult<String> {
         usable(self.broken, "decider")?;
         let schema = schema(schema_json).map_err(invalid)?;
@@ -398,11 +413,22 @@ impl Decider {
                 .map_err(|e| invalid(format!("sets are an object of string lists: {e}")))?,
             None => BTreeMap::new(),
         };
-        guarded(|| {
-            self.inner
-                .answer_one(&schema, id, attribute, &values, &sets, None)
-        })
-        .map(|a| answer_json(&a).to_string())
+        let mut kept = None;
+        let found = guarded(|| {
+            let q = gil::key_memory::Lookup::new(&schema, attribute, &values)
+                .sets(&sets)
+                .excluding(Some(id));
+            self.inner.answer_one_with(&q, &mut |r| {
+                if decisions {
+                    kept = Some(serde_json::to_value(r).expect("a decision record serializes"));
+                }
+            })
+        })?;
+        let mut value = answer_json(&found);
+        if let Some(record) = kept {
+            value["decision"] = record;
+        }
+        Ok(value.to_string())
     }
 }
 

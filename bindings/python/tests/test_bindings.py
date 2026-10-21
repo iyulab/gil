@@ -440,3 +440,39 @@ def test_an_ask_planner_refuses_what_the_core_refuses() -> None:
         gil.AskPlanner(schema, "team", ["code"], 0.3)
     with pytest.raises(ValueError, match="decided"):
         gil.AskPlanner(schema, "tags", ["product"], 0.3)
+
+
+def test_an_answer_with_its_decision_record_and_a_removed_record() -> None:
+    """The decision record comes with the answer it was made for; a removed record is never offered again."""
+    schema = gil.Schema.from_dict(final_form())
+    settled = lines("records.jsonl")
+    decider = gil.Decider(schema, gil.records(settled[:CHOSEN]))
+    observed = {"channel", "product", "summary"}
+    later = settled[CHOSEN : CHOSEN + 40]
+
+    def values(record: dict) -> dict:
+        return {k: v for k, v in record["values"].items() if k in observed}
+
+    record = later[0]
+    answer, decision = decider.answer_with_decision(schema, record["id"], "team", values(record))
+    assert answer == decider.answer(schema, record["id"], "team", values(record))
+    assert set(answer) == set(gil.Answer.__annotations__)
+    assert set(decision) == set(gil.DecisionRecord.__annotations__)
+    assert (decision["attribute"], decision["record"]) == ("team", record["id"])
+    assert (decision["answered"] is not None) == answer["answered"]
+
+    def cited() -> set[str]:
+        found = set()
+        for r in later:
+            for c in decider.answer(schema, r["id"], "team", values(r))["candidates"]:
+                evidence = c.get("evidence") or {}
+                if "record" in evidence:
+                    found.add(evidence["record"]["id"])
+        return found
+
+    before = cited()
+    assert before
+    for id in before:
+        decider.remove(schema, id)
+    decider.remove(schema, "never-put")
+    assert not (cited() & before)
