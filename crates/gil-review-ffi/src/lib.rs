@@ -3,30 +3,22 @@
 //! function returns a status — `GIL_REVIEW_OK`, or a code whose message `gil_review_last_error` copies out — and no
 //! panic crosses the boundary.
 
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use gil_review::{
-    Estimate, PopulationStratum, ReviewError, ScoredItem, Stratum, StratumSpread, Verdict,
-};
+use gil_ffi_support::{Failure, Utf8, argument, call, slice, slice_mut, write};
+use gil_review::{Estimate, PopulationStratum, ScoredItem, Stratum, StratumSpread, Verdict};
 
 /// The call succeeded.
-pub const GIL_REVIEW_OK: i32 = 0;
+pub const GIL_REVIEW_OK: i32 = gil_ffi_support::OK;
 /// The review computation refused its input (`ReviewError`); the message says what was wrong.
-pub const GIL_REVIEW_INVALID_INPUT: i32 = 1;
+pub const GIL_REVIEW_INVALID_INPUT: i32 = gil_ffi_support::INVALID_INPUT;
 /// The call itself was malformed: a null pointer with a length, text that is not UTF-8, or a buffer too small.
-pub const GIL_REVIEW_INVALID_ARGUMENT: i32 = 2;
+pub const GIL_REVIEW_INVALID_ARGUMENT: i32 = gil_ffi_support::INVALID_ARGUMENT;
 /// The computation panicked — a defect in the library, reported instead of unwinding into the caller.
-pub const GIL_REVIEW_PANIC: i32 = 3;
+pub const GIL_REVIEW_PANIC: i32 = gil_ffi_support::PANIC;
 
 /// UTF-8 text the caller owns, for the length of one call.
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct GilReviewStr {
-    pub ptr: *const u8,
-    pub len: usize,
-}
+pub type GilReviewStr = Utf8;
 
 /// One stratum of a draw: its name and the range `[first, first + count)` of the call's record ids it holds.
 #[repr(C)]
@@ -110,86 +102,11 @@ pub struct GilReviewAgreement {
     pub prevalence_max: f64,
 }
 
-thread_local! {
-    static LAST_ERROR: RefCell<String> = const { RefCell::new(String::new()) };
-}
-
-/// A refusal on its way out: the status and the message `gil_review_last_error` will give.
-struct Failure(i32, String);
-
-impl From<ReviewError> for Failure {
-    fn from(e: ReviewError) -> Self {
-        Self(GIL_REVIEW_INVALID_INPUT, e.to_string())
-    }
-}
-
-fn argument(message: impl Into<String>) -> Failure {
-    Failure(GIL_REVIEW_INVALID_ARGUMENT, message.into())
-}
-
-/// Runs one call: clears the last error, keeps a panic from unwinding out, and turns the outcome into a status.
-fn call(f: impl FnOnce() -> Result<(), Failure>) -> i32 {
-    LAST_ERROR.with(|e| e.borrow_mut().clear());
-    let outcome = catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|panic| {
-        let message = panic
-            .downcast_ref::<&str>()
-            .map(|s| (*s).to_owned())
-            .or_else(|| panic.downcast_ref::<String>().cloned())
-            .unwrap_or_else(|| "the review computation panicked".to_owned());
-        Err(Failure(GIL_REVIEW_PANIC, message))
-    });
-    match outcome {
-        Ok(()) => GIL_REVIEW_OK,
-        Err(Failure(status, message)) => {
-            LAST_ERROR.with(|e| *e.borrow_mut() = message);
-            status
-        }
-    }
-}
-
 /// # Safety
-/// `ptr` is null with `len` 0, or points to `len` readable values that stay valid for `'a`.
-unsafe fn slice<'a, T>(ptr: *const T, len: usize, what: &str) -> Result<&'a [T], Failure> {
-    if len == 0 {
-        return Ok(&[]);
-    }
-    if ptr.is_null() {
-        return Err(argument(format!("{what} is null but its length is {len}")));
-    }
-    // SAFETY: non-null, and the caller guarantees `len` readable values for 'a.
-    Ok(unsafe { std::slice::from_raw_parts(ptr, len) })
-}
-
-/// # Safety
-/// As [`slice`], writable.
-unsafe fn slice_mut<'a, T>(ptr: *mut T, len: usize, what: &str) -> Result<&'a mut [T], Failure> {
-    if len == 0 {
-        return Ok(&mut []);
-    }
-    if ptr.is_null() {
-        return Err(argument(format!("{what} is null but its length is {len}")));
-    }
-    // SAFETY: non-null, and the caller guarantees `len` writable values for 'a, aliased by nothing else.
-    Ok(unsafe { std::slice::from_raw_parts_mut(ptr, len) })
-}
-
-/// # Safety
-/// As [`slice`], for the text's bytes.
+/// As [`gil_ffi_support::text`].
 unsafe fn text<'a>(s: GilReviewStr, what: &str) -> Result<&'a str, Failure> {
     // SAFETY: forwarded from the caller.
-    let bytes = unsafe { slice(s.ptr, s.len, what) }?;
-    std::str::from_utf8(bytes).map_err(|_| argument(format!("{what} is not UTF-8")))
-}
-
-/// # Safety
-/// `out` is null or points to one writable `T`.
-unsafe fn write<T>(out: *mut T, value: T, what: &str) -> Result<(), Failure> {
-    if out.is_null() {
-        return Err(argument(format!("{what} is null")));
-    }
-    // SAFETY: non-null, and the caller guarantees one writable T.
-    unsafe { out.write(value) };
-    Ok(())
+    unsafe { gil_ffi_support::text(s, what) }
 }
 
 fn flat(e: &Estimate) -> GilReviewEstimate {
@@ -216,15 +133,8 @@ fn flat(e: &Estimate) -> GilReviewEstimate {
 /// `buffer` is null with `capacity` 0, or points to `capacity` writable bytes.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn gil_review_last_error(buffer: *mut u8, capacity: usize) -> usize {
-    LAST_ERROR.with(|e| {
-        let message = e.borrow();
-        let bytes = message.as_bytes();
-        if !buffer.is_null() && capacity >= bytes.len() {
-            // SAFETY: the caller guarantees `capacity` writable bytes, and the message fits.
-            unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), buffer, bytes.len()) };
-        }
-        bytes.len()
-    })
+    // SAFETY: forwarded from the caller.
+    unsafe { gil_ffi_support::copy_last_error(buffer, capacity) }
 }
 
 /// `gil_review::draw_pilot` over strata whose records are ranges of `record_ids`. Writes one `GilReviewDrawnStratum`

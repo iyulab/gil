@@ -1,7 +1,18 @@
 [workspace]
-members = ["crates/gil", "crates/gil-review", "crates/gil-review-ffi", "bindings/python"]
+members = [
+    "crates/gil",
+    "crates/gil-review",
+    "crates/gil-ffi-support",
+    "crates/gil-review-ffi",
+    "bindings/python",
+]
 # The bindings build through maturin (they need a Python); plain cargo commands check the core.
-default-members = ["crates/gil", "crates/gil-review", "crates/gil-review-ffi"]
+default-members = [
+    "crates/gil",
+    "crates/gil-review",
+    "crates/gil-ffi-support",
+    "crates/gil-review-ffi",
+]
 resolver = "3"
 
 [workspace.package]

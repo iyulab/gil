@@ -3,6 +3,10 @@
 version = 4
 
 [[package]]
+name = "gil-ffi-support"
+version = "0.1.0"
+
+[[package]]
 name = "gil-py"
 version = "0.7.0"
 dependencies = [
@@ -16,6 +20,7 @@ dependencies = [
 name = "gil-review-ffi"
 version = "0.1.0"
 dependencies = [
+ "gil-ffi-support",
  "iyulab-gil-review",
 ]
 
