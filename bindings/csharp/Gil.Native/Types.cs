@@ -1,7 +1,9 @@
+using System.Text.Json.Serialization;
+
 namespace Gil.Native;
 
 /// <summary>Which layer offered a candidate.</summary>
-public enum Layer : byte
+public enum Source : byte
 {
     /// <summary>No layer.</summary>
     None = 0,
@@ -12,24 +14,12 @@ public enum Layer : byte
     /// <summary>A similar settled record.</summary>
     SimilarDocument = 2,
 
-    /// <summary>An external judgement the host offered back.</summary>
-    Model = 3,
-}
-
-/// <summary>How an attribute's answers are offered.</summary>
-public enum AnswerPolicy : byte
-{
-    /// <summary>Answer when a layer is confident enough.</summary>
-    Suggest = 0,
-
-    /// <summary>Answer, but never fill on the host's own.</summary>
-    ConfirmRequired = 1,
-
-    /// <summary>Never answer.</summary>
-    Off = 2,
+    /// <summary>A judgement the host made outside the core and offered back.</summary>
+    External = 3,
 }
 
 /// <summary>How a decided attribute was settled; the names are the core's.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<SettlementKind>))]
 public enum SettlementKind
 {
     /// <summary>The answered value, kept by a person.</summary>
@@ -68,15 +58,15 @@ public enum SettlementKind
 
 /// <summary>A value offered for an attribute: its score on its layer's scale, the layer, and whether the layer trusts
 /// it.</summary>
-public readonly record struct Candidate(string Value, double Score, Layer Layer, bool Trusted);
+public readonly record struct Candidate(string Value, double Score, Source Source, bool Trusted);
 
 /// <summary>The answer for one attribute while a person types into it: the layer of the first candidate, how it is
 /// offered, whether it is answered (its first candidate trusted), whether it wants an external judgement, the candidates
 /// best first, and the coarse class offered instead when there is one. What backs each candidate is in the JSON
 /// answers.</summary>
 public sealed record PartialAnswer(
-    Layer Layer,
-    AnswerPolicy Policy,
+    Source Source,
+    AttributePolicy Policy,
     bool Answered,
     bool NeedsExternal,
     IReadOnlyList<Candidate> Candidates,

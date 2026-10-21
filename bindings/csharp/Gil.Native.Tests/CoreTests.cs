@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 
@@ -26,8 +27,10 @@ public sealed class CoreTests(ITestOutputHelper output)
     private static JsonArray Candidate(JsonNode c) =>
         [(string)c["value"]!, (double)c["score"]!, (string)c["source"]!, (bool)c["trusted"]!];
 
-    [Fact]
-    public void The_binding_reproduces_the_golden_decisions()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void The_binding_reproduces_the_golden_decisions(bool typed)
     {
         var lines = RecordLines();
         var golden = Fixture("golden.jsonl").Split('\n', StringSplitOptions.RemoveEmptyEntries)
@@ -36,9 +39,14 @@ public sealed class CoreTests(ITestOutputHelper output)
             .ToArray();
         var observed = Observed();
 
-        using var schema = Schema.FromJson(Fixture("schema.json"));
+        using var read = Schema.FromJson(Fixture("schema.json"));
+        using var built = typed ? new Schema(read.Name, read.Attributes) : null;
+        var schema = built ?? read;
         using var decider = new Decider();
-        using (var early = SettledRecords.FromJsonLines(string.Join('\n', lines[..Chosen])))
+        SettledRecords Records(IEnumerable<string> part) => typed
+            ? SettledRecords.From(part.Select(l => JsonSerializer.Deserialize(l, CoreJson.Default.Record)!))
+            : SettledRecords.FromJsonLines(string.Join('\n', part));
+        using (var early = Records(lines[..Chosen]))
         {
             early.Count.Should().Be(Chosen);
             decider.Put(schema, early);
@@ -69,7 +77,7 @@ public sealed class CoreTests(ITestOutputHelper output)
                 at++;
             }
 
-            using var settled = SettledRecords.FromJsonLines(line);
+            using var settled = Records([line]);
             decider.Put(schema, settled);
         }
 
@@ -126,7 +134,7 @@ public sealed class CoreTests(ITestOutputHelper output)
                 var flat = record.AnswerPartial(decider, name);
                 flat.Answered.Should().Be((bool)answer["answered"]!);
                 flat.NeedsExternal.Should().Be(answer["needs_external"] is not null);
-                flat.Layer.ToString().Should().Be((string)answer["source"]! == "Model" ? "Model" : (string)answer["source"]!);
+                (flat.Source == Source.External ? "Model" : flat.Source.ToString()).Should().Be((string)answer["source"]!);
                 flat.Candidates.Select(c => (c.Value, c.Score, c.Trusted)).Should().Equal(
                     answer["candidates"]!.AsArray().Select(c => ((string)c!["value"]!, (double)c["score"]!, (bool)c["trusted"]!)));
                 flat.Coarse?.Value.Should().Be((string?)answer["coarse"]?["value"]);
@@ -144,6 +152,8 @@ public sealed class CoreTests(ITestOutputHelper output)
             var saved = record.SnapshotJson();
             using var reopened = OpenRecord.Reopen(schema, saved);
             reopened.SnapshotJson().Should().Be(saved);
+            using var typed = OpenRecord.Reopen(schema, record.Snapshot());
+            typed.SnapshotJson().Should().Be(saved);
             reopened.AnswerJson(decider).Should().Be(record.AnswerJson(decider));
         }
 

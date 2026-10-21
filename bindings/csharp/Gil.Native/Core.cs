@@ -4,27 +4,42 @@ using System.Text.Json;
 
 namespace Gil.Native;
 
-/// <summary>A schema read and checked once. Schemas, records and batch results cross as JSON in the core's form.</summary>
+/// <summary>A schema checked once: its name and attributes, as the core keeps them — the settings an attribute leaves out
+/// filled with their defaults. Schemas, records and batch results also cross as JSON in the core's form.</summary>
 public sealed class Schema : IDisposable
 {
-    private Schema(SchemaHandle handle) => Handle = handle;
+    private Schema(SchemaHandle handle)
+    {
+        Handle = handle;
+        var form = JsonSerializer.Deserialize(ToJson(), CoreJson.Default.SchemaForm)!;
+        Name = form.Name;
+        Attributes = form.Attributes;
+    }
+
+    /// <summary>A schema named <paramref name="name"/> with <paramref name="attributes"/>, in order.</summary>
+    /// <exception cref="ArgumentException">The schema does not check; the message says why.</exception>
+    public Schema(string name, IEnumerable<Attribute> attributes)
+        : this(Check(name, attributes))
+    {
+    }
 
     internal SchemaHandle Handle { get; }
 
+    /// <summary>The schema's name.</summary>
+    public string Name { get; }
+
+    /// <summary>The schema's attributes, in order, as the core keeps them.</summary>
+    public IReadOnlyList<Attribute> Attributes { get; }
+
+    /// <summary>The attribute named <paramref name="name"/>, or null when the schema has none.</summary>
+    public Attribute? Find(string name) => Attributes.FirstOrDefault(a => a.Name == name);
+
     /// <summary>A schema from JSON in the core's form; the settings an attribute leaves out take their defaults.</summary>
     /// <exception cref="ArgumentException">The JSON does not read as a schema, or the schema does not check.</exception>
-    public static unsafe Schema FromJson(string json)
+    public static Schema FromJson(string json)
     {
         ArgumentNullException.ThrowIfNull(json);
-        Native.EnsureCompatible();
-        var text = new Utf8(json);
-        nint output;
-        fixed (byte* p = &text.Pin())
-        {
-            Native.Check(Native.SchemaNew(text.At(p), &output));
-        }
-
-        return new Schema(SchemaHandle.Of(output));
+        return new Schema(New(json));
     }
 
     internal static Schema Own(nint handle) => new(SchemaHandle.Of(handle));
@@ -38,6 +53,32 @@ public sealed class Schema : IDisposable
 
     /// <inheritdoc/>
     public void Dispose() => Handle.Dispose();
+
+    private static SchemaHandle Check(string name, IEnumerable<Attribute> attributes)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(attributes);
+        var form = new SchemaForm(name, [.. attributes]);
+        foreach (var attribute in form.Attributes)
+        {
+            ArgumentNullException.ThrowIfNull(attribute, nameof(attributes));
+        }
+
+        return New(JsonSerializer.Serialize(form, CoreJson.Default.SchemaForm));
+    }
+
+    private static unsafe SchemaHandle New(string json)
+    {
+        Native.EnsureCompatible();
+        var text = new Utf8(json);
+        nint output;
+        fixed (byte* p = &text.Pin())
+        {
+            Native.Check(Native.SchemaNew(text.At(p), &output));
+        }
+
+        return SchemaHandle.Of(output);
+    }
 }
 
 /// <summary>Settled records of a schema, in settlement order, read once — what fills a decider and what choosing
@@ -66,6 +107,21 @@ public sealed class SettledRecords : IDisposable
         }
 
         return new SettledRecords(RecordsHandle.Of(output));
+    }
+
+    /// <summary><paramref name="records"/>, in settlement order.</summary>
+    /// <exception cref="ArgumentException">A record does not read; the message says why.</exception>
+    public static SettledRecords From(IEnumerable<Record> records)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        var lines = new StringBuilder();
+        foreach (var record in records)
+        {
+            ArgumentNullException.ThrowIfNull(record, nameof(records));
+            lines.Append(JsonSerializer.Serialize(record, CoreJson.Default.Record)).Append('\n');
+        }
+
+        return FromJsonLines(lines.ToString());
     }
 
     /// <inheritdoc/>
@@ -171,9 +227,6 @@ public sealed class OpenRecord : IDisposable
 
     internal OpenRecordHandle Handle { get; }
 
-    /// <summary>100-nanosecond ticks since the Unix epoch, UTC — the core's time.</summary>
-    public static long Ticks(DateTimeOffset time) => time.UtcTicks - DateTimeOffset.UnixEpoch.UtcTicks;
-
     /// <summary>A new record <paramref name="id"/> of <paramref name="schema"/>, starting at
     /// <paramref name="settledAt"/> — the present for a new record.</summary>
     /// <exception cref="ArgumentException">The id is blank.</exception>
@@ -185,10 +238,17 @@ public sealed class OpenRecord : IDisposable
         nint output;
         fixed (byte* p = &text.Pin())
         {
-            Native.Check(Native.OpenRecordNew(schema.Handle, text.At(p), Ticks(settledAt), &output));
+            Native.Check(Native.OpenRecordNew(schema.Handle, text.At(p), Time.Ticks(settledAt), &output));
         }
 
         return new OpenRecord(OpenRecordHandle.Of(output));
+    }
+
+    /// <summary>A saved record — as <see cref="Snapshot"/> gives it — reopened as it was left.</summary>
+    public static OpenRecord Reopen(Schema schema, Record saved)
+    {
+        ArgumentNullException.ThrowIfNull(saved);
+        return Reopen(schema, JsonSerializer.Serialize(saved, CoreJson.Default.Record));
     }
 
     /// <summary>A saved record — JSON as <see cref="SnapshotJson"/> gives it — reopened as it was left.</summary>
@@ -276,7 +336,7 @@ public sealed class OpenRecord : IDisposable
 
                 return Native.Result(
                     Native.OpenRecordSettle(
-                        Handle, decider.Handle, name.At(a), kindName.At(k), Ticks(now), text.At(v), s,
+                        Handle, decider.Handle, name.At(a), kindName.At(k), Time.Ticks(now), text.At(v), s,
                         (nuint)(values?.Count ?? 0), probability, &length),
                     changing: true);
             }
@@ -336,8 +396,8 @@ public sealed class OpenRecord : IDisposable
                 }
 
                 return new PartialAnswer(
-                    (Layer)head.Source,
-                    (AnswerPolicy)head.Policy,
+                    (Source)head.Source,
+                    (AttributePolicy)head.Policy,
                     head.Answered != 0,
                     head.NeedsExternal != 0,
                     candidates,
@@ -383,6 +443,9 @@ public sealed class OpenRecord : IDisposable
         }
     }
 
+    /// <summary>The record as it stands, to save and reopen, or to put as settled.</summary>
+    public Record Snapshot() => JsonSerializer.Deserialize(SnapshotJson(), CoreJson.Default.Record)!;
+
     /// <summary>The record as it stands, to save — JSON in the core's form, as records are read and reopened.</summary>
     public unsafe string SnapshotJson()
     {
@@ -399,7 +462,7 @@ public sealed class OpenRecord : IDisposable
     private Candidate Read(Native.Candidate c) => new(
         Encoding.UTF8.GetString(_bytes, (int)c.ValueOffset, (int)c.ValueLen),
         c.Score,
-        (Layer)c.Source,
+        (Source)c.Source,
         c.Trusted != 0);
 }
 
