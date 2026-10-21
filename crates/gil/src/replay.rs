@@ -217,7 +217,11 @@ pub fn select_key_threshold(
     let multiple = definition.multiple;
 
     let mut ordered: Vec<Record> = records.iter().map(Record::remembered).collect();
-    ordered.sort_by(|a, b| a.settled_at.cmp(&b.settled_at).then(a.id.cmp(&b.id)));
+    ordered.sort_by(|a, b| {
+        a.settled_at
+            .cmp(&b.settled_at)
+            .then_with(|| a.id.cmp(&b.id))
+    });
 
     let mut matches: Vec<Answer> = Vec::new();
     let (mut lookups, mut lookup_weight, mut order) = (0_usize, 0.0_f64, 0_usize);
@@ -313,7 +317,7 @@ pub fn pick_order(record: &Record, attribute: &str) -> Vec<String> {
         .into_iter()
         .map(|v| (fnv1a(&format!("{}\u{1f}{v}", record.id)), v))
         .collect();
-    keyed.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(b.1)));
+    keyed.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(b.1)));
     keyed.into_iter().map(|(_, v)| v.clone()).collect()
 }
 
@@ -437,7 +441,11 @@ pub fn select_typed_key_thresholds_with(
     );
 
     let mut ordered: Vec<Record> = records.iter().map(Record::remembered).collect();
-    ordered.sort_by(|a, b| a.settled_at.cmp(&b.settled_at).then(a.id.cmp(&b.id)));
+    ordered.sort_by(|a, b| {
+        a.settled_at
+            .cmp(&b.settled_at)
+            .then_with(|| a.id.cmp(&b.id))
+    });
     let mut asked: Vec<Asked> = Vec::new();
     let mut order = 0;
     for record in &ordered {
@@ -757,7 +765,7 @@ fn with_keys(replay: ThresholdReplay, answers: &[Answer]) -> ThresholdReplay {
             }
         })
         .collect();
-    keys.sort_by(|a, b| b.lookups.cmp(&a.lookups).then(a.key.cmp(&b.key)));
+    keys.sort_by(|a, b| b.lookups.cmp(&a.lookups).then_with(|| a.key.cmp(&b.key)));
     ThresholdReplay {
         keys: Some(keys),
         ..replay
@@ -1419,7 +1427,11 @@ fn replay(
     let definition = schema.attribute(attribute);
     let votes = definition.similar_votes;
     let mut ordered: Vec<Record> = records.iter().map(Record::remembered).collect();
-    ordered.sort_by(|a, b| a.settled_at.cmp(&b.settled_at).then(a.id.cmp(&b.id)));
+    ordered.sort_by(|a, b| {
+        a.settled_at
+            .cmp(&b.settled_at)
+            .then_with(|| a.id.cmp(&b.id))
+    });
 
     let mut steps = Vec::new();
     let mut remembered = 0_usize;
@@ -1880,7 +1892,11 @@ pub fn select_key_concentrations(
         f.key_concentrations.clear();
     }
     let mut ordered: Vec<Record> = records.iter().map(Record::remembered).collect();
-    ordered.sort_by(|a, b| a.settled_at.cmp(&b.settled_at).then(a.id.cmp(&b.id)));
+    ordered.sort_by(|a, b| {
+        a.settled_at
+            .cmp(&b.settled_at)
+            .then_with(|| a.id.cmp(&b.id))
+    });
 
     // key attribute → (predictions of a new value, the totals predicted from), in record order.
     let mut predictions: BTreeMap<String, (u64, Vec<f64>)> = BTreeMap::new();

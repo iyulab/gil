@@ -13,6 +13,9 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   for every value; an attribute with thousands of values (a product code, say) spent most of an answer there. Answers
   and threshold selections are unchanged — the same values, scores and order — and on two public replays of 10,000
   decisions each, a replay of answers took 38% and 67% of the time it did.
+- **The similar record lookup is quicker without changing its answers**: the rows' norms sit beside the rows, and the
+  sorts that break ties (the lookup's, the key layer's, replay orders) read their tie-breakers only on a tie. On 10,000
+  lookups over 20,000 remembered texts, 22.4 s became 17.9 s.
 
 ### Added
 

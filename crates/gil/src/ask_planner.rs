@@ -333,7 +333,7 @@ impl Ledger {
         let asked = self.asks(gain, budget);
         let entry = (gain, characters);
         let at = self.history.partition_point(|e| {
-            e.0.total_cmp(&entry.0).then(e.1.cmp(&entry.1)) != std::cmp::Ordering::Greater
+            e.0.total_cmp(&entry.0).then_with(|| e.1.cmp(&entry.1)) != std::cmp::Ordering::Greater
         });
         self.history.insert(at, entry);
         self.seen_characters += characters as u64;

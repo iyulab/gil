@@ -84,7 +84,8 @@ impl LexicalMemory {
             similarities[*b]
                 .partial_cmp(&similarities[*a])
                 .unwrap_or(Ordering::Equal)
-                .then(index.rows[*a].order.cmp(&index.rows[*b].order))
+                // Lazily: reading the rows for every comparison, not only on a tie, cost a cache miss each time.
+                .then_with(|| index.rows[*a].order.cmp(&index.rows[*b].order))
         };
         if count < ranked.len() {
             ranked.select_nth_unstable_by(count, by);
@@ -112,12 +113,14 @@ struct Row {
     ids: Vec<usize>,
     counts: Vec<u32>,
     weights: Vec<f64>,
-    norm: f64,
 }
 
 #[derive(Default)]
 struct Index {
     rows: Vec<Row>,
+    /// Each row's weight norm, beside the rows: a lookup reads every one, and reading them out of the rows cost a cache
+    /// miss a row.
+    norms: Vec<f64>,
     remembered: u64,
     position: HashMap<String, usize>,
     ids: HashMap<String, usize>,
@@ -151,11 +154,11 @@ impl Index {
             ids,
             counts,
             weights,
-            norm,
         };
         match existing {
             Some(at) => {
                 let old = std::mem::replace(&mut self.rows[at], row);
+                self.norms[at] = norm;
                 tally(&mut self.frequency, &old.ids, -1);
                 for &id in &old.ids {
                     unpost(&mut self.postings[id], at);
@@ -164,6 +167,7 @@ impl Index {
             None => {
                 self.position.insert(key.to_owned(), self.rows.len());
                 self.rows.push(row);
+                self.norms.push(norm);
             }
         }
 
@@ -182,6 +186,7 @@ impl Index {
         };
 
         let row = self.rows.swap_remove(at);
+        self.norms.swap_remove(at);
         tally(&mut self.frequency, &row.ids, -1);
         for &id in &row.ids {
             unpost(&mut self.postings[id], at);
@@ -243,9 +248,9 @@ impl Index {
             }
         }
 
-        for ((similarity, row), sum) in similarities.iter_mut().zip(&self.rows).zip(sums) {
-            *similarity = if row.norm > 0.0 {
-                sum / (query_norm * row.norm)
+        for ((similarity, &norm), sum) in similarities.iter_mut().zip(&self.norms).zip(sums) {
+            *similarity = if norm > 0.0 {
+                sum / (query_norm * norm)
             } else {
                 0.0
             };
@@ -285,11 +290,14 @@ impl Index {
 
         self.taken_at = self.rows.len();
         self.idf = self.frequency.iter().map(|&f| self.smoothed(f)).collect();
-        let mut rows = std::mem::take(&mut self.rows);
-        for row in &mut rows {
-            row.norm = self.weigh(&row.ids, &row.counts, &mut row.weights);
+        let (mut rows, mut norms) = (
+            std::mem::take(&mut self.rows),
+            std::mem::take(&mut self.norms),
+        );
+        for (row, norm) in rows.iter_mut().zip(&mut norms) {
+            *norm = self.weigh(&row.ids, &row.counts, &mut row.weights);
         }
-        self.rows = rows;
+        (self.rows, self.norms) = (rows, norms);
         for postings in &mut self.postings {
             postings.clear();
         }

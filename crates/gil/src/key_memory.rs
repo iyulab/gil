@@ -577,8 +577,8 @@ impl KeyMemory {
         scores.sort_by(|a, b| {
             b.1.partial_cmp(&a.1)
                 .unwrap_or(Ordering::Equal)
-                .then(b.4.cmp(&a.4))
-                .then(a.0.cmp(&b.0))
+                .then_with(|| b.4.cmp(&a.4))
+                .then_with(|| a.0.cmp(&b.0))
         });
         scores
             .into_iter()
@@ -635,7 +635,7 @@ impl KeyMemory {
             .iter()
             .filter(|s| excluding != Some(s.record.as_str()))
             .collect();
-        ordered.sort_by(|a, b| a.at.cmp(&b.at).then(a.record.cmp(&b.record)));
+        ordered.sort_by(|a, b| a.at.cmp(&b.at).then_with(|| a.record.cmp(&b.record)));
 
         let mut raw: BTreeMap<String, (f64, i64)> = BTreeMap::new();
         let mut newest: Vec<&Settled> = Vec::new();
@@ -701,8 +701,8 @@ impl KeyMemory {
             b.share
                 .partial_cmp(&a.share)
                 .unwrap_or(Ordering::Equal)
-                .then(b.latest.cmp(&a.latest))
-                .then(a.value.cmp(&b.value))
+                .then_with(|| b.latest.cmp(&a.latest))
+                .then_with(|| a.value.cmp(&b.value))
         });
         shares
     }
