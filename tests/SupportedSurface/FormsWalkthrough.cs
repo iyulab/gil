@@ -45,7 +45,7 @@ public static class FormsWalkthrough
         record.Observe(restarted, "component", "vpn");
         var answers = record.Observe(restarted, "summary", "vpn drops every ten minutes");
         var team = answers.Single(a => a.Attribute == "team");
-        var answeredByKey = team.Answered && team.Source == Source.SettledFieldMemory;
+        var answeredByKey = team.Answered && team.Source == Source.KeyMemory;
         record.Settle(restarted, "team", answeredByKey ? SettlementKind.Fill : SettlementKind.Enter, at.AddMinutes(1),
             value: answeredByKey ? team.Candidates[0].Value : "network");
         using var reopened = OpenRecord.Reopen(schema, record.Snapshot());

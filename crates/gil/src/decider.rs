@@ -20,20 +20,20 @@ use crate::{similar_vote, text};
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Source {
     None,
-    SettledFieldMemory,
-    SimilarDocument,
+    KeyMemory,
+    SimilarRecord,
     /// A judgement the host made outside the core (a model) and offered back — named `Model`, as the reference names it.
     #[cfg_attr(feature = "serde", serde(rename = "Model"))]
     External,
 }
 
 impl Source {
-    /// The name the reference gives the layer.
+    /// The layer's name, as answers and decision records write it.
     pub fn name(self) -> &'static str {
         match self {
             Source::None => "None",
-            Source::SettledFieldMemory => "SettledFieldMemory",
-            Source::SimilarDocument => "SimilarDocument",
+            Source::KeyMemory => "KeyMemory",
+            Source::SimilarRecord => "SimilarRecord",
             Source::External => "Model",
         }
     }
@@ -455,7 +455,7 @@ impl Decider {
             .map(|c| Candidate {
                 value: c.value,
                 score: c.score,
-                source: Source::SettledFieldMemory,
+                source: Source::KeyMemory,
                 evidence: c.evidence.map(Evidence::Key),
                 trusted: c.trusted,
             })
@@ -592,8 +592,8 @@ impl Decider {
                 layer: c.source,
                 value: c.value.clone(),
                 threshold: match c.source {
-                    Source::SettledFieldMemory if typed.is_none() => attribute.key_threshold,
-                    Source::SimilarDocument => attribute.memory_threshold,
+                    Source::KeyMemory if typed.is_none() => attribute.key_threshold,
+                    Source::SimilarRecord => attribute.memory_threshold,
                     _ => None,
                 },
             }),
@@ -658,7 +658,7 @@ impl Decider {
         let candidate = Candidate {
             value: winner.answer.clone(),
             score,
-            source: Source::SimilarDocument,
+            source: Source::SimilarRecord,
             evidence: Some(Evidence::Record {
                 id: winner.source.clone(),
                 similarity: winner.similarity,
@@ -688,14 +688,14 @@ fn coarse(
     let from_keys = |(class, score, key): (String, f64, Key), trusted| Candidate {
         value: class,
         score,
-        source: Source::SettledFieldMemory,
+        source: Source::KeyMemory,
         evidence: Some(Evidence::Key(key)),
         trusted,
     };
     let from_vote = |(class, score, nearest, _): (String, f64, Match, bool), trusted| Candidate {
         value: class,
         score,
-        source: Source::SimilarDocument,
+        source: Source::SimilarRecord,
         evidence: Some(Evidence::Record {
             id: nearest.source,
             similarity: nearest.similarity,

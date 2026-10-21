@@ -178,8 +178,8 @@ fn usage_counts_read_back() {
 fn a_judgement_from_outside_is_named_as_the_reference_names_it() {
     assert_eq!(serde_json::to_value(Source::External).unwrap(), "Model");
     assert_eq!(
-        serde_json::to_value(Source::SettledFieldMemory).unwrap(),
-        Source::SettledFieldMemory.name()
+        serde_json::to_value(Source::KeyMemory).unwrap(),
+        Source::KeyMemory.name()
     );
     let (_, read) = round_trip(&Source::External);
     assert_eq!(read, Source::External);
@@ -195,7 +195,7 @@ fn an_answer_reads_back_with_its_evidence() {
             Candidate {
                 value: "network".into(),
                 score: 0.93,
-                source: Source::SettledFieldMemory,
+                source: Source::KeyMemory,
                 evidence: Some(Evidence::Key(Key {
                     attribute: "component".into(),
                     value: "vpn".into(),
@@ -205,7 +205,7 @@ fn an_answer_reads_back_with_its_evidence() {
             Candidate {
                 value: "security".into(),
                 score: 0.4,
-                source: Source::SimilarDocument,
+                source: Source::SimilarRecord,
                 evidence: Some(Evidence::Record {
                     id: "t3".into(),
                     similarity: 0.71,
@@ -213,7 +213,7 @@ fn an_answer_reads_back_with_its_evidence() {
                 trusted: false,
             },
         ],
-        source: Source::SettledFieldMemory,
+        source: Source::KeyMemory,
         coarse: None,
         policy: AttributePolicy::ConfirmRequired,
         needs_external: Some(vec![("summary".into(), "vpn drops".into())]),

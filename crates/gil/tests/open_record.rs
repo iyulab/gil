@@ -79,7 +79,7 @@ fn an_external_judgement_is_asked_for_only_where_no_memory_has_evidence_and_then
     // A known key: memory has evidence, and no external judgement is asked for.
     let keyed = open.observe(&mut decider, "component", Some("vpn"));
     assert_eq!(keyed.len(), 1);
-    assert_eq!(keyed[0].source, Source::SettledFieldMemory);
+    assert_eq!(keyed[0].source, Source::KeyMemory);
     assert_eq!(keyed[0].needs_external, None);
 
     // No key matches: the answer asks, with the evidence the reporter is kept out of.
@@ -112,7 +112,7 @@ fn an_external_judgement_is_asked_for_only_where_no_memory_has_evidence_and_then
             .collect::<Vec<_>>(),
         [
             ("security", Source::External),
-            ("network", Source::SettledFieldMemory)
+            ("network", Source::KeyMemory)
         ]
     );
 }
@@ -611,12 +611,12 @@ fn answers_come_from_values_settled_alongside_the_known_ones_without_an_external
     let severity = &after[0];
     assert_eq!(
         (severity.source, severity.policy, &severity.needs_external),
-        (Source::SettledFieldMemory, AttributePolicy::Suggest, &None)
+        (Source::KeyMemory, AttributePolicy::Suggest, &None)
     );
     let best = &severity.candidates[0];
     assert_eq!(
         (best.value.as_str(), best.source, best.trusted),
-        ("low", Source::SettledFieldMemory, true)
+        ("low", Source::KeyMemory, true)
     );
     assert!((best.score - (1.0 + 0.95) / (1.0 + 0.95 + 1.0)).abs() < 1e-12);
     assert_eq!(
@@ -770,7 +770,7 @@ fn an_open_record_reaches_the_state_a_rebuild_from_its_snapshot_reaches() {
 
     // With no key to go on, the similar record is the snapshot, with its corrected value.
     let team = probe(&live, &schema, "team", &[("summary", "vpn drops")]);
-    assert_eq!(team.source, Source::SimilarDocument);
+    assert_eq!(team.source, Source::SimilarRecord);
     assert_eq!(team.candidates[0].value, "network");
     assert!(
         matches!(&team.candidates[0].evidence, Some(Evidence::Record { id, .. }) if id == "d1")
@@ -824,7 +824,7 @@ fn a_similar_record_outranks_a_guess_but_not_a_value_under_a_strong_enough_key()
     );
     assert_eq!(named(&guessed), ["team"]);
     let team = &guessed[0];
-    assert_eq!(team.source, Source::SimilarDocument);
+    assert_eq!(team.source, Source::SimilarRecord);
     assert_eq!(
         team.candidates
             .iter()
@@ -835,8 +835,8 @@ fn a_similar_record_outranks_a_guess_but_not_a_value_under_a_strong_enough_key()
             ))
             .collect::<Vec<_>>(),
         [
-            ("facilities", Source::SimilarDocument, Some("d2".to_owned())),
-            ("network", Source::SettledFieldMemory, None),
+            ("facilities", Source::SimilarRecord, Some("d2".to_owned())),
+            ("network", Source::KeyMemory, None),
         ]
     );
 
@@ -849,7 +849,7 @@ fn a_similar_record_outranks_a_guess_but_not_a_value_under_a_strong_enough_key()
     let answered = team_record.answered.as_ref().unwrap();
     assert_eq!(
         (answered.layer, answered.value.as_str()),
-        (Source::SimilarDocument, "facilities")
+        (Source::SimilarRecord, "facilities")
     );
 
     // Once a key strong enough matches, its values lead.
@@ -860,7 +860,7 @@ fn a_similar_record_outranks_a_guess_but_not_a_value_under_a_strong_enough_key()
         Candidate {
             value: "network".into(),
             score: 0.5,
-            source: Source::SettledFieldMemory,
+            source: Source::KeyMemory,
             evidence: Some(Evidence::Key(Key {
                 attribute: "component".into(),
                 value: "vpn".into(),

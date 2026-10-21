@@ -72,8 +72,8 @@ fn answers_json(answers: &[Answer]) -> Value {
 fn source_code(source: Source) -> u8 {
     match source {
         Source::None => GIL_SOURCE_NONE,
-        Source::SettledFieldMemory => GIL_SOURCE_SETTLED_FIELD_MEMORY,
-        Source::SimilarDocument => GIL_SOURCE_SIMILAR_DOCUMENT,
+        Source::KeyMemory => GIL_SOURCE_KEY_MEMORY,
+        Source::SimilarRecord => GIL_SOURCE_SIMILAR_RECORD,
         Source::External => GIL_SOURCE_MODEL,
     }
 }

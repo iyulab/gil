@@ -183,7 +183,7 @@ fn suggest_and_check(schema: &gil::schema::Schema) -> [usize; 7] {
             );
             if let Some(a) = &log.answered {
                 let threshold = match a.layer {
-                    Source::SettledFieldMemory => definition.key_threshold,
+                    Source::KeyMemory => definition.key_threshold,
                     _ => definition.memory_threshold,
                 };
                 assert_eq!(a.threshold, threshold);
@@ -194,7 +194,7 @@ fn suggest_and_check(schema: &gil::schema::Schema) -> [usize; 7] {
                 if let Some(c) = expected
                     .candidates
                     .iter()
-                    .find(|c| c.source == Source::SimilarDocument)
+                    .find(|c| c.source == Source::SimilarRecord)
                 {
                     assert_eq!(
                         (
@@ -216,7 +216,7 @@ fn suggest_and_check(schema: &gil::schema::Schema) -> [usize; 7] {
                 let best = expected
                     .candidates
                     .iter()
-                    .find(|c| c.source == Source::SettledFieldMemory && c.evidence.is_some());
+                    .find(|c| c.source == Source::KeyMemory && c.evidence.is_some());
                 if let Some(c) = best.filter(|c| c.value == key.value) {
                     assert_eq!(
                         (
@@ -237,7 +237,7 @@ fn suggest_and_check(schema: &gil::schema::Schema) -> [usize; 7] {
                     assert!(keys.is_none_or(|k| k.correct.is_none()));
                     assert!(vote.is_none_or(|v| v.correct.is_none()));
                     match &expected.coarse {
-                        Some(c) if c.source == Source::SettledFieldMemory => {
+                        Some(c) if c.source == Source::KeyMemory => {
                             let k = keys.expect("the keys' class");
                             assert_eq!(
                                 (
@@ -250,7 +250,7 @@ fn suggest_and_check(schema: &gil::schema::Schema) -> [usize; 7] {
                             offered += 1;
                         }
                         Some(c) => {
-                            assert_eq!(c.source, Source::SimilarDocument);
+                            assert_eq!(c.source, Source::SimilarRecord);
                             let v = vote.expect("the vote's class");
                             assert_eq!(
                                 (

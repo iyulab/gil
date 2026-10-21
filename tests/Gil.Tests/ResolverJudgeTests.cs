@@ -110,7 +110,7 @@ public sealed class ResolverJudgeTests
         using var keyed = OpenRecord.Open(schema, "d3", DateTimeOffset.UnixEpoch.AddMinutes(3));
         keyed.Observe(decider, "component", "vpn");
         var known = (await keyed.AnswerAsync(decider, judge, Ct)).Single();
-        (known.Source, known.Candidates[0].Value, known.Answered).Should().Be((Source.SettledFieldMemory, "network", true));
+        (known.Source, known.Candidates[0].Value, known.Answered).Should().Be((Source.KeyMemory, "network", true));
         sink.Traces.Should().BeEmpty();
 
         // No key matches: the resolver's value leads; the reporter never reaches it.

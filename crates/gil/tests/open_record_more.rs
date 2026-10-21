@@ -536,7 +536,7 @@ fn a_key_below_the_threshold_is_a_guess_and_still_keeps_an_external_judgement_ou
 
     assert!(strong.answered() && strong.candidates[0].trusted);
     assert!(!weak.answered());
-    assert_eq!(weak.source, Source::SettledFieldMemory);
+    assert_eq!(weak.source, Source::KeyMemory);
     let guess = &weak.candidates[0];
     assert_eq!(
         (guess.value.as_str(), guess.score, guess.trusted),
@@ -552,7 +552,7 @@ fn a_key_below_the_threshold_is_a_guess_and_still_keeps_an_external_judgement_ou
     let answered = strong_record.answered.unwrap();
     assert_eq!(
         (answered.layer, answered.value.as_str()),
-        (Source::SettledFieldMemory, "network")
+        (Source::KeyMemory, "network")
     );
 }
 
@@ -614,10 +614,10 @@ fn the_nearest_record_below_the_similarity_threshold_is_the_last_guess() {
     assert_eq!(
         layered(&team),
         [
-            ("network", Source::SettledFieldMemory, None, false),
+            ("network", Source::KeyMemory, None, false),
             (
                 "facilities",
-                Source::SimilarDocument,
+                Source::SimilarRecord,
                 Some("d1".into()),
                 false
             ),
@@ -640,10 +640,10 @@ fn without_a_similarity_threshold_a_near_identical_record_is_still_offered_as_th
     assert_eq!(
         layered(&team),
         [
-            ("network", Source::SettledFieldMemory, None, false),
+            ("network", Source::KeyMemory, None, false),
             (
                 "facilities",
-                Source::SimilarDocument,
+                Source::SimilarRecord,
                 Some("d1".into()),
                 false
             ),
@@ -700,9 +700,9 @@ fn guesses_come_as_a_weaker_key_then_the_most_frequent_value_then_the_nearest_re
             .map(|c| (c.value.as_str(), c.source, c.trusted))
             .collect::<Vec<_>>(),
         [
-            ("security", Source::SettledFieldMemory, false), // under the weak key site: east
-            ("network", Source::SettledFieldMemory, false),  // the most frequent value
-            ("facilities", Source::SimilarDocument, false), // the nearest record, below its threshold
+            ("security", Source::KeyMemory, false), // under the weak key site: east
+            ("network", Source::KeyMemory, false),  // the most frequent value
+            ("facilities", Source::SimilarRecord, false), // the nearest record, below its threshold
         ]
     );
     assert_eq!(
@@ -757,7 +757,7 @@ fn a_saved_record_is_passed_over_for_the_next_similar_one() {
     );
 
     assert!(team.answered());
-    assert_eq!(team.source, Source::SimilarDocument);
+    assert_eq!(team.source, Source::SimilarRecord);
     assert_eq!(
         team.candidates[0]
             .evidence
@@ -1222,7 +1222,7 @@ fn a_key_that_decides_the_attribute_is_chosen_to_answer() {
         &[("component", "badge"), ("summary", "door will not open")],
     );
     assert!(team.answered());
-    assert_eq!(team.source, Source::SettledFieldMemory);
+    assert_eq!(team.source, Source::KeyMemory);
     assert_eq!(team.candidates[0].value, "security");
 }
 
@@ -1379,7 +1379,7 @@ fn the_similarity_threshold_is_chosen_on_the_lookups_no_key_answers() {
             let team = decider
                 .answer(&schema, &r.id, &without_team(r), &BTreeMap::new())
                 .remove(0);
-            team.answered() && team.source == Source::SimilarDocument
+            team.answered() && team.source == Source::SimilarRecord
         })
         .count();
     assert_eq!(similar_answers, 0);

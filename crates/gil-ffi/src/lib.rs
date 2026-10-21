@@ -64,9 +64,9 @@ pub const GIL_ABI_VERSION: u32 = 2;
 /// [`GilCandidate::source`]: no layer.
 pub const GIL_SOURCE_NONE: u8 = 0;
 /// [`GilCandidate::source`]: the settled key memory.
-pub const GIL_SOURCE_SETTLED_FIELD_MEMORY: u8 = 1;
+pub const GIL_SOURCE_KEY_MEMORY: u8 = 1;
 /// [`GilCandidate::source`]: a similar settled record.
-pub const GIL_SOURCE_SIMILAR_DOCUMENT: u8 = 2;
+pub const GIL_SOURCE_SIMILAR_RECORD: u8 = 2;
 /// [`GilCandidate::source`]: an external judgement the host offered back (the reference's `Model`).
 pub const GIL_SOURCE_MODEL: u8 = 3;
 
@@ -541,8 +541,8 @@ pub unsafe extern "C" fn gil_decider_remove(
 fn source_code(source: Source) -> u8 {
     match source {
         Source::None => GIL_SOURCE_NONE,
-        Source::SettledFieldMemory => GIL_SOURCE_SETTLED_FIELD_MEMORY,
-        Source::SimilarDocument => GIL_SOURCE_SIMILAR_DOCUMENT,
+        Source::KeyMemory => GIL_SOURCE_KEY_MEMORY,
+        Source::SimilarRecord => GIL_SOURCE_SIMILAR_RECORD,
         Source::External => GIL_SOURCE_MODEL,
     }
 }

@@ -71,6 +71,11 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Changed
 
+- **Breaking: the answer sources `Source::SettledFieldMemory` and `Source::SimilarDocument` are `Source::KeyMemory` and
+  `Source::SimilarRecord`**, in the crate's vocabulary — in Rust, in what `Source::name` and the `serde` feature write
+  (`"KeyMemory"`, `"SimilarRecord"`), and in the strings Python answers carry. A host that stored answers or decision
+  records replaces the two strings. `Model` is unchanged. The C ABI's values are unchanged; its constants are
+  `GIL_SOURCE_KEY_MEMORY` and `GIL_SOURCE_SIMILAR_RECORD`.
 - **Breaking: `replay::RECENT_DOCUMENTS` is `replay::RECENT_RECORDS`**, in the crate's vocabulary. Same value.
 - **Python: a threshold selection refused by the core's contract raises `ValueError` with the core's own message** —
   an attribute that is not decided (`'a' is not a decided attribute`), a target outside (0, 1], an attribute with no

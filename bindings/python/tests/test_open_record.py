@@ -39,7 +39,7 @@ def test_an_observed_value_brings_an_answer_with_its_key() -> None:
     assert team["attribute"] == "team"
     assert team["policy"] == "suggest"
     first = team["candidates"][0]
-    assert (first["value"], first["source"]) == ("network", "SettledFieldMemory")
+    assert (first["value"], first["source"]) == ("network", "KeyMemory")
     assert first["evidence"] == {"key": {"attribute": "component", "value": "vpn"}}
     assert team["answered"] == first["trusted"]
     assert (

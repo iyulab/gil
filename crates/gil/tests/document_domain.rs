@@ -202,14 +202,14 @@ fn a_similar_record_whose_value_lies_outside_the_records_domain_does_not_vote() 
     assert!(
         open.candidates
             .iter()
-            .any(|c| c.source == Source::SimilarDocument && c.value == "nlp" && c.trusted)
+            .any(|c| c.source == Source::SimilarRecord && c.value == "nlp" && c.trusted)
     );
     // Narrowed to vision, d1 does not vote; d2 alone does, on its own similarity.
     assert!(!values_of(&narrowed).contains(&"nlp"));
     let similar: Vec<_> = narrowed
         .candidates
         .iter()
-        .filter(|c| c.source == Source::SimilarDocument)
+        .filter(|c| c.source == Source::SimilarRecord)
         .collect();
     assert_eq!(similar.len(), 1);
     assert!(matches!(&similar[0].evidence, Some(Evidence::Record { id, .. }) if id == "d2"));

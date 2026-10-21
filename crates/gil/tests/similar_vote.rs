@@ -61,7 +61,7 @@ fn similar_candidate(answer: &Answer) -> &Candidate {
     let similar: Vec<&Candidate> = answer
         .candidates
         .iter()
-        .filter(|c| c.source == Source::SimilarDocument)
+        .filter(|c| c.source == Source::SimilarRecord)
         .collect();
     assert_eq!(similar.len(), 1, "one candidate from the vote");
     similar[0]
@@ -218,7 +218,7 @@ fn a_single_voter_has_no_floor() {
     let lone = suggest(&with_floor(intake(1, None), 2.0), None);
 
     assert!(lone.answered());
-    assert_eq!(lone.source, Source::SimilarDocument);
+    assert_eq!(lone.source, Source::SimilarRecord);
     assert_eq!(lone.candidates[0].value, "billing");
 }
 
@@ -419,7 +419,7 @@ fn the_class_the_keys_back_is_offered_when_no_layer_answers_the_value() {
     assert!(!answer.answered());
     let coarse = coarse_of(&answer);
     assert_eq!(coarse.value, "27");
-    assert_eq!(coarse.source, Source::SettledFieldMemory);
+    assert_eq!(coarse.source, Source::KeyMemory);
     assert!(coarse.trusted);
     assert_eq!(
         coarse.evidence.as_ref().map(ToString::to_string).as_deref(),
@@ -445,7 +445,7 @@ fn where_the_keys_do_not_reach_their_threshold_the_vote_of_similar_records_can()
 
     let coarse = coarse_of(&answer);
     assert_eq!(coarse.value, "27");
-    assert_eq!(coarse.source, Source::SimilarDocument);
+    assert_eq!(coarse.source, Source::SimilarRecord);
     assert!(coarse.trusted);
     assert!(record_of(coarse).0.starts_with('d'));
 }
@@ -474,7 +474,7 @@ fn a_class_voted_among_records_less_like_the_draft_than_the_floor_is_a_guess() {
     );
 
     let coarse = coarse_of(&answer);
-    assert_eq!(coarse.source, Source::SimilarDocument);
+    assert_eq!(coarse.source, Source::SimilarRecord);
     assert!(!coarse.trusted);
 }
 
@@ -518,10 +518,7 @@ fn a_replay_chooses_the_level_s_thresholds_on_the_scores_suggestions_carry() {
             &BTreeMap::new(),
             None,
         );
-        if let Some(keys) = answer
-            .coarse
-            .filter(|c| c.source == Source::SettledFieldMemory)
-        {
+        if let Some(keys) = answer.coarse.filter(|c| c.source == Source::KeyMemory) {
             key_scores.push(keys.score);
         }
     }

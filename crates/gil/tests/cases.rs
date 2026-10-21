@@ -57,7 +57,7 @@ fn similar_answer(decider: &Decider, summary: &str) -> Option<(String, String)> 
     answer
         .candidates
         .into_iter()
-        .find(|c| c.source == Source::SimilarDocument)
+        .find(|c| c.source == Source::SimilarRecord)
         .map(|c| match c.evidence {
             Some(Evidence::Record { id, .. }) => (c.value, id),
             other => panic!("a similar record's candidate rests on a record, not {other:?}"),

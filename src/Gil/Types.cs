@@ -10,10 +10,10 @@ public enum Source : byte
     None = 0,
 
     /// <summary>The settled key memory.</summary>
-    SettledFieldMemory = 1,
+    KeyMemory = 1,
 
     /// <summary>A similar settled record.</summary>
-    SimilarDocument = 2,
+    SimilarRecord = 2,
 
     /// <summary>A judgement the host made outside the core and offered back.</summary>
     [JsonStringEnumMemberName("Model")]
