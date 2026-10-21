@@ -218,8 +218,15 @@ def test_bad_input_is_a_value_error() -> None:
             ],
         }
     )
-    with pytest.raises(ValueError, match="not decided"):
+    # What the core's contract rules out comes back with the core's own message.
+    with pytest.raises(ValueError, match="'a' is not a decided attribute"):
         gil.select_layers(schema, "a", gil.records([]))
+    with pytest.raises(ValueError, match="'a' is not a decided attribute"):
+        gil.select_key_fields(schema, "a", gil.records([]))
+    with pytest.raises(ValueError, match="target_precision must be in"):
+        gil.select_layers(schema, "b", gil.records([]), 1.5)
+    with pytest.raises(ValueError, match="has no attribute 'c'"):
+        gil.select_key_concentrations(schema, "c", gil.records([]))
 
 
 def test_results_carry_exactly_the_typed_keys() -> None:

@@ -17,7 +17,7 @@ use gil::replay::{
     Choice, LayerThresholds, ThresholdRule, select_coarse_with, select_key_concentrations,
     select_key_fields, select_layers_by_rule_with,
 };
-use gil::schema::{AttributeRole, Record, Schema, Settlement, SettlementKind};
+use gil::schema::{Record, Schema, Settlement, SettlementKind};
 use gil::tuning::Tuning;
 use gil::usage::{Decision, usage};
 use pyo3::exceptions::PyValueError;
@@ -149,32 +149,14 @@ fn check_schema(schema_json: &str) -> PyResult<()> {
     schema(schema_json).map(|_| ()).map_err(invalid)
 }
 
-/// The schema, checked to have `attribute` as a decided attribute.
-fn deciding(schema_json: &str, attribute: &str) -> PyResult<Schema> {
-    let schema = schema(schema_json).map_err(invalid)?;
-    match schema.attributes.iter().find(|f| f.name == attribute) {
-        Some(f) if f.role == AttributeRole::Decided => Ok(schema),
-        Some(_) => Err(invalid(format!("attribute '{attribute}' is not decided"))),
-        None => Err(invalid(format!(
-            "the schema has no attribute '{attribute}'"
-        ))),
-    }
-}
-
-/// The schema, checked to judge `attribute`, and the counted settlement kinds, from the arguments every selection takes.
+/// The schema and the counted settlement kinds, read from the arguments every selection takes. What the core's contract
+/// rules out (an attribute that is not decided, a target outside (0, 1], a selection the attribute has no layer for) is
+/// left to the core, whose message `guarded` raises.
 fn selection_input(
     schema_json: &str,
-    attribute: &str,
-    target_precision: f64,
-    minimum_answered: usize,
     counting: Option<Vec<String>>,
 ) -> PyResult<(Schema, Option<Vec<SettlementKind>>)> {
-    let schema = deciding(schema_json, attribute)?;
-    if !(target_precision > 0.0 && target_precision <= 1.0) || minimum_answered == 0 {
-        return Err(invalid(
-            "target_precision is in (0, 1] and minimum_answered at least 1".to_owned(),
-        ));
-    }
+    let schema = schema(schema_json).map_err(invalid)?;
     let counting = counting
         .map(|kinds| {
             kinds
@@ -211,29 +193,25 @@ fn select_layers_json(
             )));
         }
     };
-    let (schema, counting) = selection_input(
-        schema_json,
-        attribute,
-        target_precision,
-        minimum_answered,
-        counting,
-    )?;
+    let (schema, counting) = selection_input(schema_json, counting)?;
     let choice = Choice {
         target_precision,
         minimum_answered,
         counting: counting.as_deref(),
     };
     let mut lines = decisions.then(String::new);
-    let layers = select_layers_by_rule_with(
-        &mut KeyMemory::default(),
-        &mut LexicalMemory::default(),
-        &schema,
-        attribute,
-        &records.records,
-        choice,
-        rule,
-        &mut |r| push_record(&mut lines, r),
-    );
+    let layers = guarded(|| {
+        select_layers_by_rule_with(
+            &mut KeyMemory::default(),
+            &mut LexicalMemory::default(),
+            &schema,
+            attribute,
+            &records.records,
+            choice,
+            rule,
+            &mut |r| push_record(&mut lines, r),
+        )
+    })?;
     Ok((to_json(&layers), lines))
 }
 
@@ -258,37 +236,24 @@ fn select_coarse_json(
     counting: Option<Vec<String>>,
     decisions: bool,
 ) -> PyResult<(String, Option<String>)> {
-    let (schema, counting) = selection_input(
-        schema_json,
-        attribute,
-        target_precision,
-        minimum_answered,
-        counting,
-    )?;
-    let definition = schema.attribute(attribute);
-    if definition.multiple {
-        return Err(invalid(format!(
-            "'{attribute}' takes several values; it has no coarse level"
-        )));
-    }
-    if definition.coarse.is_none() {
-        return Err(invalid(format!("'{attribute}' has no coarse level")));
-    }
+    let (schema, counting) = selection_input(schema_json, counting)?;
     let choice = Choice {
         target_precision,
         minimum_answered,
         counting: counting.as_deref(),
     };
     let mut lines = decisions.then(String::new);
-    let layers = select_coarse_with(
-        &mut KeyMemory::default(),
-        &mut LexicalMemory::default(),
-        &schema,
-        attribute,
-        &records.records,
-        choice,
-        &mut |r| push_record(&mut lines, r),
-    );
+    let layers = guarded(|| {
+        select_coarse_with(
+            &mut KeyMemory::default(),
+            &mut LexicalMemory::default(),
+            &schema,
+            attribute,
+            &records.records,
+            choice,
+            &mut |r| push_record(&mut lines, r),
+        )
+    })?;
     Ok((to_json(&layers), lines))
 }
 
@@ -300,13 +265,15 @@ fn select_key_concentrations_json(
     attribute: &str,
     records: &Records,
 ) -> PyResult<String> {
-    let schema = deciding(schema_json, attribute)?;
-    let found = select_key_concentrations(
-        &mut KeyMemory::default(),
-        &schema,
-        attribute,
-        &records.records,
-    );
+    let schema = schema(schema_json).map_err(invalid)?;
+    let found = guarded(|| {
+        select_key_concentrations(
+            &mut KeyMemory::default(),
+            &schema,
+            attribute,
+            &records.records,
+        )
+    })?;
     Ok(json!(found).to_string())
 }
 
@@ -323,24 +290,14 @@ fn select_key_fields_json(
     counting: Option<Vec<String>>,
     typed_longest: usize,
 ) -> PyResult<String> {
-    let (schema, counting) = selection_input(
-        schema_json,
-        attribute,
-        target_precision,
-        minimum_answered,
-        counting,
-    )?;
-    if typed_longest > 0 && schema.attribute(attribute).multiple {
-        return Err(invalid(format!(
-            "'{attribute}' takes several values; typing is not counted for it"
-        )));
-    }
+    let (schema, counting) = selection_input(schema_json, counting)?;
     let choice = Choice {
         target_precision,
         minimum_answered,
         counting: counting.as_deref(),
     };
-    let chosen = select_key_fields(&schema, attribute, &records.records, choice, typed_longest);
+    let chosen =
+        guarded(|| select_key_fields(&schema, attribute, &records.records, choice, typed_longest))?;
     Ok(to_json(&chosen))
 }
 

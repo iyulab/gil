@@ -13,6 +13,13 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   rules a binding used to repeat. The Python package's `OpenRecord.settle` now builds its settlements with it (no change
   in what it accepts).
 
+### Changed
+
+- **Python: a threshold selection refused by the core's contract raises `ValueError` with the core's own message** —
+  an attribute that is not decided (`'a' is not a decided attribute`), a target outside (0, 1], an attribute with no
+  coarse level. The binding no longer repeats those checks with wording of its own, and the key attributes' and
+  concentrations' selections now raise `ValueError` for them too instead of a panic.
+
 ## 0.7.0
 
 ### Added
