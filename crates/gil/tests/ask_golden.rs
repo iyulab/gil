@@ -80,7 +80,7 @@ fn the_ask_planner_reproduces_its_golden() {
 
         resolver.rebuild(&schema, std::slice::from_ref(record));
         for (_, planner) in &mut planners {
-            planner.learn(&resolver, &schema, record);
+            planner.learn(&resolver, record);
         }
     }
 

@@ -50,6 +50,7 @@ pub struct AskAdvice {
 /// Each attribute's gain is learned with only that attribute missing; advice for more than one open at once is an
 /// approximation.
 pub struct AskPlanner {
+    schema: Schema,
     attribute: String,
     askable: Vec<String>,
     budget: f64,
@@ -113,6 +114,7 @@ impl AskPlanner {
         }
 
         Ok(Self {
+            schema: schema.clone(),
             attribute: attribute.to_owned(),
             askable,
             budget,
@@ -120,6 +122,11 @@ impl AskPlanner {
             seen: HashSet::new(),
             class_sizes: None,
         })
+    }
+
+    /// The schema it plans for, as it was given.
+    pub fn schema(&self) -> &Schema {
+        &self.schema
     }
 
     /// The decided attribute it plans for.
@@ -137,11 +144,11 @@ impl AskPlanner {
         self.budget
     }
 
-    /// Learns from a settled record, in settlement order, asking `decider` for the decided attribute's answer with and
-    /// without each askable attribute the record filled. The answers never take the record as evidence for itself, so
-    /// the decider's memory may already hold it — but no record settled after it. A record without a value for the
-    /// decided attribute teaches nothing.
-    pub fn learn(&mut self, decider: &Decider, schema: &Schema, record: &Record) {
+    /// Learns from a settled record of its schema, in settlement order, asking `decider` for the decided attribute's
+    /// answer with and without each askable attribute the record filled. The answers never take the record as evidence
+    /// for itself, so the decider's memory may already hold it — but no record settled after it. A record without a
+    /// value for the decided attribute teaches nothing.
+    pub fn learn(&mut self, decider: &Decider, record: &Record) {
         let Some(truth) = record
             .values
             .get(&self.attribute)
@@ -165,14 +172,14 @@ impl AskPlanner {
 
             let mut without = known.clone();
             without.remove(&name);
-            let before = self.answer(decider, schema, record, &without);
+            let before = self.answer(decider, record, &without);
             if before.answered() {
                 continue;
             }
 
-            let after = after.get_or_insert_with(|| self.answer(decider, schema, record, &known));
-            let c = self.weight(schema, &before, truth);
-            let a = self.weight(schema, after, truth);
+            let after = after.get_or_insert_with(|| self.answer(decider, record, &known));
+            let c = self.weight(&before, truth);
+            let a = self.weight(after, truth);
             let characters = value.chars().count();
             let budget = self.budget;
             self.ledgers
@@ -218,12 +225,11 @@ impl AskPlanner {
     fn answer(
         &self,
         decider: &Decider,
-        schema: &Schema,
         record: &Record,
         values: &BTreeMap<String, String>,
     ) -> Answer {
         decider.answer_one(
-            schema,
+            &self.schema,
             &record.id,
             &self.attribute,
             values,
@@ -234,7 +240,7 @@ impl AskPlanner {
 
     /// What an answer gives: 1 for a value answered right, 0 for one answered wrong, else the share a trusted class that
     /// holds the settled value rules out.
-    fn weight(&mut self, schema: &Schema, answer: &Answer, truth: &str) -> f64 {
+    fn weight(&mut self, answer: &Answer, truth: &str) -> f64 {
         if answer.answered() {
             return if answer.candidates[0].value == truth {
                 1.0
@@ -246,7 +252,7 @@ impl AskPlanner {
         let Some(coarse) = answer.coarse.as_ref().filter(|c| c.trusted) else {
             return 0.0;
         };
-        let Some(level) = schema.attribute(&self.attribute).coarse.as_ref() else {
+        let Some(level) = self.schema.attribute(&self.attribute).coarse.as_ref() else {
             return 0.0;
         };
 

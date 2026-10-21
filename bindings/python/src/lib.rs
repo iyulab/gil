@@ -435,7 +435,6 @@ impl Decider {
 /// Which observed attribute to ask a person for first, so that a decided attribute gets answered. Experimental.
 #[pyclass(module = "gil._gil", unsendable)]
 struct AskPlanner {
-    schema: Schema,
     inner: ask_planner::AskPlanner,
 }
 
@@ -453,7 +452,7 @@ impl AskPlanner {
         let schema = schema(schema_json).map_err(invalid)?;
         let inner =
             ask_planner::AskPlanner::new(&schema, attribute, askable, budget).map_err(invalid)?;
-        Ok(Self { schema, inner })
+        Ok(Self { inner })
     }
 
     /// Learns from a settled record (JSON, as records are read), in settlement order, asking `decider` — whose memories
@@ -462,8 +461,8 @@ impl AskPlanner {
         usable(decider.broken, "decider")?;
         let value: Value = serde_json::from_str(record_json).map_err(|e| invalid(e.to_string()))?;
         let settled = record(&value).map_err(invalid)?;
-        let (inner, schema) = (&mut self.inner, &self.schema);
-        guarded(|| inner.learn(&decider.inner, schema, &settled))
+        let inner = &mut self.inner;
+        guarded(|| inner.learn(&decider.inner, &settled))
     }
 
     /// Advice for an open record from the decided attribute's answer (JSON, as an answer is given) and the record's

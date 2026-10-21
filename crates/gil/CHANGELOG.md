@@ -63,6 +63,11 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 - **`Schema::check` refuses a coarse level whose class table is empty or gives a value a blank class**, as the
   reference implementation does. Such a schema used to be accepted; the Python `Schema` and the .NET native binding's
   schema refuse it too, since both check through the core.
+- **Breaking: `AskPlanner` keeps the schema it was made for; `learn(decider, record)` no longer takes one.** A planner
+  given another schema to learn with learned from that schema's settings while its cached class sizes stayed those of
+  the first. Drop the schema argument: `planner.learn(&decider, &schema, &record)` becomes
+  `planner.learn(&decider, &record)`; `AskPlanner::schema()` reads it back. The Python and .NET bindings' calls are
+  unchanged.
 
 ## 0.7.0
 

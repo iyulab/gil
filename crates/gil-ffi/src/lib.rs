@@ -99,10 +99,9 @@ pub struct GilOpenRecord {
 }
 
 /// Which observed attribute to ask a person for first so that a decided attribute gets answered, learned from settled
-/// records — with its own copy of the schema it plans for.
+/// records — the planner keeps its own copy of the schema it plans for.
 pub struct GilAskPlanner {
     planner: AskPlanner,
-    schema: Schema,
     broken: AtomicBool,
 }
 
@@ -1324,7 +1323,6 @@ pub unsafe extern "C" fn gil_ask_planner_new(
         let planner = AskPlanner::new(&schema.0, attribute, askable, budget).map_err(input)?;
         let planned = GilAskPlanner {
             planner,
-            schema: schema.0.clone(),
             broken: AtomicBool::new(false),
         };
         unsafe { hand_out(out, planned, "out") }
@@ -1360,7 +1358,7 @@ pub unsafe extern "C" fn gil_ask_planner_learn(
         let memories = &unsafe { live(decider) }?.decider;
         let records = &unsafe { handle(records, "records") }?.0;
         for record in records {
-            planned.planner.learn(memories, &planned.schema, record);
+            planned.planner.learn(memories, record);
         }
         Ok(())
     });
