@@ -306,6 +306,9 @@ impl Decider {
     /// Answers every open decided attribute — without a value, unless it takes several, and not off — from the values given, writing
     /// nothing to memory. The saved version of `record`, if memory holds one, is not evidence for itself: its
     /// settlements are left out of the key memory, and a similar record lookup that finds it passes it over.
+    ///
+    /// # Panics
+    /// When `values` and `sets` keep an attribute where its kind does not belong ([`Schema::check_placement`]).
     pub fn answer(
         &self,
         schema: &Schema,
@@ -319,6 +322,9 @@ impl Decider {
     /// As [`Decider::answer`], handing `sink` the decision record of each attribute's lookup, in the answers' order — what
     /// the key layer and the similar record layer found whatever the thresholds, and what was answered — for a host that
     /// keeps them to recount its thresholds later.
+    ///
+    /// # Panics
+    /// As [`Decider::answer`].
     pub fn answer_with(
         &self,
         schema: &Schema,
@@ -327,6 +333,9 @@ impl Decider {
         sets: &BTreeMap<String, Vec<String>>,
         sink: &mut dyn FnMut(&DecisionRecord),
     ) -> Vec<Answer> {
+        if let Err(misplaced) = schema.check_placement(values, sets) {
+            panic!("{misplaced}");
+        }
         schema
             .attributes
             .iter()
@@ -350,7 +359,8 @@ impl Decider {
     /// similar record's value that fits is offered as a guess, and no coarse class is offered.
     ///
     /// # Panics
-    /// When the attribute is not decided, is off, or has a value and takes one.
+    /// When the attribute is not decided, is off, or has a value and takes one; or when `values` and `sets` keep an
+    /// attribute where its kind does not belong ([`Schema::check_placement`]).
     pub fn answer_one(
         &self,
         schema: &Schema,
@@ -408,6 +418,9 @@ impl Decider {
     /// several.
     fn open_attribute<'a>(q: &Lookup<'a>) -> &'a Attribute {
         let (attribute, definition) = (q.attribute, q.schema.attribute(q.attribute));
+        if let Err(misplaced) = q.schema.check_placement(q.known, q.known_sets) {
+            panic!("{misplaced}");
+        }
         assert!(
             definition.role == AttributeRole::Decided,
             "'{attribute}' is not a decided attribute"

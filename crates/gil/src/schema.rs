@@ -224,10 +224,10 @@ impl Schema {
     /// Checks the schema as the reference implementation does when one is made: a name, unique attribute names, at least
     /// one decided attribute, and settings that fit their attribute — several values only for a decided attribute and
     /// then no memory threshold or typed key thresholds, at least one similar-record vote, a coarse level (with a prefix
-    /// of at least one, or a table) and values to catch only on a decided single-valued attribute, dependencies and key
-    /// attributes that name other attributes that are evidence (key attributes among the dependencies when those are
-    /// given), key concentrations for known attributes that are finite and above 0, and candidates taken from another
-    /// attribute. The error names the first rule broken.
+    /// of at least one, or a table of at least one value and no blank class) and values to catch only on a decided
+    /// single-valued attribute, dependencies and key attributes that name other attributes that are evidence (key
+    /// attributes among the dependencies when those are given), key concentrations for known attributes that are finite
+    /// and above 0, and candidates taken from another attribute. The error names the first rule broken.
     pub fn check(&self) -> Result<(), String> {
         if self.name.trim().is_empty() {
             return Err("a schema needs a name".into());
@@ -274,6 +274,21 @@ impl Schema {
                 if level.prefix < 1 && level.classes.is_none() {
                     return Err(format!(
                         "attribute '{n}' gives its coarse level a prefix of 0 characters; at least one"
+                    ));
+                }
+                if level.classes.as_ref().is_some_and(BTreeMap::is_empty) {
+                    return Err(format!(
+                        "attribute '{n}' gives its coarse level a table of no classes; at least one value"
+                    ));
+                }
+                if let Some((v, _)) = level
+                    .classes
+                    .iter()
+                    .flatten()
+                    .find(|(_, class)| class.trim().is_empty())
+                {
+                    return Err(format!(
+                        "attribute '{n}' gives value '{v}' a blank class in its coarse level"
                     ));
                 }
                 if !decided_one {
@@ -335,6 +350,31 @@ impl Schema {
             }
         }
 
+        Ok(())
+    }
+
+    /// Checks that `values` and `sets` keep each attribute where its kind belongs: no single value for an attribute that
+    /// takes several, no set for one that takes one. Values of attributes the schema does not have are not checked. The
+    /// error names the first attribute out of place.
+    pub fn check_placement(
+        &self,
+        values: &BTreeMap<String, String>,
+        sets: &BTreeMap<String, Vec<String>>,
+    ) -> Result<(), String> {
+        for a in &self.attributes {
+            if a.multiple && values.contains_key(&a.name) {
+                return Err(format!(
+                    "'{}' takes several values; settle them in sets, not values",
+                    a.name
+                ));
+            }
+            if !a.multiple && sets.contains_key(&a.name) {
+                return Err(format!(
+                    "'{}' takes one value; settle it in values, not sets",
+                    a.name
+                ));
+            }
+        }
         Ok(())
     }
 

@@ -189,7 +189,13 @@ impl KeyMemory {
     /// Replaces what the record contributed with what its current values imply. An attribute that takes several values
     /// settles each of them: overall, under the record's keys, and under each of its other values — the values of one
     /// record weigh alike, as one settlement, whatever order they are listed in.
+    ///
+    /// # Panics
+    /// When the record keeps an attribute where its kind does not belong ([`Schema::check_placement`]).
     pub fn put(&mut self, schema: &Schema, record: &Record) {
+        if let Err(misplaced) = schema.check_placement(&record.values, &record.sets) {
+            panic!("record '{}': {misplaced}", record.id);
+        }
         self.remove(&schema.name, &record.id);
         let mut tallies = Vec::new();
         for attribute in schema

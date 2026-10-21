@@ -79,17 +79,8 @@ impl OpenRecord {
     /// When the record's id is blank, or it keeps an attribute where its kind does not belong: a value for an attribute
     /// that takes several, or a set for one that takes one.
     pub fn reopen(schema: Schema, saved: &Record) -> Self {
-        for a in &schema.attributes {
-            assert!(
-                !(a.multiple && saved.values.contains_key(&a.name)),
-                "'{}' takes several values; settle them in sets, not values",
-                a.name
-            );
-            assert!(
-                a.multiple || !saved.sets.contains_key(&a.name),
-                "'{}' takes one value; settle it in values, not sets",
-                a.name
-            );
+        if let Err(misplaced) = schema.check_placement(&saved.values, &saved.sets) {
+            panic!("{misplaced}");
         }
 
         let mut open = Self::new(schema, &saved.id, saved.settled_at);

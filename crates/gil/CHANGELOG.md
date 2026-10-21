@@ -8,6 +8,11 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Fixed
 
+- **A record or lookup that keeps an attribute where its kind does not belong is refused instead of half-read.** A
+  single value for an attribute that takes several values, or a set for one that takes one value, was skipped without a
+  word by `KeyMemory::put` (and so `Decider::rebuild` and every replay) and by `Decider::answer` / `answer_with` /
+  `answer_one` — the settlement was lost from memory, or the evidence from the answer. They now panic with the attribute
+  named, as `OpenRecord::reopen` already did; `Schema::check_placement` tells beforehand.
 - **The key layer no longer slows down with the square of an attribute's distinct values.** Gathering each value's score
   under the known keys, and filling the candidates from the attribute's overall values, each searched a growing list
   for every value; an attribute with thousands of values (a product code, say) spent most of an answer there. Answers
@@ -51,6 +56,9 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   `Decider.put`, `OpenRecord.observe` and `OpenRecord.settle` check their contract first (still `ValueError`, after
   which both objects are as they were); if the core then fails partway, they raise `RuntimeError`, and every later call
   on the decider and the record raises `RuntimeError` too — build them again.
+- **`Schema::check` refuses a coarse level whose class table is empty or gives a value a blank class**, as the
+  reference implementation does. Such a schema used to be accepted; the Python `Schema` and the .NET native binding's
+  schema refuse it too, since both check through the core.
 
 ## 0.7.0
 

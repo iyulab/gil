@@ -45,7 +45,8 @@ public sealed record CoarseLevel
     /// table.</summary>
     public int Prefix { get; init; }
 
-    /// <summary>Value to class, for a level made from a table; a value it does not list is a class of its own.</summary>
+    /// <summary>Value to class, for a level made from a table — at least one entry, no class blank; a value it does not list
+    /// is a class of its own.</summary>
     public IReadOnlyDictionary<string, string>? Classes { get; init; }
 
     /// <summary>The summed key scores of a class's values at or above which the keys' class is trusted; null trusts
