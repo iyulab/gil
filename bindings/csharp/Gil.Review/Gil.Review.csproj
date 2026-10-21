@@ -7,8 +7,9 @@
     <PackageTags>sampling;survey;stratified;bootstrap;agreement;review</PackageTags>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsAotCompatible>true</IsAotCompatible>
-    <!-- Not packed yet: the package carries one native library per runtime, which the release build assembles. -->
+    <!-- Packed only when the per-runtime native libraries are given (GilReviewNativeRoot, below). -->
     <IsPackable>false</IsPackable>
+    <IsPackable Condition="'$(GilReviewNativeRoot)' != ''">true</IsPackable>
   </PropertyGroup>
 
   <!-- Local builds take the native library cargo built in this repository (`cargo build -p gil-review-ffi`). -->
@@ -19,6 +20,26 @@
     <None Include="$(GilReviewNativeDirectory)libgil_review_native.dylib" Condition="Exists('$(GilReviewNativeDirectory)libgil_review_native.dylib')" Link="libgil_review_native.dylib" CopyToOutputDirectory="PreserveNewest" Visible="false" />
     <None Include="$(GilReviewNativeDirectory)libgil_review_native.so" Condition="Exists('$(GilReviewNativeDirectory)libgil_review_native.so')" Link="libgil_review_native.so" CopyToOutputDirectory="PreserveNewest" Visible="false" />
     <None Include="$(GilReviewNativeDirectory)gil_review_native.dll" Condition="Exists('$(GilReviewNativeDirectory)gil_review_native.dll')" Link="gil_review_native.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
+  <!--
+    Packing: GilReviewNativeRoot holds one folder per runtime identifier with that runtime's native library, as the
+    release build assembles them — <root>/<rid>/{libgil_review_native.so|libgil_review_native.dylib|gil_review_native.dll}.
+    Each lands in runtimes/<rid>/native/, where the .NET host finds it for the running platform.
+  -->
+  <ItemGroup Condition="'$(GilReviewNativeRoot)' != ''">
+    <None Include="$(GilReviewNativeRoot)/linux-x64/*gil_review_native.*" Pack="true" PackagePath="runtimes/linux-x64/native/" Visible="false" />
+    <None Include="$(GilReviewNativeRoot)/linux-arm64/*gil_review_native.*" Pack="true" PackagePath="runtimes/linux-arm64/native/" Visible="false" />
+    <None Include="$(GilReviewNativeRoot)/osx-x64/*gil_review_native.*" Pack="true" PackagePath="runtimes/osx-x64/native/" Visible="false" />
+    <None Include="$(GilReviewNativeRoot)/osx-arm64/*gil_review_native.*" Pack="true" PackagePath="runtimes/osx-arm64/native/" Visible="false" />
+    <None Include="$(GilReviewNativeRoot)/win-x64/*gil_review_native.*" Pack="true" PackagePath="runtimes/win-x64/native/" Visible="false" />
+    <None Include="$(GilReviewNativeRoot)/win-arm64/*gil_review_native.*" Pack="true" PackagePath="runtimes/win-arm64/native/" Visible="false" />
+  </ItemGroup>
+
+  <!-- The package's own README, in place of the repository's. -->
+  <ItemGroup>
+    <None Remove="$(MSBuildThisFileDirectory)..\..\..\README.md" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>
