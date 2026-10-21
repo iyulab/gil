@@ -1,12 +1,12 @@
-//! The decision log golden (`tests/fixtures/core/logs-out.jsonl`), written by the .NET implementation from the
-//! replay its layers threshold choice rests on: for the layers replay with records settled again (`layers.jsonl`), every
+//! The decision log golden (`tests/fixtures/core/records-out.jsonl`), from the replay
+//! its layers threshold choice rests on: for the layers replay with records settled again (`layers.jsonl`), every
 //! record asked about, in settlement order, with what the key layer and the similar record vote made of it whatever
 //! the thresholds and what it was settled as — the same here, every number to the bit. The reference replay does not
 //! keep the best value itself; where it says the best value was right, the value here must be the settled one.
 
 mod common;
 
-use common::{CHOSEN, COUNTED, doubles, fixture, lines, schema};
+use common::{CHOSEN, COUNTED, Golden, fixture, lines, schema};
 use gil::decision_record::DecisionRecord;
 use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
@@ -52,15 +52,12 @@ fn the_layers_replay_writes_the_golden_decision_records() {
     }
 
     let golden = fixture("golden.jsonl");
-    let expected: Vec<Value> = lines(&fixture("records-out.jsonl"))
-        .filter(|l| l["kind"] == "record")
-        .collect();
+    let mut golden_out = Golden::part("records-out.jsonl", &["record"]);
     let choice = Choice {
         target_precision: 0.8,
         minimum_answered: 10,
         counting: Some(&COUNTED),
     };
-    let mut at = 0;
     for attribute in ["team", "code"] {
         let schema = schema(&golden, |l| {
             l["kind"] == "layers" && l["field"] == attribute
@@ -90,12 +87,7 @@ fn the_layers_replay_writes_the_golden_decision_records() {
         );
 
         for log in &logs {
-            assert_eq!(
-                doubles(line(log)),
-                doubles(expected[at].clone()),
-                "record line {}",
-                at + 1
-            );
+            golden_out.check(line(log), format!("{attribute} record {}", log.record));
             assert!(log.answered.is_none(), "a replay answers nothing");
             let settled = log.settled.as_deref();
             if let Some(key) = &log.key {
@@ -110,11 +102,10 @@ fn the_layers_replay_writes_the_golden_decision_records() {
                     Some(similar.value.as_str()) == settled
                 );
             }
-            at += 1;
         }
     }
 
-    assert_eq!(at, expected.len());
+    golden_out.finish();
 }
 
 /// The answer side: asked about every decided attribute of each later log of the schema path's golden, as the decision golden
@@ -305,9 +296,7 @@ fn the_coarse_replay_writes_the_golden_decision_records() {
     let golden = fixture("golden.jsonl");
     let is_coarse = |l: &Value| l["kind"] == "coarse" && l["field"] == "code";
     let schema = schema(&golden, is_coarse);
-    let expected: Vec<Value> = lines(&fixture("records-out.jsonl"))
-        .filter(|l| l["kind"] == "coarse_record")
-        .collect();
+    let mut golden_out = Golden::part("records-out.jsonl", &["coarse_record"]);
     let choice = Choice {
         target_precision: 0.8,
         minimum_answered: 10,
@@ -334,21 +323,15 @@ fn the_coarse_replay_writes_the_golden_decision_records() {
             choice,
         )
     );
-    assert_eq!(logs.len(), expected.len());
     let level = schema
         .attribute("code")
         .coarse
         .as_ref()
         .expect("a coarse level");
-    for (at, (log, expected)) in logs.iter().zip(expected).enumerate() {
+    for log in &logs {
         let mut actual = line(log);
         actual["kind"] = json!("coarse_record");
-        assert_eq!(
-            doubles(actual),
-            doubles(expected),
-            "coarse record line {}",
-            at + 1
-        );
+        golden_out.check(actual, format!("coarse record {}", log.record));
         // The reference keeps no class names; a class it calls right is the settled value's.
         let look = log.coarse.as_ref().expect("a coarse replay's record");
         let class = level.of(log.settled.as_deref().expect("settled"));
@@ -361,4 +344,5 @@ fn the_coarse_replay_writes_the_golden_decision_records() {
             assert_eq!(correct == Some(true), *value == class);
         }
     }
+    golden_out.finish();
 }

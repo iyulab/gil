@@ -6,7 +6,7 @@
 
 mod common;
 
-use common::{CHOSEN, COUNTED, Golden, doubles, fixture, lines, replay, schema, to_record};
+use common::{CHOSEN, COUNTED, Golden, fixture, lines, replay, schema, to_record};
 use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::replay::{
@@ -56,9 +56,7 @@ fn the_set_field_replay_reproduces_its_golden() {
         .map(|r| to_record(&r))
         .collect();
     let golden = fixture("golden.jsonl");
-    let expected = lines(&golden)
-        .find(|l| l["kind"] == "key" && l["field"] == "tags")
-        .expect("the set field's line");
+    let mut golden_out = Golden::part("golden.jsonl", &["key"]);
 
     let schema = schema(&golden, |l| l["kind"] == "key" && l["field"] == "tags");
     let replay = select_key_threshold(
@@ -73,7 +71,8 @@ fn the_set_field_replay_reproduces_its_golden() {
         },
     );
     let actual = json!({ "kind": "key", "field": "tags", "replay": self::replay(&replay) });
-    assert_eq!(doubles(actual), doubles(expected));
+    golden_out.check(actual, "tags");
+    golden_out.finish();
 }
 
 /// The golden's own lines for both layers of each single-valued decided attribute (`golden.jsonl`, kind `layers`): the key
@@ -86,11 +85,9 @@ fn the_layers_replay_reproduces_its_golden() {
         .map(|r| to_record(&r))
         .collect();
     let golden = fixture("golden.jsonl");
+    let mut golden_out = Golden::part("golden.jsonl", &["layers"]);
     for attribute in ["team", "code"] {
         let is_layers = |l: &Value| l["kind"] == "layers" && l["field"] == attribute;
-        let expected = lines(&golden)
-            .find(is_layers)
-            .expect("the field's layers line");
         let schema = schema(&golden, is_layers);
         let layers = select_layers(
             &mut KeyMemory::default(),
@@ -110,8 +107,9 @@ fn the_layers_replay_reproduces_its_golden() {
             "key": replay(&layers.key),
             "memory": replay(&layers.memory),
         });
-        assert_eq!(doubles(actual), doubles(expected), "attribute {attribute}");
+        golden_out.check(actual, attribute);
     }
+    golden_out.finish();
 }
 
 /// The golden's own line for the coarse level of the attribute that has one (`golden.jsonl`, kind `coarse`): the class the
@@ -125,7 +123,7 @@ fn the_coarse_replay_reproduces_its_golden() {
         .collect();
     let golden = fixture("golden.jsonl");
     let is_coarse = |l: &Value| l["kind"] == "coarse" && l["field"] == "code";
-    let expected = lines(&golden).find(is_coarse).expect("the coarse line");
+    let mut golden_out = Golden::part("golden.jsonl", &["coarse"]);
     let schema = schema(&golden, is_coarse);
     let coarse = select_coarse(
         &mut KeyMemory::default(),
@@ -145,7 +143,8 @@ fn the_coarse_replay_reproduces_its_golden() {
         "key": replay(&coarse.key),
         "memory": replay(&coarse.memory),
     });
-    assert_eq!(doubles(actual), doubles(expected));
+    golden_out.check(actual, "code");
+    golden_out.finish();
 }
 
 /// The finer layers golden (`tests/fixtures/core/layers.jsonl`): both layers replayed with the same schemas on the first

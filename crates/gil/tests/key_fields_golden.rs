@@ -1,4 +1,4 @@
-//! The key attribute and concentration goldens, written by the .NET implementation: the schema path's choice for its team
+//! The key attribute and concentration goldens: the schema path's choice for its team
 //! (`golden.jsonl`, kinds `key_fields` and `key_concentrations`) and, with every trial, that choice again and the
 //! choice on made-up inspections (`key_fields.jsonl` on `inspection.jsonl`) — where a broad attribute alone answers more
 //! often than the attribute naming what the decided attribute describes, and the gain over the target keeps the latter — must come
@@ -8,7 +8,7 @@ mod common;
 
 use std::collections::BTreeMap;
 
-use common::{CHOSEN, COUNTED, doubles, fixture, lines, replay, schema, to_record};
+use common::{CHOSEN, COUNTED, Golden, fixture, lines, replay, schema, to_record};
 use gil::key_memory::KeyMemory;
 use gil::replay::{
     Choice, KeyFieldsChoice, TypedKeyThresholds, select_key_concentrations, select_key_fields,
@@ -84,7 +84,7 @@ fn the_form_paths_key_fields_and_concentrations_reproduce_its_golden() {
     let early = early();
     let golden = fixture("golden.jsonl");
     let mut schema = schema(&golden, |_| true); // the schema as declared
-    let expected: Vec<Value> = lines(&golden).take(2).collect();
+    let mut golden_out = Golden::part("golden.jsonl", &["key_fields", "key_concentrations"]);
 
     let chosen = select_key_fields(
         &schema,
@@ -103,7 +103,7 @@ fn the_form_paths_key_fields_and_concentrations_reproduce_its_golden() {
         "fields": strings(&chosen.key_fields),
         "chosen": replay(&chosen.chosen),
     });
-    assert_eq!(doubles(actual), doubles(expected[0].clone()));
+    golden_out.check(actual, "key_fields team");
 
     for f in schema.attributes.iter_mut().filter(|f| f.name == "team") {
         f.key_fields = chosen.key_fields.clone();
@@ -114,13 +114,13 @@ fn the_form_paths_key_fields_and_concentrations_reproduce_its_golden() {
         "field": "team",
         "concentrations": concentrations(&found),
     });
-    assert_eq!(doubles(actual), doubles(expected[1].clone()));
+    golden_out.check(actual, "key_concentrations team");
+    golden_out.finish();
 }
 
 #[test]
 fn key_fields_with_every_trial_reproduce_their_golden() {
-    let expected: Vec<Value> = lines(&fixture("key_fields.jsonl")).collect();
-    assert_eq!(expected.len(), 4);
+    let mut golden = Golden::open("key_fields.jsonl");
 
     let ticket = select_key_fields(
         &schema(&fixture("golden.jsonl"), |_| true),
@@ -133,10 +133,7 @@ fn key_fields_with_every_trial_reproduce_their_golden() {
         },
         0,
     );
-    assert_eq!(
-        doubles(choice("ticket", "team", &ticket)),
-        doubles(expected[0].clone())
-    );
+    golden.check(choice("ticket", "team", &ticket), "ticket");
 
     let inspections: Vec<Record> = lines(&fixture("inspection.jsonl"))
         .map(|r| to_record(&r))
@@ -153,7 +150,7 @@ fn key_fields_with_every_trial_reproduce_their_golden() {
         "field": "risk",
         "concentrations": concentrations(&found),
     });
-    assert_eq!(doubles(actual), doubles(expected[1].clone()));
+    golden.check(actual, "inspection concentrations");
 
     let chosen = select_key_fields(
         &inspection(found),
@@ -166,10 +163,7 @@ fn key_fields_with_every_trial_reproduce_their_golden() {
         },
         0,
     );
-    assert_eq!(
-        doubles(choice("inspection", "risk", &chosen)),
-        doubles(expected[2].clone())
-    );
+    golden.check(choice("inspection", "risk", &chosen), "inspection");
 
     // The ticket's team again, counting the answers while its first two characters are typed as well.
     let typed = select_key_fields(
@@ -183,8 +177,6 @@ fn key_fields_with_every_trial_reproduce_their_golden() {
         },
         2,
     );
-    assert_eq!(
-        doubles(choice("ticket-typed", "team", &typed)),
-        doubles(expected[3].clone())
-    );
+    golden.check(choice("ticket-typed", "team", &typed), "ticket-typed");
+    golden.finish();
 }

@@ -225,6 +225,9 @@ pub fn doubles(value: Value) -> Value {
 /// afresh there, one JSON line per line, so that a change the golden turns on is reviewed as a diff of the fixture.
 pub struct Golden {
     name: &'static str,
+    /// For a part of a golden several tests write: the file it is written to, beside the others (`scripts/
+    /// regen-goldens.sh` merges the parts in the fixture's order).
+    part: Option<String>,
     expected: Option<Vec<Value>>,
     written: Vec<Value>,
 }
@@ -237,6 +240,25 @@ impl Golden {
             .then(|| lines(&fixture(name)).collect());
         Self {
             name,
+            part: None,
+            expected,
+            written: Vec::new(),
+        }
+    }
+
+    /// The lines of the golden `name` whose kind is one of `kinds` — the part one test checks or writes, where other
+    /// tests write the rest. Written to `<name>.<first kind>.part`.
+    pub fn part(name: &'static str, kinds: &[&str]) -> Self {
+        let expected = std::env::var_os("GIL_WRITE_CORE_GOLDEN")
+            .is_none()
+            .then(|| {
+                lines(&fixture(name))
+                    .filter(|l| kinds.iter().any(|k| l["kind"] == *k))
+                    .collect()
+            });
+        Self {
+            name,
+            part: Some(format!("{name}.{}.part", kinds[0])),
             expected,
             written: Vec::new(),
         }
@@ -281,7 +303,8 @@ impl Golden {
                     std::env::var_os("GIL_WRITE_CORE_GOLDEN").expect("a folder to write to");
                 std::fs::create_dir_all(&folder).expect("the folder");
                 let text: String = self.written.iter().map(|l| format!("{l}\n")).collect();
-                std::fs::write(std::path::Path::new(&folder).join(self.name), text)
+                let file = self.part.as_deref().unwrap_or(self.name);
+                std::fs::write(std::path::Path::new(&folder).join(file), text)
                     .expect("the golden written");
             }
         }

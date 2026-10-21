@@ -1,14 +1,14 @@
-//! The decision lines of the schema path's golden (`tests/fixtures/core/golden.jsonl`, kind `decision`), written by the
-//! .NET implementation: a resolver rebuilt from the first 200 logs with the settings the golden chose, asked about
-//! every decided attribute of each later log from its observed values before that log is put, must answer the same
-//! here — whether it answered, the first candidate's layer, the first three candidates (values, scores to the bit,
-//! layers, trust) and the coarse class.
+//! The decision lines of the schema path's golden (`tests/fixtures/core/golden.jsonl`, kind `decision`): a resolver
+//! rebuilt from the first 200 logs with the settings the golden chose, asked about every decided attribute of each
+//! later log from its observed values before that log is put, must answer the same here — whether it answered, the
+//! first candidate's layer, the first three candidates (values, scores to the bit, layers, trust) and the coarse
+//! class.
 
 mod common;
 
 use std::collections::BTreeMap;
 
-use common::{CHOSEN, doubles, fixture, lines, schema, to_record};
+use common::{CHOSEN, Golden, fixture, lines, schema, to_record};
 use gil::decider::{Candidate, Decider};
 use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
@@ -26,11 +26,10 @@ fn the_resolver_reproduces_the_golden_decisions() {
         .collect();
     let golden = fixture("golden.jsonl");
     let schema = schema(&golden, |_| false);
-    let expected: Vec<Value> = lines(&golden).filter(|l| l["kind"] == "decision").collect();
+    let mut golden_out = Golden::part("golden.jsonl", &["decision"]);
 
     let mut resolver = Decider::new(KeyMemory::default(), Some(LexicalMemory::default()));
     resolver.rebuild(&schema, &records[..CHOSEN]);
-    let mut at = 0;
     for record in &records[CHOSEN..] {
         let observed: BTreeMap<String, String> = record
             .values
@@ -48,17 +47,11 @@ fn the_resolver_reproduces_the_golden_decisions() {
                 "candidates": suggestion.candidates.iter().map(candidate).collect::<Vec<_>>(),
                 "coarse": suggestion.coarse.as_ref().map(candidate),
             });
-            assert_eq!(
-                doubles(actual),
-                doubles(expected[at].clone()),
-                "decision line {}",
-                at + 1
-            );
-            at += 1;
+            golden_out.check(actual, format!("{} {}", record.id, suggestion.attribute));
         }
 
         resolver.rebuild(&schema, std::slice::from_ref(record));
     }
 
-    assert_eq!(at, expected.len());
+    golden_out.finish();
 }

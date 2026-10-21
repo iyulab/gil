@@ -10,7 +10,7 @@ mod common;
 
 use std::collections::BTreeMap;
 
-use common::{doubles, fixture, lines, replay, to_record};
+use common::{Golden, fixture, lines, replay, to_record};
 use gil::decider::{Answer, Candidate, Decider};
 use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
@@ -120,6 +120,8 @@ fn the_note_settings_reproduce_their_golden() {
     let early = &records[..CHOSEN];
     let golden = fixture("note-golden.jsonl");
     let counted = Some(&common::COUNTED[..]);
+    let mut golden_out = Golden::part("note-golden.jsonl", &["layers", "coarse", "key", "typed"]);
+    // The settings in the order the golden chose them — each chosen with the settings before it.
     for expected in lines(&golden)
         .filter(|l| ["layers", "coarse", "key", "typed"].contains(&l["kind"].as_str().unwrap()))
     {
@@ -180,8 +182,9 @@ fn the_note_settings_reproduce_their_golden() {
                 json!({ "kind": kind, "field": attribute, "replay": self::replay(&replay) })
             }
         };
-        assert_eq!(doubles(actual), doubles(expected), "{kind} {attribute}");
+        golden_out.check(actual, format!("{kind} {attribute}"));
     }
+    golden_out.finish();
 }
 
 fn candidate(c: &Candidate) -> Value {
@@ -212,9 +215,15 @@ fn the_note_decisions_reproduce_their_golden() {
     let early = &records[..CHOSEN];
     let golden = fixture("note-golden.jsonl");
     let schema = note_form(&golden, |_| false);
-    let expected: Vec<Value> = lines(&golden)
-        .filter(|l| l["kind"].as_str().unwrap().ends_with("decision"))
-        .collect();
+    let mut golden_out = Golden::part(
+        "note-golden.jsonl",
+        &[
+            "decision",
+            "set_decision",
+            "typed_decision",
+            "saved_decision",
+        ],
+    );
 
     let mut resolver = Decider::new(KeyMemory::default(), Some(LexicalMemory::default()));
     resolver.rebuild(&schema, early);
@@ -286,15 +295,11 @@ fn the_note_decisions_reproduce_their_golden() {
         }
     }
 
-    assert_eq!(actual.len(), expected.len());
-    for (at, (actual, expected)) in actual.into_iter().zip(expected).enumerate() {
-        assert_eq!(
-            doubles(actual),
-            doubles(expected),
-            "decision line {}",
-            at + 1
-        );
+    for line in actual {
+        let what = format!("{} {} {}", line["kind"], line["doc"], line["field"]);
+        golden_out.check(line, what);
     }
+    golden_out.finish();
 }
 
 /// The typed replay's decision logs (`note-logs-out.jsonl`, written by the .NET implementation): for the owner's
@@ -333,9 +338,8 @@ fn the_typed_replay_writes_the_golden_decision_records() {
         .thresholds()
     );
 
-    let expected: Vec<Value> = lines(&fixture("note-records-out.jsonl")).collect();
-    assert_eq!(logs.len(), expected.len());
-    for (at, (r, expected)) in logs.iter().zip(expected).enumerate() {
+    let mut golden_out = Golden::open("note-records-out.jsonl");
+    for r in &logs {
         let actual = json!({
             "kind": "typed_record",
             "field": r.attribute,
@@ -345,11 +349,7 @@ fn the_typed_replay_writes_the_golden_decision_records() {
             "typed": r.typed.as_ref().expect("a typed replay's record").iter().map(|t| t.as_ref().map(|t| json!([t.strength, t.value, t.correct]))).collect::<Vec<_>>(),
             "settled": r.settled,
         });
-        assert_eq!(
-            doubles(actual),
-            doubles(expected),
-            "typed record line {}",
-            at + 1
-        );
+        golden_out.check(actual, format!("typed record {}", r.record));
     }
+    golden_out.finish();
 }
