@@ -50,6 +50,10 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Added
 
+- A record that keeps an attribute where its kind does not belong — a set for an attribute that takes one value, or
+  one value for one that takes several — is refused with an `ArgumentException` naming the record and the attribute,
+  wherever records or values reach the core (`Decider.Put`, `Decider.Answer`, `OpenRecord.Reopen`, the `Replay`
+  selections, `AskPlanner.Learn`), and the decider goes on working. As `SettledDocument.Validate` refused it before.
 - The `Gil` package carries the native library for `linux-x64`, `linux-arm64` (glibc 2.28 or later), `osx-x64`,
   `osx-arm64` (macOS 11 or later), `win-x64` and `win-arm64` under `runtimes/<rid>/native/`. On any other runtime the
   first call throws a `DllNotFoundException` naming the runtime and the supported ones; build the library with

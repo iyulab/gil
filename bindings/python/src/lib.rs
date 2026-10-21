@@ -298,6 +298,17 @@ fn select_key_fields_json(
     Ok(to_json(&chosen))
 }
 
+/// Refuses, with a `ValueError`, a record that keeps an attribute where its kind does not belong — the core would take it
+/// for a broken contract partway through a change and leave the decider unusable.
+fn placed(schema: &Schema, records: &[Record]) -> PyResult<()> {
+    for record in records {
+        schema
+            .check_placement(&record.values, &record.sets)
+            .map_err(|m| invalid(format!("record '{}': {m}", record.id)))?;
+    }
+    Ok(())
+}
+
 /// Runs a core call, turning a broken contract (the core panics on one) into a `ValueError` with the core's message.
 fn guarded<T>(call: impl FnOnce() -> T) -> PyResult<T> {
     catch_unwind(AssertUnwindSafe(call)).map_err(|panic| invalid(panic_message(&*panic)))
@@ -354,6 +365,7 @@ impl Decider {
             similar_records.then(LexicalMemory::default),
         );
         if let Some(records) = records {
+            placed(&schema, &records.records)?;
             changing(|| inner.rebuild(&schema, &records.records))
                 .map_err(|m| defect("decider", m))?;
         }
@@ -367,6 +379,7 @@ impl Decider {
     fn put(&mut self, schema_json: &str, records: &Records) -> PyResult<()> {
         usable(self.broken, "decider")?;
         let schema = schema(schema_json).map_err(invalid)?;
+        placed(&schema, &records.records)?;
         let inner = &mut self.inner;
         changing(|| inner.rebuild(&schema, &records.records)).map_err(|m| {
             self.broken = true;

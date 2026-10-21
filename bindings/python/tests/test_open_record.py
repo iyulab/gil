@@ -80,6 +80,19 @@ def test_an_external_judgement_comes_back_in_the_answer() -> None:
     assert offered["answered"]
 
 
+def test_a_misplaced_record_is_refused_and_the_decider_keeps_working() -> None:
+    decider = gil.Decider(SCHEMA, settled())
+    misplaced = gil.records(
+        [{"id": "bad", "settled_at": 9 * MINUTE, "sets": {"team": ["a", "b"]}}]
+    )
+    with pytest.raises(ValueError, match="record 'bad': 'team' takes one value"):
+        decider.put(SCHEMA, misplaced)
+    (team,) = gil.OpenRecord(SCHEMA, "t9", 10 * MINUTE).observe(
+        decider, "component", "vpn"
+    )
+    assert team["candidates"][0]["value"] == "network"
+
+
 def test_a_call_the_core_refuses_is_a_value_error() -> None:
     decider = gil.Decider(SCHEMA)
     record = gil.OpenRecord(SCHEMA, "t1", MINUTE)

@@ -8,6 +8,9 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Fixed
 
+- **Python: a record that keeps an attribute where its kind does not belong is a `ValueError` and leaves the decider
+  usable.** `Decider(schema, records)` and `Decider.put` handed it to the core, which took it for a broken contract
+  partway through the change, and the decider could no longer be used; they now check the records first.
 - **A lookup of an attribute the schema does not have is refused whatever memory holds.** `Lookup::new` took any
   name, and the key memory's reads (`rank`, `first`, `typed`, `keyed_values`, `key_totals`, `scored`, `catches`)
   answered an unknown name with nothing while the schema's memory was empty and panicked once it held records. It now

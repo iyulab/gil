@@ -196,6 +196,14 @@ public sealed class CoreTests(ITestOutputHelper output)
         FluentActions.Invoking(() => record.Observe(decider, "nowhere", "x"))
             .Should().Throw<ArgumentException>().WithMessage("*has no attribute 'nowhere'");
 
+        // A record that keeps a single-valued attribute as a set is refused as input, not taken for a broken contract.
+        using var misplaced = SettledRecords.From([new Record("bad", DateTimeOffset.UnixEpoch.AddDays(9))
+        {
+            Sets = new Dictionary<string, IReadOnlyList<string>> { [decided] = ["a", "b"] },
+        }]);
+        FluentActions.Invoking(() => decider.Put(schema, misplaced))
+            .Should().Throw<ArgumentException>().WithMessage($"record 'bad': '{decided}' takes one value*");
+
         // The binding goes on working after a refusal: a changing call refuses before it changes anything.
         record.AnswerPartial(decider, decided).Candidates.Should().NotBeEmpty();
         record.Observe(decider, Observed().First(), "x");

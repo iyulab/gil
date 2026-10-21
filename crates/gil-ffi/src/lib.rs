@@ -451,6 +451,7 @@ pub unsafe extern "C" fn gil_decider_put(
         let decider = &mut unsafe { live_mut(decider) }?.decider;
         let schema = unsafe { handle(schema, "schema") }?;
         let records = unsafe { handle(records, "records") }?;
+        placed(&schema.0, &records.0)?;
         decider.rebuild(&schema.0, &records.0);
         Ok(())
     });
@@ -499,6 +500,10 @@ pub unsafe extern "C" fn gil_decider_answer(
             serde_json::from_str(sets)
                 .map_err(|e| argument(format!("sets are a JSON object of string lists: {e}")))?
         };
+        schema
+            .0
+            .check_placement(&values, &sets)
+            .map_err(|m| input(format!("record '{record_id}': {m}")))?;
         let mut kept = decisions.then(Vec::new);
         let found = decider.answer_with(&schema.0, record_id, &values, &sets, &mut |r| {
             keep(&mut kept, r)
@@ -609,6 +614,7 @@ pub unsafe extern "C" fn gil_open_record_reopen(
         if saved.id.trim().is_empty() {
             return Err(input("a record needs an id"));
         }
+        placed(&schema.0, [&saved])?;
         let record = OpenRecord::reopen(schema.0.clone(), &saved);
         unsafe {
             hand_out(
@@ -960,7 +966,22 @@ unsafe fn selection<'a>(
     let schema = unsafe { handle(schema, "schema") }?;
     let attribute = unsafe { text(attribute, "attribute") }?;
     let records = unsafe { handle(records, "records") }?;
+    placed(&schema.0, &records.0)?;
     Ok((&schema.0, attribute, &records.0))
+}
+
+/// Refuses, as input, a record that keeps an attribute where its kind does not belong — the core would take it for a
+/// broken contract and panic, which leaves what it was changing unusable.
+fn placed<'a>(
+    schema: &Schema,
+    records: impl IntoIterator<Item = &'a Record>,
+) -> Result<(), Failure> {
+    for record in records {
+        schema
+            .check_placement(&record.values, &record.sets)
+            .map_err(|m| input(format!("record '{}': {m}", record.id)))?;
+    }
+    Ok(())
 }
 
 /// The thresholds a layer selection chose, with the replay's decision records when they were kept.
@@ -1360,6 +1381,7 @@ pub unsafe extern "C" fn gil_ask_planner_learn(
         let planned = unsafe { live_mut(planner) }?;
         let memories = &unsafe { live(decider) }?.decider;
         let records = &unsafe { handle(records, "records") }?.0;
+        placed(planned.planner.schema(), records)?;
         for record in records {
             planned.planner.learn(memories, record);
         }
