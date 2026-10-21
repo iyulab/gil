@@ -16,6 +16,11 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   anything changes** — an attribute the schema does not have, one of the other role, a settlement of the other kind of
   attribute — as a `ContractViolation` with the message the call panics with. Both calls check through them, so the
   rule lives in one place. Also `Schema::find`, the attribute named, if there is one.
+- **`Decider::remove(schema, record)`: takes a record out of both memories** — a record the host deleted, without
+  rebuilding. The key memory is then as if it had never been put; the similar record memory never offers it again
+  (its similarities follow the lexical memory's periodic refresh, so they can differ slightly from a rebuild's).
+- **`Decider::answer_with`: `Decider::answer` with each lookup's decision record handed to a sink**, in the answers'
+  order — for a host that keeps them to recount its thresholds later.
 
 ### Changed
 

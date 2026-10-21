@@ -96,7 +96,11 @@ internal static unsafe partial class Native
 
     [LibraryImport(Library, EntryPoint = "gil_decider_answer")]
     internal static partial int DeciderAnswer(
-        DeciderHandle decider, SchemaHandle schema, Str recordId, Str values, Str sets, nuint* resultLen);
+        DeciderHandle decider, SchemaHandle schema, Str recordId, Str values, Str sets, byte decisions,
+        nuint* resultLen);
+
+    [LibraryImport(Library, EntryPoint = "gil_decider_remove")]
+    internal static partial int DeciderRemove(DeciderHandle decider, SchemaHandle schema, Str recordId);
 
     [LibraryImport(Library, EntryPoint = "gil_open_record_new")]
     internal static partial int OpenRecordNew(SchemaHandle schema, Str id, long settledAt, nint* output);

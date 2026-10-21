@@ -72,7 +72,7 @@ fn answer(
     sets: &str,
 ) -> Value {
     let mut len = usize::MAX;
-    ok(unsafe { gil_decider_answer(decider, schema, s(id), s(values), s(sets), &mut len) });
+    ok(unsafe { gil_decider_answer(decider, schema, s(id), s(values), s(sets), false, &mut len) });
     let text = copied(gil_last_result);
     assert_eq!(text.len(), len);
     serde_json::from_str(&text).unwrap()
@@ -191,11 +191,12 @@ fn a_malformed_call_never_reaches_the_core() {
     assert_eq!(last_error(), "out is null");
 
     let status =
-        unsafe { gil_decider_answer(ptr::null(), schema, s("a"), s("{}"), s(""), &mut len) };
+        unsafe { gil_decider_answer(ptr::null(), schema, s("a"), s("{}"), s(""), false, &mut len) };
     assert_eq!(status, GIL_INVALID_ARGUMENT);
     assert_eq!(last_error(), "decider is null");
 
-    let status = unsafe { gil_decider_answer(decider, schema, s("a"), s("[]"), s(""), &mut len) };
+    let status =
+        unsafe { gil_decider_answer(decider, schema, s("a"), s("[]"), s(""), false, &mut len) };
     assert_eq!(status, GIL_INVALID_ARGUMENT);
     assert!(last_error().starts_with("values are a JSON object of strings"));
 
@@ -204,7 +205,8 @@ fn a_malformed_call_never_reaches_the_core() {
         ptr: not_utf8.as_ptr(),
         len: not_utf8.len(),
     };
-    let status = unsafe { gil_decider_answer(decider, schema, bad, s("{}"), s(""), &mut len) };
+    let status =
+        unsafe { gil_decider_answer(decider, schema, bad, s("{}"), s(""), false, &mut len) };
     assert_eq!(status, GIL_INVALID_ARGUMENT);
     assert_eq!(last_error(), "record_id is not UTF-8");
 
@@ -224,8 +226,17 @@ fn a_malformed_call_never_reaches_the_core() {
     assert_eq!(status, GIL_INVALID_ARGUMENT);
     assert_eq!(last_error(), "records is null");
 
-    let status =
-        unsafe { gil_decider_answer(decider, schema, s("a"), s("{}"), s(""), ptr::null_mut()) };
+    let status = unsafe {
+        gil_decider_answer(
+            decider,
+            schema,
+            s("a"),
+            s("{}"),
+            s(""),
+            false,
+            ptr::null_mut(),
+        )
+    };
     assert_eq!(status, GIL_INVALID_ARGUMENT);
     assert_eq!(last_error(), "result_len is null");
     assert_eq!(copied(gil_last_result), "");
@@ -234,6 +245,102 @@ fn a_malformed_call_never_reaches_the_core() {
     unsafe {
         gil_decider_free(ptr::null_mut());
         gil_schema_free(ptr::null_mut());
+        gil_decider_free(decider);
+        gil_schema_free(schema);
+    }
+}
+
+#[test]
+fn answers_carry_their_decision_records_and_a_removed_record_is_taken_out_as_the_core_takes_it() {
+    use gil::decider::Decider;
+    use gil::key_memory::KeyMemory;
+    use gil::lexical_memory::LexicalMemory;
+
+    let records: Vec<Record> = lines(&fixture("records.jsonl"))
+        .map(|r| to_record(&r))
+        .collect();
+    let core_schema = schema(&fixture("golden.jsonl"), |_| false);
+    let schema = new_schema(&golden_schema());
+    let decider = new_decider();
+    put(decider, schema, &records[..CHOSEN]);
+    let mut core = Decider::new(KeyMemory::default(), Some(LexicalMemory::default()));
+    core.rebuild(&core_schema, &records[..CHOSEN]);
+
+    // Every seventh early record taken out, on both sides.
+    for record in records[..CHOSEN].iter().skip(3).step_by(7) {
+        ok(unsafe { gil_decider_remove(decider, schema, s(&record.id)) });
+        core.remove(&core_schema, &record.id);
+    }
+    ok(unsafe { gil_decider_remove(decider, schema, s("never-put")) });
+
+    for record in &records[CHOSEN..CHOSEN + 40] {
+        let observed: BTreeMap<String, String> = record
+            .values
+            .iter()
+            .filter(|(a, _)| core_schema.attribute(a).role == AttributeRole::Observed)
+            .map(|(a, v)| (a.clone(), v.clone()))
+            .collect();
+        let values = serde_json::to_string(&observed).unwrap();
+        let mut len = 0;
+        ok(unsafe {
+            gil_decider_answer(
+                decider,
+                schema,
+                s(&record.id),
+                s(&values),
+                s(""),
+                true,
+                &mut len,
+            )
+        });
+        let found: Value = serde_json::from_str(&copied(gil_last_result)).unwrap();
+
+        let mut kept = Vec::new();
+        let expected = core.answer_with(
+            &core_schema,
+            &record.id,
+            &observed,
+            &BTreeMap::new(),
+            &mut |r| kept.push(serde_json::to_value(r).unwrap()),
+        );
+        let found = found.as_array().unwrap();
+        assert_eq!(found.len(), expected.len());
+        for ((f, e), k) in found.iter().zip(&expected).zip(&kept) {
+            let mut without = f.clone();
+            let decision = without.as_object_mut().unwrap().remove("decision").unwrap();
+            without.as_object_mut().unwrap().remove("answered");
+            assert_eq!(
+                without,
+                serde_json::to_value(e).unwrap(),
+                "record {}",
+                record.id
+            );
+            assert_eq!(&decision, k, "record {}", record.id);
+        }
+
+        // Without asking, no decision records.
+        ok(unsafe {
+            gil_decider_answer(
+                decider,
+                schema,
+                s(&record.id),
+                s(&values),
+                s(""),
+                false,
+                &mut len,
+            )
+        });
+        let plain: Value = serde_json::from_str(&copied(gil_last_result)).unwrap();
+        assert!(
+            plain
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|a| a.get("decision").is_none())
+        );
+    }
+
+    unsafe {
         gil_decider_free(decider);
         gil_schema_free(schema);
     }

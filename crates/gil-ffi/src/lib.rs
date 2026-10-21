@@ -436,18 +436,22 @@ pub unsafe extern "C" fn gil_decider_put(
 /// from the values given, writing nothing to memory; the saved version of the record, if memory holds one, is not
 /// evidence for itself. `values` is a JSON object of strings; `sets` a JSON object of string lists for the attributes
 /// that take several, or empty for none. The result is a JSON array of answers in the core's `serde` form, each with
-/// `answered` beside it, in the schema's order.
+/// `answered` beside it, in the schema's order — and, when `decisions` is true, `decision`: the lookup's decision record
+/// (what the key layer and the similar record layer found whatever the thresholds, and what was answered), for a host
+/// that keeps them to recount its thresholds later.
 ///
 /// # Safety
 /// `decider` and `schema` are live handles; the texts are valid for the call; `result_len` points to one writable
 /// `usize`.
 #[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
 pub unsafe extern "C" fn gil_decider_answer(
     decider: *const GilDecider,
     schema: *const GilSchema,
     record_id: GilStr,
     values: GilStr,
     sets: GilStr,
+    decisions: bool,
     result_len: *mut usize,
 ) -> i32 {
     call(|| {
@@ -468,10 +472,44 @@ pub unsafe extern "C" fn gil_decider_answer(
             serde_json::from_str(sets)
                 .map_err(|e| argument(format!("sets are a JSON object of string lists: {e}")))?
         };
-        let found = decider.answer(&schema.0, record_id, &values, &sets);
+        let mut kept = decisions.then(Vec::new);
+        let found = decider.answer_with(&schema.0, record_id, &values, &sets, &mut |r| {
+            keep(&mut kept, r)
+        });
+        let mut value = Value::Array(found.iter().map(answer_json).collect());
+        if let (Some(kept), Value::Array(items)) = (kept, &mut value) {
+            for (item, record) in items.iter_mut().zip(kept) {
+                item["decision"] = record;
+            }
+        }
         // SAFETY: forwarded from the caller.
-        unsafe { answers(&found, result_len) }
+        unsafe { result(&value, result_len) }
     })
+}
+
+/// Takes record `record_id` out of the decider's memories — a record the host deleted; nothing happens when they do
+/// not hold it. The key memory is then as if the record had never been put, and the similar record memory never offers
+/// it again.
+///
+/// # Safety
+/// `decider` and `schema` are live handles; `record_id` is valid for the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_decider_remove(
+    decider: *mut GilDecider,
+    schema: *const GilSchema,
+    record_id: GilStr,
+) -> i32 {
+    let status = call(|| {
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let memories = &mut unsafe { live_mut(decider) }?.decider;
+        let schema = unsafe { handle(schema, "schema") }?;
+        let record_id = unsafe { text(record_id, "record_id") }?;
+        memories.remove(&schema.0, record_id);
+        Ok(())
+    });
+    // SAFETY: forwarded from the caller.
+    unsafe { break_on_panic(status, decider) };
+    status
 }
 
 fn source_code(source: Source) -> u8 {
@@ -1260,8 +1298,17 @@ mod tests {
             ptr: std::ptr::null(),
             len: 0,
         };
-        let status =
-            unsafe { gil_decider_answer(decider, std::ptr::null(), empty, empty, empty, &mut len) };
+        let status = unsafe {
+            gil_decider_answer(
+                decider,
+                std::ptr::null(),
+                empty,
+                empty,
+                empty,
+                false,
+                &mut len,
+            )
+        };
         assert_eq!(status, GIL_BROKEN);
 
         unsafe { break_on_panic(GIL_PANIC, std::ptr::null::<GilDecider>()) }; // null: nothing to mark

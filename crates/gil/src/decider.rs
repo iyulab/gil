@@ -236,6 +236,37 @@ impl Decider {
         }
     }
 
+    /// Takes the record out of both memories — a record the host deleted. The key memory is then as if the record had
+    /// never been put; in the similar record memory what it represented falls to the latest other record of its case,
+    /// and it is never offered again. The similarities themselves can differ slightly from memories rebuilt without it,
+    /// as they can after any change: the lexical memory takes its n-gram frequencies afresh only once its row count has
+    /// moved by a tenth.
+    pub fn remove(&mut self, schema: &Schema, record: &str) {
+        self.key_memory.remove(&schema.name, record);
+        let Some(memory) = self.record_memory.as_mut() else {
+            return;
+        };
+
+        for attribute in schema
+            .attributes
+            .iter()
+            .filter(|f| f.role == AttributeRole::Decided)
+        {
+            let task = Self::task(schema, &attribute.name);
+            let Some(cases) = self.cases.get_mut(&task) else {
+                continue;
+            };
+            let (forget, remember) = cases.put(record, None);
+            for id in forget {
+                memory.forget(&task, &id);
+            }
+
+            for latest in remember {
+                memory.remember(&task, &latest.record, &latest.evidence, &latest.value);
+            }
+        }
+    }
+
     /// Replaces the record's contribution to both memories with what its current values imply — leaving out values
     /// the application filled on its own.
     fn put(&mut self, schema: &Schema, record: &Record) {
@@ -282,6 +313,20 @@ impl Decider {
         values: &BTreeMap<String, String>,
         sets: &BTreeMap<String, Vec<String>>,
     ) -> Vec<Answer> {
+        self.answer_with(schema, record, values, sets, &mut |_| {})
+    }
+
+    /// As [`Decider::answer`], handing `sink` the decision record of each attribute's lookup, in the answers' order — what
+    /// the key layer and the similar record layer found whatever the thresholds, and what was answered — for a host that
+    /// keeps them to recount its thresholds later.
+    pub fn answer_with(
+        &self,
+        schema: &Schema,
+        record: &str,
+        values: &BTreeMap<String, String>,
+        sets: &BTreeMap<String, Vec<String>>,
+        sink: &mut dyn FnMut(&DecisionRecord),
+    ) -> Vec<Answer> {
         schema
             .attributes
             .iter()
@@ -294,7 +339,7 @@ impl Decider {
                 let q = Lookup::new(schema, &f.name, values)
                     .sets(sets)
                     .excluding(Some(record));
-                self.answer_attribute(&q, f, None, &mut |_| {})
+                self.answer_attribute(&q, f, None, sink)
             })
             .collect()
     }

@@ -177,6 +177,52 @@ public sealed class CoreTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void Answers_carry_decision_records_when_asked_and_a_removed_record_is_never_offered_again()
+    {
+        var (schema, decider) = Filled();
+        using var _ = schema;
+        using var __ = decider;
+        var observed = Observed();
+        var early = RecordLines()[..Chosen].Select(l => (string)JsonNode.Parse(l)!["id"]!).ToArray();
+        var later = RecordLines()[Chosen..].Take(60).Select(l => JsonNode.Parse(l)!).ToArray();
+        Dictionary<string, string> Values(JsonNode log) => log["values"]!.AsObject()
+            .Where(p => observed.Contains(p.Key))
+            .ToDictionary(p => p.Key, p => (string)p.Value!);
+        IEnumerable<string> Cited() => later
+            .SelectMany(log => JsonNode.Parse(decider.AnswerJson(schema, (string)log["id"]!, Values(log)))!.AsArray())
+            .SelectMany(a => a!["candidates"]!.AsArray())
+            .Select(c => c!["evidence"]?["record"]?["id"])
+            .Where(id => id is not null)
+            .Select(id => (string)id!);
+
+        var first = later[0];
+        var plain = JsonNode.Parse(decider.AnswerJson(schema, (string)first["id"]!, Values(first)))!.AsArray();
+        var recorded = JsonNode.Parse(
+            decider.AnswerJson(schema, (string)first["id"]!, Values(first), decisions: true))!.AsArray();
+        plain.Should().AllSatisfy(a => a!["decision"].Should().BeNull());
+        recorded.Should().HaveCount(plain.Count);
+        foreach (var (with, without) in recorded.Zip(plain))
+        {
+            var decision = with!["decision"]!;
+            ((string)decision["attribute"]!).Should().Be((string)without!["attribute"]!);
+            ((string)decision["record"]!).Should().Be((string)first["id"]!);
+            with.AsObject().Remove("decision");
+            JsonNode.DeepEquals(with, without).Should().BeTrue();
+        }
+
+        var cited = Cited().ToHashSet();
+        cited.Should().NotBeEmpty("later records lean on similar early ones");
+        foreach (var id in cited)
+        {
+            decider.Remove(schema, id);
+        }
+
+        decider.Remove(schema, "never-put");
+        Cited().Should().NotIntersectWith(cited);
+        early.Should().Contain(cited);
+    }
+
+    [Fact]
     public void Answers_from_one_decider_run_in_parallel_and_agree_with_serial_ones()
     {
         var (schema, decider) = Filled();

@@ -103,13 +103,32 @@ public sealed class Decider : IDisposable
         }
     }
 
+    /// <summary>Takes record <paramref name="recordId"/> out of the memories — a record the host deleted; nothing
+    /// happens when they do not hold it. The key memory is then as if the record had never been put, and the similar
+    /// record memory never offers it again.</summary>
+    public unsafe void Remove(Schema schema, string recordId)
+    {
+        ArgumentNullException.ThrowIfNull(schema);
+        ArgumentNullException.ThrowIfNull(recordId);
+        var id = new Utf8(recordId);
+        using (Gate.Writing())
+        {
+            fixed (byte* i = &id.Pin())
+            {
+                Native.Check(Native.DeciderRemove(Handle, schema.Handle, id.At(i)), changing: true);
+            }
+        }
+    }
+
     /// <summary>The answers for every open decided attribute of record <paramref name="recordId"/> from the values
-    /// given, writing nothing to memory, as a JSON array in the core's form (each answer with <c>answered</c>).</summary>
+    /// given, writing nothing to memory, as a JSON array in the core's form (each answer with <c>answered</c>, and with
+    /// <c>decision</c> — the lookup's decision record — when <paramref name="decisions"/> is true).</summary>
     public unsafe string AnswerJson(
         Schema schema,
         string recordId,
         IReadOnlyDictionary<string, string> values,
-        IReadOnlyDictionary<string, IReadOnlyList<string>>? sets = null)
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? sets = null,
+        bool decisions = false)
     {
         ArgumentNullException.ThrowIfNull(schema);
         ArgumentNullException.ThrowIfNull(recordId);
@@ -125,7 +144,8 @@ public sealed class Decider : IDisposable
             fixed (byte* s = &setsJson.Pin())
             {
                 return Native.Result(Native.DeciderAnswer(
-                    Handle, schema.Handle, id.At(i), valuesJson.At(v), setsJson.At(s), &length));
+                    Handle, schema.Handle, id.At(i), valuesJson.At(v), setsJson.At(s), decisions ? (byte)1 : (byte)0,
+                    &length));
             }
         }
     }
