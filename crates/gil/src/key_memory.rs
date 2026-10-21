@@ -98,11 +98,16 @@ pub struct Lookup<'a> {
 
 impl<'a> Lookup<'a> {
     /// A lookup of `attribute` from the values known so far: no sets known, nothing typed, no record left out.
+    ///
+    /// # Panics
+    /// When the schema has no attribute `attribute` — whatever memory holds, so an unknown name never reads as an
+    /// attribute nothing was settled for.
     pub fn new(
         schema: &'a Schema,
         attribute: &'a str,
         known: &'a BTreeMap<String, String>,
     ) -> Self {
+        schema.attribute(attribute);
         Self {
             schema,
             attribute,

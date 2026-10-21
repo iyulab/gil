@@ -8,6 +8,10 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Fixed
 
+- **A lookup of an attribute the schema does not have is refused whatever memory holds.** `Lookup::new` took any
+  name, and the key memory's reads (`rank`, `first`, `typed`, `keyed_values`, `key_totals`, `scored`, `catches`)
+  answered an unknown name with nothing while the schema's memory was empty and panicked once it held records. It now
+  panics at once, naming the attribute.
 - **A record or lookup that keeps an attribute where its kind does not belong is refused instead of half-read.** A
   single value for an attribute that takes several values, or a set for one that takes one value, was skipped without a
   word by `KeyMemory::put` (and so `Decider::rebuild` and every replay) and by `Decider::answer` / `answer_with` /
