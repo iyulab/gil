@@ -1,0 +1,165 @@
+name: Native libraries
+
+# Builds the native libraries the .NET bindings load — gil_native (crates/gil-ffi) and gil_review_native
+# (crates/gil-review-ffi) — for the six runtimes their packages carry, packs Gil.Review with them, and runs a consumer
+# of that package on each kind of runner. Runs when the native boundary changes, by hand, or called by a release
+# workflow before it publishes; this workflow publishes nothing. Public repository: runner minutes are not billed;
+# every artifact lives one day.
+
+on:
+  push:
+    branches: [main, rust-core]
+    paths:
+      - crates/gil/src/**
+      - crates/gil-review/src/**
+      - crates/gil-ffi/**
+      - crates/gil-ffi-support/**
+      - crates/gil-review-ffi/**
+      - bindings/csharp/Gil.Review/**
+      - Cargo.lock
+      - .github/workflows/native.yml
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Release libraries without their symbol tables: the packages carry six of each.
+  CARGO_PROFILE_RELEASE_STRIP: symbols
+
+jobs:
+  # Linux in the manylinux 2.28 images, so that the libraries need no newer glibc than the Python wheels do.
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: linux-x64, runner: ubuntu-latest, image: quay.io/pypa/manylinux_2_28_x86_64 }
+          - { rid: linux-arm64, runner: ubuntu-24.04-arm, image: quay.io/pypa/manylinux_2_28_aarch64 }
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.image }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+      - run: ~/.cargo/bin/cargo build --release --locked -p gil-ffi -p gil-review-ffi
+      - run: |
+          mkdir -p "out/${{ matrix.rid }}"
+          cp target/release/libgil_native.so target/release/libgil_review_native.so "out/${{ matrix.rid }}/"
+          ls -l "out/${{ matrix.rid }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-${{ matrix.rid }}
+          path: out/
+          retention-days: 1
+
+  # macOS and Windows on their own runners, each building both architectures; Windows links the C runtime statically
+  # so that the libraries need no Visual C++ redistributable on the machine they run on.
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: osx-x64, runner: macos-latest, target: x86_64-apple-darwin, lib: lib, ext: dylib }
+          - { rid: osx-arm64, runner: macos-latest, target: aarch64-apple-darwin, lib: lib, ext: dylib }
+          - { rid: win-x64, runner: windows-latest, target: x86_64-pc-windows-msvc, lib: "", ext: dll }
+          - { rid: win-arm64, runner: windows-latest, target: aarch64-pc-windows-msvc, lib: "", ext: dll }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+      CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: -C target-feature=+crt-static
+      CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_RUSTFLAGS: -C target-feature=+crt-static
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install stable --profile minimal --target ${{ matrix.target }} && rustup default stable
+      - run: cargo build --release --locked -p gil-ffi -p gil-review-ffi --target ${{ matrix.target }}
+      - run: |
+          from="target/${{ matrix.target }}/release"
+          mkdir -p "out/${{ matrix.rid }}"
+          cp "$from/${{ matrix.lib }}gil_native.${{ matrix.ext }}" "$from/${{ matrix.lib }}gil_review_native.${{ matrix.ext }}" \
+            "out/${{ matrix.rid }}/"
+          ls -l "out/${{ matrix.rid }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-${{ matrix.rid }}
+          path: out/
+          retention-days: 1
+
+  # Gil.Review packed with the six runtimes' libraries — the package checked to carry each under runtimes/<rid>/native/.
+  pack:
+    needs: [linux, desktop]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: native-*
+          path: native
+          merge-multiple: true
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet pack bindings/csharp/Gil.Review/Gil.Review.csproj -c Release -p:GilReviewNativeRoot="$PWD/native" -o packages
+      - name: Check the package carries every runtime
+        run: |
+          package=$(ls packages/Gil.Review.*.nupkg)
+          unzip -l "$package"
+          for entry in linux-x64/native/libgil_review_native.so linux-arm64/native/libgil_review_native.so \
+            osx-x64/native/libgil_review_native.dylib osx-arm64/native/libgil_review_native.dylib \
+            win-x64/native/gil_review_native.dll win-arm64/native/gil_review_native.dll; do
+            unzip -l "$package" "runtimes/$entry" > /dev/null || { echo "::error::$package lacks runtimes/$entry"; exit 1; }
+          done
+      - uses: actions/upload-artifact@v7
+        with:
+          name: gil-review-package
+          path: packages/*.nupkg
+          retention-days: 1
+
+  # A consumer of the package, run where the .NET host picks each library: its first call checks the interface version.
+  consume:
+    needs: pack
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: gil-review-package
+          path: packages
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - run: |
+          version=$(ls packages | sed -n 's/^Gil\.Review\.\(.*\)\.nupkg$/\1/p')
+          dotnet new console -o consumer --framework net10.0
+          cd consumer
+          dotnet add package Gil.Review --version "$version" --source "$GITHUB_WORKSPACE/packages"
+          cat > Program.cs <<'EOF'
+          var floor = Gil.Review.ReviewSampler.MinimumDesignDeviation;
+          var counts = Gil.Review.ReviewSampler.AllocateNeyman(
+              [new(600, 0.5), new(400, 0.1)], 50);
+          Console.WriteLine($"floor {floor:F6} · allocation {string.Join(",", counts)}");
+          if (Math.Abs(floor - Math.Sqrt(0.05 * 0.95)) > 1e-12 || counts.Sum() != 50)
+          {
+              return 1;
+          }
+
+          return 0;
+          EOF
+          dotnet run -c Release

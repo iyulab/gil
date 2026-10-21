@@ -908,7 +908,10 @@ included, and its golden is `tests/fixtures/review/golden.jsonl`, for a binding 
 Its .NET binding, `bindings/csharp/Gil.Review` (not yet published), calls the crate through a flat C ABI
 (`crates/gil-review-ffi`) and reproduces that golden bit for bit. Packing it takes the native library of each runtime
 (`-p:GilReviewNativeRoot=<folder>`, one `<rid>/` subfolder per runtime), which the package carries under
-`runtimes/<rid>/native/`. Build the native library first; the test project copies it from `target/debug`:
+`runtimes/<rid>/native/`. The workflow `.github/workflows/native.yml` builds both native libraries (this one and the
+decision core's, below) for linux-x64/arm64, osx-x64/arm64 and win-x64/arm64, packs the binding with them, and runs a
+consumer of the package on four kinds of runner; it publishes nothing. For the tests, build the native library first;
+the test project copies it from `target/debug`:
 
 ```
 cargo build -p gil-review-ffi
