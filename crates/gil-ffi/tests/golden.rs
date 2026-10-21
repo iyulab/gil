@@ -57,7 +57,11 @@ fn put(decider: *mut GilDecider, schema: *const GilSchema, records: &[Record]) {
         .iter()
         .map(|r| serde_json::to_string(r).unwrap() + "\n")
         .collect();
-    ok(unsafe { gil_decider_put(decider, schema, s(&lines)) });
+    let mut handle = ptr::null_mut();
+    ok(unsafe { gil_records_new(s(&lines), &mut handle) });
+    assert_eq!(unsafe { gil_records_len(handle) }, records.len());
+    ok(unsafe { gil_decider_put(decider, schema, handle) });
+    unsafe { gil_records_free(handle) };
 }
 
 fn answer(
@@ -158,8 +162,10 @@ fn a_refusal_is_a_status_and_a_message() {
 
     let schema = new_schema(&golden_schema());
     let decider = new_decider();
-    let status = unsafe { gil_decider_put(decider, schema, s("\n{\"id\":\"a\"}\n")) };
+    let mut records = ptr::null_mut();
+    let status = unsafe { gil_records_new(s("\n{\"id\":\"a\"}\n"), &mut records) };
     assert_eq!(status, GIL_INVALID_INPUT);
+    assert!(records.is_null());
     assert!(
         last_error().starts_with("record line 2 does not read"),
         "{}",
@@ -202,18 +208,21 @@ fn a_malformed_call_never_reaches_the_core() {
     assert_eq!(status, GIL_INVALID_ARGUMENT);
     assert_eq!(last_error(), "record_id is not UTF-8");
 
+    let mut records = ptr::null_mut();
     let status = unsafe {
-        gil_decider_put(
-            decider,
-            schema,
+        gil_records_new(
             GilStr {
                 ptr: ptr::null(),
                 len: 3,
             },
+            &mut records,
         )
     };
     assert_eq!(status, GIL_INVALID_ARGUMENT);
-    assert_eq!(last_error(), "records is null but its length is 3");
+    assert_eq!(last_error(), "lines is null but its length is 3");
+    let status = unsafe { gil_decider_put(decider, schema, ptr::null()) };
+    assert_eq!(status, GIL_INVALID_ARGUMENT);
+    assert_eq!(last_error(), "records is null");
 
     let status =
         unsafe { gil_decider_answer(decider, schema, s("a"), s("{}"), s(""), ptr::null_mut()) };

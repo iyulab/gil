@@ -1,8 +1,9 @@
 //! A C ABI over the Gil decision core (`iyulab-gil`), for the .NET binding.
 //!
-//! State lives behind handles the caller creates and frees: a [`GilSchema`] (a schema read and checked once), a
-//! [`GilDecider`] (the memories that answer, filled once from settled records and then kept up to date) and a
-//! [`GilOpenRecord`] (one record while its values arrive). Definitions, records and batch results cross as JSON in the
+//! State lives behind handles the caller creates and frees: a [`GilSchema`] (a schema read and checked once),
+//! [`GilRecords`] (settled records read once — what fills a decider and what a replay chooses thresholds on), a
+//! [`GilDecider`] (the memories that answer, kept up to date as records are settled) and a [`GilOpenRecord`] (one record
+//! while its values arrive). Definitions, records and batch results cross as JSON in the
 //! core's `serde` form; the answer asked for while a person types (`gil_open_record_answer_partial`) comes back in flat
 //! structures and buffers the caller owns, with no JSON either way. Nothing calls back into the host: an answer that
 //! wants an external judgement says so, and the host offers the judgement back. The core keeps no clock — a time is
@@ -17,14 +18,22 @@
 use std::collections::BTreeMap;
 
 use gil::decider::{Answer, Candidate, Decider, ExternalCandidate, Source};
+use gil::decision_record::DecisionRecord;
 use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::open_record::OpenRecord;
+use gil::replay::{
+    Choice, LayerThresholds, ThresholdRule, select_coarse_with, select_key_concentrations,
+    select_key_fields, select_layers_by_rule_with,
+};
 use gil::schema::{AttributePolicy, Record, Schema, Settlement, SettlementKind};
+use gil::tuning::Tuning;
+use gil::usage::{Decision, usage};
 use gil_ffi_support::{
     BUFFER_TOO_SMALL, Failure, Utf8, argument, call, hand_out, handle, handle_mut, input, release,
     set_result, slice, slice_mut, write,
 };
+use serde::Deserialize;
 use serde_json::{Value, json};
 
 /// The call succeeded.
@@ -59,6 +68,9 @@ pub type GilStr = Utf8;
 
 /// A schema, read and checked once.
 pub struct GilSchema(Schema);
+
+/// Settled records of a schema, in settlement order, read once.
+pub struct GilRecords(Vec<Record>);
 
 /// The memories that answer: the settled key memory and, unless left out, the lexical similar record memory.
 pub struct GilDecider(Decider);
@@ -236,25 +248,21 @@ pub unsafe extern "C" fn gil_decider_free(decider: *mut GilDecider) {
     unsafe { release(decider) }
 }
 
-/// Puts settled records of `schema` into the decider's memories, each replacing what it contributed before. `records`
-/// is JSON lines, one record per line in the core's `serde` form (`settled_at` in 100-nanosecond ticks since the Unix
-/// epoch, UTC), in settlement order and later than those the decider holds; blank lines are skipped. Every line is read
-/// before any is put, so a line that does not read leaves the memories as they were.
+/// Reads settled records from JSON lines — one record per line in the core's `serde` form (`settled_at` in ticks), in
+/// settlement order; blank lines are skipped — and hands them out through `out`. A line that does not read refuses the
+/// whole text.
 ///
 /// # Safety
-/// `decider` and `schema` are live handles; `records` is valid for the call.
+/// `lines` is valid for the call; `out` points to one writable pointer.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gil_decider_put(
-    decider: *mut GilDecider,
-    schema: *const GilSchema,
-    records: GilStr,
-) -> i32 {
+pub unsafe extern "C" fn gil_records_new(lines: GilStr, out: *mut *mut GilRecords) -> i32 {
     call(|| {
-        // SAFETY: forwarded from the caller, for every pointer below.
-        let decider = unsafe { handle_mut(decider, "decider") }?;
-        let schema = unsafe { handle(schema, "schema") }?;
-        let records = unsafe { text(records, "records") }?;
-        let records: Vec<Record> = records
+        if out.is_null() {
+            return Err(argument("out is null"));
+        }
+        // SAFETY: forwarded from the caller.
+        let lines = unsafe { text(lines, "lines") }?;
+        let records: Vec<Record> = lines
             .lines()
             .enumerate()
             .filter(|(_, line)| !line.trim().is_empty())
@@ -263,7 +271,48 @@ pub unsafe extern "C" fn gil_decider_put(
                     .map_err(|e| input(format!("record line {} does not read: {e}", at + 1)))
             })
             .collect::<Result<_, _>>()?;
-        decider.0.rebuild(&schema.0, &records);
+        // SAFETY: forwarded from the caller.
+        unsafe { hand_out(out, GilRecords(records), "out") }
+    })
+}
+
+/// How many records `records` holds; 0 for null.
+///
+/// # Safety
+/// `records` is null or a live records handle.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_records_len(records: *const GilRecords) -> usize {
+    // SAFETY: forwarded from the caller.
+    unsafe { records.as_ref() }.map_or(0, |r| r.0.len())
+}
+
+/// Frees records; null does nothing.
+///
+/// # Safety
+/// `records` is null or a live records handle, freed once and not used after.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_records_free(records: *mut GilRecords) {
+    // SAFETY: forwarded from the caller.
+    unsafe { release(records) }
+}
+
+/// Puts settled records of `schema` into the decider's memories, each replacing what it contributed before — records
+/// settled later than those the decider holds.
+///
+/// # Safety
+/// `decider`, `schema` and `records` are live handles.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_decider_put(
+    decider: *mut GilDecider,
+    schema: *const GilSchema,
+    records: *const GilRecords,
+) -> i32 {
+    call(|| {
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let decider = unsafe { handle_mut(decider, "decider") }?;
+        let schema = unsafe { handle(schema, "schema") }?;
+        let records = unsafe { handle(records, "records") }?;
+        decider.0.rebuild(&schema.0, &records.0);
         Ok(())
     })
 }
@@ -648,5 +697,387 @@ pub unsafe extern "C" fn gil_open_record_snapshot(
         let record = unsafe { handle(record, "record") }?;
         let value = serde_json::to_value(record.0.snapshot()).expect("a record serializes");
         unsafe { result(&value, result_len) }
+    })
+}
+
+/// What a threshold is chosen for, as the selections read it from JSON: `target_precision` in (0, 1] and
+/// `minimum_answered` at least 1, and optionally `counting` (the settlement kinds whose lookups count, by name; all when
+/// left out), `rule` (`every_band`, the default, or `pooled` — the layers' selection only), `decisions` (whether to keep
+/// the decision records of the replay — the layers' and the coarse level's selections) and `typed_longest` (the key
+/// attributes' selection: count typing up to that many characters).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Options {
+    target_precision: f64,
+    minimum_answered: usize,
+    #[serde(default)]
+    counting: Option<Vec<SettlementKind>>,
+    #[serde(default)]
+    rule: ThresholdRule,
+    #[serde(default)]
+    decisions: bool,
+    #[serde(default)]
+    typed_longest: usize,
+}
+
+impl Options {
+    fn choice(&self) -> Choice<'_> {
+        Choice {
+            target_precision: self.target_precision,
+            minimum_answered: self.minimum_answered,
+            counting: self.counting.as_deref(),
+        }
+    }
+}
+
+/// # Safety
+/// As [`gil_ffi_support::text`].
+unsafe fn read_options(json: GilStr) -> Result<Options, Failure> {
+    // SAFETY: forwarded from the caller.
+    let json = unsafe { text(json, "options") }?;
+    serde_json::from_str(json).map_err(|e| input(format!("the options do not read: {e}")))
+}
+
+/// The handles and texts every selection takes.
+///
+/// # Safety
+/// As the selections'.
+unsafe fn selection<'a>(
+    schema: *const GilSchema,
+    attribute: GilStr,
+    records: *const GilRecords,
+) -> Result<(&'a Schema, &'a str, &'a [Record]), Failure> {
+    // SAFETY: forwarded from the caller, for every pointer below.
+    let schema = unsafe { handle(schema, "schema") }?;
+    let attribute = unsafe { text(attribute, "attribute") }?;
+    let records = unsafe { handle(records, "records") }?;
+    Ok((&schema.0, attribute, &records.0))
+}
+
+/// The thresholds a layer selection chose, with the replay's decision records when they were kept.
+fn chosen(thresholds: &LayerThresholds, decisions: Option<Vec<Value>>) -> Value {
+    let mut value = json!({ "thresholds": thresholds });
+    if let Some(decisions) = decisions {
+        value["decisions"] = Value::Array(decisions);
+    }
+    value
+}
+
+fn keep(decisions: &mut Option<Vec<Value>>, record: &DecisionRecord) {
+    if let Some(kept) = decisions.as_mut() {
+        kept.push(serde_json::to_value(record).expect("a decision record serializes"));
+    }
+}
+
+/// Replays `records` in order and chooses the decided attribute's key and similar record thresholds for `options`
+/// (JSON — see the options above; `rule` picks the selection rule). Keeps as the result `{"thresholds": …}` in the
+/// core's `serde` form, with `"decisions": [ … ]` (the replay's decision records) when `options` asks for them. An
+/// attribute that is not decided, takes several values, or options out of range are contract violations
+/// (`GIL_PANIC`).
+///
+/// # Safety
+/// `schema` and `records` are live handles; the texts are valid for the call; `result_len` points to one writable
+/// `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_select_layers(
+    schema: *const GilSchema,
+    attribute: GilStr,
+    records: *const GilRecords,
+    options: GilStr,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        if result_len.is_null() {
+            return Err(argument("result_len is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let (schema, attribute, records) = unsafe { selection(schema, attribute, records) }?;
+        let options = unsafe { read_options(options) }?;
+        let mut decisions = options.decisions.then(Vec::new);
+        let thresholds = select_layers_by_rule_with(
+            &mut KeyMemory::default(),
+            &mut LexicalMemory::default(),
+            schema,
+            attribute,
+            records,
+            options.choice(),
+            options.rule,
+            &mut |r| keep(&mut decisions, r),
+        );
+        unsafe { result(&chosen(&thresholds, decisions), result_len) }
+    })
+}
+
+/// Replays `records` in order and chooses the thresholds of the decided attribute's coarse level — on the lookups the
+/// value layers leave at the attribute's thresholds — for `options`. The result is as `gil_select_layers`'; the decision
+/// records carry what the coarse level made of each lookup. An attribute with no coarse level is a contract violation
+/// (`GIL_PANIC`).
+///
+/// # Safety
+/// As [`gil_select_layers`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_select_coarse(
+    schema: *const GilSchema,
+    attribute: GilStr,
+    records: *const GilRecords,
+    options: GilStr,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        if result_len.is_null() {
+            return Err(argument("result_len is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let (schema, attribute, records) = unsafe { selection(schema, attribute, records) }?;
+        let options = unsafe { read_options(options) }?;
+        let mut decisions = options.decisions.then(Vec::new);
+        let thresholds = select_coarse_with(
+            &mut KeyMemory::default(),
+            &mut LexicalMemory::default(),
+            schema,
+            attribute,
+            records,
+            options.choice(),
+            &mut |r| keep(&mut decisions, r),
+        );
+        unsafe { result(&chosen(&thresholds, decisions), result_len) }
+    })
+}
+
+/// Chooses the attributes that should key the decided attribute — each it rests on alone, then greedy additions while the
+/// key layer's gain over the target grows — for `options` (`typed_longest` counts typing). Keeps the choice as the result,
+/// in the core's `serde` form.
+///
+/// # Safety
+/// As [`gil_select_layers`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_select_key_fields(
+    schema: *const GilSchema,
+    attribute: GilStr,
+    records: *const GilRecords,
+    options: GilStr,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        if result_len.is_null() {
+            return Err(argument("result_len is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let (schema, attribute, records) = unsafe { selection(schema, attribute, records) }?;
+        let options = unsafe { read_options(options) }?;
+        let found = select_key_fields(
+            schema,
+            attribute,
+            records,
+            options.choice(),
+            options.typed_longest,
+        );
+        let value = serde_json::to_value(found).expect("a key attribute choice serializes");
+        unsafe { result(&value, result_len) }
+    })
+}
+
+/// Chooses, for each attribute that keys the decided attribute, how readily its keys are believed after only a few
+/// settlements. Keeps as the result a JSON object of attribute to concentration.
+///
+/// # Safety
+/// `schema` and `records` are live handles; `attribute` is valid for the call; `result_len` points to one writable
+/// `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_select_key_concentrations(
+    schema: *const GilSchema,
+    attribute: GilStr,
+    records: *const GilRecords,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        if result_len.is_null() {
+            return Err(argument("result_len is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let (schema, attribute, records) = unsafe { selection(schema, attribute, records) }?;
+        let found =
+            select_key_concentrations(&mut KeyMemory::default(), schema, attribute, records);
+        unsafe { result(&json!(found), result_len) }
+    })
+}
+
+/// Keeps as the result the schema as JSON in the core's `serde` form — what `gil_schema_new` reads.
+///
+/// # Safety
+/// `schema` is a live handle; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_schema_json(schema: *const GilSchema, result_len: *mut usize) -> i32 {
+    call(|| {
+        if result_len.is_null() {
+            return Err(argument("result_len is null"));
+        }
+        // SAFETY: forwarded from the caller.
+        let schema = unsafe { handle(schema, "schema") }?;
+        let value = serde_json::to_value(&schema.0).expect("a schema serializes");
+        unsafe { result(&value, result_len) }
+    })
+}
+
+/// # Safety
+/// As [`gil_ffi_support::text`].
+unsafe fn tuning(json: GilStr) -> Result<Tuning, Failure> {
+    // SAFETY: forwarded from the caller.
+    let json = unsafe { text(json, "tuning") }?;
+    serde_json::from_str(json).map_err(|e| input(format!("a tuning does not read: {e}")))
+}
+
+/// Keeps as the result the chosen settings of the schema's decided attributes, chosen on `settled` records for
+/// `target_precision` — a tuning, as JSON in the core's `serde` form, its promises unrecorded.
+///
+/// # Safety
+/// `schema` is a live handle; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_tuning_capture(
+    schema: *const GilSchema,
+    settled: usize,
+    target_precision: f64,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        if result_len.is_null() {
+            return Err(argument("result_len is null"));
+        }
+        // SAFETY: forwarded from the caller.
+        let schema = unsafe { handle(schema, "schema") }?;
+        let tuned = Tuning::capture(&schema.0, settled, target_precision);
+        let value = serde_json::to_value(tuned).expect("a tuning serializes");
+        unsafe { result(&value, result_len) }
+    })
+}
+
+/// Keeps as the result the tuning (JSON) with what `attribute`'s layer selection promised — `thresholds`, as
+/// `gil_select_layers` gives them — recorded.
+///
+/// # Safety
+/// The texts are valid for the call; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_tuning_promise(
+    tuning_json: GilStr,
+    attribute: GilStr,
+    thresholds: GilStr,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        if result_len.is_null() {
+            return Err(argument("result_len is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let mut tuned = unsafe { tuning(tuning_json) }?;
+        let attribute = unsafe { text(attribute, "attribute") }?;
+        let thresholds = unsafe { text(thresholds, "thresholds") }?;
+        let thresholds: LayerThresholds = serde_json::from_str(thresholds)
+            .map_err(|e| input(format!("layer thresholds do not read: {e}")))?;
+        tuned.promise(attribute, &thresholds);
+        let value = serde_json::to_value(tuned).expect("a tuning serializes");
+        unsafe { result(&value, result_len) }
+    })
+}
+
+/// Hands out through `out` a new schema: `schema` with the tuning's settings put back on its attributes.
+///
+/// # Safety
+/// `tuning_json` is valid for the call; `schema` is a live handle; `out` points to one writable pointer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_tuning_apply(
+    tuning_json: GilStr,
+    schema: *const GilSchema,
+    out: *mut *mut GilSchema,
+) -> i32 {
+    call(|| {
+        if out.is_null() {
+            return Err(argument("out is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let tuned = unsafe { tuning(tuning_json) }?;
+        let mut schema = unsafe { handle(schema, "schema") }?.0.clone();
+        tuned.apply(&mut schema);
+        unsafe { hand_out(out, GilSchema(schema), "out") }
+    })
+}
+
+/// Keeps as the result why the tuning no longer stands for `schema` with `settled` records — JSON in the core's `serde`
+/// form — or `null` while it does.
+///
+/// # Safety
+/// `tuning_json` is valid for the call; `schema` is a live handle; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_tuning_stale(
+    tuning_json: GilStr,
+    schema: *const GilSchema,
+    settled: usize,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        if result_len.is_null() {
+            return Err(argument("result_len is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let tuned = unsafe { tuning(tuning_json) }?;
+        let schema = unsafe { handle(schema, "schema") }?;
+        let value =
+            serde_json::to_value(tuned.stale(&schema.0, settled)).expect("a reason serializes");
+        unsafe { result(&value, result_len) }
+    })
+}
+
+/// One decision as a host saw it, for `gil_usage`: the decided attribute; the trusted answer shown (null text when the
+/// answer abstained); the value it was settled as (null text when it was not, or was rejected); how it was settled, by
+/// name (null text when it was not yet); for a check, the probability it was drawn with; and the promise the answer was
+/// made under (NaN when none was known).
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct GilDecision {
+    pub attribute: GilStr,
+    pub answer: GilStr,
+    pub settled: GilStr,
+    pub settlement: GilStr,
+    pub probability: f64,
+    pub promise: f64,
+}
+
+/// Keeps as the result the usage counts of `decisions`, by attribute — a JSON object of attribute to counts in the core's
+/// `serde` form.
+///
+/// # Safety
+/// `decisions` holds `decisions_len` values whose texts are valid for the call, or is null with length 0;
+/// `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_usage(
+    decisions: *const GilDecision,
+    decisions_len: usize,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        if result_len.is_null() {
+            return Err(argument("result_len is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let given = unsafe { slice(decisions, decisions_len, "decisions") }?;
+        let decisions = given
+            .iter()
+            .map(|d| {
+                let settlement = unsafe { optional(d.settlement, "a decision's settlement") }?
+                    .map(|name| {
+                        SettlementKind::parse(name)
+                            .ok_or_else(|| input(format!("unknown settlement kind '{name}'")))
+                    })
+                    .transpose()?;
+                Ok(Decision {
+                    attribute: unsafe { text(d.attribute, "a decision's attribute") }?,
+                    answer: unsafe { optional(d.answer, "a decision's answer") }?,
+                    settled: unsafe { optional(d.settled, "a decision's settled value") }?,
+                    settlement,
+                    probability: d.probability,
+                    promise: (!d.promise.is_nan()).then_some(d.promise),
+                })
+            })
+            .collect::<Result<Vec<_>, Failure>>()?;
+        unsafe { result(&json!(usage(decisions)), result_len) }
     })
 }

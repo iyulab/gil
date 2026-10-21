@@ -100,7 +100,10 @@ impl Pair {
             .iter()
             .map(|r| serde_json::to_string(r).unwrap() + "\n")
             .collect();
-        ok(unsafe { gil_decider_put(decider_handle, schema_handle, s(&lines)) });
+        let mut records_handle = ptr::null_mut();
+        ok(unsafe { gil_records_new(s(&lines), &mut records_handle) });
+        ok(unsafe { gil_decider_put(decider_handle, schema_handle, records_handle) });
+        unsafe { gil_records_free(records_handle) };
         Self {
             schema,
             decider,

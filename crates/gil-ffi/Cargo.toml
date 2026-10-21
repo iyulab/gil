@@ -16,4 +16,5 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 gil = { package = "iyulab-gil", path = "../gil", version = "0.7.0", features = ["serde"] }
 gil-ffi-support = { path = "../gil-ffi-support" }
+serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }

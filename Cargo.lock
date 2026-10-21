@@ -8,6 +8,7 @@ version = "0.7.0"
 dependencies = [
  "gil-ffi-support",
  "iyulab-gil",
+ "serde",
  "serde_json",
 ]
 
