@@ -144,5 +144,9 @@ internal static class ReadmeExample
         var panel = new CoarseLevel(new Dictionary<string, string> { ["network"] = "infrastructure", ["payments"] = "finance" });
         using var grouped = new Schema(schema.Name, schema.Attributes.Select(a => a.Name != "team" ? a : a with { Coarse = panel }));
         var coarse = Replay.SelectCoarse(grouped, "team", saved, options);
+
+        var typing = Replay.SelectKeyFields(schema, "team", saved, options with { TypedLongest = 3 });
+        var typedThresholds = typing.Typed?.Thresholds;   // TypedKeyThresholds, beside KeyFields and KeyThreshold
+        var whileTyping = ticket.AnswerPartial(decider, "team", "ne");
     }
 }

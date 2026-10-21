@@ -424,6 +424,37 @@ on those lookups alone. A layer without a `Chosen` threshold should not answer t
 `MostPrecise` still says how close it came — the best precision it reached on at least `MinimumAnswered` answers — so
 the application can say by how much the attribute falls short.
 
+
+A replay's precision runs over every record it saw, so a layer that did better long ago keeps it high after the layer
+has changed, and the threshold was chosen on those very answers, so their precision flatters it — most of all when they
+are few. `ThresholdChoice.Promise` answers both. It takes the precision of the answers the threshold gives among the
+latest `Replay.RecentRecords` (5,000) records (the whole replay's when those are too few to rest on) and lowers it to the
+bottom of its Wilson score interval at one standard error for the answers it rests on, which `PromiseAnswered` reports.
+On many answers the two hardly differ; on a few dozen the promise sits several points below. Show it as the promise —
+it is what `Tuning.Promise` records. When `PromiseAnswered` is small, say so beside it: the number is a floor, not a
+forecast.
+
+Replaying three small public forms of about 670 records each, with thresholds chosen again whenever the records grew by
+a tenth, the similar record layer's promise without that lowering ran 9.1 points above what its answers then
+delivered, and 1.5 points above with it; the key layer's moved from between 0.1 below and 6.9 above to between 3.5
+below and 1.6 above. On the first 5,000 records of two larger public streams, where the unlowered promise had already
+been right, the lowered one came out 2.4 and 4.5 points below. Over long replays the recent window is what matters: on
+two public streams of 80,000 records, the recent-window promise stayed within half a point of what its answers
+delivered where the key layer's whole-replay precision ran 2.5 points high, and on a stretch where that precision had
+drifted 9.6 points above the answers it was 2.7 points above. The window is 5,000 records, so on a stream shorter than
+that the promise is read on the whole replay and trails a change: in a synthetic log stream of 3,000 records where one
+template's grade changed at the 2,000th, the key layer promised 2.2 points more than the next 500 answers kept. Reading
+it on the latter half of the replay instead turned that into 6.8 points too few on the 500 after, so the window stays
+as it is; what moved first was the state under the changed key (below), whose precision there fell to 0.69 while the
+attribute's promise still read 0.91. Neither mends a threshold chosen on the wrong lookups: a similar record threshold
+chosen apart from the key layer promised 2.4–2.6 points more than it kept, which is why `SelectLayers` chooses both in
+one replay. For the key layer, `ThresholdReplay.Keys` says, under each key that backed a best value, how many lookups it
+had, how many the chosen threshold answered and how precise those were (weighted, as checks are), and whether it
+answers under that key now (`KeyState`) — what an application checking its answers reads to decide how often to check
+each key. A key reads as keys compare values — `template: t07` for a value settled as `T07` (see
+docs/text-normalization.md). That policy stays the application's: a key answered rightly many times may be checked less
+often, as long as the probability of each draw is still fixed before it.
+
 Which target to ask for (`TargetPrecision`) is yours to set, and it follows from what a wrong answer costs. Count a
 value a person enters with no answer shown as 1, a right answer as nothing, and a wrong one — noticed, undone and
 entered again — as ρ. An answer right with probability p then costs ρ(1 − p) against the 1 of asking, so answering pays
@@ -500,6 +531,19 @@ values a machine filled were changed by a person within 30 days 26% of the time,
 same component the gap grows rather than shrinks — the machine's values were changed 4.8 times as often as people's
 (3.5 to 6.7), so they are wrong more often, not merely placed where values move. Filled values need the checking.
 
+
+Some values must not be missed: answering a dangerous grade as a harmless one costs far more than asking. A threshold
+cannot hold such a value back where it is rare — a key under which it was settled once among hundreds of other values
+still scores its usual value high. Name those values in `AttributeDefinition.MustCatch` (an attribute that takes one
+value), and once one of them has been settled under a key the record has, no layer answers the attribute for that
+record — neither the key layer nor a similar record, whose neighbours rarely include the value that is rare under the
+key — and its coarse level is not offered. Its values under such a key are still offered, as guesses. Keyed by an
+attribute drawn from many unrelated values (a host, a user), one such value settled under each soon holds back every
+record, so key the attribute by what decides it (`KeyFields`, below). Replaying public system logs whose risk grade a
+model had judged, naming grades 3 and above cut the lines graded 3 or more that were answered below 3 from 2 to 1 of
+1,425, while keeping 81% of the lines the key layer answered. It reaches only keys where such a value was already
+settled: the first one under a key is caught only if someone checks the answer, so it does not replace checking.
+
 The replay looks each attribute up with the values that had arrived before it was settled — what its last answer was
 made from. `Snapshot()` records that order in `Record.Arrival`; save it with the record. Without it, observed values
 count as there from the start and decided attributes as settled in the schema's order. Even so, the precision a replay
@@ -518,6 +562,39 @@ version per id, and the replay asks a record settled again without its earlier v
 evidence: copies answer each other in the replay, and the threshold promises far more than other records get.
 Replaying a public stream in which about half the records arrived twice, copies under new ids made the key layer answer
 six times as often with 0.67 right against a promise of 0.91; under the same ids, it answered as if no copy had arrived.
+
+
+The two layers answer different kinds of records. The key layer answers where a value the record already has decides
+the attribute. The similar record layer answers the rest, which are harder. A schema whose decided attributes rest only
+on observed attributes (`DependsOn` naming observed attributes alone) gets most of its answers from similar records. In
+a replay of a public stream of settled records with the nearest record deciding alone, that layer's answers were right
+about seven times in ten at most, even among the most similar records: records whose observed values read almost the
+same had different settled values. Thresholds chosen there for a target of 0.8 delivered 0.66 to 0.72 on the records
+that followed. Where settled records come in batches that share their observed values, expect the similar record layer
+to fall short of a high target, and read even `MostPrecise` as optimistic: it is measured on the same records it was
+chosen on.
+
+The similar record layer lets the nearest `SimilarVotes` records vote — ten by default. Each votes for its settled
+value with its similarity; the value with the most weight is the candidate, and its score is the vote's margin: the
+winner's weight less the runner-up's, over all the weight cast, from 0 for a tie to 1 when every voter agrees. That
+score is what `MemoryThreshold` is compared with, so a near record that its neighbours contradict is not trusted on its
+similarity alone. Only records whose value lies in the attribute's domain vote. Replaying public streams of settled
+records with thresholds chosen for a precision of 0.8, ten voters answered 1.8 times as many records right as the
+nearest record alone in one stream and 1.2 times in another, at a higher precision (0.89 and 0.91 against 0.83 and
+0.86). `SimilarVotes = 1` lets the nearest record decide alone on its similarity, as before 0.16.0. Choose
+`MemoryThreshold` again after changing it.
+
+The margin says how far the neighbours agree, not how closely they resemble the record being answered. A record written
+in words no settled record uses still has nearest records — ones that share only an opening phrase or another
+attribute — and they can agree. A threshold chosen by replaying records written the usual way never saw such a record,
+and when that replay was right every time it chooses a threshold low enough to let them through. So the replay also
+chooses a floor: of the answers at or above the threshold, the similarity of the nearest record voting for the answer
+that only a hundredth of them fell below. Set it as `MemoryFloor` with the threshold (`SimilarityFloor` of the memory
+layer's `Chosen`, as above); below it the vote is offered as a guess. In a synthetic stream where every settled record
+used the same words for each topic, ten voters with the threshold alone answered about half of records reworded in
+other words wrongly, and none with the floor. Replaying public streams with records stripped of their free text or of
+its topic words, the floor cost under one percent of the answers to records written the usual way and answered no more
+of the stripped ones wrongly. With a single voter the threshold already is a similarity, and no floor is chosen.
 
 Which attributes key a decided attribute matters most when it has many values. An attribute that rarely decides it
 still adds to the score of the values settled alongside its own: a value drawn from many, each seen only a few times —
@@ -581,6 +658,15 @@ answer is asked for, as an establishment is; if it is filled only once the decid
 folds several values into one code reads to the replay as strong evidence and comes out like any other: only `Arrival`
 keeps it out.
 
+
+When another form has already settled the same subject — the same order, case or applicant — give its settled values
+to this schema as observed attributes. The key layer learns from the settled records which of their values go with
+which of this attribute's, and the similar record layer reads them as evidence; the two forms' values need not map one
+to one. Replaying a public stream of patents classified under two schemes, with the class one scheme had settled given
+as an observed attribute of the other, the attribute was answered rightly 1.8 times as often on the records that
+followed, at the same precision (0.86); the same values shuffled between records answered no more often than without
+them. Only a value the other form has settled is evidence: one still open there may change.
+
 Where an attribute's values name their class in their leading characters — the chapter of a fault code, the class of a
 patent classification, the group of a product code — a value the layers cannot answer can often still be given its
 class. Set `AttributeDefinition.Coarse` to a `CoarseLevel` with the prefix length, and when no layer answers the value
@@ -618,6 +704,50 @@ two lists record by record. A release marked **Breaking** changes a contract, no
 two public streams (medical device recalls and aircraft fault reports, ten thousand answers each after ten thousand to
 choose from), 0.21.0, 0.22.0, 0.23.0 and 0.24.0 answered every one of the twenty thousand the same way. Choosing again
 after an upgrade is still the rule; the count says what it will move.
+
+When a person starts typing into a decided attribute, ask again with what has been typed rather than dropping the
+answer: `AnswerPartial(decider, attribute, typed)` answers that attribute alone. Typing changes no other attribute's
+answer, and where each attribute looks up similar records, answering the whole record again at every pause repeats
+every lookup. The attribute stays open, and its answer offers only values that begin with the text (ignoring case;
+Korean by keystrokes, so a syllable still being composed begins the values it leads to). Only the key layer answers
+then, held to a threshold for that many characters typed, `TypedKeyThresholds`; a value trusted with fewer characters
+typed, or before typing, stays trusted while the text still leads to it, so typing on never withdraws it. A person
+types only where the answer before did not do, and the records left are the harder ones, so a threshold chosen on every
+record promises more than it keeps there. Choose the typed thresholds with the key attributes: give `SelectKeyFields` a
+`TypedLongest`, and each set of attributes is counted by its answers before typing and while typing up to that many
+characters together — the attributes that decide an attribute before typing can blur it once a prefix has narrowed its
+values — and `Typed` brings the thresholds for the choice, each length's chosen on the records typed that far that the
+key threshold did not already answer rightly:
+
+```csharp
+var typing = Replay.SelectKeyFields(schema, "team", saved, options with { TypedLongest = 3 });
+var typedThresholds = typing.Typed?.Thresholds;   // TypedKeyThresholds, beside KeyFields and KeyThreshold
+var whileTyping = ticket.AnswerPartial(decider, "team", "ne");
+```
+
+Replaying a public stream of settled records with typed thresholds chosen on its first half, the first typed character
+was where most of the gain lay: the decided attributes of the second half were answered rightly about thirteen times as
+often as before typing, at a precision of 0.86 against a target of 0.8 — a value kept while typing on counts once, so
+record feedback once per value, not once per question — and a person was spared 9% of the characters of the settled
+values, against 1% before. A person who types on without looking saw no trusted value withdrawn. A screen that shows a
+list rather than one value can instead keep the candidates that begin with the typed text: with twenty candidates,
+filtering by the typed text saved about half of the keystrokes, against about a third when the list was shown once and
+not filtered.
+
+A decided attribute can take several values — tags, the topics a record covers, the answers to a multiple-choice
+question. Mark it `Multiple`; its values are settled as a set (`SettlementKind.Set`), in `Record.Sets` rather than
+`Values`, and order carries no meaning. Each value is remembered and answered on its own, so several candidates can each
+be trusted against `KeyThreshold`, and the values a person has already chosen are evidence for the rest. An open record
+keeps such an attribute open after it is settled and goes on answering the remaining values. The similar record layer
+does not answer it, so it takes no `MemoryThreshold` and `SelectLayers` does not take it: its key threshold is the one
+the key layer's replay in `Replay.SelectKeyFields` chose (`Chosen.Chosen?.Threshold`, with the key attributes it names),
+which replays each record as values are picked one after another. A value that has a main one among several is better a
+second, single-valued attribute that takes its candidates from the set (`CandidatesFrom`): once the record's values are
+chosen, the main one is offered only among them. The same holds for any attribute whose values depend on another's,
+such as a subcategory within its category; while the other attribute is empty, nothing is narrowed. Replaying a public
+collection of patents, each classified into one or more of 37 technology classes, with one class of a record chosen,
+using the chosen class as evidence put a remaining class first slightly more often (0.46 against 0.44) and trusted about
+one and a half times as many of the remaining classes at the same precision (0.79 against a target of 0.8).
 
 **Asking first** (experimental, `GIL0005`). When no layer answers a decided attribute, one more observed value from the
 person — the component a ticket is about, the part a fault was found on — may let one answer, or a class be trusted.

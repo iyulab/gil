@@ -72,9 +72,11 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 - The README's measured guidance on choosing a target and what to trust — choosing again as memory grows, the cost of
   a wrong answer, "A target can be read two ways", counting unprompted settlements and checks, batches and forward
-  checking, repeated records, key attributes and concentrations, coarse levels, upgrades, asking first — is carried to
-  the native API under "Choosing what to trust", with a new measurement: on four public collections `Pooled` placed
-  19–22% of its answers with senders whose own precision was below the target beyond doubt, and `EveryBand` none.
+  checking, repeated records, values that must not be missed, the promise's recent window, the similar record vote and
+  its floor, what each layer answers, evidence from another form, key attributes and concentrations, coarse levels,
+  typing, attributes that take several values, upgrades, asking first — is carried to the native API under "Choosing
+  what to trust", with a new measurement: on four public collections `Pooled` placed 19–22% of its answers with senders
+  whose own precision was below the target beyond doubt, and `EveryBand` none.
 
 ## 0.25.0
 
