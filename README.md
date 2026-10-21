@@ -919,17 +919,17 @@ dotnet test --solution bindings/csharp/Gil.Review.slnx
 ```
 
 The decision core has a C ABI of its own, `crates/gil-ffi` (native library `gil_native`; not published): handles for a
-schema, settled records read once, a decider and an open record, with definitions and batch results as JSON in the
-core's serde form and the answer asked for while a person types written into flat structures and caller buffers. Its
-.NET binding, `bindings/csharp/Gil.Native` (not packed), builds schemas and settled records as typed values (`Schema`,
-`Attribute`, `Record`, with time as `DateTimeOffset`) or reads them as JSON, hands answers back typed (`Answer`, with
-each candidate's evidence and, when asked, the lookup's `DecisionRecord`), reproduces the decision golden through it
-either way, and its threshold selections, tuning round trip and usage counts give what the C ABI gives (`tests/fixtures/core/native/selections.json`). Calls that only
-read a handle may run on several threads at once; a call that changes one needs it to itself, and is refused before it
-changes anything when the core's contract rules it out — a failure after that marks the decider and record it was
-changing broken. Each library says which version of its interface it speaks (`gil_abi_version`,
-`gil_review_abi_version`), and both .NET bindings check it before their first call. The plumbing both C ABIs share —
-statuses, the last error, the panic guard — is `crates/gil-ffi-support`.
+schema, settled records read once, a decider, an open record and an ask planner, with definitions and batch results as
+JSON in the core's serde form and the answer asked for while a person types written into flat structures and caller
+buffers. Its .NET binding, `bindings/csharp/Gil.Native` (not packed), builds schemas and settled records as typed values
+(`Schema`, `Attribute`, `Record`, with time as `DateTimeOffset`) or reads them as JSON, hands answers back typed
+(`Answer`, with each candidate's evidence and, when asked, the lookup's `DecisionRecord`), reproduces the decision
+golden and the ask planner's golden through it, and its threshold selections, tuning round trip and usage counts give
+what the C ABI gives (`tests/fixtures/core/native/selections.json`). Calls that only read a handle may run on several
+threads at once; a call that changes one needs it to itself, and is refused before it changes anything when the core's
+contract rules it out — a failure after that marks what it was changing broken. Each library says which version of its
+interface it speaks (`gil_abi_version`, `gil_review_abi_version`), and both .NET bindings check it before their first
+call. The plumbing both C ABIs share — statuses, the last error, the panic guard — is `crates/gil-ffi-support`.
 
 ```
 cargo build -p gil-ffi

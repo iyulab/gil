@@ -65,3 +65,14 @@ internal sealed class OpenRecordHandle : NativeHandle
         return true;
     }
 }
+
+internal sealed class AskPlannerHandle : NativeHandle
+{
+    public static AskPlannerHandle Of(nint value) => Own<AskPlannerHandle>(value);
+
+    protected override bool ReleaseHandle()
+    {
+        Native.AskPlannerFree(handle);
+        return true;
+    }
+}

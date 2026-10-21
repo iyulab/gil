@@ -16,7 +16,7 @@ internal static unsafe partial class Native
     internal const int Broken = 5;
 
     /// <summary>The version of the C ABI this binding was built for (<c>GIL_ABI_VERSION</c>).</summary>
-    internal const uint AbiVersion = 1;
+    internal const uint AbiVersion = 2;
 
     private static volatile bool _compatible;
 
@@ -178,6 +178,19 @@ internal static unsafe partial class Native
     [LibraryImport(Library, EntryPoint = "gil_usage")]
     internal static partial int Usage(Decision* decisions, nuint decisionsLen, nuint* resultLen);
 
+    [LibraryImport(Library, EntryPoint = "gil_ask_planner_new")]
+    internal static partial int AskPlannerNew(
+        SchemaHandle schema, Str attribute, Str* askable, nuint askableLen, double budget, nint* output);
+
+    [LibraryImport(Library, EntryPoint = "gil_ask_planner_free")]
+    internal static partial void AskPlannerFree(nint planner);
+
+    [LibraryImport(Library, EntryPoint = "gil_ask_planner_learn")]
+    internal static partial int AskPlannerLearn(AskPlannerHandle planner, DeciderHandle decider, RecordsHandle records);
+
+    [LibraryImport(Library, EntryPoint = "gil_ask_planner_advise")]
+    internal static partial int AskPlannerAdvise(AskPlannerHandle planner, Str answer, Str values, nuint* resultLen);
+
     /// <summary>Makes sure the native library speaks the interface this binding was built for — once, before the first
     /// object is made.</summary>
     /// <exception cref="InvalidOperationException">The library speaks another version.</exception>
@@ -218,7 +231,7 @@ internal static unsafe partial class Native
         throw status switch
         {
             Panic when changing => new InvalidOperationException(
-                $"The Gil core failed while changing the decider; it and the record can no longer be used: {message}"),
+                $"The Gil core failed partway through a change; what it was changing can no longer be used: {message}"),
             InvalidInput or Panic => new ArgumentException(message),
             Broken => new InvalidOperationException(message),
             _ => new InvalidOperationException($"The Gil core refused a call from its binding ({status}): {message}"),

@@ -25,6 +25,7 @@ internal sealed record SchemaForm(string Name, IReadOnlyList<Attribute> Attribut
 [JsonSerializable(typeof(Tuning))]
 [JsonSerializable(typeof(Stale))]
 [JsonSerializable(typeof(IReadOnlyDictionary<string, AttributeUsage>))]
+[JsonSerializable(typeof(IReadOnlyList<AskAdvice>))]
 internal sealed partial class CoreJson : JsonSerializerContext
 {
 }

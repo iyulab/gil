@@ -122,6 +122,11 @@ impl AskPlanner {
         })
     }
 
+    /// The decided attribute it plans for.
+    pub fn attribute(&self) -> &str {
+        &self.attribute
+    }
+
     /// The attributes a person could be asked for, as given.
     pub fn askable(&self) -> &[String] {
         &self.askable

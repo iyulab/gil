@@ -2,8 +2,8 @@
 //!
 //! State lives behind handles the caller creates and frees: a [`GilSchema`] (a schema read and checked once),
 //! [`GilRecords`] (settled records read once — what fills a decider and what a replay chooses thresholds on), a
-//! [`GilDecider`] (the memories that answer, kept up to date as records are settled) and a [`GilOpenRecord`] (one record
-//! while its values arrive). Definitions, records and batch results cross as JSON in the
+//! [`GilDecider`] (the memories that answer, kept up to date as records are settled), a [`GilOpenRecord`] (one record
+//! while its values arrive) and a [`GilAskPlanner`] (which observed attribute to ask a person for first). Definitions, records and batch results cross as JSON in the
 //! core's `serde` form; the answer asked for while a person types (`gil_open_record_answer_partial`) comes back in flat
 //! structures and buffers the caller owns, with no JSON either way. Nothing calls back into the host: an answer that
 //! wants an external judgement says so, and the host offers the judgement back. The core keeps no clock — a time is
@@ -18,12 +18,13 @@
 //! its length to `result_len`. A call the core's contract rules out comes back as `GIL_INVALID_INPUT` when the call
 //! changes a handle — it is refused before anything changes — and as `GIL_PANIC` when it only reads one (asking about an
 //! attribute that is not decided, say). A `GIL_PANIC` from a call that changes a handle is a defect that may have stopped
-//! the change halfway: the decider and record it was changing are broken, and every later call with them returns
-//! `GIL_BROKEN` until they are freed. `gil_abi_version` says which version of this interface the library speaks.
+//! the change halfway: the decider, record or planner it was changing is broken, and every later call with it returns
+//! `GIL_BROKEN` until it is freed. `gil_abi_version` says which version of this interface the library speaks.
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use gil::ask_planner::AskPlanner;
 use gil::decider::{Answer, Candidate, Decider, ExternalCandidate, Source};
 use gil::decision_record::DecisionRecord;
 use gil::key_memory::KeyMemory;
@@ -58,7 +59,7 @@ pub const GIL_BROKEN: i32 = gil_ffi_support::BROKEN;
 
 /// The version of this interface — its functions, structures and statuses. It changes whenever a binding built for one
 /// version would misread the library of another.
-pub const GIL_ABI_VERSION: u32 = 1;
+pub const GIL_ABI_VERSION: u32 = 2;
 
 /// [`GilCandidate::source`]: no layer.
 pub const GIL_SOURCE_NONE: u8 = 0;
@@ -97,6 +98,14 @@ pub struct GilOpenRecord {
     broken: AtomicBool,
 }
 
+/// Which observed attribute to ask a person for first so that a decided attribute gets answered, learned from settled
+/// records — with its own copy of the schema it plans for.
+pub struct GilAskPlanner {
+    planner: AskPlanner,
+    schema: Schema,
+    broken: AtomicBool,
+}
+
 // What the functions that only read a handle may share across threads (see the module's threads paragraph).
 const _: () = {
     const fn shared<T: Sync>() {}
@@ -104,6 +113,7 @@ const _: () = {
     shared::<GilRecords>();
     shared::<GilDecider>();
     shared::<GilOpenRecord>();
+    shared::<GilAskPlanner>();
 };
 
 /// A handle that a defect can break: what it says of itself, and its mark.
@@ -121,6 +131,13 @@ impl Breakable for GilDecider {
 
 impl Breakable for GilOpenRecord {
     const WHAT: &'static str = "record";
+    fn broken(&self) -> &AtomicBool {
+        &self.broken
+    }
+}
+
+impl Breakable for GilAskPlanner {
+    const WHAT: &'static str = "planner";
     fn broken(&self) -> &AtomicBool {
         &self.broken
     }
@@ -1264,6 +1281,123 @@ pub unsafe extern "C" fn gil_usage(
             })
             .collect::<Result<Vec<_>, Failure>>()?;
         unsafe { result(&json!(usage(decisions)), result_len) }
+    })
+}
+
+/// A planner for the decided single-valued attribute `attribute` of `schema` (not off; the planner keeps its own copy of
+/// the schema), the observed attributes `askable` — `askable_len` texts — a person could be asked for (at least one,
+/// none twice), and the share `budget` (above 0, at most 1) of the typing asking every attribute every time would take
+/// that asking may spend, handed out through `out`. A rule broken is refused (`GIL_INVALID_INPUT`), the message naming
+/// the first.
+///
+/// # Safety
+/// `schema` is a live handle; `attribute` and the `askable_len` texts at `askable` are valid for the call; `out` points
+/// to one writable pointer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_ask_planner_new(
+    schema: *const GilSchema,
+    attribute: GilStr,
+    askable: *const GilStr,
+    askable_len: usize,
+    budget: f64,
+    out: *mut *mut GilAskPlanner,
+) -> i32 {
+    call(|| {
+        if out.is_null() {
+            return Err(argument("out is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let schema = unsafe { handle(schema, "schema") }?;
+        let attribute = unsafe { text(attribute, "attribute") }?;
+        let askable = unsafe { slice(askable, askable_len, "askable") }?
+            .iter()
+            .map(|a| unsafe { text(*a, "an askable attribute") })
+            .collect::<Result<Vec<_>, Failure>>()?;
+        let planner = AskPlanner::new(&schema.0, attribute, askable, budget).map_err(input)?;
+        let planned = GilAskPlanner {
+            planner,
+            schema: schema.0.clone(),
+            broken: AtomicBool::new(false),
+        };
+        unsafe { hand_out(out, planned, "out") }
+    })
+}
+
+/// Frees a planner; null is ignored.
+///
+/// # Safety
+/// `planner` is null or a live planner handle, not used after.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_ask_planner_free(planner: *mut GilAskPlanner) {
+    // SAFETY: forwarded from the caller.
+    unsafe { release(planner) }
+}
+
+/// Learns from `records`, in order — settled records of the planner's schema, in settlement order — asking `decider`
+/// for the decided attribute's answer with and without each askable attribute a record filled. The decider's memories
+/// may hold a record being learned, but none settled after it. A record without a value for the decided attribute
+/// teaches nothing.
+///
+/// # Safety
+/// `planner`, `decider` and `records` are live handles.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_ask_planner_learn(
+    planner: *mut GilAskPlanner,
+    decider: *const GilDecider,
+    records: *const GilRecords,
+) -> i32 {
+    let status = call(|| {
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let planned = unsafe { live_mut(planner) }?;
+        let memories = &unsafe { live(decider) }?.decider;
+        let records = &unsafe { handle(records, "records") }?.0;
+        for record in records {
+            planned.planner.learn(memories, &planned.schema, record);
+        }
+        Ok(())
+    });
+    // SAFETY: forwarded from the caller.
+    unsafe { break_on_panic(status, planner) };
+    status
+}
+
+/// Keeps as the result the advice for an open record — a JSON array of `{attribute, gain, ask, threshold}`: every
+/// askable attribute the record has no value for, by gain per character, highest first, each marked whether to ask.
+/// `answer` is the decided attribute's answer for the record as it stands (JSON, as an answer is given); `values` the
+/// record's values as they stand (a JSON object of strings). An answer for another attribute is refused
+/// (`GIL_INVALID_INPUT`).
+///
+/// # Safety
+/// `planner` is a live handle; `answer` and `values` are valid for the call; `result_len` points to one writable
+/// `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_ask_planner_advise(
+    planner: *const GilAskPlanner,
+    answer: GilStr,
+    values: GilStr,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        if result_len.is_null() {
+            return Err(argument("result_len is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let planned = unsafe { live(planner) }?;
+        let answer: Answer = serde_json::from_str(unsafe { text(answer, "answer") }?)
+            .map_err(|e| input(format!("an answer does not read: {e}")))?;
+        let values: BTreeMap<String, String> =
+            serde_json::from_str(unsafe { text(values, "values") }?)
+                .map_err(|e| input(format!("values are an object of strings: {e}")))?;
+        if answer.attribute != planned.planner.attribute() {
+            return Err(input(format!(
+                "the answer is for '{}', not '{}'",
+                answer.attribute,
+                planned.planner.attribute()
+            )));
+        }
+        let advice = planned.planner.advise(&answer, &values);
+        let value = serde_json::to_value(advice).expect("advice serializes");
+        unsafe { result(&value, result_len) }
     })
 }
 
