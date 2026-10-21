@@ -1,26 +1,4 @@
-using System.Runtime.InteropServices;
-
 namespace Gil;
-
-/// <summary>A native object owned through a handle the native library handed out, freed once when released.</summary>
-internal abstract class NativeHandle : SafeHandle
-{
-    protected NativeHandle()
-        : base(IntPtr.Zero, ownsHandle: true)
-    {
-    }
-
-    public override bool IsInvalid => handle == IntPtr.Zero;
-
-    /// <summary>Takes ownership of a handle the native library just handed out.</summary>
-    protected static T Own<T>(nint value)
-        where T : NativeHandle, new()
-    {
-        var owned = new T();
-        owned.SetHandle(value);
-        return owned;
-    }
-}
 
 internal sealed class SchemaHandle : NativeHandle
 {

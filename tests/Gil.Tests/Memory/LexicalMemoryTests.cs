@@ -289,4 +289,40 @@ public sealed class LexicalMemoryTests
         stale[0].Answer.Should().Be("answer_39");
         memory.Count("task").Should().Be(2);
     }
+
+    [Fact]
+    public async Task N_grams_are_runs_of_scalars_so_characters_beyond_the_basic_plane_do_not_share_halves()
+    {
+        // 😀 and 😃 share their high surrogate; cut into UTF-16 code units, their n-grams would overlap.
+        using var memory = new LexicalMemory(minGram: 2, maxGram: 2);
+        await memory.RememberAsync("task", "a", "😀", "smile", "t1", Ct);
+
+        var (match, _) = await memory.LookupAsync("task", "😃", "t2", Ct);
+
+        match!.Similarity.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Lookups_from_several_threads_agree_with_one()
+    {
+        using var memory = new LexicalMemory();
+        for (var i = 0; i < 200; i++)
+        {
+            await memory.RememberAsync("task", $"t{i}", $"request number {i} about topic {i % 7}", $"answer_{i % 7}", "s", Ct);
+        }
+
+        var alone = memory.Nearest("task", "request about topic 3", 5);
+        var together = await Task.WhenAll(Enumerable.Range(0, 16).Select(_ => Task.Run(() => memory.Nearest("task", "request about topic 3", 5), Ct)));
+
+        together.Should().AllSatisfy(found => found.Should().Equal(alone));
+    }
+
+    [Fact]
+    public void A_disposed_memory_refuses_calls()
+    {
+        var memory = new LexicalMemory();
+        memory.Dispose();
+
+        FluentActions.Invoking(() => memory.Count("task")).Should().Throw<ObjectDisposedException>();
+    }
 }

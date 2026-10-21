@@ -42,6 +42,10 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   - The tree's `Candidate` is now `JudgeCandidate`, so it does not collide with the core's.
   - `IMemory`, `MemoryMatch`, `LexicalMemory` and `MemoryUnavailableException` are experimental (`GIL0004`);
     `PromptLanguage` is `GIL0001`; `EmbeddingGeneratorModel` is `GIL0003`.
+  - `LexicalMemory` is the core's similar record memory, reached through the native library like the rest of the core,
+    instead of a second implementation of it: the same similarities to the bit, ties and refusals. Lookups may now run
+    from several threads at once (remembering and forgetting still run alone), and it is `IDisposable` — dispose it to
+    free the native memory at once rather than at finalization.
   - `GilDiagnostics` is internal: listen to the activity source and meter `"Gil"`.
   - `ResolverFieldModel` is now `ResolverJudge`, an `IExternalJudge` (`GIL0001`): the request is the evidence as
     `name: value` lines, and the trace id and energy stay in the resolver's own sink.

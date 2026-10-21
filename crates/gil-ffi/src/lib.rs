@@ -59,7 +59,7 @@ pub const GIL_BROKEN: i32 = gil_ffi_support::BROKEN;
 
 /// The version of this interface — its functions, structures and statuses. It changes whenever a binding built for one
 /// version would misread the library of another.
-pub const GIL_ABI_VERSION: u32 = 2;
+pub const GIL_ABI_VERSION: u32 = 3;
 
 /// [`GilCandidate::source`]: no layer.
 pub const GIL_SOURCE_NONE: u8 = 0;
@@ -105,6 +105,13 @@ pub struct GilAskPlanner {
     broken: AtomicBool,
 }
 
+/// The similar record memory on its own — character n-gram TF-IDF, one index per task — for a host that keeps a memory
+/// of answers outside a decider (the one a decider holds is not reached through this).
+pub struct GilLexicalMemory {
+    memory: LexicalMemory,
+    broken: AtomicBool,
+}
+
 // What the functions that only read a handle may share across threads (see the module's threads paragraph).
 const _: () = {
     const fn shared<T: Sync>() {}
@@ -113,6 +120,7 @@ const _: () = {
     shared::<GilDecider>();
     shared::<GilOpenRecord>();
     shared::<GilAskPlanner>();
+    shared::<GilLexicalMemory>();
 };
 
 /// A handle that a defect can break: what it says of itself, and its mark.
@@ -137,6 +145,13 @@ impl Breakable for GilOpenRecord {
 
 impl Breakable for GilAskPlanner {
     const WHAT: &'static str = "planner";
+    fn broken(&self) -> &AtomicBool {
+        &self.broken
+    }
+}
+
+impl Breakable for GilLexicalMemory {
+    const WHAT: &'static str = "lexical memory";
     fn broken(&self) -> &AtomicBool {
         &self.broken
     }
@@ -1429,6 +1444,146 @@ pub unsafe extern "C" fn gil_ask_planner_advise(
         let advice = planned.planner.advise(&answer, &values);
         let value = serde_json::to_value(advice).expect("advice serializes");
         unsafe { result(&value, result_len) }
+    })
+}
+
+/// A lexical memory comparing runs of `min_gram` to `max_gram` Unicode scalars (at least 1, and `max_gram` at least
+/// `min_gram` — else `GIL_INVALID_INPUT`), handed out through `out`.
+///
+/// # Safety
+/// `out` points to one writable pointer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_lexical_memory_new(
+    min_gram: usize,
+    max_gram: usize,
+    out: *mut *mut GilLexicalMemory,
+) -> i32 {
+    call(|| {
+        if min_gram < 1 {
+            return Err(input("min_gram must be at least 1"));
+        }
+        if max_gram < min_gram {
+            return Err(input("max_gram must be at least min_gram"));
+        }
+        let memory = GilLexicalMemory {
+            memory: LexicalMemory::new(min_gram, max_gram),
+            broken: AtomicBool::new(false),
+        };
+        // SAFETY: forwarded from the caller.
+        unsafe { hand_out(out, memory, "out") }
+    })
+}
+
+/// Frees a lexical memory; null is ignored.
+///
+/// # Safety
+/// `memory` is null or a live lexical memory handle, not used after.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_lexical_memory_free(memory: *mut GilLexicalMemory) {
+    // SAFETY: forwarded from the caller.
+    unsafe { release(memory) }
+}
+
+/// Writes to `count` how many answers the task's memory holds.
+///
+/// # Safety
+/// `memory` is a live handle; `task` is valid for the call; `count` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_lexical_memory_count(
+    memory: *const GilLexicalMemory,
+    task: GilStr,
+    count: *mut usize,
+) -> i32 {
+    call(|| {
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let memory = &unsafe { live(memory) }?.memory;
+        let task = unsafe { text(task, "task") }?;
+        unsafe { write(count, memory.count(task), "count") }
+    })
+}
+
+/// Remembers `answer` for the text `state` under `key` in the task's memory, replacing what the key held; a key
+/// remembered again keeps its place among ties.
+///
+/// # Safety
+/// `memory` is a live handle; the texts are valid for the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_lexical_memory_remember(
+    memory: *mut GilLexicalMemory,
+    task: GilStr,
+    key: GilStr,
+    state: GilStr,
+    answer: GilStr,
+) -> i32 {
+    let status = call(|| {
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let task = unsafe { text(task, "task") }?;
+        let key = unsafe { text(key, "key") }?;
+        let state = unsafe { text(state, "state") }?;
+        let answer = unsafe { text(answer, "answer") }?;
+        let memory = &mut unsafe { live_mut(memory) }?.memory;
+        memory.remember(task, key, state, answer);
+        Ok(())
+    });
+    // SAFETY: forwarded from the caller.
+    unsafe { break_on_panic(status, memory) };
+    status
+}
+
+/// Forgets what `key` held in the task's memory, if anything.
+///
+/// # Safety
+/// `memory` is a live handle; the texts are valid for the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_lexical_memory_forget(
+    memory: *mut GilLexicalMemory,
+    task: GilStr,
+    key: GilStr,
+) -> i32 {
+    let status = call(|| {
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let task = unsafe { text(task, "task") }?;
+        let key = unsafe { text(key, "key") }?;
+        let memory = &mut unsafe { live_mut(memory) }?.memory;
+        memory.forget(task, key);
+        Ok(())
+    });
+    // SAFETY: forwarded from the caller.
+    unsafe { break_on_panic(status, memory) };
+    status
+}
+
+/// Keeps as the result the `count` (at least 1 — else `GIL_INVALID_INPUT`) remembered texts most similar to `state` —
+/// a JSON array of `{key, similarity, answer}`, most similar first, on a tie the one remembered first; empty when the
+/// task's memory is empty.
+///
+/// # Safety
+/// `memory` is a live handle; the texts are valid for the call; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_lexical_memory_nearest(
+    memory: *const GilLexicalMemory,
+    task: GilStr,
+    state: GilStr,
+    count: usize,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        if result_len.is_null() {
+            return Err(argument("result_len is null"));
+        }
+        if count < 1 {
+            return Err(input("count must be at least 1"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let memory = &unsafe { live(memory) }?.memory;
+        let task = unsafe { text(task, "task") }?;
+        let state = unsafe { text(state, "state") }?;
+        let found: Vec<Value> = memory
+            .nearest(task, state, count)
+            .into_iter()
+            .map(|m| json!({"key": m.source, "similarity": m.similarity, "answer": m.answer}))
+            .collect();
+        unsafe { result(&Value::Array(found), result_len) }
     })
 }
 
