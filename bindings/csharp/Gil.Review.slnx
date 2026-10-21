@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Gil.Review/Gil.Review.csproj" />
+  <Project Path="Gil.Review.Tests/Gil.Review.Tests.csproj" />
+</Solution>

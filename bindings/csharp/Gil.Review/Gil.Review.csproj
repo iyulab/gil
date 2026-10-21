@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Gil.Review</RootNamespace>
+    <!-- The binding shares its version line with the iyulab-gil-review crate it calls. -->
+    <Version>0.1.0</Version>
+    <Description>Review statistics for checking automated decisions by hand: seeded stratified samples, the Neyman allocation, weighted population estimates with normal and bootstrap intervals, and agreement between two reviewers. A binding to the Rust crate iyulab-gil-review.</Description>
+    <PackageTags>sampling;survey;stratified;bootstrap;agreement;review</PackageTags>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+    <!-- Not packed yet: the package carries one native library per runtime, which the release build assembles. -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- Local builds take the native library cargo built in this repository (`cargo build -p gil-review-ffi`). -->
+  <PropertyGroup>
+    <GilReviewNativeDirectory Condition="'$(GilReviewNativeDirectory)' == ''">$(MSBuildThisFileDirectory)..\..\..\target\debug\</GilReviewNativeDirectory>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="$(GilReviewNativeDirectory)libgil_review_native.dylib" Condition="Exists('$(GilReviewNativeDirectory)libgil_review_native.dylib')" Link="libgil_review_native.dylib" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(GilReviewNativeDirectory)libgil_review_native.so" Condition="Exists('$(GilReviewNativeDirectory)libgil_review_native.so')" Link="libgil_review_native.so" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(GilReviewNativeDirectory)gil_review_native.dll" Condition="Exists('$(GilReviewNativeDirectory)gil_review_native.dll')" Link="gil_review_native.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Gil.Review.Tests" />
+  </ItemGroup>
+</Project>

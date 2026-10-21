@@ -13,3 +13,6 @@ indent_size = 4
 # Test names read as sentences (e.g., A_run_config_is_written_once)
 [tests/**/*.cs]
 dotnet_diagnostic.CA1707.severity = none
+
+[bindings/csharp/*.Tests/**.cs]
+dotnet_diagnostic.CA1707.severity = none
