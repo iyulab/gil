@@ -115,20 +115,39 @@ struct Row {
     weights: Vec<f64>,
 }
 
+/// The slots of the rows holding one id and their weights for it, side by side, in the order they were posted.
+#[derive(Default)]
+struct Postings {
+    slots: Vec<u32>,
+    weights: Vec<f64>,
+}
+
+/// Rows in no particular order — forgetting one moves the last into its place — each numbered in the order it was
+/// remembered (a key remembered again keeps its number), ties going to the smaller number.
+///
+/// A lookup touches only the n-grams a row shares with it: every id lists, side by side, the slots of the rows that hold
+/// it and their weights, and the query's ids are walked in ascending order, so each row's products are added in the
+/// order a walk along both sorted lists would add them — the sums are the same to the bit. A row takes a slot when it is
+/// posted and keeps it, so the lists only ever grow at the end, are read front to back, and write into one array of
+/// sums. A row forgotten or replaced leaves its entries behind, summed but never read, until they pass an eighth of
+/// the live ones and the lists are rebuilt; they are rebuilt too whenever the weights are taken afresh.
 #[derive(Default)]
 struct Index {
     rows: Vec<Row>,
-    /// Each row's weight norm, beside the rows: a lookup reads every one, and reading them out of the rows cost a cache
-    /// miss a row.
+    /// Each row's weight norm and the slot its sum is kept in during a lookup, beside the rows: a lookup reads every
+    /// one, and reading them out of the rows cost a cache miss a row.
     norms: Vec<f64>,
+    slots: Vec<u32>,
     remembered: u64,
     position: HashMap<String, usize>,
     ids: HashMap<String, usize>,
     /// How many rows hold each id.
     frequency: Vec<i64>,
-    /// The rows holding each id with the id's weight in that row, in no particular order — a lookup visits only the
-    /// rows that share an n-gram with it, and reads each weight where it walks. Rebuilt whenever the weights are retaken.
-    postings: Vec<Vec<(usize, f64)>>,
+    postings: Vec<Postings>,
+    /// The next slot to give, and the posted entries of the rows still here and of those gone.
+    next_slot: u32,
+    live: usize,
+    gone: usize,
     /// The inverse record frequency of every id known when there were `taken_at` rows; later ids had none.
     idf: Vec<f64>,
     taken_at: usize,
@@ -155,29 +174,28 @@ impl Index {
             counts,
             weights,
         };
-        match existing {
+        let at = match existing {
             Some(at) => {
                 let old = std::mem::replace(&mut self.rows[at], row);
                 self.norms[at] = norm;
                 tally(&mut self.frequency, &old.ids, -1);
-                for &id in &old.ids {
-                    unpost(&mut self.postings[id], at);
-                }
+                self.retire(&old);
+                at
             }
             None => {
                 self.position.insert(key.to_owned(), self.rows.len());
                 self.rows.push(row);
                 self.norms.push(norm);
+                self.slots.push(0);
+                self.rows.len() - 1
             }
-        }
+        };
 
-        let at = existing.unwrap_or(self.rows.len() - 1);
         tally(&mut self.frequency, &self.rows[at].ids, 1);
-        let row = &self.rows[at];
-        for (&id, &weight) in row.ids.iter().zip(&row.weights) {
-            self.postings[id].push((at, weight));
+        if !self.refresh() {
+            self.post(at);
+            self.compact();
         }
-        self.refresh();
     }
 
     fn remove(&mut self, key: &str) {
@@ -185,26 +203,19 @@ impl Index {
             return;
         };
 
+        // The last row moves into the gap with its slot: no list changes.
         let row = self.rows.swap_remove(at);
         self.norms.swap_remove(at);
+        self.slots.swap_remove(at);
         tally(&mut self.frequency, &row.ids, -1);
-        for &id in &row.ids {
-            unpost(&mut self.postings[id], at);
-        }
+        self.retire(&row);
         if at < self.rows.len() {
-            // The last row moved into the gap: its postings point at its old place.
-            let moved_from = self.rows.len();
             self.position.insert(self.rows[at].key.clone(), at);
-            for &id in &self.rows[at].ids {
-                let entry = self.postings[id]
-                    .iter_mut()
-                    .find(|p| p.0 == moved_from)
-                    .expect("a moved row is posted under each of its ids");
-                entry.0 = at;
-            }
         }
 
-        self.refresh();
+        if !self.refresh() {
+            self.compact();
+        }
     }
 
     /// The cosine of the query with every row, in the rows' order. An n-gram no row has ever held matches nothing, but
@@ -238,19 +249,22 @@ impl Index {
 
         // The products of the shared ids, added to each row in ascending id order (the order of `ids`) — the same
         // additions, in the same order, as walking each row against the query, but only over the rows that share one.
-        let mut sums = vec![0.0_f64; self.rows.len()];
+        let mut sums = vec![0.0_f64; self.next_slot as usize];
         for (i, &id) in ids.iter().enumerate() {
-            let Some(rows) = self.postings.get(id) else {
+            let Some(postings) = self.postings.get(id) else {
                 continue;
             };
-            for &(r, weight) in rows {
-                sums[r] += weights[i] * weight;
+            let weight = weights[i];
+            for (&slot, &row_weight) in postings.slots.iter().zip(&postings.weights) {
+                sums[slot as usize] += weight * row_weight;
             }
         }
 
-        for ((similarity, &norm), sum) in similarities.iter_mut().zip(&self.norms).zip(sums) {
+        for ((similarity, &norm), &slot) in
+            similarities.iter_mut().zip(&self.norms).zip(&self.slots)
+        {
             *similarity = if norm > 0.0 {
-                sum / (query_norm * norm)
+                sums[slot as usize] / (query_norm * norm)
             } else {
                 0.0
             };
@@ -270,7 +284,7 @@ impl Index {
                     let id = self.ids.len();
                     self.ids.insert(gram.clone(), id);
                     self.frequency.push(0);
-                    self.postings.push(Vec::new());
+                    self.postings.push(Postings::default());
                     id
                 }
             };
@@ -281,11 +295,11 @@ impl Index {
         pairs.into_iter().unzip()
     }
 
-    /// Takes the frequencies afresh once the row count has moved by a tenth (at least one) since last time, and reweighs
-    /// every row.
-    fn refresh(&mut self) {
+    /// Takes the frequencies afresh once the row count has moved by a tenth (at least one) since last time, reweighs
+    /// every row and rebuilds the lists; false when it is not yet time.
+    fn refresh(&mut self) -> bool {
         if self.rows.len().abs_diff(self.taken_at) < (self.taken_at / 10).max(1) {
-            return;
+            return false;
         }
 
         self.taken_at = self.rows.len();
@@ -298,13 +312,47 @@ impl Index {
             *norm = self.weigh(&row.ids, &row.counts, &mut row.weights);
         }
         (self.rows, self.norms) = (rows, norms);
-        for postings in &mut self.postings {
-            postings.clear();
+        self.repost();
+        true
+    }
+
+    /// Lists the row at `at` under each of its ids, in a slot of its own.
+    fn post(&mut self, at: usize) {
+        let slot = self.next_slot;
+        self.next_slot += 1;
+        self.slots[at] = slot;
+        let row = &self.rows[at];
+        for (&id, &weight) in row.ids.iter().zip(&row.weights) {
+            let postings = &mut self.postings[id];
+            postings.slots.push(slot);
+            postings.weights.push(weight);
         }
-        for (r, row) in self.rows.iter().enumerate() {
-            for (&id, &weight) in row.ids.iter().zip(&row.weights) {
-                self.postings[id].push((r, weight));
-            }
+        self.live += row.ids.len();
+    }
+
+    /// Counts a row's entries as gone: they stay in the lists, summed but never read, until the next rebuild.
+    fn retire(&mut self, row: &Row) {
+        self.live -= row.ids.len();
+        self.gone += row.ids.len();
+    }
+
+    /// Rebuilds the lists once the entries of rows gone pass an eighth of the live ones: a lookup walks them too, so
+    /// they cost it at most an eighth more, and a rebuild comes only after that many entries were retired.
+    fn compact(&mut self) {
+        if self.gone * 8 > self.live {
+            self.repost();
+        }
+    }
+
+    /// Lists the rows afresh, in slots numbered from zero in the rows' order, with their current weights.
+    fn repost(&mut self) {
+        for postings in &mut self.postings {
+            postings.slots.clear();
+            postings.weights.clear();
+        }
+        (self.next_slot, self.live, self.gone) = (0, 0, 0);
+        for at in 0..self.rows.len() {
+            self.post(at);
         }
     }
 
@@ -328,15 +376,6 @@ impl Index {
     fn smoothed(&self, frequency: i64) -> f64 {
         ((1.0 + self.taken_at as f64) / (1.0 + frequency as f64)).ln() + 1.0
     }
-}
-
-/// Takes `row` out of one id's postings.
-fn unpost(postings: &mut Vec<(usize, f64)>, row: usize) {
-    let at = postings
-        .iter()
-        .position(|p| p.0 == row)
-        .expect("a row is posted under each of its ids");
-    postings.swap_remove(at);
 }
 
 /// Adds `delta` to the frequency of each id.
@@ -472,6 +511,51 @@ mod tests {
         assert_eq!(sources(&stale), ["moving", "kept"]);
         assert_eq!(stale[0].answer, "answer_39");
         assert_eq!(memory.count("task"), 2);
+    }
+
+    #[test]
+    fn rows_remembered_again_in_another_order_answer_to_the_bit_as_before() {
+        let text = |i: usize| {
+            format!(
+                "component: c{}\nsummary: unit {} fails after {} hours",
+                i % 7,
+                i % 13,
+                i % 5
+            )
+        };
+        let mut memory = LexicalMemory::default();
+        for i in 0..60 {
+            memory.remember("task", &format!("r{i}"), &text(i), &format!("a{}", i % 4));
+        }
+        let queries: Vec<String> = (100..110).map(text).collect();
+        let before: Vec<Vec<(String, u64)>> = queries
+            .iter()
+            .map(|q| {
+                let found = memory.nearest("task", q, 5);
+                found
+                    .into_iter()
+                    .map(|m| (m.source, m.similarity.to_bits()))
+                    .collect()
+            })
+            .collect();
+
+        // Every row remembered again with the same text, from the last to the first: the lists are rebuilt along the
+        // way, each time the old entries pass an eighth of the live ones.
+        for i in (0..60).rev() {
+            memory.remember("task", &format!("r{i}"), &text(i), &format!("a{}", i % 4));
+        }
+        let after: Vec<Vec<(String, u64)>> = queries
+            .iter()
+            .map(|q| {
+                let found = memory.nearest("task", q, 5);
+                found
+                    .into_iter()
+                    .map(|m| (m.source, m.similarity.to_bits()))
+                    .collect()
+            })
+            .collect();
+
+        assert_eq!(after, before);
     }
 
     #[test]

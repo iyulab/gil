@@ -25,6 +25,14 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 - **The similar record lookup is quicker without changing its answers**: the rows' norms sit beside the rows, and the
   sorts that break ties (the lookup's, the key layer's, replay orders) read their tie-breakers only on a tie. On 10,000
   lookups over 20,000 remembered texts, 22.4 s became 17.9 s.
+- **Remembering a record again or forgetting one no longer walks the lists of every n-gram it holds.** A decider
+  forgets and remembers a record's text each time the record is settled, and each time the similar record memory took
+  the record out of the list of each of its n-grams by searching it — for an n-gram every record shares (an attribute's
+  name), the whole memory — and the lists lost their order, so later lookups wrote their sums all over memory. Rows now
+  keep a slot of their own: a row replaced or forgotten leaves its entries behind until they pass an eighth of the live
+  ones, and the lists are rebuilt in order. Answers are unchanged to the bit. Over 20,000 remembered texts, remembering
+  each again took 1.2 s instead of 14.6 s, and 10,000 lookups after that took 19.5 s instead of 29.8 s (17.1 s instead
+  of 22.8 s on a memory remembered once).
 
 ### Added
 
