@@ -18,6 +18,9 @@ pub const INVALID_ARGUMENT: i32 = 2;
 /// The computation panicked — a defect in the library, or a call its contract rules out — reported instead of
 /// unwinding into the caller.
 pub const PANIC: i32 = 3;
+/// A buffer the caller gave is too small for the result; the call wrote the sizes it needs where it says, so that the
+/// caller can grow its buffers and call again.
+pub const BUFFER_TOO_SMALL: i32 = 4;
 
 /// UTF-8 text the caller owns, for the length of one call.
 #[repr(C)]
