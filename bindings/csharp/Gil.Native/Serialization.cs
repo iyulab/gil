@@ -14,6 +14,10 @@ internal sealed record SchemaForm(string Name, IReadOnlyList<Attribute> Attribut
     Converters = [typeof(TicksConverter)])]
 [JsonSerializable(typeof(SchemaForm))]
 [JsonSerializable(typeof(Record))]
+[JsonSerializable(typeof(IReadOnlyList<Answer>))]
+[JsonSerializable(typeof(Answer))]
+[JsonSerializable(typeof(KeyEvidence))]
+[JsonSerializable(typeof(RecordEvidence))]
 internal sealed partial class CoreJson : JsonSerializerContext
 {
 }

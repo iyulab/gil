@@ -177,7 +177,17 @@ public sealed class Decider : IDisposable
     }
 
     /// <summary>The answers for every open decided attribute of record <paramref name="recordId"/> from the values
-    /// given, writing nothing to memory, as a JSON array in the core's form (each answer with <c>answered</c>, and with
+    /// given, writing nothing to memory, in the schema's order — each with its lookup's decision record when
+    /// <paramref name="decisions"/> is true.</summary>
+    public IReadOnlyList<Answer> Answer(
+        Schema schema,
+        string recordId,
+        IReadOnlyDictionary<string, string> values,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? sets = null,
+        bool decisions = false) =>
+        Answers.Read(AnswerJson(schema, recordId, values, sets, decisions));
+
+    /// <summary><see cref="Answer"/> as a JSON array in the core's form (each answer with <c>answered</c>, and with
     /// <c>decision</c> — the lookup's decision record — when <paramref name="decisions"/> is true).</summary>
     public unsafe string AnswerJson(
         Schema schema,
@@ -267,9 +277,12 @@ public sealed class OpenRecord : IDisposable
     }
 
     /// <summary>Sets an observed attribute's value — or clears it, given null — and returns the fresh answers it
-    /// causes, as a JSON array.</summary>
+    /// causes.</summary>
     /// <exception cref="ArgumentException">The attribute is not observed.</exception>
-    public unsafe string Observe(Decider decider, string attribute, string? value)
+    public IReadOnlyList<Answer> Observe(Decider decider, string attribute, string? value) =>
+        Answers.Read(ObserveJson(decider, attribute, value));
+
+    private unsafe string ObserveJson(Decider decider, string attribute, string? value)
     {
         ArgumentNullException.ThrowIfNull(decider);
         ArgumentNullException.ThrowIfNull(attribute);
@@ -291,11 +304,20 @@ public sealed class OpenRecord : IDisposable
 
     /// <summary>Settles a decided attribute at <paramref name="now"/> with the parts its kind needs — a value for the
     /// kinds that settle one, values for <see cref="SettlementKind.Set"/> (and for a restore of an attribute that takes
-    /// several), the probability a check was drawn with — and returns the fresh answers it causes, as a JSON
-    /// array.</summary>
+    /// several), the probability a check was drawn with — and returns the fresh answers it causes.</summary>
     /// <exception cref="ArgumentException">A part the kind needs is missing, or the attribute is not decided or takes
     /// the other kind of value.</exception>
-    public unsafe string Settle(
+    public IReadOnlyList<Answer> Settle(
+        Decider decider,
+        string attribute,
+        SettlementKind kind,
+        DateTimeOffset now,
+        string? value = null,
+        IReadOnlyList<string>? values = null,
+        double probability = 1.0) =>
+        Answers.Read(SettleJson(decider, attribute, kind, now, value, values, probability));
+
+    private unsafe string SettleJson(
         Decider decider,
         string attribute,
         SettlementKind kind,
@@ -343,7 +365,10 @@ public sealed class OpenRecord : IDisposable
         }
     }
 
-    /// <summary>The answers for every open decided attribute, as a JSON array.</summary>
+    /// <summary>The answers for every open decided attribute.</summary>
+    public IReadOnlyList<Answer> Answer(Decider decider) => Answers.Read(AnswerJson(decider));
+
+    /// <summary>The answers for every open decided attribute, as a JSON array in the core's form.</summary>
     public unsafe string AnswerJson(Decider decider)
     {
         ArgumentNullException.ThrowIfNull(decider);
@@ -406,9 +431,11 @@ public sealed class OpenRecord : IDisposable
         }
     }
 
-    /// <summary>The answer for an open decided attribute with an external judgement's ranked values in it, as JSON.
-    /// </summary>
-    public unsafe string OfferExternal(Decider decider, string attribute, IReadOnlyList<ExternalCandidate> ranked)
+    /// <summary>The answer for an open decided attribute with an external judgement's ranked values in it.</summary>
+    public Answer OfferExternal(Decider decider, string attribute, IReadOnlyList<ExternalCandidate> ranked) =>
+        JsonSerializer.Deserialize(OfferExternalJson(decider, attribute, ranked), CoreJson.Default.Answer)!;
+
+    private unsafe string OfferExternalJson(Decider decider, string attribute, IReadOnlyList<ExternalCandidate> ranked)
     {
         ArgumentNullException.ThrowIfNull(decider);
         ArgumentNullException.ThrowIfNull(attribute);
@@ -464,6 +491,12 @@ public sealed class OpenRecord : IDisposable
         c.Score,
         (Source)c.Source,
         c.Trusted != 0);
+}
+
+/// <summary>Answers read from the core's JSON.</summary>
+internal static class Answers
+{
+    public static IReadOnlyList<Answer> Read(string json) => JsonSerializer.Deserialize(json, CoreJson.Default.IReadOnlyListAnswer)!;
 }
 
 /// <summary>Scopes for a decider's reader–writer lock.</summary>

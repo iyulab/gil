@@ -14,7 +14,7 @@ public sealed class CoreTests(ITestOutputHelper output)
 
     private static string Fixture(string name) => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "core", name));
 
-    private static string[] RecordLines() =>
+    internal static string[] RecordLines() =>
         Fixture("records.jsonl").Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
     private static readonly Lazy<JsonObject> SchemaJson = new(() => JsonNode.Parse(Fixture("schema.json"))!.AsObject());
@@ -22,10 +22,14 @@ public sealed class CoreTests(ITestOutputHelper output)
     private static IEnumerable<JsonObject> Attributes(string role) =>
         SchemaJson.Value["attributes"]!.AsArray().Select(a => a!.AsObject()).Where(a => (string)a["role"]! == role);
 
-    private static HashSet<string> Observed() => [.. Attributes("observed").Select(a => (string)a["name"]!)];
+    internal static HashSet<string> Observed() => [.. Attributes("observed").Select(a => (string)a["name"]!)];
 
     private static JsonArray Candidate(JsonNode c) =>
         [(string)c["value"]!, (double)c["score"]!, (string)c["source"]!, (bool)c["trusted"]!];
+
+    private static JsonArray Candidate(Candidate c) => [c.Value, c.Score, Name(c.Source), c.Trusted];
+
+    private static string Name(Source source) => source == Source.External ? "Model" : source.ToString();
 
     [Theory]
     [InlineData(false)]
@@ -60,9 +64,18 @@ public sealed class CoreTests(ITestOutputHelper output)
             var values = record["values"]!.AsObject()
                 .Where(p => observed.Contains(p.Key))
                 .ToDictionary(p => p.Key, p => (string)p.Value!);
-            foreach (var answer in JsonNode.Parse(decider.AnswerJson(schema, id, values))!.AsArray())
-            {
-                var actual = new JsonObject
+            var answers = typed
+                ? decider.Answer(schema, id, values).Select(a => new JsonObject
+                {
+                    ["kind"] = "decision",
+                    ["doc"] = id,
+                    ["field"] = a.Attribute,
+                    ["answered"] = a.Answered,
+                    ["source"] = Name(a.Source),
+                    ["candidates"] = new JsonArray([.. a.Candidates.Select(c => (JsonNode)Candidate(c))]),
+                    ["coarse"] = a.Coarse is { } coarse ? Candidate(coarse) : null,
+                })
+                : JsonNode.Parse(decider.AnswerJson(schema, id, values))!.AsArray().Select(answer => new JsonObject
                 {
                     ["kind"] = "decision",
                     ["doc"] = id,
@@ -71,7 +84,9 @@ public sealed class CoreTests(ITestOutputHelper output)
                     ["source"] = (string)answer["source"]!,
                     ["candidates"] = new JsonArray([.. answer["candidates"]!.AsArray().Select(c => (JsonNode)Candidate(c!))]),
                     ["coarse"] = answer["coarse"] is { } coarse ? Candidate(coarse) : null,
-                };
+                });
+            foreach (var actual in answers)
+            {
                 JsonNode.DeepEquals(Doubles(actual), Doubles(golden[at])).Should()
                     .BeTrue($"decision line {at + 1}: {actual.ToJsonString()} vs {golden[at].ToJsonString()}");
                 at++;
@@ -85,7 +100,7 @@ public sealed class CoreTests(ITestOutputHelper output)
     }
 
     /// <summary>Every number as the double it denotes: the reference writes a whole double without a fraction.</summary>
-    private static JsonNode? Doubles(JsonNode? node) => node switch
+    internal static JsonNode? Doubles(JsonNode? node) => node switch
     {
         JsonValue v when v.TryGetValue<double>(out var d) => JsonValue.Create(d),
         JsonArray a => new JsonArray([.. a.Select(Doubles)]),
@@ -93,7 +108,7 @@ public sealed class CoreTests(ITestOutputHelper output)
         _ => node?.DeepClone(),
     };
 
-    private static (Schema Schema, Decider Decider) Filled()
+    internal static (Schema Schema, Decider Decider) Filled()
     {
         var schema = Schema.FromJson(Fixture("schema.json"));
         var decider = new Decider();
@@ -134,7 +149,7 @@ public sealed class CoreTests(ITestOutputHelper output)
                 var flat = record.AnswerPartial(decider, name);
                 flat.Answered.Should().Be((bool)answer["answered"]!);
                 flat.NeedsExternal.Should().Be(answer["needs_external"] is not null);
-                (flat.Source == Source.External ? "Model" : flat.Source.ToString()).Should().Be((string)answer["source"]!);
+                Name(flat.Source).Should().Be((string)answer["source"]!);
                 flat.Candidates.Select(c => (c.Value, c.Score, c.Trusted)).Should().Equal(
                     answer["candidates"]!.AsArray().Select(c => ((string)c!["value"]!, (double)c["score"]!, (bool)c["trusted"]!)));
                 flat.Coarse?.Value.Should().Be((string?)answer["coarse"]?["value"]);

@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 namespace Gil.Native;
 
 /// <summary>Which layer offered a candidate.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<Source>))]
 public enum Source : byte
 {
     /// <summary>No layer.</summary>
@@ -15,6 +16,7 @@ public enum Source : byte
     SimilarDocument = 2,
 
     /// <summary>A judgement the host made outside the core and offered back.</summary>
+    [JsonStringEnumMemberName("Model")]
     External = 3,
 }
 
@@ -56,14 +58,19 @@ public enum SettlementKind
     CorrectOther,
 }
 
-/// <summary>A value offered for an attribute: its score on its layer's scale, the layer, and whether the layer trusts
-/// it.</summary>
-public readonly record struct Candidate(string Value, double Score, Source Source, bool Trusted);
+/// <summary>A value offered for an attribute: its score on its layer's scale, the layer, whether the layer trusts it, and
+/// what backs it.</summary>
+public readonly record struct Candidate(string Value, double Score, Source Source, bool Trusted)
+{
+    /// <summary>What backs the candidate — none for the attribute's overall frequency and an external judgement, and
+    /// none in a <see cref="PartialAnswer"/>, which leaves it out.</summary>
+    public Evidence? Evidence { get; init; }
+}
 
 /// <summary>The answer for one attribute while a person types into it: the layer of the first candidate, how it is
 /// offered, whether it is answered (its first candidate trusted), whether it wants an external judgement, the candidates
-/// best first, and the coarse class offered instead when there is one. What backs each candidate is in the JSON
-/// answers.</summary>
+/// best first, and the coarse class offered instead when there is one — read without JSON, so it leaves out what backs each
+/// candidate, which <see cref="Answer"/> has.</summary>
 public sealed record PartialAnswer(
     Source Source,
     AttributePolicy Policy,
