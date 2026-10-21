@@ -28,7 +28,9 @@ person finally settled is kept. It suggests those decided attributes one at a ti
 What was measured, on a public stream of aircraft maintenance reports: letting the replay choose the attributes that key a
 fault code with several hundred values made the key layer answer it 1.9 times as often as keying it by every attribute, at
 a precision of 0.94 against 0.90; and the code's chapter — its first two characters — was trusted for 42% of the reports
-whose code went unanswered at a target of 0.95, and was right for 97% of them.
+whose code went unanswered at a target of 0.95, and was right for 97% of them. On public NCBI BioSample records, an
+[association-rule recommender and Gil are compared](https://github.com/iyulab/gil/blob/main/benchmarks/biosample/README.md)
+by how many values each answers at the same target precision.
 The precision a replay promises can still be optimistic, most of all where settled records arrive in batches.
 Measure it on your own saved records before relying on it.
 
