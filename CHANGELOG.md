@@ -27,6 +27,7 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   | `FieldCandidate`, `FieldSource` | `Candidate` (`Evidence` is `KeyEvidence` or `RecordEvidence`), `Source` |
   | `IFieldModel`, `FieldModelResult` | `IExternalJudge.JudgeAsync(attribute, evidence, ct)` returning ranked `ExternalCandidate`s (empty abstains), called by `OpenRecord.AnswerAsync(decider, judge, ct)` |
   | `ThresholdSelection` | `Replay` (`SelectLayers`, `SelectCoarse`, `SelectKeyFields`, `SelectKeyConcentrations`), synchronous, over `SettledRecords` and `SelectionOptions` |
+  | `ThresholdSelection.RecentDocuments`, `PooledStandardErrors`, `PooledRecentLookups`, `PooledRecentAnswers` | `Replay.RecentRecords`, `Replay.PooledStandardErrors`, `Replay.PooledRecentLookups`, `Replay.PooledRecentAnswers` (same values) |
   | `ThresholdChoice`, `LayerThresholds`, `TypedKeyThresholds`, `KeyFieldsChoice`, `KeyFieldsTrial`, `KeyState`, `ThresholdRule` | Same names (a layers selection returns `LayerSelection`); chosen settings are kept as a `Tuning` (`Capture`, `Promise`, `Apply`, `Stale`, `ToJson`/`FromJson`) |
   | `AskPlanner`, `AskAdvice` (`GIL0005`) | `AskPlanner(schema, attribute, askable, budget)` with `Learn` and `Advise`, still `GIL0005` |
   | `GilDiagnostics` | Removed; answers carry their decision records, and `Usage.Count` reports how they fared |

@@ -29,6 +29,10 @@ from gil._gil import AskPlanner as _AskPlanner
 from gil._gil import Decider as _Decider
 from gil._gil import OpenRecord as _OpenRecord
 from gil._gil import (
+    POOLED_RECENT_ANSWERS,
+    POOLED_RECENT_LOOKUPS,
+    POOLED_STANDARD_ERRORS,
+    RECENT_RECORDS,
     Records,
     check_schema,
     select_coarse_json,
@@ -43,6 +47,10 @@ from gil._gil import (
 )
 
 __all__ = [
+    "POOLED_RECENT_ANSWERS",
+    "POOLED_RECENT_LOOKUPS",
+    "POOLED_STANDARD_ERRORS",
+    "RECENT_RECORDS",
     "Answer",
     "Answered",
     "AskAdvice",

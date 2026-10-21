@@ -9,6 +9,22 @@ namespace Gil;
 /// the records cross once, as their handle.</summary>
 public static class Replay
 {
+    /// <summary>How many of the latest records replayed <see cref="ThresholdChoice.Promise"/> is taken over — every
+    /// record in settlement order counts, whether or not it was asked about. The core's <c>RECENT_RECORDS</c>.</summary>
+    public const int RecentRecords = 5_000;
+
+    /// <summary>How many standard errors below the measured precision <see cref="ThresholdRule.Pooled"/> holds the target
+    /// at. The core's <c>POOLED_STANDARD_ERRORS</c>.</summary>
+    public const double PooledStandardErrors = 1.645;
+
+    /// <summary>How many of the attribute's latest lookups <see cref="ThresholdRule.Pooled"/> chooses on, at the least.
+    /// The core's <c>POOLED_RECENT_LOOKUPS</c>.</summary>
+    public const int PooledRecentLookups = 5_000;
+
+    /// <summary>How many answers, under the attribute's thresholds as they stand, <see cref="ThresholdRule.Pooled"/>
+    /// reaches back for when its latest lookups hold fewer. The core's <c>POOLED_RECENT_ANSWERS</c>.</summary>
+    public const int PooledRecentAnswers = 1_000;
+
     /// <summary>The key and similar record thresholds for <paramref name="attribute"/>, with the replay's decision
     /// records when <see cref="SelectionOptions.Decisions"/> asks for them.</summary>
     /// <exception cref="ArgumentException">The options are out of range, or the attribute is not decided.</exception>

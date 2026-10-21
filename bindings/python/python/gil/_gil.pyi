@@ -3,6 +3,10 @@
 from typing import final
 
 __all__ = [
+    "POOLED_RECENT_ANSWERS",
+    "POOLED_RECENT_LOOKUPS",
+    "POOLED_STANDARD_ERRORS",
+    "RECENT_RECORDS",
     "AskPlanner",
     "Decider",
     "OpenRecord",
@@ -18,6 +22,15 @@ __all__ = [
     "tuning_stale_json",
     "usage_json",
 ]
+
+RECENT_RECORDS: int
+"""How many of the latest records replayed a choice's ``promise`` is taken over."""
+POOLED_STANDARD_ERRORS: float
+"""How many standard errors below the measured precision the pooled rule holds the target at."""
+POOLED_RECENT_LOOKUPS: int
+"""How many of the attribute's latest lookups the pooled rule chooses on, at the least."""
+POOLED_RECENT_ANSWERS: int
+"""How many answers the pooled rule reaches back for when its latest lookups hold fewer."""
 
 @final
 class Records:

@@ -63,9 +63,12 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   package: a deleted record taken out without a rebuild, and an answer returned with its lookup's decision record.
 - **Python: `OpenRecord.answer_with_decisions(decider)`** — an open record's answers, each with its lookup's decision
   record.
+- **Python: the replay constants** `RECENT_RECORDS`, `POOLED_STANDARD_ERRORS`, `POOLED_RECENT_LOOKUPS` and
+  `POOLED_RECENT_ANSWERS`, as the crate has them — how far back a choice's promise and the pooled rule look.
 
 ### Changed
 
+- **Breaking: `replay::RECENT_DOCUMENTS` is `replay::RECENT_RECORDS`**, in the crate's vocabulary. Same value.
 - **Python: a threshold selection refused by the core's contract raises `ValueError` with the core's own message** —
   an attribute that is not decided (`'a' is not a decided attribute`), a target outside (0, 1], an attribute with no
   coarse level. The binding no longer repeats those checks with wording of its own, and the key attributes' and

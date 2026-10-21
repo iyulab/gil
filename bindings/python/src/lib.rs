@@ -779,5 +779,12 @@ fn _gil(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(select_key_fields_json, m)?)?;
     m.add_function(wrap_pyfunction!(select_coarse_json, m)?)?;
     m.add_function(wrap_pyfunction!(select_key_concentrations_json, m)?)?;
+    m.add("RECENT_RECORDS", gil::replay::RECENT_RECORDS)?;
+    m.add(
+        "POOLED_STANDARD_ERRORS",
+        gil::replay::POOLED_STANDARD_ERRORS,
+    )?;
+    m.add("POOLED_RECENT_LOOKUPS", gil::replay::POOLED_RECENT_LOOKUPS)?;
+    m.add("POOLED_RECENT_ANSWERS", gil::replay::POOLED_RECENT_ANSWERS)?;
     Ok(())
 }

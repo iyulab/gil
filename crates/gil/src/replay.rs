@@ -17,7 +17,7 @@ use crate::{coarse_groups, similar_vote, text};
 
 /// How many of the latest records replayed [`ThresholdChoice::promise`] is taken over — every record in settlement
 /// order counts, whether or not it was asked about.
-pub const RECENT_DOCUMENTS: usize = 5_000;
+pub const RECENT_RECORDS: usize = 5_000;
 
 /// How many standard errors below the measured precision [`ThresholdRule::Pooled`] holds the target at. More than the one
 /// [`ThresholdChoice::promise`] is lowered by: at one, thin attributes answered on a few hundred lookups fell below the
@@ -112,7 +112,7 @@ pub struct ThresholdChoice {
     /// For the similar record layer only; always `None` for the key layer.
     pub similarity_floor: Option<f64>,
     /// The precision to expect of the next answers: the precision of the answers at or above the threshold among the
-    /// latest [`RECENT_DOCUMENTS`] records replayed (or `precision` when those are worth fewer than the minimum number
+    /// latest [`RECENT_RECORDS`] records replayed (or `precision` when those are worth fewer than the minimum number
     /// of answers), lowered to the bottom of its Wilson score interval at one standard error.
     pub promise: f64,
     /// How many independent answers `promise` is worth.
@@ -594,7 +594,7 @@ fn arrived<T: Clone>(
         .collect()
 }
 
-/// [`fit`], then each choice's promise over the answers among the latest [`RECENT_DOCUMENTS`] records of `latest`.
+/// [`fit`], then each choice's promise over the answers among the latest [`RECENT_RECORDS`] records of `latest`.
 fn fit_recent(
     matches: &[Answer],
     lookups: usize,
@@ -617,7 +617,7 @@ fn fit_recent(
     }
 }
 
-/// The choice with its promise, taken over the answers of the latest [`RECENT_DOCUMENTS`] records of `latest`.
+/// The choice with its promise, taken over the answers of the latest [`RECENT_RECORDS`] records of `latest`.
 fn promised(
     choice: Option<ThresholdChoice>,
     matches: &[Answer],
@@ -627,7 +627,7 @@ fn promised(
     let choice = choice?;
     let (mut weight, mut correct, mut squares) = (0.0_f64, 0.0_f64, 0.0_f64);
     for m in matches.iter().filter(|m| {
-        m.order as i64 > latest as i64 - RECENT_DOCUMENTS as i64 && m.score >= choice.threshold
+        m.order as i64 > latest as i64 - RECENT_RECORDS as i64 && m.score >= choice.threshold
     }) {
         weight += m.weight;
         correct += if m.correct { m.weight } else { 0.0 };
