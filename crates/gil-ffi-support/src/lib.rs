@@ -60,8 +60,11 @@ pub fn input(message: impl Into<String>) -> Failure {
 }
 
 /// Runs one call: clears the last error and the last result, keeps a panic from unwinding out, and turns the outcome
-/// into a status.
+/// into a status. A panic's message reaches the host as the last error, so the default hook's note on stderr — the
+/// host's stderr — is turned off, once; the hook belongs to this library's own copy of the Rust runtime.
 pub fn call(f: impl FnOnce() -> Result<(), Failure>) -> i32 {
+    static QUIET: std::sync::Once = std::sync::Once::new();
+    QUIET.call_once(|| std::panic::set_hook(Box::new(|_| {})));
     LAST_ERROR.with(|e| e.borrow_mut().clear());
     LAST_RESULT.with(|r| r.borrow_mut().clear());
     let outcome = catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|panic| {
