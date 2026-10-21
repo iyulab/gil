@@ -136,6 +136,44 @@ internal static unsafe partial class Native
     internal static partial int SelectLayers(
         SchemaHandle schema, Str attribute, RecordsHandle records, Str options, nuint* resultLen);
 
+    [LibraryImport(Library, EntryPoint = "gil_select_coarse")]
+    internal static partial int SelectCoarse(
+        SchemaHandle schema, Str attribute, RecordsHandle records, Str options, nuint* resultLen);
+
+    [LibraryImport(Library, EntryPoint = "gil_select_key_fields")]
+    internal static partial int SelectKeyFields(
+        SchemaHandle schema, Str attribute, RecordsHandle records, Str options, nuint* resultLen);
+
+    [LibraryImport(Library, EntryPoint = "gil_select_key_concentrations")]
+    internal static partial int SelectKeyConcentrations(
+        SchemaHandle schema, Str attribute, RecordsHandle records, nuint* resultLen);
+
+    [LibraryImport(Library, EntryPoint = "gil_tuning_capture")]
+    internal static partial int TuningCapture(SchemaHandle schema, nuint settled, double targetPrecision, nuint* resultLen);
+
+    [LibraryImport(Library, EntryPoint = "gil_tuning_promise")]
+    internal static partial int TuningPromise(Str tuning, Str attribute, Str thresholds, nuint* resultLen);
+
+    [LibraryImport(Library, EntryPoint = "gil_tuning_apply")]
+    internal static partial int TuningApply(Str tuning, SchemaHandle schema, nint* output);
+
+    [LibraryImport(Library, EntryPoint = "gil_tuning_stale")]
+    internal static partial int TuningStale(Str tuning, SchemaHandle schema, nuint settled, nuint* resultLen);
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct Decision
+    {
+        public Str Attribute;
+        public Str Answer;
+        public Str Settled;
+        public Str Settlement;
+        public double Probability;
+        public double Promise;
+    }
+
+    [LibraryImport(Library, EntryPoint = "gil_usage")]
+    internal static partial int Usage(Decision* decisions, nuint decisionsLen, nuint* resultLen);
+
     /// <summary>Makes sure the native library speaks the interface this binding was built for — once, before the first
     /// object is made.</summary>
     /// <exception cref="InvalidOperationException">The library speaks another version.</exception>

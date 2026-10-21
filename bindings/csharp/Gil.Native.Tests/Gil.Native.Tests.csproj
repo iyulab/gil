@@ -11,6 +11,7 @@
   <ItemGroup>
     <None Include="..\..\..\tests\fixtures\core\native\schema.json" Link="core\schema.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\..\tests\fixtures\core\native\records.jsonl" Link="core\records.jsonl" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\tests\fixtures\core\native\selections.json" Link="core\selections.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\..\tests\fixtures\core\golden.jsonl" Link="core\golden.jsonl" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>

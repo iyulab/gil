@@ -85,3 +85,45 @@ public sealed record PartialAnswer(
 /// <summary>A value an external judgement ranked: its probability on the judgement's own scale and whether it trusts
 /// it.</summary>
 public readonly record struct ExternalCandidate(string Value, double Probability, bool Trusted);
+
+/// <summary>How a layers selection chooses an attribute's two thresholds.</summary>
+public enum ThresholdRule
+{
+    /// <summary>Each layer on its own: the lowest threshold down to which every band of its answers meets the target.
+    /// </summary>
+    EveryBand,
+
+    /// <summary>The two thresholds together, as the pair that answers the most while the precision of all those answers
+    /// taken together stays at or above the target at the low end of its interval.</summary>
+    Pooled,
+}
+
+/// <summary>What a threshold is chosen for: the precision to keep (in (0, 1]), the fewest answers a threshold needs,
+/// the settlement kinds whose lookups count (all when null), the layers' rule, whether to keep the replay's decision
+/// records (the layers' and the coarse level's selections), and how many typed characters to count (the key attributes'
+/// selection).</summary>
+public sealed record SelectionOptions(double TargetPrecision, int MinimumAnswered)
+{
+    /// <summary>The settlement kinds whose lookups count; all when null.</summary>
+    public IReadOnlyList<SettlementKind>? Counting { get; init; }
+
+    /// <summary>How the layers' selection chooses its two thresholds.</summary>
+    public ThresholdRule Rule { get; init; }
+
+    /// <summary>Whether the layers' and the coarse level's selections keep the replay's decision records.</summary>
+    public bool Decisions { get; init; }
+
+    /// <summary>The key attributes' selection: count typing up to that many characters (0: none).</summary>
+    public int TypedLongest { get; init; }
+}
+
+/// <summary>One decision for the usage counts: the attribute, the value answered (null: none), the value settled (null:
+/// not yet), how it was settled, the probability a check was drawn with, and the promise the answer was made under
+/// (null: none).</summary>
+public sealed record UsageDecision(
+    string Attribute,
+    string? Answer,
+    string? Settled,
+    SettlementKind? Settlement,
+    double Probability = 1.0,
+    double? Promise = null);
