@@ -43,27 +43,27 @@ public static class Replay
     /// <summary>The key and similar record thresholds for <paramref name="attribute"/>: <c>{"thresholds": …}</c>, with
     /// <c>"decisions"</c> when asked for.</summary>
     /// <exception cref="ArgumentException">The options are out of range, or the attribute is not decided.</exception>
-    public static unsafe string SelectLayersJson(
+    internal static unsafe string SelectLayersJson(
         Schema schema, string attribute, SettledRecords records, SelectionOptions options) =>
         Select(&Native.SelectLayers, schema, attribute, records, options);
 
     /// <summary>The thresholds of <paramref name="attribute"/>'s coarse level, as <see cref="SelectLayersJson"/> gives
     /// them.</summary>
     /// <exception cref="ArgumentException">The options are out of range, or the attribute has no coarse level.</exception>
-    public static unsafe string SelectCoarseJson(
+    internal static unsafe string SelectCoarseJson(
         Schema schema, string attribute, SettledRecords records, SelectionOptions options) =>
         Select(&Native.SelectCoarse, schema, attribute, records, options);
 
     /// <summary>The observed attributes the key layer of <paramref name="attribute"/> should lean on, and the trials
     /// that chose them.</summary>
     /// <exception cref="ArgumentException">The options are out of range, or the attribute is not decided.</exception>
-    public static unsafe string SelectKeyFieldsJson(
+    internal static unsafe string SelectKeyFieldsJson(
         Schema schema, string attribute, SettledRecords records, SelectionOptions options) =>
         Select(&Native.SelectKeyFields, schema, attribute, records, options);
 
     /// <summary>How concentrated <paramref name="attribute"/>'s values are under each observed attribute's keys.</summary>
     /// <exception cref="ArgumentException">The attribute is not decided.</exception>
-    public static unsafe string SelectKeyConcentrationsJson(Schema schema, string attribute, SettledRecords records)
+    internal static unsafe string SelectKeyConcentrationsJson(Schema schema, string attribute, SettledRecords records)
     {
         ArgumentNullException.ThrowIfNull(schema);
         ArgumentNullException.ThrowIfNull(attribute);
@@ -123,13 +123,12 @@ public static class Replay
     }
 }
 
-/// <summary>A schema's chosen settings, captured to keep and put back: JSON in the core's form, with the schema's
-/// fingerprint, so that a later schema or a grown record count tells when the settings no longer stand.</summary>
-public static class Tuning
+/// <summary>A tuning through the C ABI, as JSON in the core's form.</summary>
+internal static class TuningJson
 {
     /// <summary>The chosen settings of the schema's decided attributes, chosen on <paramref name="settled"/> records for
     /// <paramref name="targetPrecision"/>.</summary>
-    public static unsafe string CaptureJson(Schema schema, int settled, double targetPrecision)
+    internal static unsafe string CaptureJson(Schema schema, int settled, double targetPrecision)
     {
         ArgumentNullException.ThrowIfNull(schema);
         ArgumentOutOfRangeException.ThrowIfNegative(settled);
@@ -140,7 +139,7 @@ public static class Tuning
     /// <summary>The tuning with what <paramref name="attribute"/>'s layers selection promised — its
     /// <c>thresholds</c>, JSON as <see cref="Replay.SelectLayersJson"/> gives them.</summary>
     /// <exception cref="ArgumentException">The tuning or the thresholds do not read.</exception>
-    public static unsafe string PromiseJson(string tuningJson, string attribute, string thresholdsJson)
+    internal static unsafe string PromiseJson(string tuningJson, string attribute, string thresholdsJson)
     {
         ArgumentNullException.ThrowIfNull(tuningJson);
         ArgumentNullException.ThrowIfNull(attribute);
@@ -159,7 +158,7 @@ public static class Tuning
 
     /// <summary>A new schema: <paramref name="schema"/> with the tuning's settings put back on its attributes.</summary>
     /// <exception cref="ArgumentException">The tuning does not read.</exception>
-    public static unsafe Schema Apply(string tuningJson, Schema schema)
+    internal static unsafe Schema Apply(string tuningJson, Schema schema)
     {
         ArgumentNullException.ThrowIfNull(tuningJson);
         ArgumentNullException.ThrowIfNull(schema);
@@ -176,7 +175,7 @@ public static class Tuning
     /// <summary>Why the tuning no longer stands for <paramref name="schema"/> with <paramref name="settled"/> records, as
     /// JSON — <c>null</c> while it does.</summary>
     /// <exception cref="ArgumentException">The tuning does not read.</exception>
-    public static unsafe string? StaleJson(string tuningJson, Schema schema, int settled)
+    internal static unsafe string? StaleJson(string tuningJson, Schema schema, int settled)
     {
         ArgumentNullException.ThrowIfNull(tuningJson);
         ArgumentNullException.ThrowIfNull(schema);
@@ -196,8 +195,12 @@ public static class Tuning
 /// <summary>Counts of how a decided attribute's answers fared — content-free, for a host to report.</summary>
 public static class Usage
 {
-    /// <summary>The counts over <paramref name="decisions"/>, per attribute, as JSON in the core's form.</summary>
-    public static unsafe string CountJson(IReadOnlyList<UsageDecision> decisions)
+    /// <summary>The counts over <paramref name="decisions"/>, per attribute.</summary>
+    public static IReadOnlyDictionary<string, AttributeUsage> Count(IReadOnlyList<UsageDecision> decisions) =>
+        JsonSerializer.Deserialize(CountJson(decisions), CoreJson.Default.IReadOnlyDictionaryStringAttributeUsage)!;
+
+    /// <summary><see cref="Count"/> as JSON in the core's form.</summary>
+    internal static unsafe string CountJson(IReadOnlyList<UsageDecision> decisions)
     {
         ArgumentNullException.ThrowIfNull(decisions);
         Native.EnsureCompatible();

@@ -21,6 +21,10 @@ internal sealed record SchemaForm(string Name, IReadOnlyList<Attribute> Attribut
 [JsonSerializable(typeof(LayerSelection))]
 [JsonSerializable(typeof(KeyFieldsChoice))]
 [JsonSerializable(typeof(IReadOnlyDictionary<string, double>))]
+[JsonSerializable(typeof(LayerThresholds))]
+[JsonSerializable(typeof(Tuning))]
+[JsonSerializable(typeof(Stale))]
+[JsonSerializable(typeof(IReadOnlyDictionary<string, AttributeUsage>))]
 internal sealed partial class CoreJson : JsonSerializerContext
 {
 }

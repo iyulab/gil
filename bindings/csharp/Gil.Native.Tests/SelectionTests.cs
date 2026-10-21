@@ -33,7 +33,7 @@ public sealed class SelectionTests
     };
 
     private static void Same(string actual, JsonNode? expected, string what) =>
-        JsonNode.DeepEquals(Doubles(JsonNode.Parse(actual)), Doubles(expected)).Should().BeTrue(what);
+        JsonNode.DeepEquals(Comparable(JsonNode.Parse(actual)), Comparable(expected)).Should().BeTrue(what);
 
     /// <summary>Every number as the double it denotes.</summary>
     private static JsonNode? Doubles(JsonNode? node) => node switch
@@ -111,7 +111,7 @@ public sealed class SelectionTests
 
     private static JsonNode? Write<T>(T value, JsonTypeInfo<T> type) => JsonNode.Parse(JsonSerializer.Serialize(value, type));
 
-    /// <summary>The C ABI writes nulls the binding leaves out.</summary>
+    /// <summary>The C ABI writes nulls the binding leaves out — the core reads both as nothing.</summary>
     private static JsonNode? Comparable(JsonNode? node) => Doubles(node switch
     {
         JsonArray a => new JsonArray([.. a.Select(Comparable)]),
@@ -128,21 +128,28 @@ public sealed class SelectionTests
         var call = Of("tuning").Single();
         var thresholds = Of("layers").First()["result"]!["thresholds"]!.ToJsonString();
 
-        var captured = Tuning.CaptureJson(schema, (int)call["settled"]!, (double)call["target_precision"]!);
-        Same(captured, call["captured"], "captured");
-        var promised = Tuning.PromiseJson(captured, (string)call["attribute"]!, thresholds);
-        Same(promised, call["promised"], "promised");
-        using (var applied = Tuning.Apply(promised, schema))
+        var captured = Tuning.Capture(schema, (int)call["settled"]!, (double)call["target_precision"]!);
+        Same(captured.ToJson(), call["captured"], "captured");
+        Tuning.FromJson(captured.ToJson()).Should().BeEquivalentTo(captured);
+        var layers = Replay.SelectLayers(schema, (string)call["attribute"]!, records, Options(Of("layers").First()["options"]!));
+        Same(JsonSerializer.Serialize(layers.Thresholds, CoreJson.Default.LayerThresholds), JsonNode.Parse(thresholds), "thresholds");
+        var promised = captured.Promise((string)call["attribute"]!, layers.Thresholds);
+        Same(promised.ToJson(), call["promised"], "promised");
+        promised.Attributes.Single(a => a.Attribute == (string)call["attribute"]!).KeyPromise.Should().NotBeNull();
+        using (var applied = promised.Apply(schema))
         {
             Same(applied.ToJson(), call["applied"], "applied");
         }
 
-        Tuning.StaleJson(promised, schema, Chosen).Should().BeNull();
-        var stale = Tuning.StaleJson(promised, schema, (int)call["stale_at"]!);
-        stale.Should().NotBeNull();
-        Same(stale!, call["stale"], "stale");
-        FluentActions.Invoking(() => Tuning.PromiseJson("{", "team", thresholds))
+        promised.Stale(schema, Chosen).Should().BeNull();
+        var stale = promised.Stale(schema, (int)call["stale_at"]!);
+        stale.Should().BeOfType<Stale.Settled>().Which.Now.Should().Be((int)call["stale_at"]!);
+        Same(JsonSerializer.Serialize(stale, CoreJson.Default.Stale), call["stale"], "stale");
+        (promised with { Version = "0.0.1" }).Stale(schema, Chosen).Should().Be(new Stale.Version("0.0.1"));
+        FluentActions.Invoking(() => Tuning.FromJson("{"))
             .Should().Throw<ArgumentException>().WithMessage("a tuning does not read*");
+        FluentActions.Invoking(() => captured.Promise("nowhere", layers.Thresholds))
+            .Should().Throw<ArgumentException>();
     }
 
     [Fact]
@@ -157,7 +164,12 @@ public sealed class SelectionTests
             (double)d["probability"]!,
             (double?)d["promise"])).ToArray();
         Same(Usage.CountJson(decisions), call["result"], "usage");
-        Usage.CountJson([]).Should().NotBeNullOrEmpty();
+        var counted = Usage.Count(decisions);
+        Same(JsonSerializer.Serialize(counted, CoreJson.Default.IReadOnlyDictionaryStringAttributeUsage), call["result"], "typed usage");
+        var team = counted["team"];
+        team.Abstained.Should().Be(team.Decisions - team.Answered);
+        team.Realized.Should().Be(team.RightWeight / team.JudgedWeight);
+        Usage.Count([]).Should().BeEmpty();
     }
 
     [Fact]
