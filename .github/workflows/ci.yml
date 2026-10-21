@@ -38,7 +38,7 @@ jobs:
   # The Rust decision core (crates/gil): format, lints, and the language-neutral goldens it shares with .NET.
   rust:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
@@ -64,6 +64,14 @@ jobs:
           msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)
           rustup toolchain install "$msrv" --profile minimal
           cargo +"$msrv" test --locked
+
+      # The .NET binding of the review statistics (bindings/csharp): its native library from crates/gil-review-ffi, then
+      # its tests, which reproduce the review golden bit for bit. Nothing is packed.
+      - run: cargo build -p gil-review-ffi --locked
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet test --solution bindings/csharp/Gil.Review.slnx
 
       # The Python bindings (bindings/python): built as a wheel and tested against the same goldens. Nothing is published.
       - uses: actions/setup-python@v6
