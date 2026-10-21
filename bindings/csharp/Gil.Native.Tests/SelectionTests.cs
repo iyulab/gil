@@ -1,4 +1,6 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
 using AwesomeAssertions;
 
 namespace Gil.Native.Tests;
@@ -71,6 +73,51 @@ public sealed class SelectionTests
 
         seen.Should().Be(5);
     }
+
+    [Fact]
+    public void Typed_selections_hold_everything_the_C_ABI_gave()
+    {
+        var (schema, records) = Early();
+        using var _ = schema;
+        using var __ = records;
+        var seen = 0;
+        foreach (var call in Calls.Value.Select(c => c!.AsObject()))
+        {
+            var attribute = (string?)call["attribute"];
+            JsonNode? written = (string)call["call"]! switch
+            {
+                "layers" => Write(Replay.SelectLayers(schema, attribute!, records, Options(call["options"]!)), CoreJson.Default.LayerSelection),
+                "coarse" => Write(Replay.SelectCoarse(schema, attribute!, records, Options(call["options"]!)), CoreJson.Default.LayerSelection),
+                "key_fields" => Write(Replay.SelectKeyFields(schema, attribute!, records, Options(call["options"]!)), CoreJson.Default.KeyFieldsChoice),
+                "key_concentrations" => Write(Replay.SelectKeyConcentrations(schema, attribute!, records), CoreJson.Default.IReadOnlyDictionaryStringDouble),
+                _ => null,
+            };
+            if (written is null)
+            {
+                continue;
+            }
+
+            JsonNode.DeepEquals(Comparable(written), Comparable(call["result"])).Should()
+                .BeTrue($"{call["call"]} {attribute}: {written.ToJsonString()}");
+            seen++;
+        }
+
+        seen.Should().Be(5);
+        var pooled = Replay.SelectLayers(schema, "code", records, new(0.7, 5) { Rule = ThresholdRule.Pooled, Decisions = true });
+        pooled.Decisions.Should().NotBeEmpty().And.AllSatisfy(d => d.Attribute.Should().Be("code"));
+        var keyFields = Replay.SelectKeyFields(schema, "team", records, new(0.8, 10) { TypedLongest = 3 });
+        keyFields.Typed!.Thresholds().Should().HaveCount(keyFields.Typed.ByLength.Count);
+    }
+
+    private static JsonNode? Write<T>(T value, JsonTypeInfo<T> type) => JsonNode.Parse(JsonSerializer.Serialize(value, type));
+
+    /// <summary>The C ABI writes nulls the binding leaves out.</summary>
+    private static JsonNode? Comparable(JsonNode? node) => Doubles(node switch
+    {
+        JsonArray a => new JsonArray([.. a.Select(Comparable)]),
+        JsonObject o => new JsonObject(o.Where(p => p.Value is not null).Select(p => KeyValuePair.Create(p.Key, Comparable(p.Value)))),
+        _ => node?.DeepClone(),
+    });
 
     [Fact]
     public void A_tuning_round_trip_gives_what_the_C_ABI_gave()

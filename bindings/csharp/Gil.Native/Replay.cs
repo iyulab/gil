@@ -1,13 +1,45 @@
 using System.Buffers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 
 namespace Gil.Native;
 
 /// <summary>Choosing an attribute's thresholds by replaying settled records in settlement order, in the native core —
-/// the records cross once, as their handle. Results are JSON in the core's form.</summary>
+/// the records cross once, as their handle.</summary>
 public static class Replay
 {
+    /// <summary>The key and similar record thresholds for <paramref name="attribute"/>, with the replay's decision
+    /// records when <see cref="SelectionOptions.Decisions"/> asks for them.</summary>
+    /// <exception cref="ArgumentException">The options are out of range, or the attribute is not decided.</exception>
+    public static LayerSelection SelectLayers(
+        Schema schema, string attribute, SettledRecords records, SelectionOptions options) =>
+        Read(SelectLayersJson(schema, attribute, records, options), CoreJson.Default.LayerSelection);
+
+    /// <summary>The thresholds of <paramref name="attribute"/>'s coarse level, as <see cref="SelectLayers"/> gives
+    /// them.</summary>
+    /// <exception cref="ArgumentException">The options are out of range, or the attribute has no coarse level.</exception>
+    public static LayerSelection SelectCoarse(
+        Schema schema, string attribute, SettledRecords records, SelectionOptions options) =>
+        Read(SelectCoarseJson(schema, attribute, records, options), CoreJson.Default.LayerSelection);
+
+    /// <summary>The observed attributes the key layer of <paramref name="attribute"/> should lean on, and the trials
+    /// that chose them.</summary>
+    /// <exception cref="ArgumentException">The options are out of range, or the attribute is not decided.</exception>
+    public static KeyFieldsChoice SelectKeyFields(
+        Schema schema, string attribute, SettledRecords records, SelectionOptions options) =>
+        Read(SelectKeyFieldsJson(schema, attribute, records, options), CoreJson.Default.KeyFieldsChoice);
+
+    /// <summary>How concentrated <paramref name="attribute"/>'s values are under each observed attribute's keys — what
+    /// <see cref="Attribute.KeyConcentrations"/> takes.</summary>
+    /// <exception cref="ArgumentException">The attribute is not decided.</exception>
+    public static IReadOnlyDictionary<string, double> SelectKeyConcentrations(
+        Schema schema, string attribute, SettledRecords records) =>
+        Read(SelectKeyConcentrationsJson(schema, attribute, records), CoreJson.Default.IReadOnlyDictionaryStringDouble);
+
+    private static T Read<T>(string json, JsonTypeInfo<T> type) =>
+        JsonSerializer.Deserialize(json, type)!;
+
     /// <summary>The key and similar record thresholds for <paramref name="attribute"/>: <c>{"thresholds": …}</c>, with
     /// <c>"decisions"</c> when asked for.</summary>
     /// <exception cref="ArgumentException">The options are out of range, or the attribute is not decided.</exception>
