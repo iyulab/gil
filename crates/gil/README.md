@@ -58,6 +58,17 @@ stream of biological sample records with costs counted this way, thresholds chos
 time — a loss once a wrong value costs ten entries; chosen for a target at or above 1 − 1/ρ, they cost less than asking
 at every ρ from 2 to 20. When you do not know ρ, time how long undoing a wrong value takes against entering one.
 
+A target can be read two ways. By default (`replay::ThresholdRule::EveryBand`, the rule of `replay::select_layers`)
+each layer's threshold is the lowest down to which every band of its answers meets the target — a floor under every
+kind of answer. When the target is a share of all the attribute's answers instead, choose with
+`replay::select_layers_by_rule` and `ThresholdRule::Pooled`: the two thresholds together, as the pair that answers the
+most of the attribute's latest `POOLED_RECENT_LOOKUPS` lookups while all those answers hold the target at the bottom of
+their Wilson interval at `POOLED_STANDARD_ERRORS` (1.645) standard errors. The bound is on the answers together, not on
+any group of them. Split by who sent the records in — the recalling firm, the bug's reporter, the maintenance report's
+submitter, the hospital — on four public collections, `Pooled` placed 19–22% of its answers with senders whose own
+precision was below the target beyond doubt (the top of a 95% Wilson interval under 0.8), and `EveryBand` none. If you
+read a promise per customer or per site, choose `EveryBand`.
+
 ## License
 
 Apache-2.0 — see `LICENSE`.

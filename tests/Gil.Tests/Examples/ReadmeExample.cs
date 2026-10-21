@@ -132,5 +132,17 @@ internal static class ReadmeExample
 
         var kept = Tuning.FromJson(File.ReadAllText("ticket.tuning.json"));
         using var current = kept.Stale(schema, saved.Count) is null ? kept.Apply(schema) : null;
+
+        var pooled = Replay.SelectLayers(schema, "team", saved, options with { TargetPrecision = 0.8, Rule = ThresholdRule.Pooled });
+        var unprompted = Replay.SelectLayers(schema, "team", saved, options with { Counting = [SettlementKind.Enter] });
+
+        ticket.Settle(decider, "team", SettlementKind.Check, DateTimeOffset.UtcNow, value: "network", probability: 0.05);
+        var checkedLayers = Replay.SelectLayers(schema, "team", saved, options with { Counting = [SettlementKind.Enter, SettlementKind.Check] });
+
+        var concentrations = Replay.SelectKeyConcentrations(schema, "team", saved);
+
+        var panel = new CoarseLevel(new Dictionary<string, string> { ["network"] = "infrastructure", ["payments"] = "finance" });
+        using var grouped = new Schema(schema.Name, schema.Attributes.Select(a => a.Name != "team" ? a : a with { Coarse = panel }));
+        var coarse = Replay.SelectCoarse(grouped, "team", saved, options);
     }
 }

@@ -63,6 +63,12 @@ answers hold the target at the bottom of their Wilson interval at 1.645 standard
 the attribute's current thresholds answered fewer than 1,000 of them). Each layer's `chosen` still reports that
 layer's own precision and promise.
 
+The bound is on the answers together, not on any group of them. Split by who sent the records in — the recalling firm,
+the bug's reporter, the maintenance report's submitter, the hospital — on four public collections, `"pooled"` placed
+19–22% of its answers with senders whose own precision was below the target beyond doubt (the top of a 95% Wilson
+interval under 0.8), and the default `"every_band"` none. If you read a promise per customer or per site, keep
+`"every_band"`.
+
 ```python
 thresholds, _ = gil.select_layers(schema, "team", records, target_precision=0.8, rule="pooled")
 ```

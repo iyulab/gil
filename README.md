@@ -32,7 +32,8 @@ whose code went unanswered at a target of 0.95, and was right for 97% of them. O
 [association-rule recommender and Gil are compared](https://github.com/iyulab/gil/blob/main/benchmarks/biosample/README.md)
 by how many values each answers at the same target precision.
 The precision a replay promises can still be optimistic, most of all where settled records arrive in batches.
-Measure it on your own saved records before relying on it.
+Measure it on your own saved records before relying on it — [Choosing what to trust](#choosing-what-to-trust)
+says how.
 
 It is not the right tool for an attribute whose value the other attributes do not decide (free text, a new name), for a form
 nobody settles (memory then stays empty), or for choosing between models (a router does that).
@@ -413,6 +414,219 @@ using var current = kept.Stale(schema, saved.Count) is null ? kept.Apply(schema)
 
 `Promise` records the precision each chosen threshold promises for the next answers; `Usage.Count` over what was
 answered and settled since reports how each attribute's answers fared against it.
+
+### Choosing what to trust
+
+The right thresholds move as memory grows. Choose them again from time to time — `Stale` says so once the settled
+records have grown or shrunk by a tenth — by replaying the saved records. `SelectLayers` chooses both in one replay, in
+the order the decider consults the layers: a similar record answers only where no key did, so its threshold is chosen
+on those lookups alone. A layer without a `Chosen` threshold should not answer the attribute on its own; its
+`MostPrecise` still says how close it came — the best precision it reached on at least `MinimumAnswered` answers — so
+the application can say by how much the attribute falls short.
+
+Which target to ask for (`TargetPrecision`) is yours to set, and it follows from what a wrong answer costs. Count a
+value a person enters with no answer shown as 1, a right answer as nothing, and a wrong one — noticed, undone and
+entered again — as ρ. An answer right with probability p then costs ρ(1 − p) against the 1 of asking, so answering pays
+only above a precision of 1 − 1/ρ: 0.5 where a wrong value costs two entries, 0.8 at five, 0.9 at ten, 0.95 at twenty.
+Below that line a threshold that keeps its promise still loses — each answer it adds costs more than it saves.
+Replaying a public stream of biological sample records with costs counted this way, thresholds chosen for 0.8 answered
+right 0.88 of the time — a loss once a wrong value costs ten entries; chosen for a target at or above 1 − 1/ρ, they cost
+less than asking at every ρ from 2 to 20. When you do not know ρ, time how long undoing a wrong value takes against
+entering one.
+
+A target can be read two ways. By default (`ThresholdRule.EveryBand`) each layer's threshold is the lowest down to
+which every band of its answers meets the target, so no band of weak answers rides on good ones above it — a floor
+under every kind of answer. When the target is a share of all the attribute's answers instead, ask for
+`ThresholdRule.Pooled`: it chooses the two thresholds together, as the pair that answers the most of the attribute's
+latest `Replay.PooledRecentLookups` lookups while the precision of all those answers taken together stays at or above
+the target at the bottom of its Wilson interval at `Replay.PooledStandardErrors` (1.645) standard errors. Where the
+attribute's thresholds as they stand would have answered fewer than `Replay.PooledRecentAnswers` of those lookups, it
+reaches further back. In eight forward replays on seven public collections — medical device product codes, bug
+components, aircraft fault codes, patent groups and the attributes of three kinds of biological samples — each on
+records the rule was not tuned on, it kept a 0.8 target every time and answered 0.92–1.80 times as often as
+`EveryBand` (1.52 in the middle); holding the bound at one standard error instead broke the target on an attribute
+answered a few hundred times. Each layer's `Chosen` still reports that layer's own precision and `Promise` (one
+standard error, its own answers); the bound the pair was chosen under is on the answers together, and is the one to
+show:
+
+```csharp
+var pooled = Replay.SelectLayers(schema, "team", saved, options with { TargetPrecision = 0.8, Rule = ThresholdRule.Pooled });
+```
+
+The bound is on the answers together, not on any group of them. In a public bug tracker, on the bugs a deployed
+component classifier had moved out of triage — harder than the rest — `Pooled` answered a quarter at 0.77 and
+`EveryBand` a tenth at 0.90, against the classifier's 0.70. Split by who sent the records in — the recalling firm, the
+bug's reporter, the maintenance report's submitter, the hospital — on four public collections, `Pooled` placed 19–22%
+of its answers with senders whose own precision was below the target beyond doubt (the top of a 95% Wilson interval
+under 0.8), and `EveryBand` none. If you read a promise per customer or per site, choose `EveryBand`.
+
+A value a person accepted with the answer in view may be right because it was answered. A value the application filled
+was never checked. To know how right a layer is on its own, count only the settlements that saw no answer. Every record
+is still replayed into memory; only the lookups counted change. A record that does not say how an attribute was settled
+is counted only when `Counting` is left out:
+
+```csharp
+var unprompted = Replay.SelectLayers(schema, "team", saved, options with { Counting = [SettlementKind.Enter] });
+```
+
+A value settled as `Fill` stays in the record, but memory does not learn it and choosing thresholds does not ask about
+it. Remembered, an answer's own value would come back as evidence for itself. Replaying a public stream with nine in ten
+trusted answers filled, a replay that learned from them promised 0.97 where 0.73 was right, and one stream's key layer
+ended up answering every record with 0.11 right. Learning only from what a person settled kept the promise within a few
+points of what was right.
+
+An application that fills values on its own still needs some of them checked, or nothing tells it when the fills go
+wrong. Draw the decisions to check at random, with a probability fixed before the draw — the same for every decision
+unless some keys need watching more closely — and have someone settle the attribute again without seeing the filled
+value: `SettlementKind.Check`, with the probability. Memory learns the checked value in place of the filled one, and
+choosing thresholds counts each check as one ÷ its probability decisions, the filled decisions it was drawn from, so
+checking some keys more often does not tilt the promise toward them. Name `SettlementKind.Check` in `Counting` beside
+the kinds a person settles. A decision picked because it looked doubtful has no such probability and is not a check:
+counted as one, it would lean the promise toward the doubtful ones. Few checks weigh much but say little, so the fewest
+answers a threshold must rest on is held to their effective number (`ThresholdChoice.EffectiveAnswered`).
+
+```csharp
+ticket.Settle(decider, "team", SettlementKind.Check, DateTimeOffset.UtcNow, value: "network", probability: 0.05);
+var checkedLayers = Replay.SelectLayers(schema, "team", saved, options with { Counting = [SettlementKind.Enter, SettlementKind.Check] });
+```
+
+The check is a second settlement of the same attribute in the same open record, after the fill; the snapshot then keeps
+the checked value, its kind and its probability (`Record.Probabilities`). Replaying two public streams with nine in ten
+trusted answers filled and the tenth checked, counting the checks by their weight kept the promise within two points of
+what was right in both, where counting them once had promised more than two points less than was right in one.
+Weighting makes the promise honest rather than generous: where the answers had been doing worse than promised,
+thresholds rose and about 8% fewer answers were right; where better, slightly more were. In a public bug tracker,
+values a machine filled were changed by a person within 30 days 26% of the time, values a person chose 7%. Within the
+same component the gap grows rather than shrinks — the machine's values were changed 4.8 times as often as people's
+(3.5 to 6.7), so they are wrong more often, not merely placed where values move. Filled values need the checking.
+
+The replay looks each attribute up with the values that had arrived before it was settled — what its last answer was
+made from. `Snapshot()` records that order in `Record.Arrival`; save it with the record. Without it, observed values
+count as there from the start and decided attributes as settled in the schema's order. Even so, the precision a replay
+reports can be optimistic, as the introduction warns. `TargetPrecision` is checked on the records the threshold is
+chosen on. Where settled records come in batches — several at once from one source, alike in their observed values —
+whether a near-identical record's value is right tends to hold or fail for the whole batch. The replay then sees fewer
+independent cases than it counts. Key layer thresholds chosen once for a target of 0.8 on the first forty thousand
+records of two public streams — an issue tracker and aircraft maintenance reports — answered right 0.85 and 0.90 of the
+time on the forty thousand that followed, and 0.82 to 0.91 for the six attributes of a smaller stream of biological
+sample records. Version 0.6.0, on two other streams of sample records, saw 0.63 to 0.74 at 0.8 and 0.64 to 0.72 at
+0.7; wider statistical margins did not close that gap. To know the precision an attribute actually delivers, check it
+on your own records: choose on those settled up to a date and count the answers on those settled after it.
+
+Settle a record that arrives again — a retransmission, a re-save — under the same record id. The memories keep one
+version per id, and the replay asks a record settled again without its earlier version. Under a new id the copy is new
+evidence: copies answer each other in the replay, and the threshold promises far more than other records get.
+Replaying a public stream in which about half the records arrived twice, copies under new ids made the key layer answer
+six times as often with 0.67 right against a promise of 0.91; under the same ids, it answered as if no copy had arrived.
+
+Which attributes key a decided attribute matters most when it has many values. An attribute that rarely decides it
+still adds to the score of the values settled alongside its own: a value drawn from many, each seen only a few times —
+a model number, say — lends a few wrong values most of their strength and pushes them above the right one. Name the
+attributes that decide it in `KeyFields`. To find them in the saved records, replay the key layer with
+`Replay.SelectKeyFields`, as above. It weighs a set of attributes by what its key layer gains at the target precision —
+the right answers less the target times the answers, the amount the threshold itself is chosen to make largest — so an
+answer counts only by how far it is right beyond the target. It tries each attribute the decided one rests on alone,
+adds them in order of that gain while each addition gains more, and names a set only if it gains more than every
+attribute together; otherwise `KeyFields` comes back null. Counting answers alone would drop an attribute that names
+the very thing the record describes (a customer, a site, a piece of equipment): alone it answers only where that thing
+comes again, so a broad attribute answers more often — and wrongly on exactly those. Then choose the thresholds again
+with the attributes it named, since a narrower set changes the scores. Replaying a public stream of maintenance
+reports, it chose two of thirteen observed attributes for a fault code with several hundred values: the key layer
+answered 1.9 times as often as with every attribute, at a precision of 0.94 against 0.90. These were the two attributes
+a learned weighting of the attributes ranked highest, and resting on them answered 2.2 times as often on the records
+that followed, at 0.95 against 0.89. It costs one replay per attribute tried and one per addition.
+
+`KeyFields` narrows the key layer only. The similar record layer still reads every attribute the decided one rests on
+(`DependsOn`): matching a whole record discounts a line that does not decide the attribute rather than counting it, and
+cut down to an attribute or two the lookups read alike. Replaying a public issue tracker with both layers on, resting a
+component attribute on the one attribute the key layer chose (`DependsOn`) answered half as often; keying it by that
+attribute (`KeyFields`) answered rightly 1.02 times as often as every attribute, on the same records at the same target.
+The key layer took more of the answers and the similar record layer fewer, so precision moved from 0.89 to 0.88 —
+above the target of 0.8, which is what the thresholds promise. On the maintenance reports above, with the similar
+record layer and a coarse level on and a target of 0.95, keying the fault code by the one attribute chosen answered it
+rightly 1.36 times as often as every attribute, at 0.96 either way; resting it on that attribute had answered less
+often than every attribute.
+
+How far a key seen only a few times is trusted depends on its attribute. A value's strength under a key is its weighted
+count there over the key's weighted total plus a concentration, 1 unless set: a key seen once lends its value half its
+strength, whatever attribute it comes from. An attribute that names the very thing the decided one describes — a
+reference to another form's record, an equipment or customer number — keeps the value its keys were first seen with,
+so a key of it seen once is as good as settled; a broad attribute whose keys mix values deserves less than half. Choose
+a concentration for each attribute from the saved records with `Replay.SelectKeyConcentrations`. It replays them in the
+order they were settled and asks, before each, how often a key seen before brought a value new to it; the
+concentration under which that was likeliest is the attribute's. Two predictions from a key seen once are counted for
+every attribute besides, so an attribute whose keys were seldom seen again stays near 1. Set them as
+`KeyConcentrations`, after `KeyFields`, then choose the thresholds again, since the scores move:
+
+```csharp
+var concentrations = Replay.SelectKeyConcentrations(schema, "team", saved);
+```
+
+Replaying a year of public food inspections of one area (701 inspections, 382 establishments), where a risk level is
+set per establishment and an inspection's kind is drawn from a few, the establishment attribute came out at 0.004 and
+the kind at 0.23. Of the 319 inspections of an establishment inspected before, the key layer had answered 291 — 12
+wrongly, following the kind against the establishment's own record — and abstained on 28; with the concentrations it
+answered 313, all right, and abstained on 6. Establishments seen for the first time were answered as before (270 at
+0.92, then 266 at 0.92). On a public issue tracker and the maintenance reports above, where no attribute names what is
+decided, the concentrations ranged from 0.2 to 5 and the answers given rightly moved by −0.2% to +1.9%, every
+threshold keeping its target.
+
+A concentration near zero is also what an attribute gets when it was written from the decided value itself — a copy of
+it, an identifier assigned to each value — and such an attribute may not be there yet while the record is being filled
+in. With attributes like these planted beside the decided attribute of seven public streams of settled records, a copy
+and an identifier per value came out below 0.001 in every stream, and none of the 141 attributes the records really had
+came out below 0.14. Before trusting an attribute whose concentration is under 0.01, check that it is there when an
+answer is asked for, as an establishment is; if it is filled only once the decided attribute is settled, save
+`Record.Arrival`, so the replay looks the attribute up without it. An attribute computed from the decided value that
+folds several values into one code reads to the replay as strong evidence and comes out like any other: only `Arrival`
+keeps it out.
+
+Where an attribute's values name their class in their leading characters — the chapter of a fault code, the class of a
+patent classification, the group of a product code — a value the layers cannot answer can often still be given its
+class. Set `AttributeDefinition.Coarse` to a `CoarseLevel` with the prefix length, and when no layer answers the value
+`Answer.Coarse` offers a prefix: the one the values under the record's keys back by their summed scores, else the one
+the similar records vote for. It is trusted at the level's own thresholds, chosen after the attribute's with
+`Replay.SelectCoarse` on the lookups the value layers leave, and is a guess otherwise. It never enters `Candidates`,
+which hold settled values only. The class is worth what follows from it — routing, a reviewer, a section of the form —
+more than typing: a right two-character chapter saves one keystroke of four. Replaying public streams with thresholds
+chosen on the first ten thousand records, the chapter of an aircraft fault code was trusted for 42% of the reports
+whose code went unanswered at a target of 0.95, and was right for 97% of them; the class of a patent classification,
+for 10% of the patents unanswered at 0.8, right for 85%.
+
+Where a value's class is not in its characters but in a table — the panel that reviews a device code, the category of
+a product — give the table instead, value to class. The values stay as they were settled and the classes are read off
+them, so the table can change without settling anything again. A value the table does not list is a class of its own,
+so list every value — those without a known class under a class named for them:
+
+```csharp
+var panel = new CoarseLevel(new Dictionary<string, string> { ["network"] = "infrastructure", ["payments"] = "finance" });
+using var grouped = new Schema(schema.Name, schema.Attributes.Select(a => a.Name != "team" ? a : a with { Coarse = panel }));
+var coarse = Replay.SelectCoarse(grouped, "team", saved, options);
+```
+
+Replaying public medical device recall records with the review panel of each product code from the public
+classification table — 19 panels — the panel was trusted for 54% of the records whose code went unanswered at 0.8, and
+was right for 90% of them; the code's own first letter, as a prefix, managed 9%.
+
+A chosen threshold also holds only for the version of the core that chose it. A threshold rests on how a layer scores
+its candidates and on what the replay asks, and a release may change either. A `Tuning` records the version that
+chose it, and `Stale` returns `Stale.Version` under any other — choose again then. What an upgrade moves can be counted
+before you take it. Replay your saved records once with each version — two small programs that differ only in the
+version of the `Gil` package — choosing thresholds on the earlier records and asking for each later one before putting
+it into memory, and write down each answer's first candidate, whether it was answered and its coarse class. Compare the
+two lists record by record. A release marked **Breaking** changes a contract, not necessarily your answers: replaying
+two public streams (medical device recalls and aircraft fault reports, ten thousand answers each after ten thousand to
+choose from), 0.21.0, 0.22.0, 0.23.0 and 0.24.0 answered every one of the twenty thousand the same way. Choosing again
+after an upgrade is still the rule; the count says what it will move.
+
+**Asking first** (experimental, `GIL0005`). When no layer answers a decided attribute, one more observed value from the
+person — the component a ticket is about, the part a fault was found on — may let one answer, or a class be trusted.
+Asking every time costs every one of those values typed. `AskPlanner` learns from settled records in settlement order
+(`Learn`) what asking each attribute gained per character, and advises an open record within a budget (`Advise`).
+Replaying a public stream of medical device recalls (asking for the recalling firm to answer the product code, ten
+thousand records after thirty thousand) with a budget of 0.49, advice spent 49% of the typing and gained 0.032 per
+record — 60% of what asking every time gained; on a public stream of aircraft fault reports (asking for the part to
+answer the fault code), 48% and 0.094 — 68%.
 
 ## Build and test
 
