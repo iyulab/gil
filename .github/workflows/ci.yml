@@ -73,13 +73,14 @@ jobs:
           rustup toolchain install "$msrv" --profile minimal
           cargo +"$msrv" test --locked
 
-      # The .NET binding of the review statistics (bindings/csharp): its native library from crates/gil-review-ffi, then
-      # its tests, which reproduce the review golden bit for bit. Nothing is packed.
-      - run: cargo build -p gil-review-ffi --locked
+      # The .NET bindings (bindings/csharp): their native libraries from crates/gil-review-ffi and crates/gil-ffi, then
+      # their tests, which reproduce the review golden and the decision golden through the C ABIs. Nothing is packed.
+      - run: cargo build -p gil-review-ffi -p gil-ffi --locked
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
       - run: dotnet test --solution bindings/csharp/Gil.Review.slnx
+      - run: dotnet test --solution bindings/csharp/Gil.Native.slnx
 
       # The Python bindings (bindings/python): built as a wheel and tested against the same goldens. Nothing is published.
       - uses: actions/setup-python@v6

@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Gil.Native/Gil.Native.csproj" />
+  <Project Path="Gil.Native.Tests/Gil.Native.Tests.csproj" />
+</Solution>
