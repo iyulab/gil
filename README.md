@@ -211,11 +211,12 @@ the model files, so which model to ship stays your decision.
 
 Where no model is reachable at all, `LexicalMemory` compares requests by their characters (n-gram TF-IDF), with no
 tokenizer and no call, and `new Resolver(memory, sink)` resolves with memory alone — a request memory cannot answer
-abstains instead of reaching a model. Its similarities are on their own scale: pick the task's `MemoryThreshold` by
-replaying your feedback history rather than reusing an embedding memory's value.
+abstains instead of reaching a model. It is the decision core's similar record memory, run by the native library the
+`Gil` package carries, so dispose it when you are done with it. Its similarities are on their own scale: pick the
+task's `MemoryThreshold` by replaying your feedback history rather than reusing an embedding memory's value.
 
 ```csharp
-var lexical = new LexicalMemory();
+using var lexical = new LexicalMemory();
 await MemoryReplay.From(store.FeedbackHistory("support")).ApplyAsync(lexical, "support", traceId: "startup");
 var offline = new Resolver(lexical, store);
 var bare = TreeYaml.Parse("id: root").Root;   // the tree is not used without models

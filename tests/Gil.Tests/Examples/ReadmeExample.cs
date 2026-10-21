@@ -66,7 +66,7 @@ internal static class ReadmeExample
         Console.WriteLine($"{result.Mode}: {result.Output}");
         await resolver.FeedbackAsync(task, result.TraceId, correct: true);
 
-        var lexical = new LexicalMemory();
+        using var lexical = new LexicalMemory();
         await MemoryReplay.From(store.FeedbackHistory("support")).ApplyAsync(lexical, "support", traceId: "startup");
         var offline = new Resolver(lexical, store);
         var bare = TreeYaml.Parse("id: root").Root;   // the tree is not used without models

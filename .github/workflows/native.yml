@@ -17,6 +17,8 @@ on:
       - crates/gil-review-ffi/**
       - bindings/csharp/Gil.Review/**
       - src/Gil/**
+      - src/Gil.Tree/**
+      - src/Gil.Abstractions/**
       - Cargo.lock
       - .github/workflows/native.yml
   workflow_dispatch:
@@ -96,7 +98,8 @@ jobs:
           retention-days: 1
 
   # Gil and Gil.Review packed with the six runtimes' libraries — each package checked to carry each under
-  # runtimes/<rid>/native/.
+  # runtimes/<rid>/native/. Gil.Tree (and the Gil.Abstractions it needs) too: its lexical memory calls the library Gil
+  # carries.
   pack:
     needs: [linux, desktop]
     runs-on: ubuntu-latest
@@ -112,6 +115,8 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - run: dotnet pack src/Gil/Gil.csproj -c Release -p:GilNativeRoot="$PWD/native" -o packages
+      - run: dotnet pack src/Gil.Abstractions/Gil.Abstractions.csproj -c Release -o packages
+      - run: dotnet pack src/Gil.Tree/Gil.Tree.csproj -c Release -p:GilNativeRoot="$PWD/native" -o packages
       - run: dotnet pack bindings/csharp/Gil.Review/Gil.Review.csproj -c Release -p:GilReviewNativeRoot="$PWD/native" -o packages
       - name: Check each package carries every runtime
         run: |
@@ -161,11 +166,22 @@ jobs:
             <packageSources>
               <clear />
               <add key="built" value="$GITHUB_WORKSPACE/packages" />
+              <add key="nuget" value="https://api.nuget.org/v3/index.json" />
             </packageSources>
+            <packageSourceMapping>
+              <packageSource key="built">
+                <package pattern="Gil" />
+                <package pattern="Gil.*" />
+              </packageSource>
+              <packageSource key="nuget">
+                <package pattern="*" />
+              </packageSource>
+            </packageSourceMapping>
           </configuration>
           EOF
           dotnet add package Gil --version "$gil"
           dotnet add package Gil.Review --version "$review"
+          dotnet add package Gil.Tree --version "$gil"
           cat > Program.cs <<'EOF'
           using Gil;
 
@@ -194,6 +210,14 @@ jobs:
           var team = open.Observe(decider, "component", "vpn").Single(a => a.Attribute == "team");
           var top = team.Candidates.Count > 0 ? team.Candidates[0].Value : null;
           Console.WriteLine($"team {top} · answered {team.Answered}");
-          return team.Answered && top == "network" ? 0 : 1;
+          // Gil.Tree's lexical memory runs on the same library, found through the Gil package.
+          #pragma warning disable GIL0004
+          using var lexical = new Gil.Memory.LexicalMemory();
+          await lexical.RememberAsync("support", "t1", "refund for my last order", "refund_policy", "t1");
+          var near = lexical.Nearest("support", "Refund for my LAST order", 1);
+          #pragma warning restore GIL0004
+          Console.WriteLine($"lexical {near[0].Answer} · similarity {near[0].Similarity:F6}");
+          return team.Answered && top == "network" && near[0].Answer == "refund_policy"
+              && Math.Abs(near[0].Similarity - 1.0) < 1e-12 ? 0 : 1;
           EOF
           dotnet run -c Release
