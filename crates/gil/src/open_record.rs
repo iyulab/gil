@@ -18,6 +18,21 @@ use crate::schema::{
     Attribute, AttributePolicy, AttributeRole, Record, Schema, Settlement, SettlementKind,
 };
 
+/// A call [`OpenRecord::observe`] or [`OpenRecord::settle`] would refuse, found before it changes anything: an
+/// attribute the schema does not have, or one of the other role, or a settlement of the other kind of attribute. A
+/// binding asks first ([`OpenRecord::check_observe`], [`OpenRecord::check_settle`]) so that it can tell this refusal —
+/// after which the record and the decider are as they were — from a defect that stopped a change halfway.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContractViolation(String);
+
+impl std::fmt::Display for ContractViolation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for ContractViolation {}
+
 /// A record of a schema whose values are arriving. Not thread-safe; the decider it is used with is passed to each call.
 #[derive(Clone, Debug)]
 pub struct OpenRecord {
@@ -150,17 +165,16 @@ impl OpenRecord {
     /// returns fresh answers for the open decided attributes it is evidence for.
     ///
     /// # Panics
-    /// When the attribute is not an observed attribute of the schema.
+    /// When the attribute is not an observed attribute of the schema — what [`OpenRecord::check_observe`] tells beforehand.
     pub fn observe(
         &mut self,
         decider: &mut Decider,
         attribute: &str,
         value: Option<&str>,
     ) -> Vec<Answer> {
-        assert!(
-            self.schema.attribute(attribute).role == AttributeRole::Observed,
-            "'{attribute}' is decided; settle it instead"
-        );
+        if let Err(refused) = self.check_observe(attribute) {
+            panic!("{refused}");
+        }
         self.set(attribute, value);
         self.changed(decider, attribute, false)
     }
@@ -171,7 +185,8 @@ impl OpenRecord {
     ///
     /// # Panics
     /// When the attribute is not a decided attribute of the schema, or the settlement is of the other kind of attribute:
-    /// values of a set for a single-valued attribute, or a single value for an attribute that takes several.
+    /// values of a set for a single-valued attribute, or a single value for an attribute that takes several — what
+    /// [`OpenRecord::check_settle`] tells beforehand.
     pub fn settle(
         &mut self,
         decider: &mut Decider,
@@ -179,25 +194,14 @@ impl OpenRecord {
         settlement: &Settlement,
         now: i64,
     ) -> Vec<Answer> {
-        let definition = self.schema.attribute(attribute);
-        assert!(
-            definition.role == AttributeRole::Decided,
-            "'{attribute}' is observed; observe it instead"
-        );
+        if let Err(refused) = self.check_settle(attribute, settlement) {
+            panic!("{refused}");
+        }
         let clears = matches!(
             settlement.kind,
             SettlementKind::Reject | SettlementKind::Revert
         );
-        assert!(
-            clears || settlement.is_set() == definition.multiple,
-            "{}",
-            if definition.multiple {
-                format!("'{attribute}' takes several values; settle it with Settlement::set")
-            } else {
-                format!("'{attribute}' takes one value; settle it with a single value")
-            }
-        );
-        let multiple = definition.multiple;
+        let multiple = self.schema.attribute(attribute).multiple;
 
         self.rejected.remove(attribute);
         if clears {
@@ -301,6 +305,51 @@ impl OpenRecord {
             .typed(partial)
             .excluding(Some(&self.id))
             .arrival(Some(&self.arrival))
+    }
+
+    /// Whether [`OpenRecord::observe`] would take `attribute`: one the schema has, and observed.
+    pub fn check_observe(&self, attribute: &str) -> Result<(), ContractViolation> {
+        let definition = self.defined(attribute)?;
+        if definition.role != AttributeRole::Observed {
+            return Err(ContractViolation(format!(
+                "'{attribute}' is decided; settle it instead"
+            )));
+        }
+        Ok(())
+    }
+
+    /// Whether [`OpenRecord::settle`] would take `settlement` for `attribute`: one the schema has, decided, and settled
+    /// with the kind of value it takes — values of a set for an attribute that takes several, a single value for one
+    /// that takes one (rejecting and reverting carry neither).
+    pub fn check_settle(
+        &self,
+        attribute: &str,
+        settlement: &Settlement,
+    ) -> Result<(), ContractViolation> {
+        let definition = self.defined(attribute)?;
+        if definition.role != AttributeRole::Decided {
+            return Err(ContractViolation(format!(
+                "'{attribute}' is observed; observe it instead"
+            )));
+        }
+        let clears = matches!(
+            settlement.kind,
+            SettlementKind::Reject | SettlementKind::Revert
+        );
+        if !clears && settlement.is_set() != definition.multiple {
+            return Err(ContractViolation(if definition.multiple {
+                format!("'{attribute}' takes several values; settle it with Settlement::set")
+            } else {
+                format!("'{attribute}' takes one value; settle it with a single value")
+            }));
+        }
+        Ok(())
+    }
+
+    fn defined(&self, attribute: &str) -> Result<&Attribute, ContractViolation> {
+        self.schema
+            .find(attribute)
+            .ok_or_else(|| ContractViolation(self.schema.no_attribute(attribute)))
     }
 
     fn assert_open(&self, attribute: &str) {

@@ -3,7 +3,8 @@
 //! logs: its observed values arrive one by one, each decided attribute is asked about while its value is typed (the flat
 //! answer), then settled as a person would (accepting a right first candidate, correcting a wrong one). Every answer,
 //! snapshot and reopened record must be the same on both sides. Also: the flat answer's buffers, an external judgement
-//! offered back, refused settlements and calls the core's contract rules out.
+//! offered back, refused settlements and calls the core's contract rules out — refused before anything changes when
+//! the call would change a handle.
 
 #[path = "../../gil/tests/common/mod.rs"]
 mod common;
@@ -486,15 +487,41 @@ fn refused_settlements_and_contract_violations_come_back_as_statuses() {
     assert!(last_error().starts_with("a check is drawn"));
     ok(settle("Reject", NONE, 1.0, &mut len));
 
-    // Observing a decided attribute, and asking about one just rejected, are ruled out by the contract.
+    // Observing a decided attribute, settling an observed one or one the schema lacks: refused before anything
+    // changes, so the record and the decider go on working. Asking about an attribute just rejected only reads, and
+    // the contract rules it out.
     let status = unsafe {
         gil_open_record_observe(handle, pair.decider_handle, s(&attribute), s("x"), &mut len)
     };
-    assert_eq!(status, GIL_PANIC);
+    assert_eq!(status, GIL_INVALID_INPUT);
     assert_eq!(
         last_error(),
         format!("'{attribute}' is decided; settle it instead")
     );
+    let status = unsafe {
+        gil_open_record_settle(
+            handle,
+            pair.decider_handle,
+            s(&observed),
+            s("Accept"),
+            1,
+            s("x"),
+            ptr::null(),
+            0,
+            1.0,
+            &mut len,
+        )
+    };
+    assert_eq!(status, GIL_INVALID_INPUT);
+    assert_eq!(
+        last_error(),
+        format!("'{observed}' is observed; observe it instead")
+    );
+    let status = unsafe {
+        gil_open_record_observe(handle, pair.decider_handle, s("nowhere"), s("x"), &mut len)
+    };
+    assert_eq!(status, GIL_INVALID_INPUT);
+    assert!(last_error().contains("has no attribute 'nowhere'"));
     let mut head = GilAnswer::default();
     let status = unsafe {
         gil_open_record_answer_partial(
@@ -523,4 +550,10 @@ fn refused_settlements_and_contract_violations_come_back_as_statuses() {
         gil_open_record_observe(handle, pair.decider_handle, s(&observed), NONE, &mut len)
     });
     unsafe { gil_open_record_free(handle) };
+}
+
+#[test]
+fn the_library_says_which_interface_it_speaks() {
+    assert_eq!(gil_abi_version(), GIL_ABI_VERSION);
+    assert_eq!(GIL_ABI_VERSION, 1);
 }

@@ -13,6 +13,35 @@ internal static unsafe partial class Native
     internal const int InvalidArgument = 2;
     internal const int Panic = 3;
 
+    /// <summary>The version of the C ABI this binding was built for (<c>GIL_REVIEW_ABI_VERSION</c>).</summary>
+    internal const uint AbiVersion = 1;
+
+    private static volatile bool _compatible;
+
+    [LibraryImport(Library, EntryPoint = "gil_review_abi_version")]
+    private static partial uint LibraryAbiVersion();
+
+    /// <summary>Makes sure the native library speaks the interface this binding was built for — once, before the first
+    /// call.</summary>
+    /// <exception cref="InvalidOperationException">The library speaks another version.</exception>
+    internal static void EnsureCompatible()
+    {
+        if (_compatible)
+        {
+            return;
+        }
+
+        var found = LibraryAbiVersion();
+        if (found != AbiVersion)
+        {
+            throw new InvalidOperationException(
+                $"The native library {Library} speaks version {found} of its interface; this binding needs version " +
+                $"{AbiVersion}. Use the native library built with this binding.");
+        }
+
+        _compatible = true;
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     internal struct Str
     {

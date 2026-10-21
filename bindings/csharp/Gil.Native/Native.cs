@@ -13,6 +13,12 @@ internal static unsafe partial class Native
     internal const int InvalidArgument = 2;
     internal const int Panic = 3;
     internal const int BufferTooSmall = 4;
+    internal const int Broken = 5;
+
+    /// <summary>The version of the C ABI this binding was built for (<c>GIL_ABI_VERSION</c>).</summary>
+    internal const uint AbiVersion = 1;
+
+    private static volatile bool _compatible;
 
     [StructLayout(LayoutKind.Sequential)]
     internal struct Str
@@ -51,6 +57,9 @@ internal static unsafe partial class Native
         public double Probability;
         public byte Trusted;
     }
+
+    [LibraryImport(Library, EntryPoint = "gil_abi_version")]
+    private static partial uint LibraryAbiVersion();
 
     [LibraryImport(Library, EntryPoint = "gil_last_error")]
     private static partial nuint LastError(byte* buffer, nuint capacity);
@@ -127,9 +136,36 @@ internal static unsafe partial class Native
     internal static partial int SelectLayers(
         SchemaHandle schema, Str attribute, RecordsHandle records, Str options, nuint* resultLen);
 
-    /// <summary>Throws for a refused call, with the native message: a refused input or a call the core's contract rules
-    /// out is the caller's <see cref="ArgumentException"/>; a malformed call is a defect of this binding.</summary>
-    internal static void Check(int status)
+    /// <summary>Makes sure the native library speaks the interface this binding was built for — once, before the first
+    /// object is made.</summary>
+    /// <exception cref="InvalidOperationException">The library speaks another version.</exception>
+    internal static void EnsureCompatible()
+    {
+        if (_compatible)
+        {
+            return;
+        }
+
+        var found = LibraryAbiVersion();
+        if (found != AbiVersion)
+        {
+            throw new InvalidOperationException(
+                $"The native library {Library} speaks version {found} of its interface; this binding needs version " +
+                $"{AbiVersion}. Use the native library built with this binding.");
+        }
+
+        _compatible = true;
+    }
+
+    /// <summary>Throws for a refused call, with the native message: a refused input, or a call that only reads and that
+    /// the core's contract rules out, is the caller's <see cref="ArgumentException"/>; a malformed call is a defect of
+    /// this binding.</summary>
+    internal static void Check(int status) => Check(status, changing: false);
+
+    /// <summary>As <see cref="Check(int)"/>, for a call that changes a decider (and a record): a refused contract comes
+    /// back as input refused before anything changed, so a panic here is a defect that may have stopped the change
+    /// halfway — the core marks what it was changing broken, and so does the exception.</summary>
+    internal static void Check(int status, bool changing)
     {
         if (status == Ok)
         {
@@ -139,15 +175,18 @@ internal static unsafe partial class Native
         var message = Copy(&LastError);
         throw status switch
         {
+            Panic when changing => new InvalidOperationException(
+                $"The Gil core failed while changing the decider; it and the record can no longer be used: {message}"),
             InvalidInput or Panic => new ArgumentException(message),
+            Broken => new InvalidOperationException(message),
             _ => new InvalidOperationException($"The Gil core refused a call from its binding ({status}): {message}"),
         };
     }
 
-    /// <summary>The text result of the call just made, after <see cref="Check"/> passed it.</summary>
-    internal static string Result(int status)
+    /// <summary>The text result of the call just made, after <see cref="Check(int, bool)"/> passed it.</summary>
+    internal static string Result(int status, bool changing = false)
     {
-        Check(status);
+        Check(status, changing);
         return Copy(&LastResult);
     }
 

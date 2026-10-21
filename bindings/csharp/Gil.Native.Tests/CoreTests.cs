@@ -168,8 +168,34 @@ public sealed class CoreTests(ITestOutputHelper output)
         FluentActions.Invoking(() => OpenRecord.Open(schema, " ", DateTimeOffset.UnixEpoch))
             .Should().Throw<ArgumentException>().WithMessage("a record needs an id");
 
-        // The binding goes on working after a refusal.
+        FluentActions.Invoking(() => record.Observe(decider, "nowhere", "x"))
+            .Should().Throw<ArgumentException>().WithMessage("*has no attribute 'nowhere'");
+
+        // The binding goes on working after a refusal: a changing call refuses before it changes anything.
         record.AnswerPartial(decider, decided).Candidates.Should().NotBeEmpty();
+        record.Observe(decider, Observed().First(), "x");
+    }
+
+    [Fact]
+    public void Answers_from_one_decider_run_in_parallel_and_agree_with_serial_ones()
+    {
+        var (schema, decider) = Filled();
+        using var _ = schema;
+        using var __ = decider;
+        var observed = Observed();
+        var logs = RecordLines()[Chosen..].Take(64).Select(l => JsonNode.Parse(l)!).ToArray();
+        string Answer(JsonNode log)
+        {
+            var values = log["values"]!.AsObject()
+                .Where(p => observed.Contains(p.Key))
+                .ToDictionary(p => p.Key, p => (string)p.Value!);
+            return decider.AnswerJson(schema, (string)log["id"]!, values);
+        }
+
+        var serial = logs.Select(Answer).ToArray();
+        var parallel = new string[logs.Length];
+        Parallel.For(0, logs.Length, new ParallelOptions { MaxDegreeOfParallelism = 8 }, i => parallel[i] = Answer(logs[i]));
+        parallel.Should().Equal(serial);
     }
 
     [Fact]

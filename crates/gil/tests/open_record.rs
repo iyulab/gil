@@ -412,6 +412,35 @@ fn a_single_value_is_not_settled_as_a_set() {
 }
 
 #[test]
+fn the_checks_tell_beforehand_what_observe_and_settle_refuse() {
+    let open = OpenRecord::new(paper(), "d4", 0);
+    let refused = |r: Result<(), gil::open_record::ContractViolation>| r.unwrap_err().to_string();
+
+    assert_eq!(
+        refused(open.check_settle("topics", &Settlement::accept("nlp"))),
+        "'topics' takes several values; settle it with Settlement::set"
+    );
+    assert_eq!(
+        refused(open.check_settle("lead", &Settlement::set(["kim"]))),
+        "'lead' takes one value; settle it with a single value"
+    );
+    assert!(
+        open.check_settle("lead", &Settlement::accept("kim"))
+            .is_ok()
+    );
+    assert!(open.check_settle("topics", &Settlement::reject()).is_ok());
+    assert!(refused(open.check_observe("nowhere")).contains("has no attribute 'nowhere'"));
+    assert!(
+        refused(open.check_settle("nowhere", &Settlement::reject()))
+            .contains("has no attribute 'nowhere'")
+    );
+    assert_eq!(
+        refused(open.check_observe("lead")),
+        "'lead' is decided; settle it instead"
+    );
+}
+
+#[test]
 fn an_attribute_that_is_off_is_never_answered() {
     let mut schema = settled_ticket();
     schema.attributes[1].policy = AttributePolicy::Off;

@@ -343,10 +343,18 @@ impl Schema {
     /// # Panics
     /// When the schema has no such attribute.
     pub fn attribute(&self, name: &str) -> &Attribute {
-        self.attributes
-            .iter()
-            .find(|f| f.name == name)
-            .unwrap_or_else(|| panic!("schema '{}' has no attribute '{name}'", self.name))
+        self.find(name)
+            .unwrap_or_else(|| panic!("{}", self.no_attribute(name)))
+    }
+
+    /// The attribute named `name`, if the schema has one.
+    pub fn find(&self, name: &str) -> Option<&Attribute> {
+        self.attributes.iter().find(|f| f.name == name)
+    }
+
+    /// What [`Schema::attribute`] says of a name the schema does not have.
+    pub(crate) fn no_attribute(&self, name: &str) -> String {
+        format!("schema '{}' has no attribute '{name}'", self.name)
     }
 
     /// Whether `evidence`'s value may support suggestions for `attribute`: another attribute that is evidence and, when the attribute

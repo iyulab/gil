@@ -12,6 +12,10 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   needs.** It refuses, with a message, a part the kind needs and lacks and a check's probability outside (0, 1] — the
   rules a binding used to repeat. The Python package's `OpenRecord.settle` now builds its settlements with it (no change
   in what it accepts).
+- **`OpenRecord::check_observe` and `OpenRecord::check_settle`: what `observe` and `settle` would refuse, told before
+  anything changes** — an attribute the schema does not have, one of the other role, a settlement of the other kind of
+  attribute — as a `ContractViolation` with the message the call panics with. Both calls check through them, so the
+  rule lives in one place. Also `Schema::find`, the attribute named, if there is one.
 
 ### Changed
 
@@ -19,6 +23,10 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   an attribute that is not decided (`'a' is not a decided attribute`), a target outside (0, 1], an attribute with no
   coarse level. The binding no longer repeats those checks with wording of its own, and the key attributes' and
   concentrations' selections now raise `ValueError` for them too instead of a panic.
+- **Python: a defect while a decider or record changes now makes them unusable instead of leaving them half-changed.**
+  `Decider.put`, `OpenRecord.observe` and `OpenRecord.settle` check their contract first (still `ValueError`, after
+  which both objects are as they were); if the core then fails partway, they raise `RuntimeError`, and every later call
+  on the decider and the record raises `RuntimeError` too — build them again.
 
 ## 0.7.0
 

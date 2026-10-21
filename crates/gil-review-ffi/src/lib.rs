@@ -17,6 +17,17 @@ pub const GIL_REVIEW_INVALID_ARGUMENT: i32 = gil_ffi_support::INVALID_ARGUMENT;
 /// The computation panicked — a defect in the library, reported instead of unwinding into the caller.
 pub const GIL_REVIEW_PANIC: i32 = gil_ffi_support::PANIC;
 
+/// The version of this interface — its functions, structures and statuses. It changes whenever a binding built for one
+/// version would misread the library of another.
+pub const GIL_REVIEW_ABI_VERSION: u32 = 1;
+
+/// The version of this interface the library speaks ([`GIL_REVIEW_ABI_VERSION`]) — what a binding checks before its
+/// first call.
+#[unsafe(no_mangle)]
+pub extern "C" fn gil_review_abi_version() -> u32 {
+    GIL_REVIEW_ABI_VERSION
+}
+
 /// UTF-8 text the caller owns, for the length of one call.
 pub type GilReviewStr = Utf8;
 

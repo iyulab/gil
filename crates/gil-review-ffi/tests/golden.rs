@@ -427,3 +427,9 @@ fn a_malformed_call_is_refused_before_the_computation() {
         last_error()
     );
 }
+
+#[test]
+fn the_library_says_which_interface_it_speaks() {
+    assert_eq!(gil_review_abi_version(), GIL_REVIEW_ABI_VERSION);
+    assert_eq!(GIL_REVIEW_ABI_VERSION, 1);
+}

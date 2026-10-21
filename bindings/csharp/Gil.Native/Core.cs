@@ -16,6 +16,7 @@ public sealed class Schema : IDisposable
     public static unsafe Schema FromJson(string json)
     {
         ArgumentNullException.ThrowIfNull(json);
+        Native.EnsureCompatible();
         var text = new Utf8(json);
         nint output;
         fixed (byte* p = &text.Pin())
@@ -56,6 +57,7 @@ public sealed class SettledRecords : IDisposable
     public static unsafe SettledRecords FromJsonLines(string lines)
     {
         ArgumentNullException.ThrowIfNull(lines);
+        Native.EnsureCompatible();
         var text = new Utf8(lines);
         nint output;
         fixed (byte* p = &text.Pin())
@@ -70,16 +72,18 @@ public sealed class SettledRecords : IDisposable
     public void Dispose() => Handle.Dispose();
 }
 
-/// <summary>The memories that answer: the settled key memory and, unless left out, the similar record memory. Calls
-/// on one decider are serialized.</summary>
+/// <summary>The memories that answer: the settled key memory and, unless left out, the similar record memory. Answers
+/// from one decider run in parallel; a call that changes it — putting records, observing or settling a record — waits
+/// for them and runs alone.</summary>
 public sealed class Decider : IDisposable
 {
-    internal readonly Lock Gate = new();
+    internal readonly ReaderWriterLockSlim Gate = new();
 
     /// <summary>A decider with empty memories.</summary>
     /// <param name="similarRecords">Whether to keep the similar record memory.</param>
     public unsafe Decider(bool similarRecords = true)
     {
+        Native.EnsureCompatible();
         nint output;
         Native.Check(Native.DeciderNew(similarRecords ? (byte)1 : (byte)0, &output));
         Handle = DeciderHandle.Of(output);
@@ -93,9 +97,9 @@ public sealed class Decider : IDisposable
     {
         ArgumentNullException.ThrowIfNull(schema);
         ArgumentNullException.ThrowIfNull(records);
-        lock (Gate)
+        using (Gate.Writing())
         {
-            Native.Check(Native.DeciderPut(Handle, schema.Handle, records.Handle));
+            Native.Check(Native.DeciderPut(Handle, schema.Handle, records.Handle), changing: true);
         }
     }
 
@@ -114,7 +118,7 @@ public sealed class Decider : IDisposable
         var valuesJson = new Utf8(Json.Object(values));
         var setsJson = new Utf8(sets is null ? string.Empty : Json.Sets(sets));
         nuint length;
-        lock (Gate)
+        using (Gate.Reading())
         {
             fixed (byte* i = &id.Pin())
             fixed (byte* v = &valuesJson.Pin())
@@ -127,11 +131,16 @@ public sealed class Decider : IDisposable
     }
 
     /// <inheritdoc/>
-    public void Dispose() => Handle.Dispose();
+    public void Dispose()
+    {
+        Handle.Dispose();
+        Gate.Dispose();
+    }
 }
 
 /// <summary>One record of a schema while its values arrive. Each change puts it into the decider's memory again.
-/// Calls on one record are serialized, and hold the decider's lock while they use it.</summary>
+/// Calls on one record are serialized; they hold the decider's lock while they use it — shared to answer, alone to
+/// change it.</summary>
 public sealed class OpenRecord : IDisposable
 {
     private readonly Lock _gate = new();
@@ -188,13 +197,14 @@ public sealed class OpenRecord : IDisposable
         var text = new Utf8(value);
         nuint length;
         lock (_gate)
-        lock (decider.Gate)
+        using (decider.Gate.Writing())
         {
             fixed (byte* a = &name.Pin())
             fixed (byte* v = &text.Pin())
             {
-                return Native.Result(Native.OpenRecordObserve(
-                    Handle, decider.Handle, name.At(a), text.At(v), &length));
+                return Native.Result(
+                    Native.OpenRecordObserve(Handle, decider.Handle, name.At(a), text.At(v), &length),
+                    changing: true);
             }
         }
     }
@@ -225,7 +235,7 @@ public sealed class OpenRecord : IDisposable
         var strs = values is null ? null : new Native.Str[Math.Max(values.Count, 1)];
         nuint length;
         lock (_gate)
-        lock (decider.Gate)
+        using (decider.Gate.Writing())
         {
             fixed (byte* a = &name.Pin())
             fixed (byte* k = &kindName.Pin())
@@ -244,9 +254,11 @@ public sealed class OpenRecord : IDisposable
                     }
                 }
 
-                return Native.Result(Native.OpenRecordSettle(
-                    Handle, decider.Handle, name.At(a), kindName.At(k), Ticks(now), text.At(v), s,
-                    (nuint)(values?.Count ?? 0), probability, &length));
+                return Native.Result(
+                    Native.OpenRecordSettle(
+                        Handle, decider.Handle, name.At(a), kindName.At(k), Ticks(now), text.At(v), s,
+                        (nuint)(values?.Count ?? 0), probability, &length),
+                    changing: true);
             }
         }
     }
@@ -257,7 +269,7 @@ public sealed class OpenRecord : IDisposable
         ArgumentNullException.ThrowIfNull(decider);
         nuint length;
         lock (_gate)
-        lock (decider.Gate)
+        using (decider.Gate.Reading())
         {
             return Native.Result(Native.OpenRecordAnswer(Handle, decider.Handle, &length));
         }
@@ -273,7 +285,7 @@ public sealed class OpenRecord : IDisposable
         var name = new Utf8(attribute);
         var typed = new Utf8(partial);
         lock (_gate)
-        lock (decider.Gate)
+        using (decider.Gate.Reading())
         {
             while (true)
             {
@@ -326,7 +338,7 @@ public sealed class OpenRecord : IDisposable
         var flat = new Native.ExternalCandidate[ranked.Count];
         nuint length;
         lock (_gate)
-        lock (decider.Gate)
+        using (decider.Gate.Reading())
         {
             fixed (byte* a = &name.Pin())
             fixed (byte* b = block)
@@ -369,6 +381,37 @@ public sealed class OpenRecord : IDisposable
         c.Score,
         (Layer)c.Source,
         c.Trusted != 0);
+}
+
+/// <summary>Scopes for a decider's reader–writer lock.</summary>
+internal static class Gates
+{
+    public static Scope Reading(this ReaderWriterLockSlim gate)
+    {
+        gate.EnterReadLock();
+        return new Scope(gate, write: false);
+    }
+
+    public static Scope Writing(this ReaderWriterLockSlim gate)
+    {
+        gate.EnterWriteLock();
+        return new Scope(gate, write: true);
+    }
+
+    public readonly struct Scope(ReaderWriterLockSlim gate, bool write) : IDisposable
+    {
+        public void Dispose()
+        {
+            if (write)
+            {
+                gate.ExitWriteLock();
+            }
+            else
+            {
+                gate.ExitReadLock();
+            }
+        }
+    }
 }
 
 /// <summary>The JSON the C ABI reads, written without reflection.</summary>

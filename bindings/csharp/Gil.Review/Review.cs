@@ -8,7 +8,14 @@ public static class ReviewSampler
     public const int PilotRecordsPerStratum = 30;
 
     /// <summary>The floor on a stratum's deviation that allocation plans against: √(0.05 · 0.95).</summary>
-    public static double MinimumDesignDeviation => Native.MinimumDesignDeviation();
+    public static double MinimumDesignDeviation
+    {
+        get
+        {
+            Native.EnsureCompatible();
+            return Native.MinimumDesignDeviation();
+        }
+    }
 
     /// <summary>A pilot draw: <paramref name="perStratum"/> records from every stratum. Within a stratum the ids are
     /// put in ordinal order of their UTF-8 bytes and a partial Fisher–Yates shuffle takes the sample; a stratum with no
@@ -20,6 +27,7 @@ public static class ReviewSampler
     {
         ArgumentNullException.ThrowIfNull(strata);
         ArgumentOutOfRangeException.ThrowIfNegative(perStratum);
+        Native.EnsureCompatible();
         var ids = new List<string>();
         var names = new string[strata.Count];
         for (var i = 0; i < strata.Count; i++)
@@ -94,6 +102,7 @@ public static class ReviewSampler
     {
         ArgumentNullException.ThrowIfNull(strata);
         ArgumentOutOfRangeException.ThrowIfNegative(budget);
+        Native.EnsureCompatible();
         var native = new Native.StratumSpread[strata.Count];
         for (var i = 0; i < strata.Count; i++)
         {
@@ -125,6 +134,7 @@ public static class ReviewEstimator
     public static double UnobservedVariationBound(long reviewed)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(reviewed);
+        Native.EnsureCompatible();
         return Native.UnobservedVariationBound((ulong)reviewed);
     }
 
@@ -140,6 +150,7 @@ public static class ReviewEstimator
         ArgumentNullException.ThrowIfNull(strata);
         ArgumentNullException.ThrowIfNull(items);
         ArgumentOutOfRangeException.ThrowIfNegative(replicates);
+        Native.EnsureCompatible();
         var names = Utf8Block.Of(strata.Select(s => s.Name).ToArray());
         var native = Items(items);
         Native.Estimate output;
@@ -170,6 +181,7 @@ public static class ReviewEstimator
         ArgumentNullException.ThrowIfNull(lower);
         ArgumentNullException.ThrowIfNull(upper);
         ArgumentOutOfRangeException.ThrowIfNegative(replicates);
+        Native.EnsureCompatible();
         var names = Utf8Block.Of(strata.Select(s => s.Name).ToArray());
         var low = Items(lower);
         var high = Items(upper);
@@ -240,6 +252,7 @@ public static class ReviewAgreement
         ArgumentNullException.ThrowIfNull(verdicts);
         ArgumentOutOfRangeException.ThrowIfNegative(categories);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(categories, byte.MaxValue);
+        Native.EnsureCompatible();
         var strings = new string[verdicts.Count * 3];
         var outcomes = new byte[verdicts.Count];
         for (var i = 0; i < verdicts.Count; i++)

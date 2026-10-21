@@ -21,6 +21,9 @@ pub const PANIC: i32 = 3;
 /// A buffer the caller gave is too small for the result; the call wrote the sizes it needs where it says, so that the
 /// caller can grow its buffers and call again.
 pub const BUFFER_TOO_SMALL: i32 = 4;
+/// A handle is unusable: an earlier call that changed it panicked partway, so what it holds can no longer be trusted.
+/// Free it and build it again.
+pub const BROKEN: i32 = 5;
 
 /// UTF-8 text the caller owns, for the length of one call.
 #[repr(C)]
@@ -172,7 +175,7 @@ pub unsafe fn write<T>(out: *mut T, value: T, what: &str) -> Result<(), Failure>
 /// A shared reference to the object behind a handle.
 ///
 /// # Safety
-/// `handle` is null or a live handle of this type, used by no other thread during the call.
+/// `handle` is null or a live handle of this type that no other thread changes during the call.
 pub unsafe fn handle<'a, T>(handle: *const T, what: &str) -> Result<&'a T, Failure> {
     // SAFETY: forwarded from the caller.
     unsafe { handle.as_ref() }.ok_or_else(|| argument(format!("{what} is null")))
@@ -181,7 +184,7 @@ pub unsafe fn handle<'a, T>(handle: *const T, what: &str) -> Result<&'a T, Failu
 /// An exclusive reference to the object behind a handle.
 ///
 /// # Safety
-/// As [`handle`], and nothing else refers to the object during the call.
+/// As [`handle`], and nothing else — on this thread or another — refers to the object during the call.
 pub unsafe fn handle_mut<'a, T>(handle: *mut T, what: &str) -> Result<&'a mut T, Failure> {
     // SAFETY: forwarded from the caller.
     unsafe { handle.as_mut() }.ok_or_else(|| argument(format!("{what} is null")))

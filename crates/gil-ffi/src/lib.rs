@@ -7,15 +7,22 @@
 //! core's `serde` form; the answer asked for while a person types (`gil_open_record_answer_partial`) comes back in flat
 //! structures and buffers the caller owns, with no JSON either way. Nothing calls back into the host: an answer that
 //! wants an external judgement says so, and the host offers the judgement back. The core keeps no clock — a time is
-//! given in 100-nanosecond ticks since the Unix epoch, UTC. A handle is not thread-safe: a caller that shares one across
-//! threads holds a lock around each call.
+//! given in 100-nanosecond ticks since the Unix epoch, UTC.
+//!
+//! Threads: a function that takes a handle as `*const` only reads it, and may run on several threads at once for the
+//! same handle; one that takes it as `*mut` changes it, and needs it to itself — a caller that shares a handle across
+//! threads holds a reader–writer lock, shared for the first kind and exclusive for the second.
 //!
 //! Every function returns a status — `GIL_OK`, or a code whose message `gil_last_error` copies out — and no panic
 //! crosses the boundary. A function with a text result keeps it on the calling thread for `gil_last_result` and writes
-//! its length to `result_len`. A call the core's contract rules out (asking about an attribute that is not decided, say)
-//! comes back as `GIL_PANIC`; after a `GIL_PANIC` from a call that changes a handle, free that handle.
+//! its length to `result_len`. A call the core's contract rules out comes back as `GIL_INVALID_INPUT` when the call
+//! changes a handle — it is refused before anything changes — and as `GIL_PANIC` when it only reads one (asking about an
+//! attribute that is not decided, say). A `GIL_PANIC` from a call that changes a handle is a defect that may have stopped
+//! the change halfway: the decider and record it was changing are broken, and every later call with them returns
+//! `GIL_BROKEN` until they are freed. `gil_abi_version` says which version of this interface the library speaks.
 
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use gil::decider::{Answer, Candidate, Decider, ExternalCandidate, Source};
 use gil::decision_record::DecisionRecord;
@@ -46,6 +53,12 @@ pub const GIL_INVALID_ARGUMENT: i32 = gil_ffi_support::INVALID_ARGUMENT;
 pub const GIL_PANIC: i32 = gil_ffi_support::PANIC;
 /// The caller's buffers are too small for the answer; the sizes it needs are in the answer header.
 pub const GIL_BUFFER_TOO_SMALL: i32 = gil_ffi_support::BUFFER_TOO_SMALL;
+/// A decider or record is broken: an earlier call that changed it panicked partway. Free it and build it again.
+pub const GIL_BROKEN: i32 = gil_ffi_support::BROKEN;
+
+/// The version of this interface — its functions, structures and statuses. It changes whenever a binding built for one
+/// version would misread the library of another.
+pub const GIL_ABI_VERSION: u32 = 1;
 
 /// [`GilCandidate::source`]: no layer.
 pub const GIL_SOURCE_NONE: u8 = 0;
@@ -73,10 +86,100 @@ pub struct GilSchema(Schema);
 pub struct GilRecords(Vec<Record>);
 
 /// The memories that answer: the settled key memory and, unless left out, the lexical similar record memory.
-pub struct GilDecider(Decider);
+pub struct GilDecider {
+    decider: Decider,
+    broken: AtomicBool,
+}
 
 /// One record of a schema while its values arrive.
-pub struct GilOpenRecord(OpenRecord);
+pub struct GilOpenRecord {
+    record: OpenRecord,
+    broken: AtomicBool,
+}
+
+// What the functions that only read a handle may share across threads (see the module's threads paragraph).
+const _: () = {
+    const fn shared<T: Sync>() {}
+    shared::<GilSchema>();
+    shared::<GilRecords>();
+    shared::<GilDecider>();
+    shared::<GilOpenRecord>();
+};
+
+/// A handle that a defect can break: what it says of itself, and its mark.
+trait Breakable {
+    const WHAT: &'static str;
+    fn broken(&self) -> &AtomicBool;
+}
+
+impl Breakable for GilDecider {
+    const WHAT: &'static str = "decider";
+    fn broken(&self) -> &AtomicBool {
+        &self.broken
+    }
+}
+
+impl Breakable for GilOpenRecord {
+    const WHAT: &'static str = "record";
+    fn broken(&self) -> &AtomicBool {
+        &self.broken
+    }
+}
+
+fn refuse_broken<T: Breakable>(h: &T) -> Result<(), Failure> {
+    if h.broken().load(Ordering::Relaxed) {
+        return Err(Failure(
+            GIL_BROKEN,
+            format!(
+                "the {} is broken: an earlier call that changed it panicked partway; free it and build it again",
+                T::WHAT
+            ),
+        ));
+    }
+    Ok(())
+}
+
+/// The live object behind a handle, refused when broken.
+///
+/// # Safety
+/// As [`gil_ffi_support::handle`].
+unsafe fn live<'a, T: Breakable>(h: *const T) -> Result<&'a T, Failure> {
+    // SAFETY: forwarded from the caller.
+    let found = unsafe { handle(h, T::WHAT) }?;
+    refuse_broken(found)?;
+    Ok(found)
+}
+
+/// As [`live`], exclusively.
+///
+/// # Safety
+/// As [`gil_ffi_support::handle_mut`].
+unsafe fn live_mut<'a, T: Breakable>(h: *mut T) -> Result<&'a mut T, Failure> {
+    // SAFETY: forwarded from the caller.
+    let found = unsafe { handle_mut(h, T::WHAT) }?;
+    refuse_broken(found)?;
+    Ok(found)
+}
+
+/// Marks the handle a changing call was given broken when the call panicked.
+///
+/// # Safety
+/// `h` is null or a live handle that no other thread uses during the call.
+unsafe fn break_on_panic<T: Breakable>(status: i32, h: *const T) {
+    if status == GIL_PANIC
+        // SAFETY: forwarded from the caller.
+        && let Some(found) = unsafe { h.as_ref() }
+    {
+        found.broken().store(true, Ordering::Relaxed);
+    }
+}
+
+/// The version of this interface the library speaks ([`GIL_ABI_VERSION`]) — what a binding checks before its first
+/// call.
+#[unsafe(no_mangle)]
+pub extern "C" fn gil_abi_version() -> u32 {
+    GIL_ABI_VERSION
+}
 
 /// A candidate of a flat answer: its value — `value_len` bytes of UTF-8 at `value_offset` in the call's value buffer —
 /// its score on its layer's scale, its layer (`GIL_SOURCE_…`) and whether the layer trusts it. What backs it is left
@@ -234,7 +337,16 @@ pub unsafe extern "C" fn gil_decider_new(similar_records: bool, out: *mut *mut G
             similar_records.then(LexicalMemory::default),
         );
         // SAFETY: forwarded from the caller.
-        unsafe { hand_out(out, GilDecider(decider), "out") }
+        unsafe {
+            hand_out(
+                out,
+                GilDecider {
+                    decider,
+                    broken: AtomicBool::new(false),
+                },
+                "out",
+            )
+        }
     })
 }
 
@@ -307,14 +419,17 @@ pub unsafe extern "C" fn gil_decider_put(
     schema: *const GilSchema,
     records: *const GilRecords,
 ) -> i32 {
-    call(|| {
+    let status = call(|| {
         // SAFETY: forwarded from the caller, for every pointer below.
-        let decider = unsafe { handle_mut(decider, "decider") }?;
+        let decider = &mut unsafe { live_mut(decider) }?.decider;
         let schema = unsafe { handle(schema, "schema") }?;
         let records = unsafe { handle(records, "records") }?;
-        decider.0.rebuild(&schema.0, &records.0);
+        decider.rebuild(&schema.0, &records.0);
         Ok(())
-    })
+    });
+    // SAFETY: forwarded from the caller.
+    unsafe { break_on_panic(status, decider) };
+    status
 }
 
 /// Answers every open decided attribute of record `record_id` — without a value, unless it takes several, and not off —
@@ -340,7 +455,7 @@ pub unsafe extern "C" fn gil_decider_answer(
             return Err(argument("result_len is null"));
         }
         // SAFETY: forwarded from the caller, for every pointer below.
-        let decider = unsafe { handle(decider, "decider") }?;
+        let decider = &unsafe { live(decider) }?.decider;
         let schema = unsafe { handle(schema, "schema") }?;
         let record_id = unsafe { text(record_id, "record_id") }?;
         let values = unsafe { text(values, "values") }?;
@@ -353,7 +468,7 @@ pub unsafe extern "C" fn gil_decider_answer(
             serde_json::from_str(sets)
                 .map_err(|e| argument(format!("sets are a JSON object of string lists: {e}")))?
         };
-        let found = decider.0.answer(&schema.0, record_id, &values, &sets);
+        let found = decider.answer(&schema.0, record_id, &values, &sets);
         // SAFETY: forwarded from the caller.
         unsafe { answers(&found, result_len) }
     })
@@ -399,7 +514,16 @@ pub unsafe extern "C" fn gil_open_record_new(
             return Err(input("a record needs an id"));
         }
         let record = OpenRecord::new(schema.0.clone(), id, settled_at);
-        unsafe { hand_out(out, GilOpenRecord(record), "out") }
+        unsafe {
+            hand_out(
+                out,
+                GilOpenRecord {
+                    record,
+                    broken: AtomicBool::new(false),
+                },
+                "out",
+            )
+        }
     })
 }
 
@@ -427,7 +551,16 @@ pub unsafe extern "C" fn gil_open_record_reopen(
             return Err(input("a record needs an id"));
         }
         let record = OpenRecord::reopen(schema.0.clone(), &saved);
-        unsafe { hand_out(out, GilOpenRecord(record), "out") }
+        unsafe {
+            hand_out(
+                out,
+                GilOpenRecord {
+                    record,
+                    broken: AtomicBool::new(false),
+                },
+                "out",
+            )
+        }
     })
 }
 
@@ -443,8 +576,8 @@ pub unsafe extern "C" fn gil_open_record_free(record: *mut GilOpenRecord) {
 
 /// Sets an observed attribute's value — or clears it, given null text (null pointer, length 0) — puts the record into
 /// `decider`'s memory again, and keeps as the result the fresh answers for the open decided attributes it is evidence
-/// for (a JSON array, as `gil_decider_answer`'s). An attribute that is not observed is a contract violation
-/// (`GIL_PANIC`).
+/// for (a JSON array, as `gil_decider_answer`'s). An attribute that is not observed is refused (`GIL_INVALID_INPUT`)
+/// before anything changes.
 ///
 /// # Safety
 /// `record` and `decider` are live handles; the texts are valid for the call; `result_len` points to one writable
@@ -457,18 +590,25 @@ pub unsafe extern "C" fn gil_open_record_observe(
     value: GilStr,
     result_len: *mut usize,
 ) -> i32 {
-    call(|| {
+    let status = call(|| {
         if result_len.is_null() {
             return Err(argument("result_len is null"));
         }
         // SAFETY: forwarded from the caller, for every pointer below.
-        let record = unsafe { handle_mut(record, "record") }?;
-        let decider = unsafe { handle_mut(decider, "decider") }?;
+        let open = &mut unsafe { live_mut(record) }?.record;
+        let memories = &mut unsafe { live_mut(decider) }?.decider;
         let attribute = unsafe { text(attribute, "attribute") }?;
         let value = unsafe { optional(value, "value") }?;
-        let found = record.0.observe(&mut decider.0, attribute, value);
+        open.check_observe(attribute)?;
+        let found = open.observe(memories, attribute, value);
         unsafe { answers(&found, result_len) }
-    })
+    });
+    // SAFETY: forwarded from the caller, for both.
+    unsafe {
+        break_on_panic(status, record);
+        break_on_panic(status, decider);
+    }
+    status
 }
 
 /// Settles a decided attribute at `now` (ticks): `kind` by name (`Accept`, `Correct`, `Reject`, `Revert`, `Restore`,
@@ -476,8 +616,8 @@ pub unsafe extern "C" fn gil_open_record_observe(
 /// settle one (null text when none), `values` for `Set` (and for `Restore` of an attribute that takes several, chosen by
 /// giving `values` non-null), and `probability` for `Check` (any other kind ignores it). Puts the record into
 /// `decider`'s memory again and keeps as the result the fresh answers it causes (a JSON array). A kind or part that
-/// does not fit is refused (`GIL_INVALID_INPUT`); an attribute that is not decided, or a settlement of the other kind
-/// of attribute, is a contract violation (`GIL_PANIC`).
+/// does not fit, an attribute that is not decided, and a settlement of the other kind of attribute are refused
+/// (`GIL_INVALID_INPUT`) before anything changes.
 ///
 /// # Safety
 /// `record` and `decider` are live handles; the texts are valid for the call; `values` is null or holds `values_len`
@@ -496,13 +636,13 @@ pub unsafe extern "C" fn gil_open_record_settle(
     probability: f64,
     result_len: *mut usize,
 ) -> i32 {
-    call(|| {
+    let status = call(|| {
         if result_len.is_null() {
             return Err(argument("result_len is null"));
         }
         // SAFETY: forwarded from the caller, for every pointer below.
-        let record = unsafe { handle_mut(record, "record") }?;
-        let decider = unsafe { handle_mut(decider, "decider") }?;
+        let open = &mut unsafe { live_mut(record) }?.record;
+        let memories = &mut unsafe { live_mut(decider) }?.decider;
         let attribute = unsafe { text(attribute, "attribute") }?;
         let kind = unsafe { text(kind, "kind") }?;
         let kind = SettlementKind::parse(kind)
@@ -521,9 +661,16 @@ pub unsafe extern "C" fn gil_open_record_settle(
         };
         let settlement =
             Settlement::new(kind, value, values.as_deref(), Some(probability)).map_err(input)?;
-        let found = record.0.settle(&mut decider.0, attribute, &settlement, now);
+        open.check_settle(attribute, &settlement)?;
+        let found = open.settle(memories, attribute, &settlement, now);
         unsafe { answers(&found, result_len) }
-    })
+    });
+    // SAFETY: forwarded from the caller, for both.
+    unsafe {
+        break_on_panic(status, record);
+        break_on_panic(status, decider);
+    }
+    status
 }
 
 /// Keeps as the result the answers for every open decided attribute — not settled (unless it takes several), not
@@ -542,9 +689,9 @@ pub unsafe extern "C" fn gil_open_record_answer(
             return Err(argument("result_len is null"));
         }
         // SAFETY: forwarded from the caller, for every pointer below.
-        let record = unsafe { handle(record, "record") }?;
-        let decider = unsafe { handle(decider, "decider") }?;
-        let found = record.0.answer(&decider.0);
+        let record = &unsafe { live(record) }?.record;
+        let decider = &unsafe { live(decider) }?.decider;
+        let found = record.answer(decider);
         unsafe { answers(&found, result_len) }
     })
 }
@@ -578,14 +725,14 @@ pub unsafe extern "C" fn gil_open_record_answer_partial(
             return Err(argument("answer is null"));
         }
         // SAFETY: forwarded from the caller, for every pointer below.
-        let record = unsafe { handle(record, "record") }?;
-        let decider = unsafe { handle(decider, "decider") }?;
+        let record = &unsafe { live(record) }?.record;
+        let decider = &unsafe { live(decider) }?.decider;
         let attribute = unsafe { text(attribute, "attribute") }?;
         let partial = unsafe { optional(partial, "partial") }?;
         let slots = unsafe { slice_mut(candidates, candidates_capacity, "candidates") }?;
         let bytes = unsafe { slice_mut(value_bytes, value_bytes_capacity, "value_bytes") }?;
 
-        let found = record.0.answer_partial(&decider.0, attribute, partial);
+        let found = record.answer_partial(decider, attribute, partial);
         let total: usize = found
             .candidates
             .iter()
@@ -661,8 +808,8 @@ pub unsafe extern "C" fn gil_open_record_offer_external(
             return Err(argument("result_len is null"));
         }
         // SAFETY: forwarded from the caller, for every pointer below.
-        let record = unsafe { handle(record, "record") }?;
-        let decider = unsafe { handle(decider, "decider") }?;
+        let record = &unsafe { live(record) }?.record;
+        let decider = &unsafe { live(decider) }?.decider;
         let attribute = unsafe { text(attribute, "attribute") }?;
         let ranked: Vec<ExternalCandidate> = unsafe { slice(ranked, ranked_len, "ranked") }?
             .iter()
@@ -674,7 +821,7 @@ pub unsafe extern "C" fn gil_open_record_offer_external(
                 })
             })
             .collect::<Result<_, Failure>>()?;
-        let found = record.0.offer_external(&decider.0, attribute, &ranked);
+        let found = record.offer_external(decider, attribute, &ranked);
         unsafe { result(&answer_json(&found), result_len) }
     })
 }
@@ -694,8 +841,8 @@ pub unsafe extern "C" fn gil_open_record_snapshot(
             return Err(argument("result_len is null"));
         }
         // SAFETY: forwarded from the caller.
-        let record = unsafe { handle(record, "record") }?;
-        let value = serde_json::to_value(record.0.snapshot()).expect("a record serializes");
+        let record = &unsafe { live(record) }?.record;
+        let value = serde_json::to_value(record.snapshot()).expect("a record serializes");
         unsafe { result(&value, result_len) }
     })
 }
@@ -1080,4 +1227,44 @@ pub unsafe extern "C" fn gil_usage(
             .collect::<Result<Vec<_>, Failure>>()?;
         unsafe { result(&json!(usage(decisions)), result_len) }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn last_error() -> String {
+        let len = unsafe { gil_last_error(std::ptr::null_mut(), 0) };
+        let mut buffer = vec![0u8; len];
+        unsafe { gil_last_error(buffer.as_mut_ptr(), len) };
+        String::from_utf8(buffer).unwrap()
+    }
+
+    #[test]
+    fn a_panic_in_a_changing_call_breaks_the_handles_it_was_changing() {
+        let mut decider = std::ptr::null_mut();
+        assert_eq!(unsafe { gil_decider_new(false, &mut decider) }, GIL_OK);
+
+        // A refusal is not a panic: the handle stays usable.
+        unsafe { break_on_panic(GIL_INVALID_INPUT, decider) };
+        let status = unsafe { gil_decider_put(decider, std::ptr::null(), std::ptr::null()) };
+        assert_eq!(status, GIL_INVALID_ARGUMENT, "{}", last_error());
+
+        // After a panic every call with it is refused, reading ones too, until it is freed.
+        unsafe { break_on_panic(GIL_PANIC, decider) };
+        let status = unsafe { gil_decider_put(decider, std::ptr::null(), std::ptr::null()) };
+        assert_eq!(status, GIL_BROKEN);
+        assert!(last_error().starts_with("the decider is broken"));
+        let mut len = 0;
+        let empty = GilStr {
+            ptr: std::ptr::null(),
+            len: 0,
+        };
+        let status =
+            unsafe { gil_decider_answer(decider, std::ptr::null(), empty, empty, empty, &mut len) };
+        assert_eq!(status, GIL_BROKEN);
+
+        unsafe { break_on_panic(GIL_PANIC, std::ptr::null::<GilDecider>()) }; // null: nothing to mark
+        unsafe { gil_decider_free(decider) };
+    }
 }

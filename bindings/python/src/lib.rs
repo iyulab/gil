@@ -20,7 +20,7 @@ use gil::replay::{
 use gil::schema::{Record, Schema, Settlement, SettlementKind};
 use gil::tuning::Tuning;
 use gil::usage::{Decision, usage};
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use serde_json::{Value, json};
 
@@ -303,20 +303,45 @@ fn select_key_fields_json(
 
 /// Runs a core call, turning a broken contract (the core panics on one) into a `ValueError` with the core's message.
 fn guarded<T>(call: impl FnOnce() -> T) -> PyResult<T> {
-    catch_unwind(AssertUnwindSafe(call)).map_err(|panic| {
-        let message = panic
-            .downcast_ref::<String>()
-            .cloned()
-            .or_else(|| panic.downcast_ref::<&str>().map(|s| (*s).to_owned()))
-            .unwrap_or_else(|| "the core refused the call".to_owned());
-        invalid(message)
-    })
+    catch_unwind(AssertUnwindSafe(call)).map_err(|panic| invalid(panic_message(&*panic)))
+}
+
+fn panic_message(panic: &(dyn std::any::Any + Send)) -> String {
+    panic
+        .downcast_ref::<String>()
+        .cloned()
+        .or_else(|| panic.downcast_ref::<&str>().map(|s| (*s).to_owned()))
+        .unwrap_or_else(|| "the core refused the call".to_owned())
+}
+
+/// Runs a core call that changes a decider (and a record), its contract already checked: a panic now is a defect that
+/// may have stopped the change halfway. `Err` carries its message; the caller marks what it was changing broken.
+fn changing<T>(call: impl FnOnce() -> T) -> Result<T, String> {
+    catch_unwind(AssertUnwindSafe(call)).map_err(|panic| panic_message(&*panic))
+}
+
+/// The `RuntimeError` for a defect that broke `what`.
+fn defect(what: &str, message: String) -> PyErr {
+    PyRuntimeError::new_err(format!(
+        "the core panicked while changing the {what}, which can no longer be used: {message}"
+    ))
+}
+
+/// Refuses an object a defect broke.
+fn usable(broken: bool, what: &str) -> PyResult<()> {
+    if broken {
+        return Err(PyRuntimeError::new_err(format!(
+            "the {what} is broken: an earlier call that changed it panicked partway; build it again"
+        )));
+    }
+    Ok(())
 }
 
 /// The memories that answer: the settled key memory and, unless left out, the lexical similar record memory.
 #[pyclass(module = "gil._gil", unsendable)]
 struct Decider {
     inner: gil::decider::Decider,
+    broken: bool,
 }
 
 #[pymethods]
@@ -332,16 +357,24 @@ impl Decider {
             similar_records.then(LexicalMemory::default),
         );
         if let Some(records) = records {
-            inner.rebuild(&schema, &records.records);
+            changing(|| inner.rebuild(&schema, &records.records))
+                .map_err(|m| defect("decider", m))?;
         }
-        Ok(Self { inner })
+        Ok(Self {
+            inner,
+            broken: false,
+        })
     }
 
     /// Puts `records` (settled records of the schema, in settlement order, later than those it holds) into the memories.
     fn put(&mut self, schema_json: &str, records: &Records) -> PyResult<()> {
+        usable(self.broken, "decider")?;
         let schema = schema(schema_json).map_err(invalid)?;
         let inner = &mut self.inner;
-        guarded(|| inner.rebuild(&schema, &records.records))
+        changing(|| inner.rebuild(&schema, &records.records)).map_err(|m| {
+            self.broken = true;
+            defect("decider", m)
+        })
     }
 
     /// The answer for one open decided attribute of record `id` from the values given (a JSON object, and the sets of
@@ -356,6 +389,7 @@ impl Decider {
         values_json: &str,
         sets_json: Option<&str>,
     ) -> PyResult<String> {
+        usable(self.broken, "decider")?;
         let schema = schema(schema_json).map_err(invalid)?;
         let values: BTreeMap<String, String> = serde_json::from_str(values_json)
             .map_err(|e| invalid(format!("values are an object of strings: {e}")))?;
@@ -399,6 +433,7 @@ impl AskPlanner {
     /// Learns from a settled record (JSON, as records are read), in settlement order, asking `decider` — whose memories
     /// may hold the record but none settled after it.
     fn learn(&mut self, decider: PyRef<'_, Decider>, record_json: &str) -> PyResult<()> {
+        usable(decider.broken, "decider")?;
         let value: Value = serde_json::from_str(record_json).map_err(|e| invalid(e.to_string()))?;
         let settled = record(&value).map_err(invalid)?;
         let (inner, schema) = (&mut self.inner, &self.schema);
@@ -433,6 +468,7 @@ fn settlement_of(
 #[pyclass(module = "gil._gil", unsendable)]
 struct OpenRecord {
     inner: open_record::OpenRecord,
+    broken: bool,
 }
 
 #[pymethods]
@@ -441,7 +477,10 @@ impl OpenRecord {
     #[new]
     fn new(schema_json: &str, id: &str, settled_at: i64) -> PyResult<Self> {
         let schema = schema(schema_json).map_err(invalid)?;
-        guarded(|| open_record::OpenRecord::new(schema, id, settled_at)).map(|inner| Self { inner })
+        guarded(|| open_record::OpenRecord::new(schema, id, settled_at)).map(|inner| Self {
+            inner,
+            broken: false,
+        })
     }
 
     /// A saved record (JSON, as a snapshot gives it) reopened as it was left.
@@ -450,7 +489,10 @@ impl OpenRecord {
         let schema = schema(schema_json).map_err(invalid)?;
         let value: Value = serde_json::from_str(record_json).map_err(|e| invalid(e.to_string()))?;
         let saved = record(&value).map_err(invalid)?;
-        guarded(|| open_record::OpenRecord::reopen(schema, &saved)).map(|inner| Self { inner })
+        guarded(|| open_record::OpenRecord::reopen(schema, &saved)).map(|inner| Self {
+            inner,
+            broken: false,
+        })
     }
 
     #[getter]
@@ -466,8 +508,20 @@ impl OpenRecord {
         attribute: &str,
         value: Option<&str>,
     ) -> PyResult<String> {
-        let decider = &mut decider.inner;
-        guarded(|| self.inner.observe(decider, attribute, value)).map(|a| answers_json(&a))
+        usable(self.broken, "record")?;
+        usable(decider.broken, "decider")?;
+        self.inner
+            .check_observe(attribute)
+            .map_err(|e| invalid(e.to_string()))?;
+        let memories = &mut decider.inner;
+        match changing(|| self.inner.observe(memories, attribute, value)) {
+            Ok(found) => Ok(answers_json(&found)),
+            Err(message) => {
+                self.broken = true;
+                decider.broken = true;
+                Err(defect("record and its decider", message))
+            }
+        }
     }
 
     /// Settles a decided attribute at `now` (ticks) — `kind` by name, with the value, values or probability it needs;
@@ -484,14 +538,27 @@ impl OpenRecord {
         values: Option<Vec<String>>,
         probability: Option<f64>,
     ) -> PyResult<String> {
+        usable(self.broken, "record")?;
+        usable(decider.broken, "decider")?;
         let settlement = settlement_of(kind, value, values, probability).map_err(invalid)?;
-        let decider = &mut decider.inner;
-        guarded(|| self.inner.settle(decider, attribute, &settlement, now))
-            .map(|a| answers_json(&a))
+        self.inner
+            .check_settle(attribute, &settlement)
+            .map_err(|e| invalid(e.to_string()))?;
+        let memories = &mut decider.inner;
+        match changing(|| self.inner.settle(memories, attribute, &settlement, now)) {
+            Ok(found) => Ok(answers_json(&found)),
+            Err(message) => {
+                self.broken = true;
+                decider.broken = true;
+                Err(defect("record and its decider", message))
+            }
+        }
     }
 
     /// Answers for every open decided attribute, as JSON.
     fn answer(&self, decider: PyRef<'_, Decider>) -> PyResult<String> {
+        usable(self.broken, "record")?;
+        usable(decider.broken, "decider")?;
         guarded(|| self.inner.answer(&decider.inner)).map(|a| answers_json(&a))
     }
 
@@ -503,6 +570,8 @@ impl OpenRecord {
         attribute: &str,
         partial: Option<&str>,
     ) -> PyResult<String> {
+        usable(self.broken, "record")?;
+        usable(decider.broken, "decider")?;
         guarded(|| {
             self.inner
                 .answer_partial(&decider.inner, attribute, partial)
@@ -518,6 +587,8 @@ impl OpenRecord {
         attribute: &str,
         ranked_json: &str,
     ) -> PyResult<String> {
+        usable(self.broken, "record")?;
+        usable(decider.broken, "decider")?;
         let ranked: Value =
             serde_json::from_str(ranked_json).map_err(|e| invalid(e.to_string()))?;
         let ranked = ranked
@@ -546,8 +617,9 @@ impl OpenRecord {
     }
 
     /// The record as it stands, to save — JSON in the form records are read in.
-    fn snapshot(&self) -> String {
-        serde_json::to_string(&self.inner.snapshot()).expect("a record serializes")
+    fn snapshot(&self) -> PyResult<String> {
+        usable(self.broken, "record")?;
+        Ok(serde_json::to_string(&self.inner.snapshot()).expect("a record serializes"))
     }
 }
 
