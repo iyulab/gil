@@ -640,7 +640,8 @@ impl KeyMemory {
 
     /// Each value's share of the weighted total, largest first; ties to the one settled most recently, then to the
     /// smaller value in scalar order. Settlements are folded from the earliest: each one leaves every earlier weight one
-    /// step lighter and adds its own at 1 — the same operations, in the same order, as the reference implementation.
+    /// step lighter and adds its own at 1 — always the same operations in the same order, so the shares come out the same
+    /// to the bit wherever they are computed.
     fn shares(&self, settled: &[Settled], excluding: Option<&str>) -> Vec<Share> {
         let mut ordered: Vec<&Settled> = settled
             .iter()

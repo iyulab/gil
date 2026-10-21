@@ -45,7 +45,7 @@ public static class ShadowIndex
     /// <param name="evidence">The task's recorded requests (<see cref="IShadowEvidenceSource"/>), in arrival order.</param>
     /// <param name="root">The task's tree.</param>
     /// <param name="exclude">Outputs that mean "no answer"; as candidates they would duplicate "none of these".</param>
-    public static IReadOnlyDictionary<string, IReadOnlyList<Candidate>> Build(
+    public static IReadOnlyDictionary<string, IReadOnlyList<JudgeCandidate>> Build(
         IEnumerable<ShadowEvidence> evidence, Node root, IReadOnlySet<string>? exclude = null)
     {
         ArgumentNullException.ThrowIfNull(evidence);
@@ -77,7 +77,7 @@ public static class ShadowIndex
             }
         }
 
-        var index = new Dictionary<string, IReadOnlyList<Candidate>>(StringComparer.Ordinal);
+        var index = new Dictionary<string, IReadOnlyList<JudgeCandidate>>(StringComparer.Ordinal);
         foreach (var (anchor, counts) in support)
         {
             if (root.Find(anchor) is not { Habits.Count: > 0 } node)
@@ -93,7 +93,7 @@ public static class ShadowIndex
 
             // OrderBy is stable: equal support keeps first-seen order.
             index[anchor] = [.. counts.OrderByDescending(c => c.Count).Take(room)
-                .Select(c => new Candidate(Id(anchor, c.Text), DerivedHabits.Label(c.Text), c.Example, c.Text))];
+                .Select(c => new JudgeCandidate(Id(anchor, c.Text), DerivedHabits.Label(c.Text), c.Example, c.Text))];
         }
 
         return index;

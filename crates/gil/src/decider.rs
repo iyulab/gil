@@ -51,7 +51,7 @@ pub enum Evidence {
 }
 
 impl std::fmt::Display for Evidence {
-    /// The reference implementation's text: `attribute: value` for a key, the record id for a record.
+    /// `attribute: value` for a key, the record id for a record — the text a host shows.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Evidence::Key(key) => key.fmt(f),

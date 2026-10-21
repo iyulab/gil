@@ -5,8 +5,8 @@ using System.Reflection;
 namespace Gil;
 
 /// <summary>
-/// The resolution span and metrics of the tree judgment path, under the same activity source and meter name as the rest
-/// of Gil (<see cref="GilDiagnostics.Name"/>), so one registration listens to both.
+/// The resolution span and metrics of the tree judgment path, under the same activity source and meter name as the call
+/// spans (<see cref="GilDiagnostics.Name"/>), so one registration listens to both.
 /// </summary>
 internal static class TreeDiagnostics
 {

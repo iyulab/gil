@@ -34,7 +34,7 @@ public sealed class SingleTokenJudge(CallRecorder recorder, SingleTokenJudgeOpti
 
     public async Task<Judgment> JudgeAsync(
         string state,
-        IReadOnlyList<Candidate> candidates,
+        IReadOnlyList<JudgeCandidate> candidates,
         PromptLanguage language,
         string traceId,
         string? nodeId = null,
@@ -98,7 +98,7 @@ public sealed class SingleTokenJudge(CallRecorder recorder, SingleTokenJudgeOpti
         };
     }
 
-    private List<Candidate> Order(string state, IReadOnlyList<Candidate> candidates, string? nodeId)
+    private List<JudgeCandidate> Order(string state, IReadOnlyList<JudgeCandidate> candidates, string? nodeId)
     {
         if (_options.OrderSeed is not int seed)
         {
@@ -110,17 +110,17 @@ public sealed class SingleTokenJudge(CallRecorder recorder, SingleTokenJudgeOpti
         return [.. candidates.OrderBy(c => Hash(request + "\u001d" + c.Id), StringComparer.Ordinal)];
     }
 
-    private static string UserPrompt(string state, IReadOnlyList<Candidate> ordered, IReadOnlyList<string> labels, string none, PromptLanguage language)
+    private static string UserPrompt(string state, IReadOnlyList<JudgeCandidate> ordered, IReadOnlyList<string> labels, string none, PromptLanguage language)
     {
         var listed = labels.Zip(ordered, (label, c) => $"{label}. {c.Label} — {c.Description}");
         var choices = string.Join('\n', [$"{none}. {language.NoneOfThese}", .. listed]);
         return PromptText.Fill(language.Input, ("state", state)) + "\n\n" + PromptText.Fill(language.JudgeQuestion, ("choices", choices));
     }
 
-    private static string? Choice(LabelDistribution distribution, string none, Dictionary<string, Candidate> byLabel) =>
+    private static string? Choice(LabelDistribution distribution, string none, Dictionary<string, JudgeCandidate> byLabel) =>
         distribution.Trusted && distribution.Choice is string label && label != none ? byLabel[label].Id : null;
 
-    private static Dictionary<string, double> ById(LabelDistribution distribution, Dictionary<string, Candidate> byLabel) =>
+    private static Dictionary<string, double> ById(LabelDistribution distribution, Dictionary<string, JudgeCandidate> byLabel) =>
         distribution.Probs.Where(p => byLabel.ContainsKey(p.Key)).ToDictionary(p => byLabel[p.Key].Id, p => p.Value, StringComparer.Ordinal);
 
     private static string Hash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));

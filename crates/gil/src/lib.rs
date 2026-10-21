@@ -4,8 +4,8 @@
 //!
 //! The vocabulary: a [`schema::Schema`] lists the [`schema::Attribute`]s of a record, each observed or decided; a
 //! [`schema::Record`] holds settled values; the [`decider::Decider`] answers a record's decided attributes layer by
-//! layer ([`decider::Answer`]); [`replay`] chooses each layer's threshold. The crate reproduces the .NET
-//! implementation's language-neutral goldens (`tests/fixtures/core`) to the bit.
+//! layer ([`decider::Answer`]); [`replay`] chooses each layer's threshold. Its tests write the language-neutral goldens
+//! (`tests/fixtures/core`) that every binding reproduces to the bit.
 
 pub mod ask_planner;
 pub mod coarse_groups;

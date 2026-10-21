@@ -389,7 +389,7 @@ def final_form() -> dict:
 
 
 def test_the_ask_planner_golden_comes_back() -> None:
-    """The ask planner's golden (ask.jsonl), written by the .NET implementation, read through Python to the bit."""
+    """The ask planner's golden (ask.jsonl), written by the core's tests, read through Python to the bit."""
     schema = gil.Schema.from_dict(final_form())
     settled = lines("records.jsonl")
     decider = gil.Decider(schema, gil.records(settled[:CHOSEN]))

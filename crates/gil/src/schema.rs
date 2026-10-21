@@ -238,8 +238,8 @@ impl<'de> serde::Deserialize<'de> for Schema {
 }
 
 impl Schema {
-    /// A schema named `name` with `attributes` in order, checked as the reference implementation checks one when it is
-    /// made: a name, unique attribute names, at least one decided attribute, and settings that fit their attribute —
+    /// A schema named `name` with `attributes` in order, checked when it is made: a name, unique attribute names, at least
+    /// one decided attribute, and settings that fit their attribute —
     /// several values only for a decided attribute and then no memory threshold or typed key thresholds, at least one
     /// similar-record vote, a coarse level (with a prefix of at least one, or a table of at least one value and no blank
     /// class) and values to catch only on a decided single-valued attribute, dependencies and key attributes that name
@@ -511,7 +511,7 @@ impl Schema {
     }
 }
 
-/// What happened to a decided attribute when it was settled — the names the reference implementation uses.
+/// What happened to a decided attribute when it was settled — the names every binding uses.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SettlementKind {
@@ -547,7 +547,7 @@ pub enum SettlementKind {
 }
 
 impl SettlementKind {
-    /// The kind named `name`, as the reference implementation spells it; `None` for any other name.
+    /// The kind named `name`, as every binding spells it; `None` for any other name.
     pub fn parse(name: &str) -> Option<Self> {
         Some(match name {
             "Accept" => Self::Accept,

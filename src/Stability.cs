@@ -7,22 +7,28 @@ namespace Gil;
 /// </summary>
 internal static class Stability
 {
-    /// <summary>The tree judgment path: the resolver, the tree and its YAML, traversal, one-token judging, fallback generation.</summary>
+    /// <summary>
+    /// The tree judgment path (package <c>Gil.Tree</c>): the resolver, the tree and its YAML, traversal, one-token judging
+    /// and its candidates, the prompt language, output contracts, fallback generation.
+    /// </summary>
     public const string Tree = "GIL0001";
 
-    /// <summary>Habit promotion and its review, deactivation, differentiation and shadow evidence.</summary>
+    /// <summary>Habit promotion and its review, deactivation, differentiation and shadow evidence (package <c>Gil.Tree</c>).</summary>
     public const string Habits = "GIL0002";
 
-    /// <summary>Recording and pricing: the telemetry sink and its stored records and statistics, the call recorders, the energy model.</summary>
+    /// <summary>
+    /// Recording and pricing (package <c>Gil.Tree</c>): the telemetry sink and its stored records and statistics, the
+    /// call recorders, the energy model, the Microsoft.Extensions.AI embedding adapter.
+    /// </summary>
     public const string Recording = "GIL0003";
 
     /// <summary>
-    /// A document memory other than <c>LexicalMemory</c> on the form path: the embedding memory, the circuit breaker, a
-    /// memory of your own. The supported document memory is the lexical one, and the form path takes only it.
+    /// The memory of confirmed answers (package <c>Gil.Tree</c>): the memory port and its matches, the lexical and
+    /// embedding memories, the circuit breaker.
     /// </summary>
-    public const string DocumentMemory = "GIL0004";
+    public const string Memory = "GIL0004";
 
-    /// <summary>Asking advice: which observed field to ask a person for first, and whether it is worth asking within a budget.</summary>
+    /// <summary>Asking advice (package <c>Gil</c>): which observed attribute to ask a person for first, and whether it is worth asking within a budget.</summary>
     public const string Asking = "GIL0005";
 
     /// <summary>Where the stability of each surface is described.</summary>

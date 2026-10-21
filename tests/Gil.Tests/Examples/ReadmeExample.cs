@@ -1,10 +1,8 @@
 // The code of README.md's code blocks, compiled here so that the README breaks together with the API.
 // ReadmeTests checks that every line of the README's code blocks appears here, in the same order.
-using System.Reflection;
 using System.Text.Json.Nodes;
 using Gil;
 using Gil.Fallback;
-using Gil.Forms;
 using Gil.Habits;
 using Gil.Judge;
 using Gil.Llm;
@@ -91,101 +89,48 @@ internal static class ReadmeExample
 
         var stats = store.Stats(task.Name, window: 100, pricing: fitted, tree: tree);
 
-        SettledDocument[] saved = [];   // the documents the application has saved
-        var form = new FormDefinition("ticket",
+        IReadOnlyList<Record> savedRecords = [];
+        using var schema = new Schema("ticket",
         [
-            new FieldDefinition("reporter", FieldRole.Observed) { UseAsEvidence = false },
-            new FieldDefinition("component", FieldRole.Observed),
-            new FieldDefinition("summary", FieldRole.Observed),
-            new FieldDefinition("team", FieldRole.Judged) { MemoryThreshold = 0.5, KeyThreshold = 0.6 },
-            new FieldDefinition("severity", FieldRole.Judged) { Candidates = ["low", "medium", "high"], Policy = FieldPolicy.ConfirmRequired },
-        ], PromptLanguage.English);
+            new Attribute("reporter", AttributeRole.Observed) { UseAsEvidence = false },
+            new Attribute("component", AttributeRole.Observed),
+            new Attribute("summary", AttributeRole.Observed),
+            new Attribute("team", AttributeRole.Decided) { KeyThreshold = 0.6, MemoryThreshold = 0.5 },
+            new Attribute("severity", AttributeRole.Decided) { Candidates = ["low", "medium", "high"], Policy = AttributePolicy.ConfirmRequired },
+        ]);
 
-        var forms = new FormResolver(new FieldMemory(), new LexicalMemory());
-        await forms.RebuildAsync(form, saved);
+        using var decider = new Decider();
+        using var saved = SettledRecords.From(savedRecords);   // the records settled so far, in settlement order
+        decider.Put(schema, saved);
 
-        var session = forms.Open(form, "tickets/0412");
-        await session.ObserveAsync("reporter", "Kim");
-        var suggestions = await session.ObserveAsync("summary", "VPN drops every ten minutes");
-        var updated = await session.SettleAsync("team", Settlement.Accept("network"));
-        var document = session.Snapshot();
-
-        var checkedByPerson = "network"; // what a person settles when asked again, without the filled value in view
-        var filled = forms.Open(form, "tickets/0413");
-        await filled.ObserveAsync("summary", "VPN drops again");
-        var answer = await filled.SuggestAsync("team");
-        if (answer.Answered)
+        using var ticket = OpenRecord.Open(schema, "t/4", DateTimeOffset.UtcNow);
+        ticket.Observe(decider, "component", "vpn");
+        var answers = ticket.Observe(decider, "summary", "vpn drops every ten minutes");
+        var team = answers.Single(a => a.Attribute == "team");
+        if (team.Answered && team.Policy == AttributePolicy.Suggest)
         {
-            await filled.SettleAsync("team", Settlement.Fill(answer.Candidates[0].Value));
-            if (Random.Shared.NextDouble() < 0.05) // the probability is fixed before the draw
-            {
-                await filled.SettleAsync("team", Settlement.Check(checkedByPerson, 0.05));
-            }
+            ticket.Settle(decider, "team", SettlementKind.Fill, DateTimeOffset.UtcNow, value: team.Candidates[0].Value);
         }
 
-        var checkedLayers = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30, counting: [SettlementKind.Enter, SettlementKind.Check]);
+        Record snapshot = ticket.Snapshot();   // keep it; OpenRecord.Reopen(schema, snapshot) carries on from it
 
-        Dictionary<string, string> valuesOnScreen = new() { ["summary"] = "VPN drops every ten minutes" };
-        var savedDocument = document;
-        var onScreen = await forms.SuggestAsync(form, "tickets/0412", valuesOnScreen);
-        var teamOnly = await forms.SuggestAsync(form, "tickets/0412", "team", valuesOnScreen); // one field, when only it is shown
-        // … on save:
-        await forms.RebuildAsync(form, [savedDocument]);
+        var judge = new ResolverJudge(resolver, new Dictionary<string, TaskDefinition> { ["team"] = task });
+        var judged = await ticket.AnswerAsync(decider, judge);
 
-        var reopened = forms.Open(form, saved[0]);
-
-        var layers = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30);
-        var team = form.Field("team") with
+        var options = new SelectionOptions(TargetPrecision: 0.9, MinimumAnswered: 30);
+        var layers = Replay.SelectLayers(schema, "team", saved, options);
+        var keyFields = Replay.SelectKeyFields(schema, "team", saved, options);
+        using var tuned = new Schema(schema.Name, schema.Attributes.Select(a => a.Name != "team" ? a : a with
         {
-            KeyThreshold = layers.Key.Chosen?.Threshold,
-            MemoryThreshold = layers.Memory.Chosen?.Threshold,
-            MemorySimilarityFloor = layers.Memory.Chosen?.SimilarityFloor,
-        };
-        var tuned = form.WithField(team);
-        var pooled = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "team", saved, targetPrecision: 0.8, minimumAnswered: 30, counting: null, ThresholdRule.Pooled);
-        var unprompted = await ThresholdSelection.SelectLayersAsync(new FieldMemory(), new LexicalMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30, counting: [SettlementKind.Enter]);
+            KeyFields = keyFields.KeyFields,
+            KeyThreshold = layers.Thresholds.Key.Chosen?.Threshold,
+            MemoryThreshold = layers.Thresholds.Memory.Chosen?.Threshold,
+            MemoryFloor = layers.Thresholds.Memory.Chosen?.SimilarityFloor,
+        }));
+        var tuning = Tuning.Capture(tuned, saved.Count, options.TargetPrecision).Promise("team", layers.Thresholds);
+        File.WriteAllText("ticket.tuning.json", tuning.ToJson());
 
-        var planner = new AskPlanner(form, "team", askable: ["component"], budget: 0.5);
-        var replay = new FormResolver(new FieldMemory(), new LexicalMemory()); // starts empty: no later document leaks in
-        foreach (var earlier in saved)                                         // in settlement order
-        {
-            await planner.LearnAsync(replay, earlier);
-            await replay.RebuildAsync(form, [earlier]);
-        }
-
-        var teamNow = await forms.SuggestAsync(form, "tickets/0412", "team", valuesOnScreen);
-        foreach (var advice in planner.Advise(teamNow, valuesOnScreen)) // empty fields, highest gain per character first
-        {
-            if (advice.Ask) { /* ask for advice.Field before the rest */ }
-        }
-
-        var gilVersion = typeof(FormResolver).Assembly
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-
-        var narrowed = ThresholdSelection.SelectKeyFields(() => new FieldMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30);
-        var keyed = form.Field("team") with { KeyFields = narrowed.KeyFields };
-        var concentrations = ThresholdSelection.SelectKeyConcentrations(new FieldMemory(), form, "team", saved);
-        var trusting = form.Field("team") with { KeyConcentrations = concentrations };
-
-        var typedTeam = form.Field("team") with { TypedKeyThresholds = ThresholdSelection.SelectTypedKeyThresholds(new FieldMemory(), form, "team", saved, targetPrecision: 0.9, minimumAnswered: 30).Thresholds };
-        var whileTyping = await forms.SuggestAsync(form, "tickets/0412", "team", valuesOnScreen, typed: "ne");
-
-        await SetValuedFieldAsync(forms);
-    }
-
-    // The README's set-valued field reuses the names of the walkthrough above, so it runs in a scope of its own.
-    private static async Task SetValuedFieldAsync(FormResolver forms)
-    {
-        var paper = new FormDefinition("paper",
-        [
-            new FieldDefinition("venue", FieldRole.Observed),
-            new FieldDefinition("topics", FieldRole.Judged) { Multiple = true, KeyThreshold = 0.8 },
-            new FieldDefinition("main", FieldRole.Judged) { CandidatesFrom = "topics", KeyThreshold = 0.8 },
-        ], PromptLanguage.English);
-
-        var session = forms.Open(paper, "papers/0107");
-        await session.ObserveAsync("venue", "ACL");
-        var rest = await session.SettleAsync("topics", Settlement.Set(["parsing"]));   // suggests the other topics
-        var saved = session.Snapshot();                                                 // saved.Sets["topics"]
+        var kept = Tuning.FromJson(File.ReadAllText("ticket.tuning.json"));
+        using var current = kept.Stale(schema, saved.Count) is null ? kept.Apply(schema) : null;
     }
 }

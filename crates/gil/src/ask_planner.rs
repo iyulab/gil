@@ -1,5 +1,5 @@
-//! Which observed attribute to ask a person for first, so that a decided attribute gets answered. Experimental, as in
-//! the reference implementation.
+//! Which observed attribute to ask a person for first, so that a decided attribute gets answered. Experimental: its shape
+//! may change in any release.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 

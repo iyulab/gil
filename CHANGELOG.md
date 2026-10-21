@@ -5,6 +5,48 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 [crates/gil/CHANGELOG.md](crates/gil/CHANGELOG.md), and the review statistics (`iyulab-gil-review` and its .NET binding
 `Gil.Review`) theirs in [crates/gil-review/CHANGELOG.md](crates/gil-review/CHANGELOG.md).
 
+## Unreleased
+
+### Breaking
+
+- **Breaking: the decision core is native.** The `Gil` package is now the Rust decision core behind its C ABI, with
+  typed .NET values on top; the package carries the native library of each supported runtime. Its vocabulary is the
+  core's — schemas, attributes, records — and its answers, replays and tunings are the ones the Rust crate and the
+  Python package `iyulab-gil` give, to the bit. The managed implementation is removed. Old type to new:
+
+  | Before | Now |
+  |---|---|
+  | `FormDefinition` | `Schema` (`new Schema(name, attributes)`, `Find`, `FromJson`/`ToJson`; `IDisposable`) |
+  | `FieldDefinition`, `FieldRole`, `FieldPolicy` | `Attribute` (settings as `init` properties), `AttributeRole` (`Observed`, `Decided`), `AttributePolicy` |
+  | `CoarseLevel` | `CoarseLevel` (`Prefix` or `Classes`, with its thresholds) |
+  | `SettledDocument` | `Record` (`SettledAt` is a `DateTimeOffset`); a batch is `SettledRecords.From(records)` |
+  | `Settlement`, `SettlementKind` | `OpenRecord.Settle(decider, attribute, kind, now, value, values, probability)`; `SettlementKind` unchanged |
+  | `FormResolver`, `FieldMemory`, `LexicalMemory` (as document memory) | `Decider` (`Put`, `Remove`, `Answer`), which holds both memories |
+  | `FormSession` | `OpenRecord` (`Open`, `Reopen`, `Observe`, `Settle`, `Answer`, `AnswerPartial`, `OfferExternal`, `Snapshot`) |
+  | `FieldSuggestion` | `Answer` (with `Decision` when asked for); while typing, `PartialAnswer` |
+  | `FieldCandidate`, `FieldSource` | `Candidate` (`Evidence` is `KeyEvidence` or `RecordEvidence`), `Source` |
+  | `IFieldModel`, `FieldModelResult` | `IExternalJudge.JudgeAsync(attribute, evidence, ct)` returning ranked `ExternalCandidate`s (empty abstains), called by `OpenRecord.AnswerAsync(decider, judge, ct)` |
+  | `ThresholdSelection` | `Replay` (`SelectLayers`, `SelectCoarse`, `SelectKeyFields`, `SelectKeyConcentrations`), synchronous, over `SettledRecords` and `SelectionOptions` |
+  | `ThresholdChoice`, `LayerThresholds`, `TypedKeyThresholds`, `KeyFieldsChoice`, `KeyFieldsTrial`, `KeyState`, `ThresholdRule` | Same names (a layers selection returns `LayerSelection`); chosen settings are kept as a `Tuning` (`Capture`, `Promise`, `Apply`, `Stale`, `ToJson`/`FromJson`) |
+  | `AskPlanner`, `AskAdvice` (`GIL0005`) | `AskPlanner(schema, attribute, askable, budget)` with `Learn` and `Advise`, still `GIL0005` |
+  | `GilDiagnostics` | Removed; answers carry their decision records, and `Usage.Count` reports how they fared |
+  | `IEmbeddingPrefetch` | Removed |
+
+- **The experimental types live in `Gil.Tree`.** The memories (`IMemory`, `MemoryMatch`, `LexicalMemory`,
+  `EmbeddingMemory`, `CircuitBreakingMemory`, `MemoryReplay`, `MemoryUnavailableException`), the call recorders,
+  `EnergyModel`, `EmbeddingGeneratorModel`, and the tree, judging, habit, review, promotion, shadow, telemetry and
+  statistics contracts move from `Gil` and `Gil.Abstractions` into `Gil.Tree`. Their namespaces are unchanged: reference
+  `Gil.Tree` instead. `Gil.Abstractions` keeps only the model ports (`IChatModel`, `IEmbeddingModel` and their requests
+  and results).
+  - The tree's `Candidate` is now `JudgeCandidate`, so it does not collide with the core's.
+  - `IMemory`, `MemoryMatch`, `LexicalMemory` and `MemoryUnavailableException` are experimental (`GIL0004`);
+    `PromptLanguage` is `GIL0001`; `EmbeddingGeneratorModel` is `GIL0003`.
+  - `GilDiagnostics` is internal: listen to the activity source and meter `"Gil"`.
+  - `ResolverFieldModel` is now `ResolverJudge`, an `IExternalJudge` (`GIL0001`): the request is the evidence as
+    `name: value` lines, and the trace id and energy stay in the resolver's own sink.
+  - `Gil.Tree` references `Gil`; `Gil` references none of `Gil.Tree`, `Gil.Abstractions`, YamlDotNet or
+    Microsoft.Extensions.AI.
+
 ## 0.25.0
 
 ### Breaking

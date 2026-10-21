@@ -84,7 +84,7 @@ public sealed class GreedyTraverserTests
     public async Task Choosing_a_shadow_defers_instead_of_answering()
     {
         var judge = new Scripted(("quality", 0.9), ("dimension", 0.9), ("shadow-1", 0.9));
-        var shadows = new Dictionary<string, IReadOnlyList<Candidate>> { ["dimension"] = [new Candidate("shadow-1", "known", "a known answer", "Known.")] };
+        var shadows = new Dictionary<string, IReadOnlyList<JudgeCandidate>> { ["dimension"] = [new JudgeCandidate("shadow-1", "known", "a known answer", "Known.")] };
 
         var result = await new GreedyTraverser(judge).TraverseAsync("x", Root, Loose, PromptLanguage.Korean, "t", shadows, TestContext.Current.CancellationToken);
 
@@ -134,9 +134,9 @@ public sealed class GreedyTraverserTests
 
         public bool Trusted { get; init; } = true;
 
-        public List<IReadOnlyList<Candidate>> Shown { get; } = [];
+        public List<IReadOnlyList<JudgeCandidate>> Shown { get; } = [];
 
-        public Task<Judgment> JudgeAsync(string state, IReadOnlyList<Candidate> candidates, PromptLanguage language, string traceId, string? nodeId = null, int? layer = null, CancellationToken cancellationToken = default)
+        public Task<Judgment> JudgeAsync(string state, IReadOnlyList<JudgeCandidate> candidates, PromptLanguage language, string traceId, string? nodeId = null, int? layer = null, CancellationToken cancellationToken = default)
         {
             Shown.Add(candidates);
             var (choice, confidence) = script[_next++];

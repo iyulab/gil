@@ -1,4 +1,4 @@
-//! The note golden (`tests/fixtures/core/note-golden.jsonl`), written by the .NET implementation on the made-up notes of
+//! The note golden (`tests/fixtures/core/note-golden.jsonl`), what the decision core decides on the made-up notes of
 //! `note-logs.jsonl`: a schema whose long free text decides a decided attribute through the similar record layer, with a
 //! value that must not be missed, a value settled outside the attribute's candidates, a coarse level made from a table, a
 //! attribute that takes several values, values arriving in different orders, and records settled again and copied while
@@ -303,7 +303,7 @@ fn the_note_decisions_reproduce_their_golden() {
     golden_out.finish();
 }
 
-/// The typed replay's decision logs (`note-logs-out.jsonl`, written by the .NET implementation): for the owner's
+/// The typed replay's decision logs (`note-logs-out.jsonl`): for the owner's
 /// typed key thresholds on the first notes, every note asked about in settlement order with the key layer's best value
 /// with none, one and two characters of its owner typed — score, value, whether it is the owner — to the bit.
 #[test]

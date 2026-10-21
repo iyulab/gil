@@ -97,8 +97,8 @@ public sealed class FallbackGeneratorTests
         {
             var node = root.Find(expected.GetProperty("node").GetString()!)!;
             var candidates = node.Children.Count > 0
-                ? node.Children.Select(c => new Candidate(c.Id, c.Label, c.Description)).ToList()
-                : node.Habits.Select(h => new Candidate(h.Id, h.Label, h.Description)).ToList();
+                ? node.Children.Select(c => new JudgeCandidate(c.Id, c.Label, c.Description)).ToList()
+                : node.Habits.Select(h => new JudgeCandidate(h.Id, h.Label, h.Description)).ToList();
             var model = new ScriptedModel("A");
             var judge = new SingleTokenJudge(new CallRecorder(model, new EnergyModel(0, 1, 0, 1)), new SingleTokenJudgeOptions { Scheme = expected.GetProperty("scheme").GetString()! });
             await judge.JudgeAsync(expected.GetProperty("state").GetString()!, candidates, PromptLanguage.Korean, "t", node.Id, cancellationToken: ct);

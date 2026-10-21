@@ -35,7 +35,7 @@ public sealed class GreedyTraverser(IJudge judge)
         Thresholds thresholds,
         PromptLanguage language,
         string traceId,
-        IReadOnlyDictionary<string, IReadOnlyList<Candidate>>? shadows = null,
+        IReadOnlyDictionary<string, IReadOnlyList<JudgeCandidate>>? shadows = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(root);
@@ -49,7 +49,7 @@ public sealed class GreedyTraverser(IJudge judge)
         {
             var isLeaf = current.Habits.Count > 0;
             var shown = current.Children.Count > 0
-                ? current.Children.Select(child => new Candidate(child.Id, child.Label, child.Description)).ToList()
+                ? current.Children.Select(child => new JudgeCandidate(child.Id, child.Label, child.Description)).ToList()
                 : current.Habits.Select(ToCandidate).ToList();
             if (shown.Count == 0)
             {
@@ -97,6 +97,6 @@ public sealed class GreedyTraverser(IJudge judge)
         }
     }
 
-    private static Candidate ToCandidate(Habit habit) =>
+    private static JudgeCandidate ToCandidate(Habit habit) =>
         new(habit.Id, habit.Label, habit.Description, habit.Kind == HabitKind.Answer ? habit.Text : null);
 }

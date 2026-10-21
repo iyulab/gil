@@ -321,7 +321,7 @@ pub unsafe extern "C" fn gil_last_result(buffer: *mut u8, capacity: usize) -> us
 }
 
 /// Reads a schema from JSON in the core's `serde` form — the settings an attribute leaves out take their defaults — and
-/// hands it out through `out`. Reading checks it as the reference implementation checks one; a schema that breaks a rule
+/// hands it out through `out`. Reading checks it as `Schema::new` checks one; a schema that breaks a rule
 /// does not read, and the error names the rule.
 ///
 /// # Safety

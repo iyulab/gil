@@ -598,9 +598,9 @@ public sealed class ResolverTests
     {
         private int _next;
 
-        public List<IReadOnlyList<Candidate>> Shown { get; } = [];
+        public List<IReadOnlyList<JudgeCandidate>> Shown { get; } = [];
 
-        public Task<Judgment> JudgeAsync(string state, IReadOnlyList<Candidate> candidates, PromptLanguage language, string traceId, string? nodeId = null, int? layer = null, CancellationToken cancellationToken = default)
+        public Task<Judgment> JudgeAsync(string state, IReadOnlyList<JudgeCandidate> candidates, PromptLanguage language, string traceId, string? nodeId = null, int? layer = null, CancellationToken cancellationToken = default)
         {
             Shown.Add(candidates);
             var (choice, confidence) = script[_next++];

@@ -3,9 +3,8 @@
 //! it, then remembered. Precision is fitted as a non-decreasing function of the score, and the threshold is the lowest
 //! score down to which every fitted band of answers meets the target precision.
 //!
-//! Every sum here is taken in the order the reference implementation takes it — the same operations on the same operands
-//! — so the numbers come out the same to the bit. Not yet supported by this implementation: values an attribute must not
-//! miss, typed thresholds and the similar record layer.
+//! Every sum here is taken in a fixed order — the same operations on the same operands — so the numbers come out the
+//! same to the bit on every run and every platform.
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};

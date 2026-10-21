@@ -1,15 +1,24 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>Gil</RootNamespace>
-    <Description>Suggests the judged fields of a record from the records already settled, and says how often a suggestion it trusts is right: values settled together, similar settled records, thresholds chosen by replaying them. No model needed.</Description>
+    <Description>Suggests the decided attributes of a record from the records already settled, and says how often a suggestion it trusts is right: values settled together, similar settled records, thresholds chosen by replaying them. No model needed. The decision core is native (Rust) and called through its C ABI; schemas, records and answers are typed .NET values.</Description>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+    <!-- Not packed yet: the package carries the native library of each runtime, which packing has to gather first. -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- Local builds take the native library cargo built in this repository (`cargo build -p gil-ffi`). -->
+  <PropertyGroup>
+    <GilNativeDirectory Condition="'$(GilNativeDirectory)' == ''">$(MSBuildThisFileDirectory)..\..\target\debug\</GilNativeDirectory>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Gil.Abstractions\Gil.Abstractions.csproj" />
+    <None Include="$(GilNativeDirectory)libgil_native.dylib" Condition="Exists('$(GilNativeDirectory)libgil_native.dylib')" Link="libgil_native.dylib" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(GilNativeDirectory)libgil_native.so" Condition="Exists('$(GilNativeDirectory)libgil_native.so')" Link="libgil_native.so" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(GilNativeDirectory)gil_native.dll" Condition="Exists('$(GilNativeDirectory)gil_native.dll')" Link="gil_native.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
+
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
-  </ItemGroup>
-  <ItemGroup>
-    <InternalsVisibleTo Include="Gil.Tests" />
+    <InternalsVisibleTo Include="Gil.Core.Tests" />
   </ItemGroup>
 </Project>

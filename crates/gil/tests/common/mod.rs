@@ -204,8 +204,8 @@ pub fn choice(choice: &ThresholdChoice) -> Value {
     })
 }
 
-/// Every number as the double it denotes: the reference writes a whole double without a fraction (`160`), which reads
-/// back as an integer, so both sides compare as doubles — exactly.
+/// Every number as the double it denotes, so a line compares by the values it holds rather than by how a writer spelled
+/// them (`160` reads back as an integer, `160.0` as a double) — exactly.
 pub fn doubles(value: Value) -> Value {
     match value {
         Value::Number(n) => {
@@ -303,11 +303,28 @@ impl Golden {
                 let folder =
                     std::env::var_os("GIL_WRITE_CORE_GOLDEN").expect("a folder to write to");
                 std::fs::create_dir_all(&folder).expect("the folder");
-                let text: String = self.written.iter().map(|l| format!("{l}\n")).collect();
+                let text: String = self
+                    .written
+                    .iter()
+                    .map(|l| format!("{}\n", line_safe(&l.to_string())))
+                    .collect();
                 let file = self.part.as_deref().unwrap_or(self.name);
                 std::fs::write(std::path::Path::new(&folder).join(file), text)
                     .expect("the golden written");
             }
         }
     }
+}
+
+/// A JSON line with the characters a line reader may split at besides `\n` — NEL, LINE SEPARATOR, PARAGRAPH SEPARATOR
+/// (`str.splitlines` among others) — written as escapes. They only occur inside strings, where an escape is the same text.
+fn line_safe(line: &str) -> String {
+    let mut safe = String::with_capacity(line.len());
+    for c in line.chars() {
+        match c {
+            '\u{85}' | '\u{2028}' | '\u{2029}' => safe.push_str(&format!("\\u{:04X}", c as u32)),
+            _ => safe.push(c),
+        }
+    }
+    safe
 }

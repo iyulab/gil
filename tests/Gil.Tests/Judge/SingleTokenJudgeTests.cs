@@ -7,7 +7,7 @@ namespace Gil.Tests.Judge;
 
 public sealed class SingleTokenJudgeTests
 {
-    private static readonly Candidate[] Candidates =
+    private static readonly JudgeCandidate[] Candidates =
     [
         new("quality", "Quality", "defects"),
         new("equipment", "Equipment", "machine failure"),

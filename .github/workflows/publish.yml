@@ -45,11 +45,15 @@ jobs:
         id: version
         run: echo "version=$(dotnet msbuild src/Gil/Gil.csproj -getProperty:Version)" >> "$GITHUB_OUTPUT"
 
+      # The Gil project copies the decision core's native library from target/debug; the tests load it.
+      - run: rustup toolchain install stable --profile minimal && rustup default stable
+      - run: cargo build -p gil-ffi --locked
+
       - run: dotnet build Gil.slnx --no-restore --configuration Release
       - run: dotnet test --solution Gil.slnx --no-build --configuration Release
       - run: dotnet pack Gil.slnx --no-build --configuration Release --output packages
 
-      # Every project under src/ must produce a package of this version; none at all means packing is off.
+      # Every packable project under src/ must produce a package of this version; none at all means packing is off.
       - name: Check the packages
         id: packages
         env:
@@ -65,6 +69,17 @@ jobs:
           missing=0
           for csproj in $(grep -oP '(?<=Path=")src/[^"]+\.csproj' Gil.slnx); do
             id=$(basename "$csproj" .csproj)
+            if [ "$(dotnet msbuild "$csproj" -getProperty:IsPackable)" = "false" ]; then
+              # A package that depends on it would point at a version that is never published.
+              for pkg in "${produced[@]}"; do
+                if unzip -p "$pkg" '*.nuspec' | grep -q "<dependency id=\"${id}\""; then
+                  echo "::error::$(basename "$pkg") depends on ${id}, which is not packed"
+                  missing=1
+                fi
+              done
+              echo "${id} is not packable; skipped."
+              continue
+            fi
             if [ ! -f "packages/${id}.${VERSION}.nupkg" ]; then
               echo "::error::${id}.${VERSION}.nupkg was not produced"
               missing=1

@@ -5,7 +5,6 @@
     <NoWarn>$(NoWarn);GIL0001;GIL0002;GIL0003;GIL0004;GIL0005</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Gil\Gil.csproj" />
     <ProjectReference Include="..\..\src\Gil.Tree\Gil.Tree.csproj" />
     <ProjectReference Include="..\..\src\Gil.IronHive\Gil.IronHive.csproj" />
     <ProjectReference Include="..\..\src\Gil.Sqlite\Gil.Sqlite.csproj" />
@@ -17,7 +16,6 @@
   <ItemGroup>
     <None Include="..\fixtures\conformance\*.json" Link="conformance\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\fixtures\conformance\trees\*.yaml" Link="conformance\trees\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\fixtures\core\*.jsonl" Link="core\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="xunit.v3" />

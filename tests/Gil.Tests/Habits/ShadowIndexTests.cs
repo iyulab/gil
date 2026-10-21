@@ -71,7 +71,7 @@ public sealed class ShadowIndexTests : IDisposable
         index.Keys.Should().Equal("bank");
         var shadows = index["bank"];
         shadows.Select(s => s.Answer).Should().Equal("card_lost", "a", "b", "c", "d", "e", "f"); // equal support keeps first-seen order
-        shadows[0].Should().Be(new Candidate(ShadowIndex.Id("bank", "card_lost"), "card_lost", "I lost my card", "card_lost"));
+        shadows[0].Should().Be(new JudgeCandidate(ShadowIndex.Id("bank", "card_lost"), "card_lost", "I lost my card", "card_lost"));
         shadows.Should().OnlyContain(s => ShadowIndex.IsShadow(s.Id));
     }
 
@@ -126,7 +126,7 @@ public sealed class ShadowIndexTests : IDisposable
             var built = ShadowIndex.Build(evidence.Take(rows), tree, exclude);
             var expected = checkpoint.GetProperty("index").EnumerateObject().ToDictionary(
                 a => a.Name,
-                a => a.Value.EnumerateArray().Select(c => new Candidate(
+                a => a.Value.EnumerateArray().Select(c => new JudgeCandidate(
                     c.GetProperty("id").GetString()!,
                     c.GetProperty("label").GetString()!,
                     c.GetProperty("description").GetString()!,

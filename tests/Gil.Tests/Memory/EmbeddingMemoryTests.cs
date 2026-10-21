@@ -200,7 +200,7 @@ public sealed class EmbeddingMemoryTests
 
     private sealed class AlwaysAccept : IJudge
     {
-        public Task<Judgment> JudgeAsync(string state, IReadOnlyList<Candidate> candidates, PromptLanguage language, string traceId, string? nodeId = null, int? layer = null, CancellationToken cancellationToken = default) =>
+        public Task<Judgment> JudgeAsync(string state, IReadOnlyList<JudgeCandidate> candidates, PromptLanguage language, string traceId, string? nodeId = null, int? layer = null, CancellationToken cancellationToken = default) =>
             Task.FromResult(new Judgment
             {
                 Probs = new Dictionary<string, double> { [candidates[0].Id] = 0.99 },

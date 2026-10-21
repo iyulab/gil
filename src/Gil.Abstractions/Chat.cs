@@ -5,6 +5,9 @@ namespace Gil;
 /// <summary>One chat message.</summary>
 public sealed record ChatMessage(string Role, string Content);
 
+/// <summary>One of the top alternatives the model reported at the first generated token.</summary>
+public sealed record TokenLogprob(string Token, double Logprob);
+
 /// <summary>A completion request, provider-neutral.</summary>
 public sealed record ChatRequest
 {

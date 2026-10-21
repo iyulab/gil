@@ -1,13 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>Gil</RootNamespace>
-    <Description>Gil's experimental tree judgment path: a resolver that answers repeated LLM requests from a memory of confirmed answers or a small tree of one-token judgments, generates only what they cannot settle, and promotes recurring answers to habits for review.</Description>
+    <Description>Gil's experimental tree judgment path: a resolver that answers repeated LLM requests from a memory of confirmed answers or a small tree of one-token judgments, generates only what they cannot settle, and promotes recurring answers to habits for review. Also carries the memories, call recorders, energy model and telemetry contracts it is built on, and an external judge for the decision core made of the resolver.</Description>
     <PackageTags>$(PackageTags);tree;experimental</PackageTags>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Gil\Gil.csproj" />
+    <ProjectReference Include="..\Gil.Abstractions\Gil.Abstractions.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
     <PackageReference Include="YamlDotNet" />
   </ItemGroup>
   <ItemGroup>

@@ -5,8 +5,8 @@
 //! remembered answers has moved by a tenth (or by one, while there are fewer than ten) since they were last taken, and
 //! every row and every lookup is weighted with the same ones in between — so a similarity stays a cosine, 1 for the same
 //! text. Each distinct n-gram gets an id the first time it is remembered, in the n-grams' scalar order, and every sum is
-//! taken in the order of the ids — the same operations, in the same order, as the reference implementation, so the
-//! similarities come out the same to the bit.
+//! taken in the order of the ids — always the same operations in the same order, so the similarities come out the same
+//! to the bit.
 
 use std::cmp::Ordering;
 use std::collections::HashMap;

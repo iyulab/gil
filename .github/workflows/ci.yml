@@ -38,6 +38,10 @@ jobs:
           key: ${{ runner.os }}-nuget-${{ hashFiles('Directory.Packages.props') }}
           restore-keys: ${{ runner.os }}-nuget-
 
+      # The decision core's native library (crates/gil-ffi), which the Gil project copies from target/debug when it builds.
+      - run: rustup toolchain install stable --profile minimal && rustup default stable
+      - run: cargo build -p gil-ffi --locked
+
       - run: dotnet restore Gil.slnx
       - run: dotnet build Gil.slnx --no-restore --configuration Release
       # Compatibility replays and live calls skip themselves: their fixtures and endpoints are not part of this repository.
@@ -73,14 +77,14 @@ jobs:
           rustup toolchain install "$msrv" --profile minimal
           cargo +"$msrv" test --locked
 
-      # The .NET bindings (bindings/csharp): their native libraries from crates/gil-review-ffi and crates/gil-ffi, then
-      # their tests, which reproduce the review golden and the decision golden through the C ABIs. Nothing is packed.
-      - run: cargo build -p gil-review-ffi -p gil-ffi --locked
+      # The review statistics' .NET binding (bindings/csharp): its native library from crates/gil-review-ffi, then its
+      # tests, which reproduce the review golden through the C ABI. Nothing is packed. The decision core's .NET binding
+      # (src/Gil) is tested by the build job.
+      - run: cargo build -p gil-review-ffi --locked
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
       - run: dotnet test --solution bindings/csharp/Gil.Review.slnx
-      - run: dotnet test --solution bindings/csharp/Gil.Native.slnx
 
       # The Python bindings (bindings/python): built as a wheel and tested against the same goldens. Nothing is published.
       - uses: actions/setup-python@v6
