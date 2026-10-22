@@ -82,6 +82,8 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 - The crate's README says which way the goldens run: the Rust core writes them and `Gil` is checked against them.
 - The three READMEs name the trade a threshold makes in the words selective prediction and automated coding use:
   precision for coverage, the share of lookups answered (`AnswerRate`).
+- The README's Usage now starts with the supported surface, the decision core (`dotnet add package Gil`), and the
+  experimental tree judgment path follows under its own section with its walkthrough.
 
 ### Dependencies
 

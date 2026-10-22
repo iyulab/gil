@@ -15,7 +15,72 @@ namespace Gil.Tests.Examples;
 
 internal static class ReadmeExample
 {
-    public static async Task RunAsync()
+    // The decision core (README "Usage"). The external judge is the tree judgment path's resolver and task, below.
+    public static async Task DecisionCoreAsync(Resolver resolver, TaskDefinition task)
+    {
+        IReadOnlyList<Record> savedRecords = [];
+        using var schema = new Schema("ticket",
+        [
+            new AttributeDefinition("reporter", AttributeRole.Observed) { UseAsEvidence = false },
+            new AttributeDefinition("component", AttributeRole.Observed),
+            new AttributeDefinition("summary", AttributeRole.Observed),
+            new AttributeDefinition("team", AttributeRole.Decided) { KeyThreshold = 0.6, MemoryThreshold = 0.5 },
+            new AttributeDefinition("severity", AttributeRole.Decided) { Candidates = ["low", "medium", "high"], Policy = AttributePolicy.ConfirmRequired },
+        ]);
+
+        using var decider = new Decider();
+        using var saved = SettledRecords.From(savedRecords);   // the records settled so far, in settlement order
+        decider.Put(schema, saved);
+
+        using var ticket = OpenRecord.Open(schema, "t/4", DateTimeOffset.UtcNow);
+        ticket.Observe(decider, "component", "vpn");
+        var answers = ticket.Observe(decider, "summary", "vpn drops every ten minutes");
+        var team = answers.Single(a => a.Attribute == "team");
+        if (team.Answered && team.Policy == AttributePolicy.Suggest)
+        {
+            ticket.Settle(decider, "team", SettlementKind.Fill, DateTimeOffset.UtcNow, value: team.Candidates[0].Value);
+        }
+
+        Record snapshot = ticket.Snapshot();   // keep it; OpenRecord.Reopen(schema, snapshot) carries on from it
+
+        var judge = new ResolverJudge(resolver, new Dictionary<string, TaskDefinition> { ["team"] = task });
+        var judged = await ticket.AnswerAsync(decider, judge);
+
+        var options = new SelectionOptions(TargetPrecision: 0.9, MinimumAnswered: 30);
+        var layers = Replay.SelectLayers(schema, "team", saved, options);
+        var keyFields = Replay.SelectKeyFields(schema, "team", saved, options);
+        using var tuned = new Schema(schema.Name, schema.Attributes.Select(a => a.Name != "team" ? a : a with
+        {
+            KeyFields = keyFields.KeyFields,
+            KeyThreshold = layers.Thresholds.Key.Chosen?.Threshold,
+            MemoryThreshold = layers.Thresholds.Memory.Chosen?.Threshold,
+            MemoryFloor = layers.Thresholds.Memory.Chosen?.SimilarityFloor,
+        }));
+        var tuning = Tuning.Capture(tuned, saved.Count, options.TargetPrecision).Promise("team", layers.Thresholds);
+        File.WriteAllText("ticket.tuning.json", tuning.ToJson());
+
+        var kept = Tuning.FromJson(File.ReadAllText("ticket.tuning.json"));
+        using var current = kept.Stale(schema, saved.Count) is null ? kept.Apply(schema) : null;
+
+        var pooled = Replay.SelectLayers(schema, "team", saved, options with { TargetPrecision = 0.8, Rule = ThresholdRule.Pooled });
+        var unprompted = Replay.SelectLayers(schema, "team", saved, options with { Counting = [SettlementKind.Enter] });
+
+        ticket.Settle(decider, "team", SettlementKind.Check, DateTimeOffset.UtcNow, value: "network", probability: 0.05);
+        var checkedLayers = Replay.SelectLayers(schema, "team", saved, options with { Counting = [SettlementKind.Enter, SettlementKind.Check] });
+
+        var concentrations = Replay.SelectKeyConcentrations(schema, "team", saved);
+
+        var panel = new CoarseLevel(new Dictionary<string, string> { ["network"] = "infrastructure", ["payments"] = "finance" });
+        using var grouped = new Schema(schema.Name, schema.Attributes.Select(a => a.Name != "team" ? a : a with { Coarse = panel }));
+        var coarse = Replay.SelectCoarse(grouped, "team", saved, options);
+
+        var typing = Replay.SelectKeyFields(schema, "team", saved, options with { TypedLongest = 3 });
+        var typedThresholds = typing.Typed?.Thresholds;   // TypedKeyThresholds, beside KeyFields and KeyThreshold
+        var whileTyping = ticket.AnswerPartial(decider, "team", "ne");
+    }
+
+    // The tree judgment path (README "The tree judgment path").
+    public static async Task TreeJudgmentPathAsync()
     {
         using var store = new SqliteTelemetryStore("gil.sqlite");
         using var chat = IronHiveChatModel.OpenAICompatible(new OpenAICompatibleOptions
@@ -88,65 +153,5 @@ internal static class ReadmeExample
         var fitted = EnergyModel.Fit(store.ServerTimeSamples("my-model"));
 
         var stats = store.Stats(task.Name, window: 100, pricing: fitted, tree: tree);
-
-        IReadOnlyList<Record> savedRecords = [];
-        using var schema = new Schema("ticket",
-        [
-            new AttributeDefinition("reporter", AttributeRole.Observed) { UseAsEvidence = false },
-            new AttributeDefinition("component", AttributeRole.Observed),
-            new AttributeDefinition("summary", AttributeRole.Observed),
-            new AttributeDefinition("team", AttributeRole.Decided) { KeyThreshold = 0.6, MemoryThreshold = 0.5 },
-            new AttributeDefinition("severity", AttributeRole.Decided) { Candidates = ["low", "medium", "high"], Policy = AttributePolicy.ConfirmRequired },
-        ]);
-
-        using var decider = new Decider();
-        using var saved = SettledRecords.From(savedRecords);   // the records settled so far, in settlement order
-        decider.Put(schema, saved);
-
-        using var ticket = OpenRecord.Open(schema, "t/4", DateTimeOffset.UtcNow);
-        ticket.Observe(decider, "component", "vpn");
-        var answers = ticket.Observe(decider, "summary", "vpn drops every ten minutes");
-        var team = answers.Single(a => a.Attribute == "team");
-        if (team.Answered && team.Policy == AttributePolicy.Suggest)
-        {
-            ticket.Settle(decider, "team", SettlementKind.Fill, DateTimeOffset.UtcNow, value: team.Candidates[0].Value);
-        }
-
-        Record snapshot = ticket.Snapshot();   // keep it; OpenRecord.Reopen(schema, snapshot) carries on from it
-
-        var judge = new ResolverJudge(resolver, new Dictionary<string, TaskDefinition> { ["team"] = task });
-        var judged = await ticket.AnswerAsync(decider, judge);
-
-        var options = new SelectionOptions(TargetPrecision: 0.9, MinimumAnswered: 30);
-        var layers = Replay.SelectLayers(schema, "team", saved, options);
-        var keyFields = Replay.SelectKeyFields(schema, "team", saved, options);
-        using var tuned = new Schema(schema.Name, schema.Attributes.Select(a => a.Name != "team" ? a : a with
-        {
-            KeyFields = keyFields.KeyFields,
-            KeyThreshold = layers.Thresholds.Key.Chosen?.Threshold,
-            MemoryThreshold = layers.Thresholds.Memory.Chosen?.Threshold,
-            MemoryFloor = layers.Thresholds.Memory.Chosen?.SimilarityFloor,
-        }));
-        var tuning = Tuning.Capture(tuned, saved.Count, options.TargetPrecision).Promise("team", layers.Thresholds);
-        File.WriteAllText("ticket.tuning.json", tuning.ToJson());
-
-        var kept = Tuning.FromJson(File.ReadAllText("ticket.tuning.json"));
-        using var current = kept.Stale(schema, saved.Count) is null ? kept.Apply(schema) : null;
-
-        var pooled = Replay.SelectLayers(schema, "team", saved, options with { TargetPrecision = 0.8, Rule = ThresholdRule.Pooled });
-        var unprompted = Replay.SelectLayers(schema, "team", saved, options with { Counting = [SettlementKind.Enter] });
-
-        ticket.Settle(decider, "team", SettlementKind.Check, DateTimeOffset.UtcNow, value: "network", probability: 0.05);
-        var checkedLayers = Replay.SelectLayers(schema, "team", saved, options with { Counting = [SettlementKind.Enter, SettlementKind.Check] });
-
-        var concentrations = Replay.SelectKeyConcentrations(schema, "team", saved);
-
-        var panel = new CoarseLevel(new Dictionary<string, string> { ["network"] = "infrastructure", ["payments"] = "finance" });
-        using var grouped = new Schema(schema.Name, schema.Attributes.Select(a => a.Name != "team" ? a : a with { Coarse = panel }));
-        var coarse = Replay.SelectCoarse(grouped, "team", saved, options);
-
-        var typing = Replay.SelectKeyFields(schema, "team", saved, options with { TypedLongest = 3 });
-        var typedThresholds = typing.Typed?.Thresholds;   // TypedKeyThresholds, beside KeyFields and KeyThreshold
-        var whileTyping = ticket.AnswerPartial(decider, "team", "ne");
     }
 }

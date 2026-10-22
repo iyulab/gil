@@ -99,251 +99,16 @@ Suppress the ids of what you use, in the project file or around the code:
 </PropertyGroup>
 ```
 
-The walkthrough under [Usage](#usage) is the tree judgment path: it needs `GIL0001`, `GIL0003` and `GIL0004`, and
-`GIL0002` for its habit promotion part.
-
-### The tree judgment path
-
-What the experimental ids cover is the library's first shape: confirmed-answer memory and cheap one-token judgments in
-front of an LLM. Repeated requests are answered from memory or from a small tree of single-token judgments; only what
-they cannot settle goes to full generation, narrowed to the category the tree already confirmed. Every call is recorded
-and priced. Promoting answers that keep coming back into habits is off unless a task turns it on, and behind a review
-gate.
-
-It is for a task that keeps receiving requests of the same few kinds — support tickets, service requests,
-recurring log messages — where each request needs one answer from a known set of categories and someone can say,
-at least some of the time, whether the answer was right. It sits in front of a model you already call:
-
-- **Memory** answers a request that means the same as one whose answer was confirmed. Like a semantic cache, but
-  only confirmed answers enter it, and an answer later marked wrong is forgotten.
-- **The tree** of one-token judgments settles what memory missed when the categories are clear enough to judge,
-  and narrows generation to the confirmed category when they are not.
-- **Every call is recorded and priced**, so whether the tree pays for itself is read off the log rather than assumed.
-
-What was measured: wherever requests repeated, memory did most of the work. Behind memory, the tree with narrowed
-generation beat full generation — one to three points more accurate at about half the cost — on an English benchmark
-with a hosted model. With a mid-size open model on non-English service data it made no difference to accuracy, and
-its cost ran from somewhat lower to nearly double, depending on how long the full generation prompt was. Promoting
-answers into habits did not pay on the realistic datasets and stays off unless a task turns it on. Measure it on your
-own log before relying on it.
-
-It is not the right tool for free conversation (there is no answer to remember or category to judge), for choosing
-between models (a router does that), or for a task that never gets feedback (memory then stays empty — see
-"Memory lives in the process" below for filling it from answers you already have confirmed).
+[The tree judgment path](#the-tree-judgment-path) describes the experimental path and walks through it: the
+walkthrough needs `GIL0001`, `GIL0003` and `GIL0004`, and `GIL0002` for its habit promotion part.
 
 ## Usage
 
-This walkthrough is the tree judgment path, which is experimental — see [Stability](#stability) for the ids to suppress.
+The decision core is the supported surface, and it needs no other package:
 
 ```sh
-dotnet add package Gil.Tree       # the tree judgment path this walkthrough uses, its memories and recorders
-dotnet add package Gil.IronHive   # the models below; skip it if you bring your own IChatModel
-dotnet add package Gil.Sqlite     # the telemetry store below; skip it if you keep no telemetry
+dotnet add package Gil
 ```
-
-A request goes through memory first, then the tree of one-token judgments, then a fallback narrowed to the
-category the tree confirmed, then the full fallback. Every model call is recorded and priced in the telemetry
-store, and feedback on an answer is what memory, habit statistics and promotion learn from.
-
-```csharp
-using System.Text.Json.Nodes;
-using Gil;
-using Gil.Fallback;
-using Gil.Habits;
-using Gil.Judge;
-using Gil.Llm;
-using Gil.Memory;
-using Gil.Tree;
-using Gil.Telemetry;
-using Gil.Traverse;
-
-using var store = new SqliteTelemetryStore("gil.sqlite");
-using var chat = IronHiveChatModel.OpenAICompatible(new OpenAICompatibleOptions
-{
-    BaseUrl = new Uri("http://localhost:8080/"),
-    ApiKey = "",
-    Model = "my-model",
-    // Sent with every call. A server whose chat template reasons by default must be told not to: otherwise a
-    // one-token judgment returns no label, and generation and slot filling spend their budget on reasoning.
-    ExtraBody = new JsonObject { ["chat_template_kwargs"] = new JsonObject { ["enable_thinking"] = false } },
-});
-
-// Calls are priced in the unit you report (GPU milliseconds or dollars), with coefficients fitted for your server.
-var recorder = new CallRecorder(chat, new EnergyModel(Fixed: 120, PerFreshPromptToken: 0.7, PerCachedToken: 0, PerOutputToken: 15), store);
-
-using var embedder = IronHiveEmbeddingModel.OpenAICompatible(new OpenAICompatibleOptions
-{
-    BaseUrl = new Uri("http://localhost:8081/"),
-    ApiKey = "",
-    Model = "my-embedding-model",
-});
-// Memory is a cache in front of the tree: if it fails, requests go on as misses (the trace keeps the error), and
-// the breaker stops a dead endpoint from adding its retries to every request.
-var remembered = new EmbeddingMemory(new EmbeddingRecorder(embedder, new EnergyModel(Fixed: 0, PerFreshPromptToken: 0.05, PerCachedToken: 0, PerOutputToken: 0), store));
-var memory = new CircuitBreakingMemory(remembered, cooldown: TimeSpan.FromSeconds(30));
-
-var resolver = new Resolver(
-    new GreedyTraverser(new SingleTokenJudge(recorder)),
-    new FallbackGenerator(recorder),
-    new SlotFiller(recorder),
-    sink: store,
-    memory: memory,
-    statistics: store,
-    shadowEvidence: store);
-
-var tree = TreeYaml.Load("support.yaml").Root;
-// The last argument is the language support.yaml is written in: every prompt the task sends is worded in it.
-var task = new TaskDefinition("support", new TreeAnswerContract(tree), tree, new TaskPolicy
-{
-    // No defaults: a judgment's probability is not a calibrated accuracy, and the right threshold depends on the task.
-    Thresholds = new Thresholds(PerLayer: [0.7], Leaf: 0.9),
-    FallbackScope = FallbackScope.Path,
-    // Similarity scales differ between embedding models, so this has no default either; without it memory is off.
-    MemoryThreshold = 0.9,
-}, PromptLanguage.English);
-
-var result = await resolver.ResolveAsync(task, "I lost my card");
-Console.WriteLine($"{result.Mode}: {result.Output}");
-await resolver.FeedbackAsync(task, result.TraceId, correct: true);
-```
-
-Memory can embed through any Microsoft.Extensions.AI `IEmbeddingGenerator<string, Embedding<float>>` instead:
-`new EmbeddingGeneratorModel(generator)` takes the place of the IronHive embedder, with the provider's usage and model
-recorded the same way.
-That includes a generator running on the same machine (an ONNX model, for example): Gil takes the generator, not
-the model files, so which model to ship stays your decision.
-
-Where no model is reachable at all, `LexicalMemory` compares requests by their characters (n-gram TF-IDF), with no
-tokenizer and no call, and `new Resolver(memory, sink)` resolves with memory alone — a request memory cannot answer
-abstains instead of reaching a model. It is the decision core's similar record memory, run by the native library the
-`Gil` package carries, so dispose it when you are done with it. Its similarities are on their own scale: pick the
-task's `MemoryThreshold` by replaying your feedback history rather than reusing an embedding memory's value.
-
-```csharp
-using var lexical = new LexicalMemory();
-await MemoryReplay.From(store.FeedbackHistory("support")).ApplyAsync(lexical, "support", traceId: "startup");
-var offline = new Resolver(lexical, store);
-var bare = TreeYaml.Parse("id: root").Root;   // the tree is not used without models
-var answered = await offline.ResolveAsync(new TaskDefinition("support", new TextContract(), bare,
-    new TaskPolicy { Thresholds = new([1.0], 1.0), MemoryThreshold = 0.5 }, PromptLanguage.English), "I lost my card");
-```
-
-The tree file names the categories and, under each, the answers a request can get. Only `id` is required; a
-field left out takes the value shown in the comment, and the writer leaves out any field equal to it, so a file
-written back after a review diffs cleanly against the one a person wrote:
-
-```yaml
-id: root
-children:
-  - id: billing
-    description: Charges, invoices, refunds, payment methods   # default: empty — but this is what the judge reads
-    options:
-      - id: billing-refund
-        text: "Refunds reach the original payment method within 5 business days."
-        # kind: answer (or template with slots, or procedure with steps) · label: the id · origin: seed
-  - id: cards
-    description: Lost, stolen or blocked cards
-    # label_scheme: inherited from the parent, letters at the root (digits holds fewer candidates)
-    options:
-      - id: cards-block
-        text: "Freeze the card in the app under Cards > Freeze; a replacement ships in 3 days."
-```
-
-A node has either children (categories) or options (answers), not both. Loading warns when siblings' descriptions
-share distinctive words, since the judge may not tell them apart.
-
-`TreeAnswerContract` makes the fallback pick one of the tree's answers (or "none of these"); it never writes a new
-one. A request that fits no answer exactly gets the closest listed one, or none. For answers written case by case,
-give the task a `TextContract` instead: the fallback then generates, and answers confirmed by feedback can be
-remembered and later proposed as habits.
-
-A task whose answers are free text may gain nothing from judgments; define it with a bare root (`id: root`) and
-it goes from memory straight to the fallback without a judgment call.
-
-Every task declares the language its tree is written in, and every prompt the task sends — judgments, the
-fallback, slot filling, the contract's instructions and the violations fed back on a retry — is worded in it. There
-is no default for the same reason as the thresholds: "none of these" and the tree's candidates must share a language,
-or out-of-scope requests stop being rejected. Two languages are built in: `PromptLanguage.Korean`, the wording the
-behaviour was measured with (kept as measured), and `PromptLanguage.English`. To change a piece of the wording, start
-from one of them, for example `PromptLanguage.English with { NoneOfThese = "Not applicable" }`.
-
-Memory lives in the process. It is an index over the feedback in the log, so a restarted process starts empty
-until it is rebuilt from that log — the same call fills it from answers confirmed elsewhere, once they are in the
-store:
-
-```csharp
-await remembered.RebuildAsync(task.Name, store.FeedbackHistory(task.Name), traceId: "startup");
-```
-
-Memory is a port, `IMemory`, so it can live elsewhere — a vector store several instances share, for example. The
-contract is three calls: `LookupAsync` returns the task's nearest remembered request (keyed by its trace id, with the
-similarity — the task's `MemoryThreshold` decides whether it answers) and the energy the lookup cost; `RememberAsync`
-stores a confirmed answer under the request's trace id; `Forget` removes one. The resolver calls them as verdicts
-arrive, and a lookup that throws is a miss (or an error, per `MemoryFailure`), so `CircuitBreakingMemory` wraps any of
-them. To fill a store from the log, `MemoryReplay` reads the same rule off the feedback history and applies it through
-those calls. Tenants belong in the task name — one task per tenant and job — so nothing crosses between them:
-
-```csharp
-await MemoryReplay.From(store.FeedbackHistory(task.Name)).ApplyAsync(memory, task.Name, traceId: "rebuild");
-```
-
-Promotion never edits the tree by itself. Whoever operates the task runs a round, reviews the result against the
-authored YAML and applies what they accept:
-
-```csharp
-var proposer = new RepeatedOutputProposer(
-    new PromotionPolicy(MinSupport: 3),
-    store.JudgeEnergyByNode(task.Name),
-    JudgeCostModel.Fit(store.JudgeCostSamples(task.Name)));
-var review = Promotion.Review(tree, proposer.Propose(tree, store.PromotionCandidates(task.Name)));
-File.WriteAllText("support.proposed.yaml", review.After);
-store.RecordPromotionRound(task.Name, atIndex: store.Usage(task.Name).Total, review.Applied);
-```
-
-Record the round once you apply it: `atIndex` is how many of the task's requests were resolved before the proposer ran,
-and `Applied` holds what the tree took (an empty round is recorded too). A later review or a restart then sees exactly
-what was proposed when, instead of running the proposer again over a log that has grown since.
-
-By default a proposal comes only from fallback answers confirmed as correct. When the right answer is one only
-your organisation knows, it arrives as a correction instead; set `FromCorrections = true` on the policy to count
-corrections too. A round that proposes nothing says so only by an empty list.
-
-`Deactivation.Propose` and `Differentiation.Capacity` / `Differentiation.Anchored` produce the other two review
-lists: habits to retire, and nodes to split or categories to add. `Differentiation.UnservedAsync` adds the requests
-the task keeps answering "none of these" to, grouped by how similar they are — each group is either a category to
-add or out-of-scope input to confirm as such. Record what the reviewer decided on each item, with
-the reason when there is one — the log then shows what was accepted and rejected, and what reviewing the task costs:
-
-```csharp
-store.RecordReview(task.Name, ReviewKind.Promotion, review.Proposals[0].Habit.Id, ReviewDecision.Rejected, "same as billing-refund");
-```
-
-Costs are only as real as the coefficients. A self-hosted server reports how long each call took; once a few hundred
-calls are recorded, fit the coefficients to those times and price with them from then on (for an API, use its
-published prices instead):
-
-```csharp
-var fitted = EnergyModel.Fit(store.ServerTimeSamples("my-model"));
-```
-
-Accuracy is reported, not promised. `Stats` reads it off the log — per mode, on the requests that got feedback, with a
-95% interval — together with the share of requests habits and memory answered and the cost per request over time
-(priced again with the fitted coefficients, so early and late requests compare in one unit). Given the tree, it also
-counts misroutes: requests whose confirmed answer lies outside the category the tree sent them to.
-
-```csharp
-var stats = store.Stats(task.Name, window: 100, pricing: fitted, tree: tree);
-```
-
-Live, the same story goes to your tracing and metrics backend. Gil emits through the BCL under one name,
-`"Gil"`: a `gil.resolve` span per request with the task, mode, memory outcome (`off`, `hit`,
-`miss`, or `failed` — a lookup that failed and was treated as a miss), energy and confidence, a `gil.call` span under
-it per model call with its role, node and tokens, and the metrics `gil.resolutions` (by task, mode and memory
-outcome), `gil.resolution.energy`, `gil.resolution.duration` and `gil.call.energy`. With OpenTelemetry, add
-`AddSource("Gil")` and `AddMeter("Gil")`. Provider spans and token metrics (`gen_ai.*`) come
-from the model client, not from Gil, and nest under `gil.call`.
-
-## Filling forms
 
 A form is a `Schema`: the attributes a host reads in (`Observed`) and those the decider answers (`Decided`), each with
 the settings that govern its answers. A `Decider` holds the memories — values settled together, similar settled
@@ -384,7 +149,7 @@ from values alone and writes nothing; `AnswerPartial` answers one attribute whil
 
 When neither memory has evidence for an attribute, its answer's `NeedsExternal` lists the values a judgement outside the
 core would read. `AnswerAsync` asks an `IExternalJudge` — a model, a rule engine, a service — for each of them and puts
-what it ranks into the answers. `ResolverJudge` (`Gil.Tree`, `GIL0001`) is the tree judgment path above as one:
+what it ranks into the answers. `ResolverJudge` (`Gil.Tree`, `GIL0001`) is the [tree judgment path](#the-tree-judgment-path) as one:
 
 ```csharp
 var judge = new ResolverJudge(resolver, new Dictionary<string, TaskDefinition> { ["team"] = task });
@@ -764,6 +529,247 @@ Replaying a public stream of medical device recalls (asking for the recalling fi
 thousand records after thirty thousand) with a budget of 0.49, advice spent 49% of the typing and gained 0.032 per
 record — 60% of what asking every time gained; on a public stream of aircraft fault reports (asking for the part to
 answer the fault code), 48% and 0.094 — 68%.
+
+## The tree judgment path
+
+What the experimental ids cover is the library's first shape: confirmed-answer memory and cheap one-token judgments in
+front of an LLM. Repeated requests are answered from memory or from a small tree of single-token judgments; only what
+they cannot settle goes to full generation, narrowed to the category the tree already confirmed. Every call is recorded
+and priced. Promoting answers that keep coming back into habits is off unless a task turns it on, and behind a review
+gate.
+
+It is for a task that keeps receiving requests of the same few kinds — support tickets, service requests,
+recurring log messages — where each request needs one answer from a known set of categories and someone can say,
+at least some of the time, whether the answer was right. It sits in front of a model you already call:
+
+- **Memory** answers a request that means the same as one whose answer was confirmed. Like a semantic cache, but
+  only confirmed answers enter it, and an answer later marked wrong is forgotten.
+- **The tree** of one-token judgments settles what memory missed when the categories are clear enough to judge,
+  and narrows generation to the confirmed category when they are not.
+- **Every call is recorded and priced**, so whether the tree pays for itself is read off the log rather than assumed.
+
+What was measured: wherever requests repeated, memory did most of the work. Behind memory, the tree with narrowed
+generation beat full generation — one to three points more accurate at about half the cost — on an English benchmark
+with a hosted model. With a mid-size open model on non-English service data it made no difference to accuracy, and
+its cost ran from somewhat lower to nearly double, depending on how long the full generation prompt was. Promoting
+answers into habits did not pay on the realistic datasets and stays off unless a task turns it on. Measure it on your
+own log before relying on it.
+
+It is not the right tool for free conversation (there is no answer to remember or category to judge), for choosing
+between models (a router does that), or for a task that never gets feedback (memory then stays empty — see
+"Memory lives in the process" below for filling it from answers you already have confirmed).
+
+### Walkthrough
+
+This walkthrough is the tree judgment path, which is experimental — see [Stability](#stability) for the ids to suppress.
+
+```sh
+dotnet add package Gil.Tree       # the tree judgment path this walkthrough uses, its memories and recorders
+dotnet add package Gil.IronHive   # the models below; skip it if you bring your own IChatModel
+dotnet add package Gil.Sqlite     # the telemetry store below; skip it if you keep no telemetry
+```
+
+A request goes through memory first, then the tree of one-token judgments, then a fallback narrowed to the
+category the tree confirmed, then the full fallback. Every model call is recorded and priced in the telemetry
+store, and feedback on an answer is what memory, habit statistics and promotion learn from.
+
+```csharp
+using System.Text.Json.Nodes;
+using Gil;
+using Gil.Fallback;
+using Gil.Habits;
+using Gil.Judge;
+using Gil.Llm;
+using Gil.Memory;
+using Gil.Tree;
+using Gil.Telemetry;
+using Gil.Traverse;
+
+using var store = new SqliteTelemetryStore("gil.sqlite");
+using var chat = IronHiveChatModel.OpenAICompatible(new OpenAICompatibleOptions
+{
+    BaseUrl = new Uri("http://localhost:8080/"),
+    ApiKey = "",
+    Model = "my-model",
+    // Sent with every call. A server whose chat template reasons by default must be told not to: otherwise a
+    // one-token judgment returns no label, and generation and slot filling spend their budget on reasoning.
+    ExtraBody = new JsonObject { ["chat_template_kwargs"] = new JsonObject { ["enable_thinking"] = false } },
+});
+
+// Calls are priced in the unit you report (GPU milliseconds or dollars), with coefficients fitted for your server.
+var recorder = new CallRecorder(chat, new EnergyModel(Fixed: 120, PerFreshPromptToken: 0.7, PerCachedToken: 0, PerOutputToken: 15), store);
+
+using var embedder = IronHiveEmbeddingModel.OpenAICompatible(new OpenAICompatibleOptions
+{
+    BaseUrl = new Uri("http://localhost:8081/"),
+    ApiKey = "",
+    Model = "my-embedding-model",
+});
+// Memory is a cache in front of the tree: if it fails, requests go on as misses (the trace keeps the error), and
+// the breaker stops a dead endpoint from adding its retries to every request.
+var remembered = new EmbeddingMemory(new EmbeddingRecorder(embedder, new EnergyModel(Fixed: 0, PerFreshPromptToken: 0.05, PerCachedToken: 0, PerOutputToken: 0), store));
+var memory = new CircuitBreakingMemory(remembered, cooldown: TimeSpan.FromSeconds(30));
+
+var resolver = new Resolver(
+    new GreedyTraverser(new SingleTokenJudge(recorder)),
+    new FallbackGenerator(recorder),
+    new SlotFiller(recorder),
+    sink: store,
+    memory: memory,
+    statistics: store,
+    shadowEvidence: store);
+
+var tree = TreeYaml.Load("support.yaml").Root;
+// The last argument is the language support.yaml is written in: every prompt the task sends is worded in it.
+var task = new TaskDefinition("support", new TreeAnswerContract(tree), tree, new TaskPolicy
+{
+    // No defaults: a judgment's probability is not a calibrated accuracy, and the right threshold depends on the task.
+    Thresholds = new Thresholds(PerLayer: [0.7], Leaf: 0.9),
+    FallbackScope = FallbackScope.Path,
+    // Similarity scales differ between embedding models, so this has no default either; without it memory is off.
+    MemoryThreshold = 0.9,
+}, PromptLanguage.English);
+
+var result = await resolver.ResolveAsync(task, "I lost my card");
+Console.WriteLine($"{result.Mode}: {result.Output}");
+await resolver.FeedbackAsync(task, result.TraceId, correct: true);
+```
+
+Memory can embed through any Microsoft.Extensions.AI `IEmbeddingGenerator<string, Embedding<float>>` instead:
+`new EmbeddingGeneratorModel(generator)` takes the place of the IronHive embedder, with the provider's usage and model
+recorded the same way.
+That includes a generator running on the same machine (an ONNX model, for example): Gil takes the generator, not
+the model files, so which model to ship stays your decision.
+
+Where no model is reachable at all, `LexicalMemory` compares requests by their characters (n-gram TF-IDF), with no
+tokenizer and no call, and `new Resolver(memory, sink)` resolves with memory alone — a request memory cannot answer
+abstains instead of reaching a model. It is the decision core's similar record memory, run by the native library the
+`Gil` package carries, so dispose it when you are done with it. Its similarities are on their own scale: pick the
+task's `MemoryThreshold` by replaying your feedback history rather than reusing an embedding memory's value.
+
+```csharp
+using var lexical = new LexicalMemory();
+await MemoryReplay.From(store.FeedbackHistory("support")).ApplyAsync(lexical, "support", traceId: "startup");
+var offline = new Resolver(lexical, store);
+var bare = TreeYaml.Parse("id: root").Root;   // the tree is not used without models
+var answered = await offline.ResolveAsync(new TaskDefinition("support", new TextContract(), bare,
+    new TaskPolicy { Thresholds = new([1.0], 1.0), MemoryThreshold = 0.5 }, PromptLanguage.English), "I lost my card");
+```
+
+The tree file names the categories and, under each, the answers a request can get. Only `id` is required; a
+field left out takes the value shown in the comment, and the writer leaves out any field equal to it, so a file
+written back after a review diffs cleanly against the one a person wrote:
+
+```yaml
+id: root
+children:
+  - id: billing
+    description: Charges, invoices, refunds, payment methods   # default: empty — but this is what the judge reads
+    options:
+      - id: billing-refund
+        text: "Refunds reach the original payment method within 5 business days."
+        # kind: answer (or template with slots, or procedure with steps) · label: the id · origin: seed
+  - id: cards
+    description: Lost, stolen or blocked cards
+    # label_scheme: inherited from the parent, letters at the root (digits holds fewer candidates)
+    options:
+      - id: cards-block
+        text: "Freeze the card in the app under Cards > Freeze; a replacement ships in 3 days."
+```
+
+A node has either children (categories) or options (answers), not both. Loading warns when siblings' descriptions
+share distinctive words, since the judge may not tell them apart.
+
+`TreeAnswerContract` makes the fallback pick one of the tree's answers (or "none of these"); it never writes a new
+one. A request that fits no answer exactly gets the closest listed one, or none. For answers written case by case,
+give the task a `TextContract` instead: the fallback then generates, and answers confirmed by feedback can be
+remembered and later proposed as habits.
+
+A task whose answers are free text may gain nothing from judgments; define it with a bare root (`id: root`) and
+it goes from memory straight to the fallback without a judgment call.
+
+Every task declares the language its tree is written in, and every prompt the task sends — judgments, the
+fallback, slot filling, the contract's instructions and the violations fed back on a retry — is worded in it. There
+is no default for the same reason as the thresholds: "none of these" and the tree's candidates must share a language,
+or out-of-scope requests stop being rejected. Two languages are built in: `PromptLanguage.Korean`, the wording the
+behaviour was measured with (kept as measured), and `PromptLanguage.English`. To change a piece of the wording, start
+from one of them, for example `PromptLanguage.English with { NoneOfThese = "Not applicable" }`.
+
+Memory lives in the process. It is an index over the feedback in the log, so a restarted process starts empty
+until it is rebuilt from that log — the same call fills it from answers confirmed elsewhere, once they are in the
+store:
+
+```csharp
+await remembered.RebuildAsync(task.Name, store.FeedbackHistory(task.Name), traceId: "startup");
+```
+
+Memory is a port, `IMemory`, so it can live elsewhere — a vector store several instances share, for example. The
+contract is three calls: `LookupAsync` returns the task's nearest remembered request (keyed by its trace id, with the
+similarity — the task's `MemoryThreshold` decides whether it answers) and the energy the lookup cost; `RememberAsync`
+stores a confirmed answer under the request's trace id; `Forget` removes one. The resolver calls them as verdicts
+arrive, and a lookup that throws is a miss (or an error, per `MemoryFailure`), so `CircuitBreakingMemory` wraps any of
+them. To fill a store from the log, `MemoryReplay` reads the same rule off the feedback history and applies it through
+those calls. Tenants belong in the task name — one task per tenant and job — so nothing crosses between them:
+
+```csharp
+await MemoryReplay.From(store.FeedbackHistory(task.Name)).ApplyAsync(memory, task.Name, traceId: "rebuild");
+```
+
+Promotion never edits the tree by itself. Whoever operates the task runs a round, reviews the result against the
+authored YAML and applies what they accept:
+
+```csharp
+var proposer = new RepeatedOutputProposer(
+    new PromotionPolicy(MinSupport: 3),
+    store.JudgeEnergyByNode(task.Name),
+    JudgeCostModel.Fit(store.JudgeCostSamples(task.Name)));
+var review = Promotion.Review(tree, proposer.Propose(tree, store.PromotionCandidates(task.Name)));
+File.WriteAllText("support.proposed.yaml", review.After);
+store.RecordPromotionRound(task.Name, atIndex: store.Usage(task.Name).Total, review.Applied);
+```
+
+Record the round once you apply it: `atIndex` is how many of the task's requests were resolved before the proposer ran,
+and `Applied` holds what the tree took (an empty round is recorded too). A later review or a restart then sees exactly
+what was proposed when, instead of running the proposer again over a log that has grown since.
+
+By default a proposal comes only from fallback answers confirmed as correct. When the right answer is one only
+your organisation knows, it arrives as a correction instead; set `FromCorrections = true` on the policy to count
+corrections too. A round that proposes nothing says so only by an empty list.
+
+`Deactivation.Propose` and `Differentiation.Capacity` / `Differentiation.Anchored` produce the other two review
+lists: habits to retire, and nodes to split or categories to add. `Differentiation.UnservedAsync` adds the requests
+the task keeps answering "none of these" to, grouped by how similar they are — each group is either a category to
+add or out-of-scope input to confirm as such. Record what the reviewer decided on each item, with
+the reason when there is one — the log then shows what was accepted and rejected, and what reviewing the task costs:
+
+```csharp
+store.RecordReview(task.Name, ReviewKind.Promotion, review.Proposals[0].Habit.Id, ReviewDecision.Rejected, "same as billing-refund");
+```
+
+Costs are only as real as the coefficients. A self-hosted server reports how long each call took; once a few hundred
+calls are recorded, fit the coefficients to those times and price with them from then on (for an API, use its
+published prices instead):
+
+```csharp
+var fitted = EnergyModel.Fit(store.ServerTimeSamples("my-model"));
+```
+
+Accuracy is reported, not promised. `Stats` reads it off the log — per mode, on the requests that got feedback, with a
+95% interval — together with the share of requests habits and memory answered and the cost per request over time
+(priced again with the fitted coefficients, so early and late requests compare in one unit). Given the tree, it also
+counts misroutes: requests whose confirmed answer lies outside the category the tree sent them to.
+
+```csharp
+var stats = store.Stats(task.Name, window: 100, pricing: fitted, tree: tree);
+```
+
+Live, the same story goes to your tracing and metrics backend. Gil emits through the BCL under one name,
+`"Gil"`: a `gil.resolve` span per request with the task, mode, memory outcome (`off`, `hit`,
+`miss`, or `failed` — a lookup that failed and was treated as a miss), energy and confidence, a `gil.call` span under
+it per model call with its role, node and tokens, and the metrics `gil.resolutions` (by task, mode and memory
+outcome), `gil.resolution.energy`, `gil.resolution.duration` and `gil.call.energy`. With OpenTelemetry, add
+`AddSource("Gil")` and `AddMeter("Gil")`. Provider spans and token metrics (`gen_ai.*`) come
+from the model client, not from Gil, and nest under `gil.call`.
 
 ## Build and test
 
