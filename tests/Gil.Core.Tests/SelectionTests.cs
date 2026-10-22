@@ -215,4 +215,28 @@ public sealed class SelectionTests
         FluentActions.Invoking(() => Replay.SelectLayersJson(schema, "team", records, new(1.5, 10)))
             .Should().Throw<ArgumentException>().WithMessage("target_precision must be in (0, 1]");
     }
+
+    [Fact]
+    public void Records_read_their_time_as_text_as_they_read_it_in_ticks()
+    {
+        var lines = Fixture("records.jsonl").Split('\n', StringSplitOptions.RemoveEmptyEntries)[..Chosen];
+        var asText = lines.Select(line =>
+        {
+            var record = JsonNode.Parse(line)!.AsObject();
+            var ticks = (long)record["settled_at"]!;
+            record["settled_at"] = new DateTimeOffset(DateTimeOffset.UnixEpoch.UtcTicks + ticks, TimeSpan.FromHours(9))
+                .ToOffset(TimeSpan.FromHours(9)).ToString("O");
+            record["probabilities"] ??= null;
+            return record.ToJsonString();
+        });
+        using var schema = Schema.FromJson(Fixture("schema.json"));
+        using var inTicks = SettledRecords.FromJsonLines(string.Join('\n', lines));
+        using var inText = SettledRecords.FromJsonLines(string.Join('\n', asText));
+
+        var options = new SelectionOptions(0.8, 10);
+        Replay.SelectLayersJson(schema, "team", inText, options)
+            .Should().Be(Replay.SelectLayersJson(schema, "team", inTicks, options));
+        FluentActions.Invoking(() => SettledRecords.FromJsonLines("""{"id":"t","settled_at":"2025-02-29T00:00:00.0000000+00:00"}"""))
+            .Should().Throw<ArgumentException>().WithMessage("*neither ticks nor a time*");
+    }
 }

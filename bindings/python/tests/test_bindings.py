@@ -194,8 +194,10 @@ def test_bad_input_is_a_value_error() -> None:
         )
     with pytest.raises(ValueError, match="missing field `role`"):
         gil.Schema.from_dict({"name": "f", "attributes": [{"name": "a"}]})
-    with pytest.raises(ValueError, match="settled_at"):
+    with pytest.raises(ValueError, match="neither ticks nor a time"):
         gil.records([{"id": "1", "settled_at": "yesterday", "values": {}}])
+    with pytest.raises(ValueError, match="neither ticks nor a time"):
+        gil.records([{"id": "1", "settled_at": "2025-02-29T00:00:00.0000000+00:00"}])
     with pytest.raises(ValueError, match="at least one decided attribute"):
         gil.Schema.from_dict(
             {"name": "f", "attributes": [{"name": "a", "role": "observed"}]}

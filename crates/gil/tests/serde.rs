@@ -118,6 +118,62 @@ fn a_record_reads_back_with_how_each_value_was_settled() {
 }
 
 #[test]
+fn a_record_reads_its_time_as_ticks_or_as_text_and_null_as_left_out() {
+    let read = |line: Value| serde_json::from_value::<Record>(line);
+    // 2025-10-22 16:00 UTC, as ticks, as text in UTC and as text nine hours ahead.
+    for settled_at in [
+        json!(17_611_488_000_000_000_i64),
+        json!("2025-10-22T16:00:00.0000000+00:00"),
+        json!("2025-10-23T01:00:00.0000000+09:00"),
+    ] {
+        let record = read(json!({ "id": "t1", "settled_at": settled_at })).expect("a record");
+        assert_eq!(record.settled_at, 17_611_488_000_000_000);
+    }
+    let before_the_epoch =
+        read(json!({ "id": "t1", "settled_at": "1969-12-31T23:59:59.9999999-00:00" }));
+    assert_eq!(before_the_epoch.expect("a record").settled_at, -1);
+    // A leap day, and the fraction in ticks.
+    let leap = read(json!({ "id": "t1", "settled_at": "2024-02-29T00:00:00.0000001+00:00" }))
+        .expect("a record");
+    assert_eq!(leap.settled_at, 17_091_648_000_000_001);
+
+    // It is written back in ticks.
+    let written = serde_json::to_value(
+        read(json!({
+            "id": "t1", "settled_at": "2025-10-22T16:00:00.0000000+00:00"
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(written["settled_at"], 17_611_488_000_000_000_i64);
+
+    for bad in [
+        "2025-10-22 16:00:00.0000000+00:00",
+        "2025-10-22T16:00:00Z",
+        "2025-13-01T00:00:00.0000000+00:00",
+        "2025-02-29T00:00:00.0000000+00:00",
+        "2025-10-22T24:00:00.0000000+00:00",
+        "2025-10-22T16:00:00.0000000+15:00",
+        "2025-10-22T16:00:00.00000x0+00:00",
+    ] {
+        let refused = read(json!({ "id": "t1", "settled_at": bad })).expect_err(bad);
+        assert!(
+            refused.to_string().contains("neither ticks nor a time"),
+            "{refused}"
+        );
+    }
+
+    let nulls = read(json!({
+        "id": "t1", "settled_at": 5, "values": null, "sets": null, "settlements": null,
+        "probabilities": null, "arrival": null, "batch": null,
+    }))
+    .expect("a record");
+    assert!(nulls.values.is_empty() && nulls.sets.is_empty() && nulls.settlements.is_empty());
+    assert!(nulls.probabilities.is_empty() && nulls.arrival.is_none() && nulls.batch.is_none());
+    assert!(read(json!({ "id": "t1", "settled_at": null })).is_err());
+}
+
+#[test]
 fn a_settlement_reads_back_with_its_kind_and_probability() {
     for settlement in [
         Settlement::check("network", 0.25),

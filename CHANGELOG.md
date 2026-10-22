@@ -18,6 +18,11 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   or wrong together (device event reports, design effect about 7: 1.6 points), not where batches were small (vehicle
   complaints, 1.5) or not right or wrong together (food inspections, 1.1).
 
+### Changed
+
+- `SettledRecords.FromJsonLines` reads `settled_at` as a time in the round-trip format (`"O"`) as well as in ticks,
+  and an entry given as null as left out — the line Python reads. A date, time or offset out of range does not read.
+
 ### Breaking
 
 - **Breaking: the decision core is native.** The `Gil` package is now the Rust decision core behind its C ABI, with

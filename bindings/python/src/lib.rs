@@ -38,56 +38,13 @@ fn schema(text: &str) -> Parsed<Schema> {
     serde_json::from_str(text).map_err(|e| format!("a schema does not read: {e}"))
 }
 
-/// `yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM` → 100-nanosecond ticks since the Unix epoch, UTC.
-fn ticks(text: &str) -> Parsed<i64> {
-    let bad = || format!("settled_at '{text}' is not yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM");
-    if text.len() != 33 || !text.is_ascii() {
-        return Err(bad());
-    }
-    let number =
-        |range: std::ops::Range<usize>| -> Parsed<i64> { text[range].parse().map_err(|_| bad()) };
-    let (year, month, day) = (number(0..4)?, number(5..7)?, number(8..10)?);
-    let (hour, minute, second, fraction) = (
-        number(11..13)?,
-        number(14..16)?,
-        number(17..19)?,
-        number(20..27)?,
-    );
-    let sign = match &text[27..28] {
-        "+" => 1,
-        "-" => -1,
-        _ => return Err(bad()),
-    };
-    let offset = sign * (number(28..30)? * 60 + number(31..33)?);
-    // Days from civil (Howard Hinnant).
-    let y = if month <= 2 { year - 1 } else { year };
-    let era = y.div_euclid(400);
-    let yoe = y - era * 400;
-    let mp = (month + 9) % 12;
-    let doy = (153 * mp + 2) / 5 + day - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    let days = era * 146_097 + doe - 719_468;
-    let seconds = days * 86_400 + hour * 3_600 + (minute - offset) * 60 + second;
-    Ok(seconds * 10_000_000 + fraction)
-}
-
 fn settlement(name: &str) -> Parsed<SettlementKind> {
     SettlementKind::parse(name).ok_or_else(|| format!("unknown settlement kind '{name}'"))
 }
 
-/// A record as the core's `serde` form reads it, with `settled_at` given as ticks or as a time and an entry given as null
-/// left out.
-fn record(value: &Value) -> Parsed<Record> {
-    let mut value = value.clone();
-    // An entry given as null is one left out, as Python's None reads.
-    if let Value::Object(entries) = &mut value {
-        entries.retain(|_, v| !v.is_null());
-    }
-    if let Some(Value::String(text)) = value.get("settled_at") {
-        let ticks = ticks(text)?;
-        value["settled_at"] = json!(ticks);
-    }
-    serde_json::from_value(value).map_err(|e| format!("a record does not read: {e}"))
+/// A record as the core's `serde` form reads it — `settled_at` as ticks or as a time, an entry given as null left out.
+fn record(text: &str) -> Parsed<Record> {
+    serde_json::from_str(text).map_err(|e| format!("a record does not read: {e}"))
 }
 
 // ---- writing ----
@@ -125,11 +82,7 @@ impl Records {
             .lines()
             .enumerate()
             .filter(|(_, line)| !line.trim().is_empty())
-            .map(|(i, line)| {
-                let value: Value =
-                    serde_json::from_str(line).map_err(|e| format!("line {}: {e}", i + 1))?;
-                record(&value).map_err(|e| format!("line {}: {e}", i + 1))
-            })
+            .map(|(i, line)| record(line).map_err(|e| format!("line {}: {e}", i + 1)))
             .collect::<Parsed<Vec<_>>>()
             .map_err(invalid)?;
         Ok(Self { records })
@@ -471,8 +424,7 @@ impl AskPlanner {
     /// may hold the record but none settled after it.
     fn learn(&mut self, decider: PyRef<'_, Decider>, record_json: &str) -> PyResult<()> {
         usable(decider.broken, "decider")?;
-        let value: Value = serde_json::from_str(record_json).map_err(|e| invalid(e.to_string()))?;
-        let settled = record(&value).map_err(invalid)?;
+        let settled = record(record_json).map_err(invalid)?;
         let inner = &mut self.inner;
         guarded(|| inner.learn(&decider.inner, &settled))
     }
@@ -524,8 +476,7 @@ impl OpenRecord {
     #[staticmethod]
     fn reopen(schema_json: &str, record_json: &str) -> PyResult<Self> {
         let schema = schema(schema_json).map_err(invalid)?;
-        let value: Value = serde_json::from_str(record_json).map_err(|e| invalid(e.to_string()))?;
-        let saved = record(&value).map_err(invalid)?;
+        let saved = record(record_json).map_err(invalid)?;
         guarded(|| open_record::OpenRecord::reopen(schema, &saved)).map(|inner| Self {
             inner,
             broken: false,

@@ -14,6 +14,10 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   for `select_layers_by_rule`, `LayerOptions { sink: Some(&mut sink), ..Default::default() }` for
   `select_layers_with`, and both fields for `select_layers_by_rule_with`. Python's `select_layers` and the C ABI are
   unchanged.
+- **A record reads `settled_at` as a time as well as in ticks.** With `serde`, `Record` takes `settled_at` as ticks or
+  as text `yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM` (.NET's round-trip format), and an entry given as null as left out; it
+  is written in ticks as before. Python records are read through it, and now refuse a date, time or offset out of
+  range (`2025-02-29`, `24:00`, `+15:00`) that they used to turn into ticks.
 
 ### Added
 

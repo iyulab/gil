@@ -93,7 +93,8 @@ public sealed class SettledRecords : IDisposable
     public int Count => (int)Native.RecordsLen(Handle);
 
     /// <summary>Records from JSON lines, one record per line in the core's form (<c>settled_at</c> in 100-nanosecond
-    /// ticks since the Unix epoch, UTC); blank lines are skipped.</summary>
+    /// ticks since the Unix epoch, UTC, or as a time in the round-trip format <c>"O"</c>; an entry given as null is left
+    /// out); blank lines are skipped.</summary>
     /// <exception cref="ArgumentException">A line does not read as a record.</exception>
     public static unsafe SettledRecords FromJsonLines(string lines)
     {

@@ -402,9 +402,9 @@ pub unsafe extern "C" fn gil_decider_free(decider: *mut GilDecider) {
     unsafe { release(decider) }
 }
 
-/// Reads settled records from JSON lines — one record per line in the core's `serde` form (`settled_at` in ticks), in
-/// settlement order; blank lines are skipped — and hands them out through `out`. A line that does not read refuses the
-/// whole text.
+/// Reads settled records from JSON lines — one record per line in the core's `serde` form (`settled_at` in ticks or as a
+/// time), in settlement order; blank lines are skipped — and hands them out through `out`. A line that does not read
+/// refuses the whole text.
 ///
 /// # Safety
 /// `lines` is valid for the call; `out` points to one writable pointer.
