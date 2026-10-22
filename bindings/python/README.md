@@ -33,6 +33,10 @@ thresholds, decisions = gil.select_layers(
 print(thresholds["key"]["chosen"], len(decisions))
 ```
 
+A line holds a record's `id`, `settled_at`, `values` and, for each decided attribute, how it was settled
+(`settlements`) — the form [docs/settled-records.md](https://github.com/iyulab/gil/blob/main/docs/settled-records.md) specifies, which the other bindings read too.
+Records kept in it before Gil is in use are what the first thresholds are chosen from.
+
 Before choosing thresholds, narrow the attributes that key the decided attribute. An attribute that happened to settle
 with one value for a while would otherwise key every later record that shares it:
 

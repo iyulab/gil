@@ -144,7 +144,10 @@ Record snapshot = ticket.Snapshot();   // keep it; OpenRecord.Reopen(schema, sna
 An answer is `Answered` when its first candidate is trusted at the attribute's thresholds; the other candidates are
 offered as untrusted guesses, and each says which layer offered it and what backs it (`Evidence`: the key, or the
 similar record). A person's decision is settled with the kind that says how it was made — `Accept`, `Correct`,
-`Enter`, `Fill`, … — since memory and the replays treat them differently. `decider.Answer(schema, id, values)` answers
+`Enter`, `Fill`, … — since memory and the replays treat them differently. Settled records are kept and read back as
+JSON lines (`SettledRecords.FromJsonLines`), one line per settlement, in the form
+[docs/settled-records.md](https://github.com/iyulab/gil/blob/main/docs/settled-records.md) specifies; an application can start keeping them before it uses Gil, and
+the first thresholds are then chosen from what it kept. `decider.Answer(schema, id, values)` answers
 from values alone and writes nothing; `AnswerPartial` answers one attribute while a person types into it.
 
 When neither memory has evidence for an attribute, its answer's `NeedsExternal` lists the values a judgement outside the

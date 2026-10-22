@@ -113,6 +113,12 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   in the JSON reading stopped. Applying a tuning that would break the schema still raises `ValueError` in Python, and
   now throws `ArgumentException` in .NET, where the tuned schema used to be handed out unchecked.
 
+### Documentation
+
+- `docs/settled-records.md` specifies the settled-record line every binding reads — its entries, why the time and
+  the kind of settlement matter, and what an application should keep before it uses Gil — and the READMEs point to
+  it.
+
 ## 0.7.0
 
 ### Added

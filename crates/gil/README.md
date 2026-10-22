@@ -42,7 +42,8 @@ With the `serde` feature (`iyulab-gil = { version = "…", features = ["serde"] 
 schemas, records, settlements, tunings, usage counts — implements `Serialize` and `Deserialize`. Field names are the
 Rust ones; roles and policies are written in snake case (`"decided"`, `"confirm_required"`), settlement kinds by name
 (`"Accept"`), times in ticks; an attribute's settings left out take `Attribute::new`'s defaults, and an unknown one does
-not read.
+not read. A record in that form, one per line, is the settled-record line all three bindings read —
+[docs/settled-records.md](https://github.com/iyulab/gil/blob/main/docs/settled-records.md) says what each entry is for and what to keep before Gil is in use.
 
 Python bindings are published on PyPI as `iyulab-gil` (`pip install iyulab-gil`, then `import gil`; Python 3.11 or
 later).
