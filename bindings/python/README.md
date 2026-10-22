@@ -79,6 +79,19 @@ hold.
 thresholds, _ = gil.select_layers(schema, "team", records, target_precision=0.8, rule="pooled")
 ```
 
+Records settled together — several at once from one source — can be right or wrong together, and a promise taken on
+records that batch mates span is then too high. Give each record its `batch` and `select_layers` adds `batches`: the
+precision of thresholds chosen on half of the latest batches and counted on the other half (`across_batches`), the same
+split by record (`across_records`), and how many answers a batch holds and how much they are right or wrong together
+(`batch_size`, `correlation`, `design_effect`). Read `across_batches` as the promise only where `across_records` stands
+above it and the design effect is well above one. The thresholds are chosen as before.
+
+```python
+records = gil.records({**r, "batch": r["import_id"]} for r in rows)
+thresholds, _ = gil.select_layers(schema, "team", records, target_precision=0.8)
+check = thresholds.get("batches")
+```
+
 ## Answering a record while its values arrive
 
 A decider holds the settled records; an open record asks it each time a value arrives or is settled, and hands back

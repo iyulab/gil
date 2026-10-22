@@ -111,6 +111,38 @@ public sealed class SelectionTests
 
     private static JsonNode? Write<T>(T value, JsonTypeInfo<T> type) => JsonNode.Parse(JsonSerializer.Serialize(value, type));
 
+    [Fact]
+    public void Records_that_name_their_batch_get_a_batch_check_and_the_same_thresholds()
+    {
+        var lines = Fixture("records.jsonl").Split('\n', StringSplitOptions.RemoveEmptyEntries)[..Chosen];
+        var batched = lines.Select((line, i) =>
+        {
+            var record = JsonNode.Parse(line)!.AsObject();
+            record["batch"] = $"b{i / 4}";
+            return record.ToJsonString();
+        });
+        using var schema = Schema.FromJson(Fixture("schema.json"));
+        using var plainRecords = SettledRecords.FromJsonLines(string.Join('\n', lines));
+        using var batchedRecords = SettledRecords.FromJsonLines(string.Join('\n', batched));
+        var options = new SelectionOptions(0.8, 10);
+
+        var plain = Replay.SelectLayers(schema, "team", plainRecords, options).Thresholds;
+        var named = Replay.SelectLayers(schema, "team", batchedRecords, options).Thresholds;
+
+        plain.Batches.Should().BeNull();
+        named.Batches.Should().NotBeNull();
+        named.Batches!.Batches.Should().Be((Chosen + 3) / 4);
+        named.Batches.AcrossBatchesAnswered.Should().BePositive();
+        named.Batches.AcrossRecordsAnswered.Should().BePositive();
+        // The check moves no threshold.
+        named.Key.Should().BeEquivalentTo(plain.Key);
+        named.Memory.Should().BeEquivalentTo(plain.Memory);
+        // A record's batch crosses to the core and back; one that names none writes none.
+        var record = new Record("r1", DateTimeOffset.UnixEpoch) { Batch = "import-7" };
+        JsonNode.Parse(JsonSerializer.Serialize(record, CoreJson.Default.Record))!["batch"]!.GetValue<string>().Should().Be("import-7");
+        JsonNode.Parse(JsonSerializer.Serialize(record with { Batch = null }, CoreJson.Default.Record))!.AsObject().ContainsKey("batch").Should().BeFalse();
+    }
+
     /// <summary>The C ABI writes nulls the binding leaves out — the core reads both as nothing.</summary>
     private static JsonNode? Comparable(JsonNode? node) => Doubles(node switch
     {

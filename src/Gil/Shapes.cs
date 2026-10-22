@@ -181,4 +181,9 @@ public sealed record Record(string Id, DateTimeOffset SettledAt)
     /// is unknown — the observed values then count as there from the start and the decided ones as settled in the
     /// schema's order.</summary>
     public IReadOnlyList<string>? Arrival { get; init; }
+
+    /// <summary>The batch the record was settled in — records settled together, several at once from one source — when
+    /// known; records of one batch name the same. A layers selection counts what the batches do to its promise
+    /// (<see cref="LayerThresholds.Batches"/>).</summary>
+    public string? Batch { get; init; }
 }

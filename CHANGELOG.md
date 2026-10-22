@@ -7,6 +7,17 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ## Unreleased
 
+### Added
+
+- **What batches do to a promise.** `Record.Batch` names the batch a record was settled in — records settled together,
+  several at once from one source. When any of the latest `Replay.RecentRecords` records names one,
+  `LayerThresholds.Batches` (`BatchCheck`) gives the precision of thresholds chosen on half of them and counted on the
+  other half, split by batch and split by record, over `Replay.BatchSplits` splits; how many answers a batch holds; how
+  much they are right or wrong together; and the design effect. Thresholds are chosen as before, and records that name
+  no batch read and write as before. On public records the two counts differed only where batches were large and right
+  or wrong together (device event reports, design effect about 7: 1.6 points), not where batches were small (vehicle
+  complaints, 1.5) or not right or wrong together (food inspections, 1.1).
+
 ### Breaking
 
 - **Breaking: the decision core is native.** The `Gil` package is now the Rust decision core behind its C ABI, with
