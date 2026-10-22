@@ -138,6 +138,15 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   in the JSON reading stopped. Applying a tuning that would break the schema still raises `ValueError` in Python, and
   now throws `ArgumentException` in .NET, where the tuned schema used to be handed out unchecked.
 
+### Documentation
+
+- `docs/settled-records.md` specifies the settled-record line every binding reads — its entries, why the time and
+  the kind of settlement matter, and what an application should keep before it uses Gil — and the READMEs point to
+  it.
+- The Python README's "Keeping a tuning" is a worked loop: put the chosen thresholds (and the similarity floor) on the
+  schema, keep the tuning with its promises, check it at start-up, and count `usage` against the promise of the
+  layer each answer came from. `capture_tuning` and `tuning_stale` say that `settled` is the number of records.
+
 ## 0.7.0
 
 ### Added

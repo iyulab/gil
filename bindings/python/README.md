@@ -33,6 +33,10 @@ thresholds, decisions = gil.select_layers(
 print(thresholds["key"]["chosen"], len(decisions))
 ```
 
+A line holds a record's `id`, `settled_at`, `values` and, for each decided attribute, how it was settled
+(`settlements`) — the form [docs/settled-records.md](https://github.com/iyulab/gil/blob/main/docs/settled-records.md) specifies, which the other bindings read too.
+Records kept in it before Gil is in use are what the first thresholds are chosen from.
+
 Before choosing thresholds, narrow the attributes that key the decided attribute. An attribute that happened to settle
 with one value for a while would otherwise key every later record that shares it:
 
@@ -138,10 +142,69 @@ for advice in planner.advise(answer, values):  # the open attributes, highest ga
 
 ## Keeping a tuning
 
-`gil.capture_tuning(schema, settled, target_precision)` keeps the chosen settings (`gil.record_promise` adds what each
-layer replay promised), `gil.apply_tuning` puts them back on a schema, and `gil.tuning_stale` says when to choose
-again — another package version, a changed setting, or a tenth more (or fewer) settled records. `gil.usage(decisions)`
-counts, without content, how the answers shown were settled and the precision they realized against the promise.
+How far to trust each layer is chosen by replaying the settled records. Put the choice on the schema — the key layer's
+`threshold` as `key_threshold`, the similar record layer's as `memory_threshold` with its `similarity_floor` as
+`memory_floor` — and keep it as a tuning with what each threshold promised:
+
+```python
+import json
+from pathlib import Path
+
+TARGET = 0.8
+
+
+def tune(records):
+    layers, _ = gil.select_layers(
+        gil.Schema.from_dict(definition), "team", records, target_precision=TARGET, decisions=False
+    )
+    key, memory = layers["key"]["chosen"], layers["memory"]["chosen"]
+    team = next(a for a in definition["attributes"] if a["name"] == "team")
+    team["key_threshold"] = key["threshold"] if key else None
+    team["memory_threshold"] = memory["threshold"] if memory else None
+    team["memory_floor"] = memory["similarity_floor"] if memory else None
+    tuning = gil.capture_tuning(gil.Schema.from_dict(definition), len(records), TARGET)
+    return gil.record_promise(tuning, "team", layers)
+
+
+Path("ticket.tuning.json").write_text(json.dumps(tune(records)))
+```
+
+A layer with no `chosen` threshold is left unset and does not answer the attribute. `capture_tuning` and
+`tuning_stale` take the number of settled records, not the records. At start-up, `tuning_stale` says whether the kept
+tuning still stands — the same package version, the same settings it rests on, and less than a tenth more or fewer records —
+and `apply_tuning` puts it back on the schema; otherwise choose again:
+
+```python
+tuning = json.loads(Path("ticket.tuning.json").read_text())
+base = gil.Schema.from_dict(definition)
+if gil.tuning_stale(tuning, base, len(records)) is not None:
+    tuning = tune(records)
+schema = gil.apply_tuning(tuning, base)
+```
+
+An answer does not carry its promise; the promise is its layer's, read from the tuning by the answer's `source`.
+`gil.usage(decisions)` counts, without content, how the answers shown were settled and the precision they realized —
+`right_weight / judged_weight`, to read against `promise_sum / promised`:
+
+```python
+team = next(a for a in tuning["attributes"] if a["attribute"] == "team")
+promise = {"KeyMemory": team["key_promise"], "SimilarRecord": team["memory_promise"]}
+decider = gil.Decider(schema, records)
+
+answer = decider.answer(schema, "t9", "team", {"product": "vpn", "summary": "drops again"})
+shown = answer["candidates"][0]["value"] if answer["answered"] else None
+# ... the person settles `settled` ...
+decisions.append({
+    "attribute": "team",
+    "answer": shown,
+    "settled": settled,
+    "settlement": "Enter" if shown is None else "Accept" if settled == shown else "Correct",
+    "promise": promise.get(answer["source"]) if shown is not None else None,
+})
+
+counts = gil.usage(decisions)["team"]
+print(counts["right_weight"] / counts["judged_weight"], "against", counts["promise_sum"] / counts["promised"])
+```
 
 **Status: early.** The API may change within 0.x — each change is listed in
 [CHANGELOG.md](https://github.com/iyulab/gil/blob/main/crates/gil/CHANGELOG.md) with what to do about it.

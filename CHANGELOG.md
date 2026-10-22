@@ -107,6 +107,9 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   either: batches add optimism only when they are large as well.
 - The README's Usage now starts with the supported surface, the decision core (`dotnet add package Gil`), and the
   experimental tree judgment path follows under its own section with its walkthrough.
+- `docs/settled-records.md` specifies the settled-record line every binding reads — its entries, why the time and
+  the kind of settlement matter, and what an application should keep before it uses Gil — and the READMEs point to
+  it.
 
 ### Dependencies
 

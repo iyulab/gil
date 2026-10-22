@@ -679,8 +679,9 @@ class OpenRecord:
 def capture_tuning(
     schema: Schema, settled: int, target_precision: float
 ) -> dict[str, Any]:
-    """The chosen settings of ``schema``'s decided attributes as they now stand, chosen on ``settled`` records for
-    ``target_precision`` — the core's ``Tuning``. Add each layer replay's promises with :func:`record_promise`."""
+    """The chosen settings of ``schema``'s decided attributes as they now stand, chosen when ``settled`` records — the
+    number of them, ``len(records)`` — had been settled, for ``target_precision``: the core's ``Tuning``. Add each layer
+    replay's promises with :func:`record_promise`."""
     return cast(
         dict[str, Any],
         json.loads(tuning_capture_json(schema.json, settled, target_precision)),
@@ -709,7 +710,7 @@ def apply_tuning(tuning: dict[str, Any], schema: Schema) -> Schema:
 def tuning_stale(
     tuning: dict[str, Any], schema: Schema, settled: int
 ) -> dict[str, Any] | str | None:
-    """Why the tuning no longer stands for ``schema`` with ``settled`` records — ``{"version": {"chosen": ...}}``,
+    """Why the tuning no longer stands for ``schema`` now that ``settled`` records (the number of them) are settled — ``{"version": {"chosen": ...}}``,
     ``"schema"`` or ``{"settled": {"chosen": ..., "now": ...}}`` — or ``None`` while it does."""
     text = tuning_stale_json(json.dumps(tuning), schema.json, settled)
     return None if text is None else cast(dict[str, Any] | str, json.loads(text))
