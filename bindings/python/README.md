@@ -57,6 +57,10 @@ The other settings follow the same pattern — choose, then set on the attribute
 `key_concentrations`, after `key_fields`) and, for an attribute with a coarse level (`"coarse": {"prefix": 2}`),
 `select_coarse` once its value thresholds are set.
 
+A threshold trades precision for coverage — the share of lookups answered, `answer_rate` in each `chosen`, the word
+selective prediction and automated coding use. Gil holds the precision (the target, at the bottom of an interval) and
+reports the coverage it reaches.
+
 When the target is a share of all the attribute's answers rather than a floor under every band of them, choose both
 thresholds together with `rule="pooled"`: the pair that answers the most of the latest 5,000 lookups while all those
 answers hold the target at the bottom of their Wilson interval at 1.645 standard errors (it reaches further back when

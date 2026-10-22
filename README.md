@@ -418,6 +418,10 @@ answered and settled since reports how each attribute's answers fared against it
 
 ### Choosing what to trust
 
+A threshold trades precision for coverage — the share of lookups answered, `AnswerRate`, the word selective prediction
+and automated coding use. Gil holds the precision (the target, at the bottom of an interval) and reports the coverage
+it reaches; "answered n times as often" below compares coverage at the same target.
+
 The right thresholds move as memory grows. Choose them again from time to time — `Stale` says so once the settled
 records have grown or shrunk by a tenth — by replaying the saved records. `SelectLayers` chooses both in one replay, in
 the order the decider consults the layers: a similar record answers only where no key did, so its threshold is chosen

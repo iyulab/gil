@@ -80,6 +80,8 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   look at the sender: when one sender's own settlements are less reliable than the others', it answers below the
   target for that sender too, so count `Usage.Count` over each sender's answers to see a per-sender promise hold.
 - The crate's README says which way the goldens run: the Rust core writes them and `Gil` is checked against them.
+- The three READMEs name the trade a threshold makes in the words selective prediction and automated coding use:
+  precision for coverage, the share of lookups answered (`AnswerRate`).
 
 ### Dependencies
 

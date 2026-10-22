@@ -49,6 +49,10 @@ later).
 
 ## Choosing the target precision
 
+A threshold trades precision for coverage — the share of lookups answered, `answer_rate`, the word selective
+prediction and automated coding use. Gil holds the precision (the target, at the bottom of an interval) and reports
+the coverage it reaches.
+
 `replay::Choice::target_precision` is yours to set, and it follows from what a wrong answer costs. Count a value a
 person enters with no suggestion as 1, a right answer as nothing, and a wrong one — noticed, undone and entered again —
 as ρ. An answer right with probability p then costs ρ(1 − p) against the 1 of asking, so answering pays only above a
