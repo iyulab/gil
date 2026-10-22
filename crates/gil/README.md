@@ -31,12 +31,15 @@ that the .NET library on NuGet, `Gil`, is checked against — `Gil` runs on this
   value.
 - **Threshold choice** — each layer's threshold is chosen by replaying the settled records: the lowest score down to
   which every band of answers met the target precision, with the promise a replay of that many answers can make.
+  `Schema::with_layers` puts the choice on the schema, a `Tuning` keeps it between runs, and `Tuning::promise_of`
+  gives an answer the promise of the layer it came from.
 - **Decision records** — every lookup a replay or an answer makes can be handed to a sink, so a host can recount a
   choice or follow a layer over time without reaching into the replay.
 
 The core does no I/O: records come in as values and decision records go out through a callback. How they are stored
 is the host's business. A similar-record lookup over a large memory is split among up to eight threads, each summing
-its rows in the same order, so the answers do not depend on how many there are. Text is compared after the normalization specified in
+its rows in the same order, so the answers do not depend on how many there are; `LexicalMemory::with_threads` caps
+them for a host that keeps its own budget. Text is compared after the normalization specified in
 [docs/text-normalization.md](https://github.com/iyulab/gil/blob/main/docs/text-normalization.md).
 
 With the `serde` feature (`iyulab-gil = { version = "…", features = ["serde"] }`), what a host keeps or sends on —
