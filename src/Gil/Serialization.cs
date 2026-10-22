@@ -23,6 +23,7 @@ internal sealed record SchemaForm(string Name, IReadOnlyList<AttributeDefinition
 [JsonSerializable(typeof(IReadOnlyDictionary<string, double>))]
 [JsonSerializable(typeof(LayerThresholds))]
 [JsonSerializable(typeof(Tuning))]
+[JsonSerializable(typeof(KeeperChoice))]
 [JsonSerializable(typeof(Stale))]
 [JsonSerializable(typeof(IReadOnlyDictionary<string, AttributeUsage>))]
 [JsonSerializable(typeof(IReadOnlyList<AskAdvice>))]

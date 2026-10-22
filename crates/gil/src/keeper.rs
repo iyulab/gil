@@ -3,11 +3,13 @@
 //!
 //! Without it a host settles each record twice (into the decider and into the records it will replay), asks
 //! [`Tuning::stale`] itself, replays every record again when the choice is stale — the cost grows with the square of the
-//! records — and puts the choice back on the schema in the right order. A [`Keeper`] holds the decider, the records and,
-//! for each decided attribute it keeps, the replay as it stands: [`Keeper::settle`] feeds both, [`Keeper::stale`] says
-//! when the choice no longer stands, and [`Keeper::rechoose`] replays only the records settled since and chooses again —
-//! the same thresholds, to the bit, as [`crate::replay::select_layers`] on all the records. Answers come from
-//! [`Keeper::decider`] with [`Keeper::schema`]; an answer's promise from [`Keeper::tuning`].
+//! records — and puts the choice back on the schema in the right order. A [`Keeper`] holds the records and, for each
+//! decided attribute it keeps, the replay as it stands: [`Keeper::settle`] puts records into the host's decider and into
+//! the next choice, [`Keeper::stale`] says when the choice no longer stands, and [`Keeper::rechoose`] replays only the
+//! records settled since and chooses again — the same thresholds, to the bit, as [`crate::replay::select_layers`] on all
+//! the records. The host answers with its decider and [`Keeper::schema`]; an answer's promise is [`Keeper::tuning`]'s.
+//! The decider stays the host's, so that records being filled in ([`crate::open_record::OpenRecord`]) use it as before;
+//! give the keeper the same decider every time.
 //!
 //! What it keeps is the choosing and the promise. Whether to check answers again, how often and where to send them stay
 //! with the host. Nothing is stored outside the process: a keeper made at start-up replays the saved records once, from
@@ -68,13 +70,12 @@ struct Replay {
     through: usize,
 }
 
-/// The decider, the settled records and the replays the thresholds are chosen on, for the decided attributes of one
-/// schema that take one value. Not thread-safe.
+/// The settled records and the replays the thresholds are chosen on, for the decided attributes of one schema that take
+/// one value. Not thread-safe.
 pub struct Keeper {
     schema: Schema,
     keep: Keep,
     threads: Option<usize>,
-    decider: Decider,
     records: Vec<Record>,
     replays: BTreeMap<String, Replay>,
     chosen: BTreeMap<String, LayerThresholds>,
@@ -95,7 +96,6 @@ impl Keeper {
             schema,
             keep,
             threads: None,
-            decider: Decider::new(KeyMemory::default(), Some(LexicalMemory::default())),
             records: Vec::new(),
             replays: BTreeMap::new(),
             chosen: BTreeMap::new(),
@@ -105,8 +105,8 @@ impl Keeper {
         keeper
     }
 
-    /// The keeper with a similar-record lookup split among at most `threads` threads, in its decider and its replays —
-    /// see [`LexicalMemory::with_threads`]. Set it before settling anything.
+    /// The keeper with a similar-record lookup in its replays split among at most `threads` threads — see
+    /// [`LexicalMemory::with_threads`]. The choice is the same whatever the number. Set it before settling anything.
     ///
     /// # Panics
     /// When `threads` is 0, or records were settled already.
@@ -117,7 +117,6 @@ impl Keeper {
             "set the threads before settling records"
         );
         self.threads = Some(threads);
-        self.decider = Decider::new(KeyMemory::default(), Some(self.lexical()));
         self.restart();
         self
     }
@@ -125,11 +124,6 @@ impl Keeper {
     /// The schema as chosen: the one given, with the thresholds the last [`Keeper::rechoose`] put on its attributes.
     pub fn schema(&self) -> &Schema {
         &self.schema
-    }
-
-    /// The decider, holding every record settled — answer with [`Keeper::schema`].
-    pub fn decider(&self) -> &Decider {
-        &self.decider
     }
 
     /// The last choice as a tuning, with each attribute's promises — [`Tuning::promise_of`] gives an answer's.
@@ -153,18 +147,18 @@ impl Keeper {
         self.records.len()
     }
 
-    /// Takes a settled record: the decider learns it and the next choice replays it. Records may come in any order; one
-    /// settled before the last a replay has gone through has the next choice replay everything from the start.
-    pub fn settle(&mut self, record: &Record) {
-        self.decider
-            .rebuild(&self.schema, std::slice::from_ref(record));
-        self.records.push(record.clone());
+    /// Takes settled records: `decider` learns them ([`Decider::rebuild`]) and the next choice replays them. Records may
+    /// come in any order; one settled before the last a replay has gone through has the next choice replay everything
+    /// from the start.
+    pub fn settle(&mut self, decider: &mut Decider, records: &[Record]) {
+        decider.rebuild(&self.schema, records);
+        self.records.extend_from_slice(records);
     }
 
-    /// Takes a record the host deleted out of the decider and out of the records; the next choice replays from the
-    /// start, without it.
-    pub fn remove(&mut self, record: &str) {
-        self.decider.remove(&self.schema, record);
+    /// Takes a record the host deleted out of `decider` ([`Decider::remove`]) and out of the records; the next choice
+    /// replays from the start, without it.
+    pub fn remove(&mut self, decider: &mut Decider, record: &str) {
+        decider.remove(&self.schema, record);
         self.records.retain(|r| r.id != record);
         self.restart();
     }
@@ -282,12 +276,17 @@ impl Keeper {
 #[cfg(test)]
 mod tests {
     use super::{Keep, Keeper};
+    use crate::decider::{Decider, Source};
     use crate::key_memory::KeyMemory;
     use crate::lexical_memory::LexicalMemory;
     use crate::replay::{LayerOptions, ThresholdRule, select_layers};
     use crate::schema::{Attribute, AttributeRole, Record, Schema, SettlementKind};
     use crate::tuning::Stale;
     use std::collections::BTreeMap;
+
+    fn decider() -> Decider {
+        Decider::new(KeyMemory::default(), Some(LexicalMemory::default()))
+    }
 
     fn schema() -> Schema {
         Schema::new(
@@ -389,11 +388,10 @@ mod tests {
             },
         ] {
             let mut keeper = Keeper::new(schema(), keep.clone());
+            let mut decider = decider();
             let mut done = 0;
             for at in [1, 40, 41, 300, 650, 700] {
-                for record in &records[done..at] {
-                    keeper.settle(record);
-                }
+                keeper.settle(&mut decider, &records[done..at]);
                 done = at;
                 keeper.rechoose();
                 assert_eq!(
@@ -412,9 +410,7 @@ mod tests {
             );
             assert_eq!(keeper.tuning().settled, 700);
             assert_eq!(
-                keeper
-                    .tuning()
-                    .promise_of("team", crate::decider::Source::KeyMemory),
+                keeper.tuning().promise_of("team", Source::KeyMemory),
                 team.key.chosen.as_ref().map(|c| c.promise)
             );
         }
@@ -424,24 +420,22 @@ mod tests {
     fn a_record_out_of_order_or_removed_replays_from_the_start() {
         let keep = Keep::new(0.8);
         let records = settled(300);
-        let mut keeper = Keeper::new(schema(), keep.clone());
-        for record in &records[..200] {
-            keeper.settle(record);
-        }
+        let mut keeper = Keeper::new(schema(), keep.clone()).with_threads(2);
+        let mut decider = decider();
+        keeper.settle(&mut decider, &records[..200]);
         keeper.rechoose();
         // Settled late but dated early: the next choice starts again.
         let mut late = records[250].clone();
         late.settled_at = 1_050;
         late.id = "late".into();
-        for record in records[200..].iter().chain([&late]) {
-            keeper.settle(record);
-        }
+        keeper.settle(&mut decider, &records[200..]);
+        keeper.settle(&mut decider, std::slice::from_ref(&late));
         keeper.rechoose();
         let mut all = records.clone();
         all.push(late);
         assert_eq!(of(&keeper), from_the_start(&keep, &all));
 
-        keeper.remove("t10");
+        keeper.remove(&mut decider, "t10");
         keeper.rechoose();
         all.retain(|r| r.id != "t10");
         assert_eq!(of(&keeper), from_the_start(&keep, &all));
@@ -452,19 +446,16 @@ mod tests {
     fn the_choice_is_stale_by_the_tuning_rule() {
         let records = settled(120);
         let mut keeper = Keeper::new(schema(), Keep::new(0.8));
+        let mut decider = decider();
         assert_eq!(keeper.stale(), None);
-        keeper.settle(&records[0]);
+        keeper.settle(&mut decider, &records[..1]);
         assert_eq!(keeper.stale(), Some(Stale::Settled { chosen: 0, now: 1 }));
-        for record in &records[1..100] {
-            keeper.settle(record);
-        }
+        keeper.settle(&mut decider, &records[1..100]);
         keeper.rechoose();
         assert_eq!(keeper.stale(), None);
-        for record in &records[100..109] {
-            keeper.settle(record);
-        }
+        keeper.settle(&mut decider, &records[100..109]);
         assert_eq!(keeper.stale(), None);
-        keeper.settle(&records[109]);
+        keeper.settle(&mut decider, &records[109..110]);
         assert_eq!(
             keeper.stale(),
             Some(Stale::Settled {
@@ -475,27 +466,28 @@ mod tests {
     }
 
     #[test]
-    fn the_decider_answers_from_every_record_settled() {
+    fn the_decider_settled_through_the_keeper_answers_as_one_rebuilt() {
         let records = settled(200);
         let mut keeper = Keeper::new(schema(), Keep::new(0.8));
-        let mut decider =
-            crate::decider::Decider::new(KeyMemory::default(), Some(LexicalMemory::default()));
-        for record in &records {
-            keeper.settle(record);
-        }
-        decider.rebuild(&schema(), &records);
+        let mut through = decider();
+        keeper.settle(&mut through, &records[..120]);
+        keeper.settle(&mut through, &records[120..]);
+        keeper.remove(&mut through, "t10");
+        let mut rebuilt = decider();
+        rebuilt.rebuild(&schema(), &records);
+        rebuilt.remove(&schema(), "t10");
         keeper.rechoose();
         let values = BTreeMap::from([
             ("product".to_owned(), "p3".to_owned()),
             ("summary".to_owned(), "vpn drops 2".to_owned()),
         ]);
-        let answers = |d: &crate::decider::Decider| {
+        let answers = |d: &Decider| {
             format!(
                 "{:?}",
                 d.answer(keeper.schema(), "new", &values, &BTreeMap::new())
             )
         };
-        assert_eq!(answers(keeper.decider()), answers(&decider));
+        assert_eq!(answers(&through), answers(&rebuilt));
     }
 
     #[test]

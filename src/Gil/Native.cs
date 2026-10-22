@@ -141,6 +141,33 @@ internal static unsafe partial class Native
     [LibraryImport(Library, EntryPoint = "gil_tuning_stale")]
     internal static partial int TuningStale(Str tuning, SchemaHandle schema, nuint settled, nuint* resultLen);
 
+    [LibraryImport(Library, EntryPoint = "gil_keeper_new")]
+    internal static partial int KeeperNew(SchemaHandle schema, Str options, nint* output);
+
+    [LibraryImport(Library, EntryPoint = "gil_keeper_free")]
+    internal static partial void KeeperFree(nint keeper);
+
+    [LibraryImport(Library, EntryPoint = "gil_keeper_settle")]
+    internal static partial int KeeperSettle(KeeperHandle keeper, DeciderHandle decider, RecordsHandle records);
+
+    [LibraryImport(Library, EntryPoint = "gil_keeper_remove")]
+    internal static partial int KeeperRemove(KeeperHandle keeper, DeciderHandle decider, Str recordId);
+
+    [LibraryImport(Library, EntryPoint = "gil_keeper_stale")]
+    internal static partial int KeeperStale(KeeperHandle keeper, nuint* resultLen);
+
+    [LibraryImport(Library, EntryPoint = "gil_keeper_settled")]
+    internal static partial nuint KeeperSettled(KeeperHandle keeper);
+
+    [LibraryImport(Library, EntryPoint = "gil_keeper_rechoose")]
+    internal static partial int KeeperRechoose(KeeperHandle keeper, byte decisions, nuint* resultLen);
+
+    [LibraryImport(Library, EntryPoint = "gil_keeper_state")]
+    internal static partial int KeeperState(KeeperHandle keeper, nuint* resultLen);
+
+    [LibraryImport(Library, EntryPoint = "gil_keeper_schema")]
+    internal static partial int KeeperSchema(KeeperHandle keeper, nint* output);
+
     [StructLayout(LayoutKind.Sequential)]
     internal struct Decision
     {

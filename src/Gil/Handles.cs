@@ -33,6 +33,17 @@ internal sealed class DeciderHandle : NativeHandle
     }
 }
 
+internal sealed class KeeperHandle : NativeHandle
+{
+    public static KeeperHandle Of(nint value) => Own<KeeperHandle>(value);
+
+    protected override bool ReleaseHandle()
+    {
+        Native.KeeperFree(handle);
+        return true;
+    }
+}
+
 internal sealed class OpenRecordHandle : NativeHandle
 {
     public static OpenRecordHandle Of(nint value) => Own<OpenRecordHandle>(value);

@@ -27,6 +27,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use gil::ask_planner::AskPlanner;
 use gil::decider::{Answer, Candidate, Decider, ExternalCandidate, Source};
 use gil::decision_record::DecisionRecord;
+use gil::keeper::{Keep, Keeper};
 use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::open_record::OpenRecord;
@@ -59,7 +60,7 @@ pub const GIL_BROKEN: i32 = iyulab_ffi_support::BROKEN;
 
 /// The version of this interface — its functions, structures and statuses. It changes whenever a binding built for one
 /// version would misread the library of another.
-pub const GIL_ABI_VERSION: u32 = 4;
+pub const GIL_ABI_VERSION: u32 = 5;
 
 /// [`GilCandidate::source`]: no layer.
 pub const GIL_SOURCE_NONE: u8 = 0;
@@ -112,6 +113,12 @@ pub struct GilLexicalMemory {
     broken: AtomicBool,
 }
 
+/// The promise-keeping loop of one schema: the records settled and the replays the thresholds are chosen on.
+pub struct GilKeeper {
+    keeper: Keeper,
+    broken: AtomicBool,
+}
+
 // What the functions that only read a handle may share across threads (see the module's threads paragraph).
 const _: () = {
     const fn shared<T: Sync>() {}
@@ -145,6 +152,13 @@ impl Breakable for GilOpenRecord {
 
 impl Breakable for GilAskPlanner {
     const WHAT: &'static str = "planner";
+    fn broken(&self) -> &AtomicBool {
+        &self.broken
+    }
+}
+
+impl Breakable for GilKeeper {
+    const WHAT: &'static str = "keeper";
     fn broken(&self) -> &AtomicBool {
         &self.broken
     }
@@ -1351,6 +1365,225 @@ pub unsafe extern "C" fn gil_tuning_stale(
         let value =
             serde_json::to_value(tuned.stale(&schema.0, settled)).expect("a reason serializes");
         unsafe { result(&value, result_len) }
+    })
+}
+
+/// A keeper of `schema` with nothing settled, choosing for every decided attribute that takes one value as `options`
+/// says (JSON — `target_precision`, `minimum_answered`, `counting`, `rule`, and `threads` for its replays, as for
+/// `gil_select_layers`), handed out through `out`. Options out of range are contract violations (`GIL_PANIC`).
+///
+/// # Safety
+/// `schema` is a live handle; `options` is valid for the call; `out` points to one writable pointer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_keeper_new(
+    schema: *const GilSchema,
+    options: GilStr,
+    out: *mut *mut GilKeeper,
+) -> i32 {
+    call(|| {
+        if out.is_null() {
+            return Err(argument("out is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let schema = unsafe { handle(schema, "schema") }?;
+        let options = unsafe { read_options(options) }?;
+        let keep = Keep {
+            target_precision: options.target_precision,
+            minimum_answered: options.minimum_answered,
+            counting: options.counting.clone(),
+            rule: options.rule,
+        };
+        let mut keeper = Keeper::new(schema.0.clone(), keep);
+        if options.threads > 0 {
+            keeper = keeper.with_threads(options.threads);
+        }
+        unsafe {
+            hand_out(
+                out,
+                GilKeeper {
+                    keeper,
+                    broken: AtomicBool::new(false),
+                },
+                "out",
+            )
+        }
+    })
+}
+
+/// Frees a keeper; null does nothing.
+///
+/// # Safety
+/// `keeper` is null or a live keeper handle, freed once and not used after.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_keeper_free(keeper: *mut GilKeeper) {
+    // SAFETY: forwarded from the caller.
+    unsafe { release(keeper) }
+}
+
+/// Puts settled records into `decider` and into the keeper's next choice — in any order; one settled before the last a
+/// replay went through has the next choice replay from the start. Give the keeper the same decider every time.
+///
+/// # Safety
+/// `keeper`, `decider` and `records` are live handles, and no other thread uses the keeper or the decider during the
+/// call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_keeper_settle(
+    keeper: *mut GilKeeper,
+    decider: *mut GilDecider,
+    records: *const GilRecords,
+) -> i32 {
+    let status = call(|| {
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let keeper = &mut unsafe { live_mut(keeper) }?.keeper;
+        let decider = &mut unsafe { live_mut(decider) }?.decider;
+        let records = unsafe { handle(records, "records") }?;
+        placed(keeper.schema(), &records.0)?;
+        keeper.settle(decider, &records.0);
+        Ok(())
+    });
+    // SAFETY: forwarded from the caller.
+    unsafe {
+        break_on_panic(status, keeper);
+        break_on_panic(status, decider);
+    }
+    status
+}
+
+/// Takes record `record_id`, which the host deleted, out of `decider` and out of the keeper's records; the next choice
+/// replays from the start without it.
+///
+/// # Safety
+/// As [`gil_keeper_settle`]; `record_id` is valid for the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_keeper_remove(
+    keeper: *mut GilKeeper,
+    decider: *mut GilDecider,
+    record_id: GilStr,
+) -> i32 {
+    let status = call(|| {
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let keeper = &mut unsafe { live_mut(keeper) }?.keeper;
+        let decider = &mut unsafe { live_mut(decider) }?.decider;
+        let record_id = unsafe { text(record_id, "record_id") }?;
+        keeper.remove(decider, record_id);
+        Ok(())
+    });
+    // SAFETY: forwarded from the caller.
+    unsafe {
+        break_on_panic(status, keeper);
+        break_on_panic(status, decider);
+    }
+    status
+}
+
+/// Keeps as the result why the keeper's last choice no longer stands — JSON in the core's `serde` form — or `null` while
+/// it does.
+///
+/// # Safety
+/// `keeper` is a live handle; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_keeper_stale(keeper: *const GilKeeper, result_len: *mut usize) -> i32 {
+    call(|| {
+        if result_len.is_null() {
+            return Err(argument("result_len is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let keeper = &unsafe { live(keeper) }?.keeper;
+        let value = serde_json::to_value(keeper.stale()).expect("a reason serializes");
+        unsafe { result(&value, result_len) }
+    })
+}
+
+/// How many records the keeper took, a record settled again counting again; 0 for null.
+///
+/// # Safety
+/// `keeper` is null or a live keeper handle.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_keeper_settled(keeper: *const GilKeeper) -> usize {
+    // SAFETY: forwarded from the caller.
+    unsafe { keeper.as_ref() }.map_or(0, |k| k.keeper.settled())
+}
+
+/// The keeper's choice as it stands: `{"tuning": …, "chosen": {attribute: thresholds, …}}` in the core's `serde` form —
+/// `chosen` empty before the first choice.
+fn keeper_state(keeper: &Keeper, decisions: Option<Vec<Value>>) -> Value {
+    let chosen: serde_json::Map<String, Value> = keeper
+        .attributes()
+        .filter_map(|a| {
+            keeper.chosen(a).map(|t| {
+                (
+                    a.to_owned(),
+                    serde_json::to_value(t).expect("thresholds serialize"),
+                )
+            })
+        })
+        .collect();
+    let mut value = json!({ "tuning": keeper.tuning(), "chosen": chosen });
+    if let Some(decisions) = decisions {
+        value["decisions"] = Value::Array(decisions);
+    }
+    value
+}
+
+/// Chooses every attribute's thresholds again on all the records settled — replaying only those settled since the last
+/// choice where it can — and keeps as the result the choice as `gil_keeper_state` gives it, with `"decisions": [ … ]`
+/// (the decision records of the records replayed this time) when `decisions` is true.
+///
+/// # Safety
+/// `keeper` is a live handle no other thread uses during the call; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_keeper_rechoose(
+    keeper: *mut GilKeeper,
+    decisions: bool,
+    result_len: *mut usize,
+) -> i32 {
+    let status = call(|| {
+        if result_len.is_null() {
+            return Err(argument("result_len is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let keeper = &mut unsafe { live_mut(keeper) }?.keeper;
+        let mut kept = decisions.then(Vec::new);
+        keeper.rechoose_with(&mut |r| keep(&mut kept, r));
+        unsafe { result(&keeper_state(keeper, kept), result_len) }
+    });
+    // SAFETY: forwarded from the caller.
+    unsafe { break_on_panic(status, keeper) };
+    status
+}
+
+/// Keeps as the result the keeper's choice as it stands — `{"tuning": …, "chosen": {…}}`.
+///
+/// # Safety
+/// `keeper` is a live handle; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_keeper_state(keeper: *const GilKeeper, result_len: *mut usize) -> i32 {
+    call(|| {
+        if result_len.is_null() {
+            return Err(argument("result_len is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let keeper = &unsafe { live(keeper) }?.keeper;
+        unsafe { result(&keeper_state(keeper, None), result_len) }
+    })
+}
+
+/// Hands out through `out` a new schema: the keeper's, with the thresholds its last choice put on the attributes.
+///
+/// # Safety
+/// `keeper` is a live handle; `out` points to one writable pointer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_keeper_schema(
+    keeper: *const GilKeeper,
+    out: *mut *mut GilSchema,
+) -> i32 {
+    call(|| {
+        if out.is_null() {
+            return Err(argument("out is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let keeper = &unsafe { live(keeper) }?.keeper;
+        unsafe { hand_out(out, GilSchema(keeper.schema().clone()), "out") }
     })
 }
 
