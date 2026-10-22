@@ -18,6 +18,11 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   as text `yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM` (.NET's round-trip format), and an entry given as null as left out; it
   is written in ticks as before. Python records are read through it, and now refuse a date, time or offset out of
   range (`2025-02-29`, `24:00`, `+15:00`) that they used to turn into ticks.
+- **A similar-record lookup over a large memory is split among threads.** When a lookup would add more than 2¹⁸
+  products, `LexicalMemory::nearest` splits the rows into up to eight ranges, one a thread, each summed in the same
+  order and ranked on its own — the similarities and the leaders are the same to the bit with any number of threads,
+  and one thread is used where none are available. Replaying 40,000 public food inspection records took 27 s against
+  60 s. The lists keep each row's count of an n-gram rather than its weight, a third less memory.
 
 ### Added
 

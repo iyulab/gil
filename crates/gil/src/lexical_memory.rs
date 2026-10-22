@@ -76,28 +76,12 @@ impl LexicalMemory {
             return Vec::new();
         };
 
-        let similarities = index.similarities(&text::grams(state, self.min_gram, self.max_gram));
-        let mut ranked: Vec<usize> = (0..similarities.len()).collect();
-        // A total order (similarity, then first remembered), so selecting the first `count` and sorting them gives the
-        // same leaders as sorting every row.
-        let by = |a: &usize, b: &usize| {
-            similarities[*b]
-                .partial_cmp(&similarities[*a])
-                .unwrap_or(Ordering::Equal)
-                // Lazily: reading the rows for every comparison, not only on a tie, cost a cache miss each time.
-                .then_with(|| index.rows[*a].order.cmp(&index.rows[*b].order))
-        };
-        if count < ranked.len() {
-            ranked.select_nth_unstable_by(count, by);
-            ranked.truncate(count);
-        }
-        ranked.sort_by(by);
-        ranked
+        index
+            .nearest(&text::grams(state, self.min_gram, self.max_gram), count)
             .into_iter()
-            .take(count)
-            .map(|r| Match {
+            .map(|(r, similarity)| Match {
                 source: index.rows[r].key.clone(),
-                similarity: similarities[r],
+                similarity,
                 answer: index.rows[r].answer.clone(),
             })
             .collect()
@@ -115,12 +99,23 @@ struct Row {
     weights: Vec<f64>,
 }
 
-/// The slots of the rows holding one id and their weights for it, side by side, in the order they were posted.
+/// The slots of the rows holding one id and how many times each holds it, side by side, in the order they were posted —
+/// the slots ascending. A row's weight for the id is that count × the id's inverse record frequency, which every entry
+/// of the list shares until the weights are taken afresh and the lists rebuilt: a lookup multiplies it again, as the
+/// row's own weights were, and reads a third less than a list of weights.
 #[derive(Default)]
 struct Postings {
     slots: Vec<u32>,
-    weights: Vec<f64>,
+    counts: Vec<u32>,
 }
+
+/// A slot whose row is gone.
+const GONE: u32 = u32::MAX;
+
+/// The products a lookup adds before it is split among threads, and the most threads it is split among: below the
+/// first, starting threads costs more than it saves.
+const SPLIT_AT: usize = 1 << 18;
+const MOST_THREADS: usize = 8;
 
 /// Rows in no particular order — forgetting one moves the last into its place — each numbered in the order it was
 /// remembered (a key remembered again keeps its number), ties going to the smaller number.
@@ -131,6 +126,10 @@ struct Postings {
 /// posted and keeps it, so the lists only ever grow at the end, are read front to back, and write into one array of
 /// sums. A row forgotten or replaced leaves its entries behind, summed but never read, until they pass an eighth of
 /// the live ones and the lists are rebuilt; they are rebuilt too whenever the weights are taken afresh.
+///
+/// A lookup that would add many products splits the slots into ranges, one a thread: each range's sums take the same
+/// additions in the same order, and each thread ranks its own rows, so the leaders are the same to the bit whatever
+/// the number of threads — one where threads are not available.
 #[derive(Default)]
 struct Index {
     rows: Vec<Row>,
@@ -138,6 +137,8 @@ struct Index {
     /// one, and reading them out of the rows cost a cache miss a row.
     norms: Vec<f64>,
     slots: Vec<u32>,
+    /// The row in each slot, [`GONE`] once it has left it.
+    owners: Vec<u32>,
     remembered: u64,
     position: HashMap<String, usize>,
     ids: HashMap<String, usize>,
@@ -178,6 +179,7 @@ impl Index {
             Some(at) => {
                 let old = std::mem::replace(&mut self.rows[at], row);
                 self.norms[at] = norm;
+                self.owners[self.slots[at] as usize] = GONE;
                 tally(&mut self.frequency, &old.ids, -1);
                 self.retire(&old);
                 at
@@ -204,6 +206,7 @@ impl Index {
         };
 
         // The last row moves into the gap with its slot: no list changes.
+        self.owners[self.slots[at] as usize] = GONE;
         let row = self.rows.swap_remove(at);
         self.norms.swap_remove(at);
         self.slots.swap_remove(at);
@@ -211,6 +214,7 @@ impl Index {
         self.retire(&row);
         if at < self.rows.len() {
             self.position.insert(self.rows[at].key.clone(), at);
+            self.owners[self.slots[at] as usize] = at as u32;
         }
 
         if !self.refresh() {
@@ -218,9 +222,9 @@ impl Index {
         }
     }
 
-    /// The cosine of the query with every row, in the rows' order. An n-gram no row has ever held matches nothing, but
-    /// still weighs in the query's norm — added in the query's scalar order, then the known ones in the order of their ids.
-    fn similarities(&self, query: &[(String, u32)]) -> Vec<f64> {
+    /// The query's known ids, ascending, their weights, and its norm. An n-gram no row has ever held matches nothing, but
+    /// still weighs in the norm — added in the query's scalar order, then the known ones in the order of their ids.
+    fn weigh_query(&self, query: &[(String, u32)]) -> (Vec<usize>, Vec<f64>, f64) {
         let mut known: Vec<(usize, u32)> = Vec::with_capacity(query.len());
         let mut squares = 0.0_f64;
         for (gram, count) in query {
@@ -240,37 +244,115 @@ impl Index {
         let counts: Vec<u32> = known.iter().map(|k| k.1).collect();
         let mut weights = vec![0.0; ids.len()];
         let known_norm = self.weigh(&ids, &counts, &mut weights);
-        let query_norm = (squares + known_norm * known_norm).sqrt();
+        (ids, weights, (squares + known_norm * known_norm).sqrt())
+    }
 
-        let mut similarities = vec![0.0; self.rows.len()];
-        if query_norm == 0.0 {
-            return similarities;
-        }
+    /// The `count` rows most similar to the query and their similarities, most similar first; on a tie, the one
+    /// remembered first.
+    fn nearest(&self, query: &[(String, u32)], count: usize) -> Vec<(usize, f64)> {
+        let (ids, weights, query_norm) = self.weigh_query(query);
+        let products: usize = ids
+            .iter()
+            .filter_map(|&id| self.postings.get(id))
+            .map(|p| p.slots.len())
+            .sum();
+        let threads = if products < SPLIT_AT || query_norm == 0.0 {
+            1
+        } else {
+            std::thread::available_parallelism().map_or(1, |n| n.get().min(MOST_THREADS))
+        };
+        let slots = self.next_slot as usize;
+        let span = slots.div_ceil(threads).max(1);
+        let leaders = |from: usize| {
+            self.leaders(
+                &ids,
+                &weights,
+                query_norm,
+                from..(from + span).min(slots),
+                count,
+            )
+        };
 
-        // The products of the shared ids, added to each row in ascending id order (the order of `ids`) — the same
-        // additions, in the same order, as walking each row against the query, but only over the rows that share one.
-        let mut sums = vec![0.0_f64; self.next_slot as usize];
-        for (i, &id) in ids.iter().enumerate() {
-            let Some(postings) = self.postings.get(id) else {
-                continue;
-            };
-            let weight = weights[i];
-            for (&slot, &row_weight) in postings.slots.iter().zip(&postings.weights) {
-                sums[slot as usize] += weight * row_weight;
+        let mut found: Vec<(usize, f64)> = if threads == 1 {
+            leaders(0)
+        } else {
+            std::thread::scope(|scope| {
+                let parts: Vec<_> = (0..slots)
+                    .step_by(span)
+                    .map(|from| scope.spawn(move || leaders(from)))
+                    .collect();
+                parts
+                    .into_iter()
+                    .flat_map(|part| part.join().expect("a lookup thread does not panic"))
+                    .collect()
+            })
+        };
+        self.rank(&mut found, count);
+        found
+    }
+
+    /// The first `count` of the rows in the slots of `range` by similarity to the query, then first remembered. The
+    /// products of the shared ids are added to each row in ascending id order (the order of `ids`) — the same additions,
+    /// in the same order, as walking each row against the query, but only over the rows that share one.
+    fn leaders(
+        &self,
+        ids: &[usize],
+        weights: &[f64],
+        query_norm: f64,
+        range: std::ops::Range<usize>,
+        count: usize,
+    ) -> Vec<(usize, f64)> {
+        let mut sums = vec![0.0_f64; range.len()];
+        if query_norm > 0.0 {
+            let (low, high) = (range.start as u32, range.end as u32);
+            for (&id, &weight) in ids.iter().zip(weights) {
+                let Some(postings) = self.postings.get(id) else {
+                    continue;
+                };
+                let from = postings.slots.partition_point(|&s| s < low);
+                let to = postings.slots.partition_point(|&s| s < high);
+                let idf = self.idf_of(id);
+                for (&slot, &count) in postings.slots[from..to]
+                    .iter()
+                    .zip(&postings.counts[from..to])
+                {
+                    sums[(slot - low) as usize] += weight * (f64::from(count) * idf);
+                }
             }
         }
 
-        for ((similarity, &norm), &slot) in
-            similarities.iter_mut().zip(&self.norms).zip(&self.slots)
-        {
-            *similarity = if norm > 0.0 {
-                sums[slot as usize] / (query_norm * norm)
-            } else {
-                0.0
-            };
-        }
+        let mut found: Vec<(usize, f64)> = self.owners[range]
+            .iter()
+            .zip(&sums)
+            .filter(|(row, _)| **row != GONE)
+            .map(|(&row, &sum)| {
+                let norm = self.norms[row as usize];
+                let similarity = if query_norm > 0.0 && norm > 0.0 {
+                    sum / (query_norm * norm)
+                } else {
+                    0.0
+                };
+                (row as usize, similarity)
+            })
+            .collect();
+        self.rank(&mut found, count);
+        found
+    }
 
-        similarities
+    /// Keeps the first `count` rows by similarity, then first remembered — a total order, so selecting the first
+    /// `count` and sorting them gives the same leaders as sorting every row.
+    fn rank(&self, found: &mut Vec<(usize, f64)>, count: usize) {
+        let by = |a: &(usize, f64), b: &(usize, f64)| {
+            b.1.partial_cmp(&a.1)
+                .unwrap_or(Ordering::Equal)
+                // Lazily: reading the rows for every comparison, not only on a tie, cost a cache miss each time.
+                .then_with(|| self.rows[a.0].order.cmp(&self.rows[b.0].order))
+        };
+        if count < found.len() {
+            found.select_nth_unstable_by(count, by);
+            found.truncate(count);
+        }
+        found.sort_by(by);
     }
 
     /// The ids of the n-grams, ascending, with their counts. An n-gram seen for the first time takes the next id, in the
@@ -321,11 +403,12 @@ impl Index {
         let slot = self.next_slot;
         self.next_slot += 1;
         self.slots[at] = slot;
+        self.owners.push(at as u32);
         let row = &self.rows[at];
-        for (&id, &weight) in row.ids.iter().zip(&row.weights) {
+        for (&id, &count) in row.ids.iter().zip(&row.counts) {
             let postings = &mut self.postings[id];
             postings.slots.push(slot);
-            postings.weights.push(weight);
+            postings.counts.push(count);
         }
         self.live += row.ids.len();
     }
@@ -348,8 +431,9 @@ impl Index {
     fn repost(&mut self) {
         for postings in &mut self.postings {
             postings.slots.clear();
-            postings.weights.clear();
+            postings.counts.clear();
         }
+        self.owners.clear();
         (self.next_slot, self.live, self.gone) = (0, 0, 0);
         for at in 0..self.rows.len() {
             self.post(at);
@@ -360,16 +444,19 @@ impl Index {
     fn weigh(&self, ids: &[usize], counts: &[u32], weights: &mut [f64]) -> f64 {
         let mut squares = 0.0_f64;
         for i in 0..ids.len() {
-            let idf = self
-                .idf
-                .get(ids[i])
-                .copied()
-                .unwrap_or_else(|| self.smoothed(0));
-            weights[i] = f64::from(counts[i]) * idf;
+            weights[i] = f64::from(counts[i]) * self.idf_of(ids[i]);
             squares += weights[i] * weights[i];
         }
 
         squares.sqrt()
+    }
+
+    /// The inverse record frequency of `id` at the last refresh; an id first seen since then had none.
+    fn idf_of(&self, id: usize) -> f64 {
+        self.idf
+            .get(id)
+            .copied()
+            .unwrap_or_else(|| self.smoothed(0))
     }
 
     /// The smoothed inverse record frequency at the last refresh: never zero, highest for an n-gram no row had.
@@ -580,5 +667,152 @@ mod tests {
         assert_eq!(found.answer, "auth");
         assert_eq!(decomposed.answer, "billing");
         assert!((decomposed.similarity - 1.0).abs() < 1e-9);
+    }
+
+    /// Every row's similarity by walking it against the query in ascending id order, ranked by similarity and then
+    /// first remembered.
+    fn ranked_by_every_row(
+        memory: &LexicalMemory,
+        state: &str,
+        count: usize,
+    ) -> Vec<(String, u64)> {
+        let index = &memory.indexes["task"];
+        let (ids, weights, query_norm) =
+            index.weigh_query(&text::grams(state, memory.min_gram, memory.max_gram));
+        let similarity = |row: &Row, norm: f64| {
+            let mut sum = 0.0_f64;
+            for (&id, &weight) in ids.iter().zip(&weights) {
+                if let Ok(at) = row.ids.binary_search(&id) {
+                    sum += weight * row.weights[at];
+                }
+            }
+            if query_norm > 0.0 && norm > 0.0 {
+                sum / (query_norm * norm)
+            } else {
+                0.0
+            }
+        };
+        let mut rows: Vec<(usize, f64)> = index
+            .rows
+            .iter()
+            .zip(&index.norms)
+            .enumerate()
+            .map(|(r, (row, &norm))| (r, similarity(row, norm)))
+            .collect();
+        rows.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .unwrap_or(Ordering::Equal)
+                .then(index.rows[a.0].order.cmp(&index.rows[b.0].order))
+        });
+        rows.into_iter()
+            .take(count)
+            .map(|(r, s)| (index.rows[r].key.clone(), s.to_bits()))
+            .collect()
+    }
+
+    /// The leaders of the slots split into `parts` ranges, each ranked on its own, then ranked together — as threads do.
+    fn ranked_in_parts(
+        memory: &LexicalMemory,
+        state: &str,
+        count: usize,
+        parts: usize,
+    ) -> Vec<(String, u64)> {
+        let index = &memory.indexes["task"];
+        let (ids, weights, query_norm) =
+            index.weigh_query(&text::grams(state, memory.min_gram, memory.max_gram));
+        let slots = index.next_slot as usize;
+        let span = slots.div_ceil(parts).max(1);
+        let mut found: Vec<(usize, f64)> = (0..slots)
+            .step_by(span)
+            .flat_map(|from| {
+                index.leaders(
+                    &ids,
+                    &weights,
+                    query_norm,
+                    from..(from + span).min(slots),
+                    count,
+                )
+            })
+            .collect();
+        index.rank(&mut found, count);
+        found
+            .into_iter()
+            .map(|(r, s)| (index.rows[r].key.clone(), s.to_bits()))
+            .collect()
+    }
+
+    #[test]
+    fn the_nearest_are_the_same_to_the_bit_however_the_slots_are_split() {
+        // Records alike in common words and apart in a few rare ones, remembered, replaced and forgotten in a fixed
+        // pseudo-random order, so slots of gone rows sit among the live ones.
+        let mut seed = 0x9E37_79B9_7F4A_7C15_u64;
+        let mut next = move |n: u64| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed % n
+        };
+        let common = [
+            "risk high",
+            "license inspection",
+            "canvass",
+            "zip 606",
+            "restaurant",
+        ];
+        let rare = [
+            "walk-in cooler",
+            "mouse droppings",
+            "hand sink",
+            "allergen card",
+            "thermometer",
+        ];
+        let text = |next: &mut dyn FnMut(u64) -> u64| {
+            let mut words: Vec<String> = Vec::new();
+            for _ in 0..(1 + next(4)) {
+                words.push(common[next(common.len() as u64) as usize].to_owned());
+            }
+            for _ in 0..next(3) {
+                words.push(rare[next(rare.len() as u64) as usize].to_owned());
+            }
+            words.push(format!("no {}", next(40)));
+            words.join(" ")
+        };
+
+        let mut memory = LexicalMemory::default();
+        let mut lookups = 0;
+        for step in 0..1_500 {
+            let key = format!("r{}", next(600));
+            if next(10) == 0 {
+                memory.forget("task", &key);
+            } else {
+                let state = text(&mut next);
+                memory.remember("task", &key, &state, &format!("a{}", next(7)));
+            }
+            if step % 7 == 0 && memory.count("task") > 0 {
+                let state = if next(20) == 0 {
+                    String::new()
+                } else {
+                    text(&mut next)
+                };
+                for count in [1, 3, 10, 11] {
+                    let every = ranked_by_every_row(&memory, &state, count);
+                    let found: Vec<(String, u64)> = memory
+                        .nearest("task", &state, count)
+                        .into_iter()
+                        .map(|m| (m.source, m.similarity.to_bits()))
+                        .collect();
+                    assert_eq!(found, every, "step {step}, count {count}");
+                    for parts in [2, 3, 7] {
+                        assert_eq!(
+                            ranked_in_parts(&memory, &state, count, parts),
+                            every,
+                            "step {step}, {parts} parts"
+                        );
+                    }
+                    lookups += 1;
+                }
+            }
+        }
+        assert!(lookups > 800, "{lookups} lookups");
     }
 }
