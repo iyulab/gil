@@ -119,10 +119,19 @@ fn selection_input(
     Ok((schema, counting))
 }
 
+/// A similar record memory whose lookups are split among at most `threads` threads, or as many as the core's default.
+fn record_memory(threads: Option<usize>) -> PyResult<LexicalMemory> {
+    match threads {
+        None => Ok(LexicalMemory::default()),
+        Some(0) => Err(invalid("threads must be at least 1".to_owned())),
+        Some(n) => Ok(LexicalMemory::default().with_threads(n)),
+    }
+}
+
 /// Replays the records in order and chooses the attribute's key and memory thresholds, as `select_layers` does. Returns
 /// the thresholds as JSON and, when `decisions` is true, the decision records as JSON lines.
 #[pyfunction]
-#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, decisions=true, rule="every_band"))]
+#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, decisions=true, rule="every_band", threads=None))]
 #[allow(clippy::too_many_arguments)]
 fn select_layers_json(
     schema_json: &str,
@@ -133,6 +142,7 @@ fn select_layers_json(
     counting: Option<Vec<String>>,
     decisions: bool,
     rule: &str,
+    threads: Option<usize>,
 ) -> PyResult<(String, Option<String>)> {
     let rule = match rule {
         "every_band" => ThresholdRule::EveryBand,
@@ -144,6 +154,7 @@ fn select_layers_json(
         }
     };
     let (schema, counting) = selection_input(schema_json, counting)?;
+    let mut memory = record_memory(threads)?;
     let choice = Choice {
         target_precision,
         minimum_answered,
@@ -153,7 +164,7 @@ fn select_layers_json(
     let layers = guarded(|| {
         select_layers(
             &mut KeyMemory::default(),
-            &mut LexicalMemory::default(),
+            &mut memory,
             &schema,
             attribute,
             &records.records,
@@ -178,7 +189,8 @@ fn push_record(lines: &mut Option<String>, r: &DecisionRecord) {
 /// the lookups the value layers leave at the attribute's thresholds. Returns them as JSON and, when `decisions` is true, the
 /// decision records with what the coarse level made of each lookup as JSON lines.
 #[pyfunction]
-#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, decisions=true))]
+#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, decisions=true, threads=None))]
+#[allow(clippy::too_many_arguments)]
 fn select_coarse_json(
     schema_json: &str,
     attribute: &str,
@@ -187,8 +199,10 @@ fn select_coarse_json(
     minimum_answered: usize,
     counting: Option<Vec<String>>,
     decisions: bool,
+    threads: Option<usize>,
 ) -> PyResult<(String, Option<String>)> {
     let (schema, counting) = selection_input(schema_json, counting)?;
+    let mut memory = record_memory(threads)?;
     let choice = Choice {
         target_precision,
         minimum_answered,
@@ -198,7 +212,7 @@ fn select_coarse_json(
     let layers = guarded(|| {
         select_coarse_with(
             &mut KeyMemory::default(),
-            &mut LexicalMemory::default(),
+            &mut memory,
             &schema,
             attribute,
             &records.records,
@@ -310,15 +324,19 @@ struct Decider {
 #[pymethods]
 impl Decider {
     /// A decider whose memories hold `records` (settled records of the schema, in settlement order), with the similar
-    /// record memory unless `similar_records` is false.
+    /// record memory unless `similar_records` is false, its lookups split among at most `threads` threads.
     #[new]
-    #[pyo3(signature = (schema_json, records=None, similar_records=true))]
-    fn new(schema_json: &str, records: Option<&Records>, similar_records: bool) -> PyResult<Self> {
+    #[pyo3(signature = (schema_json, records=None, similar_records=true, threads=None))]
+    fn new(
+        schema_json: &str,
+        records: Option<&Records>,
+        similar_records: bool,
+        threads: Option<usize>,
+    ) -> PyResult<Self> {
         let schema = schema(schema_json).map_err(invalid)?;
-        let mut inner = gil::decider::Decider::new(
-            KeyMemory::default(),
-            similar_records.then(LexicalMemory::default),
-        );
+        let memory = record_memory(threads)?;
+        let mut inner =
+            gil::decider::Decider::new(KeyMemory::default(), similar_records.then_some(memory));
         if let Some(records) = records {
             placed(&schema, &records.records)?;
             changing(|| inner.rebuild(&schema, &records.records))

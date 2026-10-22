@@ -320,6 +320,7 @@ def select_layers(
     counting: Iterable[str] | None = None,
     decisions: bool = True,
     rule: Literal["every_band", "pooled"] = "every_band",
+    threads: int | None = None,
 ) -> tuple[LayerThresholds, list[DecisionRecord] | None]:
     """Replays ``records`` and chooses ``attribute``'s key and memory thresholds.
 
@@ -335,6 +336,9 @@ def select_layers(
     When some of the latest records name their ``batch``, the thresholds carry ``batches`` (``BatchCheck``): the
     precision of thresholds chosen on half of those records and counted on the other half, split by batch and by
     record, with the batches' size, correlation and design effect. It moves no threshold.
+
+    ``threads`` caps the threads a similar-record lookup over many records is split among (``None``: as many as the
+    machine offers, up to eight; ``1``: none). The choice is the same whatever it is.
     """
     thresholds, lines = select_layers_json(
         schema.json,
@@ -345,6 +349,7 @@ def select_layers(
         None if counting is None else list(counting),
         decisions,
         rule,
+        threads,
     )
     out = (
         None
@@ -395,13 +400,15 @@ def select_coarse(
     minimum_answered: int = 10,
     counting: Iterable[str] | None = None,
     decisions: bool = True,
+    threads: int | None = None,
 ) -> tuple[LayerThresholds, list[DecisionRecord] | None]:
     """Replays ``records`` and chooses the thresholds of ``attribute``'s coarse level.
 
     The coarse level answers with a class (``{"coarse": {"prefix": 2}}`` or a ``classes`` map) where the value layers
     did not answer at the attribute's thresholds — set the attribute's ``key_threshold`` and ``memory_threshold`` from
     :func:`select_layers` first. Returns the level's key and similar record replays and, unless ``decisions`` is false,
-    the decision records with what the level made of each lookup (``coarse``).
+    the decision records with what the level made of each lookup (``coarse``). ``threads`` is as for
+    :func:`select_layers`.
     """
     thresholds, lines = select_coarse_json(
         schema.json,
@@ -411,6 +418,7 @@ def select_coarse(
         minimum_answered,
         None if counting is None else list(counting),
         decisions,
+        threads,
     )
     out = (
         None
@@ -470,7 +478,9 @@ class ExternalCandidate(TypedDict):
 
 class Decider:
     """The memories that answer: the settled key memory and, unless ``similar_records`` is false, the lexical similar
-    record memory, holding ``records`` (settled records of ``schema``, in settlement order)."""
+    record memory, holding ``records`` (settled records of ``schema``, in settlement order). ``threads`` caps the
+    threads one similar-record lookup over a large memory is split among (``None``: as many as the machine offers, up
+    to eight; ``1``: none); answers are the same whatever it is."""
 
     __slots__ = ("_inner",)
 
@@ -479,8 +489,9 @@ class Decider:
         schema: Schema,
         records: Records | None = None,
         similar_records: bool = True,
+        threads: int | None = None,
     ) -> None:
-        self._inner = _Decider(schema.json, records, similar_records)
+        self._inner = _Decider(schema.json, records, similar_records, threads)
 
     def put(self, schema: Schema, records: Records) -> None:
         """Puts ``records`` — settled later than those the memories hold, in settlement order — into the memories."""

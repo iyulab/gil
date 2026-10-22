@@ -55,6 +55,7 @@ def select_layers_json(
     counting: list[str] | None = None,
     decisions: bool = True,
     rule: str = "every_band",
+    threads: int | None = None,
 ) -> tuple[str, str | None]:
     """The attribute's key and memory threshold replays as JSON and, when `decisions` is true, the decision records as JSON lines."""
 
@@ -77,6 +78,7 @@ def select_coarse_json(
     minimum_answered: int,
     counting: list[str] | None = None,
     decisions: bool = True,
+    threads: int | None = None,
 ) -> tuple[str, str | None]:
     """The attribute's coarse level thresholds as JSON and, when `decisions` is true, the decision records as JSON lines."""
 
@@ -94,6 +96,7 @@ class Decider:
         schema_json: str,
         records: Records | None = None,
         similar_records: bool = True,
+        threads: int | None = None,
     ) -> Decider: ...
     def put(self, schema_json: str, records: Records) -> None:
         """Puts `records` (settled records of the schema, in settlement order, later than those it holds) into the memories."""

@@ -206,6 +206,21 @@ def test_a_choice_goes_on_the_schema_and_an_answer_reads_its_promise() -> None:
     assert gil.promise_of(promised, "lead", "KeyMemory") is None
 
 
+def test_a_replay_or_a_decider_kept_on_one_thread_gives_the_same() -> None:
+    records = settled()
+    assert gil.select_layers(
+        SCHEMA, "team", records, minimum_answered=1, threads=1
+    ) == gil.select_layers(SCHEMA, "team", records, minimum_answered=1)
+    values = {"component": "vpn", "summary": "drop again"}
+    assert gil.Decider(SCHEMA, records, threads=1).answer(
+        SCHEMA, "t9", "team", values
+    ) == gil.Decider(SCHEMA, records).answer(SCHEMA, "t9", "team", values)
+    with pytest.raises(ValueError, match="threads must be at least 1"):
+        gil.Decider(SCHEMA, records, threads=0)
+    with pytest.raises(ValueError, match="threads must be at least 1"):
+        gil.select_coarse(SCHEMA, "team", records, threads=0)
+
+
 def test_usage_counts_each_settlement_by_its_meaning() -> None:
     counts = gil.usage(
         [
