@@ -56,7 +56,9 @@ public sealed record Tuning(
     /// <summary>What the layer an answer came from promised for <paramref name="attribute"/>: the key layer's promise for
     /// an answer from <see cref="Source.KeyMemory"/>, the similar record layer's for one from
     /// <see cref="Source.SimilarRecord"/>; null for no answer, an outside judgement, an attribute the tuning does not
-    /// name, or a promise it did not record (<see cref="Promise"/>).</summary>
+    /// name, or a promise it did not record (<see cref="Promise"/>). It reads the value's layers only: a coarse class
+    /// offered instead (the answer's <c>Coarse</c>) names the layer that backs the class, and what the value's layer
+    /// promised is not what the class's does.</summary>
     public double? PromiseOf(string attribute, Source source)
     {
         ArgumentNullException.ThrowIfNull(attribute);

@@ -116,7 +116,9 @@ impl Tuning {
 
     /// What the layer an answer came from promised for `attribute`: the key layer's promise for an answer from the key
     /// memory, the similar record layer's for one from the similar records; `None` for no answer, an outside judgement,
-    /// an attribute the tuning does not name, or a promise it did not record ([`Tuning::promise`]).
+    /// an attribute the tuning does not name, or a promise it did not record ([`Tuning::promise`]). It reads the value's
+    /// layers only: a coarse class offered instead ([`crate::decider::Answer::coarse`]) names the layer that backs the
+    /// class, and what the value's layer promised is not what the class's does.
     pub fn promise_of(&self, attribute: &str, source: Source) -> Option<f64> {
         let tuned = self.attributes.iter().find(|a| a.attribute == attribute)?;
         match source {
