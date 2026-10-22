@@ -830,7 +830,9 @@ def record_promise(
 def promise_of(tuning: dict[str, Any], attribute: str, source: str) -> float | None:
     """What the layer an answer came from promised for ``attribute``: the key layer's promise for an answer whose
     ``source`` is ``"KeyMemory"``, the similar record layer's for ``"SimilarRecord"``; ``None`` for no answer, an
-    outside judgement, an attribute the tuning does not name, or a promise it did not record (:func:`record_promise`)."""
+    outside judgement, an attribute the tuning does not name, or a promise it did not record (:func:`record_promise`).
+    It reads the value's layers only: a coarse class offered instead (the answer's ``coarse``) names the layer that backs
+    the class, and what the value's layer promised is not what the class's does."""
     field = {"KeyMemory": "key_promise", "SimilarRecord": "memory_promise"}.get(source)
     tuned = next(
         (a for a in tuning["attributes"] if a["attribute"] == attribute), None
