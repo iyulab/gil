@@ -87,7 +87,11 @@ yet. They are kept because a record cannot be given them afterwards, and each an
 - **`settle_ms` and `open_ms`** — what settling costs a person, and whether it falls as settled records accumulate and
   more is left to Gil. A monotonic clock's difference is enough; the wall clock is `settled_at`.
 - **`settled_by`** — whether settlers differ in how often they are right, which a promise counted over everyone hides.
-  An opaque id is all it needs: the same person, the same id.
+  An opaque id is all it needs: the same person, the same id. One settlement per record is not enough to tell: a
+  settler who agrees less often may be wrong more often, or may be given the harder records, and nothing in the
+  records says which. What tells them apart is records settled twice — drawn at random, settled again by a second
+  person who sees neither the answer nor the first settlement, written as a `Check` under the same id. Between them,
+  with three settlers or more, how often each pair agrees gives each settler's rate of being right.
 - **`form_version`** — which records were settled on which version of a form, so that a changed form is known as one
   and its first thresholds can be compared with the old form's.
 
