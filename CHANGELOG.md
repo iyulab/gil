@@ -85,7 +85,8 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   precision for coverage, the share of lookups answered (`AnswerRate`).
 - The README says how to count, on records already settled, the optimism that batches add to a promise — choose on
   half of the batches and count on the other half — with a measurement on public medical device event reports: 1.9
-  points counted on the records chosen on, 0.1 across halves of the batches.
+  points counted on the records chosen on, 0.1 across halves of the batches — and on public food inspection records,
+  whose batches are not right or wrong together, no difference, with the count on the records chosen on closest.
 - The README's Usage now starts with the supported surface, the decision core (`dotnet add package Gil`), and the
   experimental tree judgment path follows under its own section with its walkthrough.
 

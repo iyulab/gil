@@ -333,7 +333,11 @@ the batches and count the answers on the other half. On a month of public medica
 manufacturers send many at a time, the precision of thresholds chosen for 0.8, counted on the records they were chosen
 on, was 1.9 points above what the reports that followed got; counted across halves of the batches it was 0.1 points
 above, and across halves of the records, batch mates split between them, still 1.7. That is right on average only: the
-reports between two choices, a few batches each, came out anywhere from 0.64 to 0.89.
+reports between two choices, a few batches each, came out anywhere from 0.64 to 0.89. Batches add optimism only when
+the records of one batch tend to be right or wrong together. On two years of public food inspection records, where one
+inspection settles several different violations, they do not: halves of the batches and halves of the records gave the
+same count, both 1.5 points above what followed, and the count on the records chosen on was closest, 0.2 points above.
+Check that first on your own settled records before counting across halves of the batches.
 
 Settle a record that arrives again — a retransmission, a re-save — under the same record id. The memories keep one
 version per id, and the replay asks a record settled again without its earlier version. Under a new id the copy is new
