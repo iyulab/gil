@@ -35,6 +35,7 @@ from gil._gil import (
     RECENT_RECORDS,
     Records,
     check_schema,
+    schema_with_layers_json,
     select_coarse_json,
     select_key_concentrations_json,
     select_key_fields_json,
@@ -77,6 +78,7 @@ __all__ = [
     "TypedLook",
     "apply_tuning",
     "capture_tuning",
+    "promise_of",
     "read_records",
     "record_promise",
     "records",
@@ -273,6 +275,23 @@ class Schema:
     @property
     def json(self) -> str:
         return self._json
+
+    def with_layers(self, attribute: str, layers: LayerThresholds) -> Schema:
+        """The schema with what :func:`select_layers` chose put on the decided ``attribute``: the key layer's
+        ``threshold`` as ``key_threshold``, the similar record layer's as ``memory_threshold`` with its
+        ``similarity_floor`` as ``memory_floor``. A layer with no ``chosen`` threshold is left unset, so it does not
+        answer the attribute. Raises ``ValueError`` for an attribute the schema does not have or that is not decided, or
+        a result that breaks a schema rule."""
+        return Schema(
+            schema_with_layers_json(self._json, attribute, json.dumps(layers), False)
+        )
+
+    def with_coarse(self, attribute: str, layers: LayerThresholds) -> Schema:
+        """As :meth:`with_layers`, for what :func:`select_coarse` chose: the thresholds go on the attribute's
+        ``coarse`` level; ``ValueError`` too for an attribute with none."""
+        return Schema(
+            schema_with_layers_json(self._json, attribute, json.dumps(layers), True)
+        )
 
 
 def records(items: Iterable[dict[str, Any]]) -> Records:
@@ -698,6 +717,17 @@ def record_promise(
             tuning_promise_json(json.dumps(tuning), attribute, json.dumps(layers))
         ),
     )
+
+
+def promise_of(tuning: dict[str, Any], attribute: str, source: str) -> float | None:
+    """What the layer an answer came from promised for ``attribute``: the key layer's promise for an answer whose
+    ``source`` is ``"KeyMemory"``, the similar record layer's for ``"SimilarRecord"``; ``None`` for no answer, an
+    outside judgement, an attribute the tuning does not name, or a promise it did not record (:func:`record_promise`)."""
+    field = {"KeyMemory": "key_promise", "SimilarRecord": "memory_promise"}.get(source)
+    tuned = next(
+        (a for a in tuning["attributes"] if a["attribute"] == attribute), None
+    )
+    return None if field is None or tuned is None else tuned.get(field)
 
 
 def apply_tuning(tuning: dict[str, Any], schema: Schema) -> Schema:

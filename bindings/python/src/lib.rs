@@ -653,6 +653,27 @@ fn tuning_promise_json(tuning_json: &str, attribute: &str, layers_json: &str) ->
     Ok(to_json(&tuned))
 }
 
+/// The schema with what `attribute`'s layer replay (JSON, as `select_layers_json` gives it) chose put on the attribute —
+/// on its coarse level when `coarse` — as JSON.
+#[pyfunction]
+fn schema_with_layers_json(
+    schema_json: &str,
+    attribute: &str,
+    layers_json: &str,
+    coarse: bool,
+) -> PyResult<String> {
+    let schema = schema(schema_json).map_err(invalid)?;
+    let layers: LayerThresholds = serde_json::from_str(layers_json)
+        .map_err(|e| invalid(format!("a layer replay does not read: {e}")))?;
+    let changed = if coarse {
+        schema.with_coarse(attribute, &layers)
+    } else {
+        schema.with_layers(attribute, &layers)
+    }
+    .map_err(invalid)?;
+    Ok(serde_json::to_string(&changed).expect("a schema serializes"))
+}
+
 /// The schema with the tuning's settings put back on its attributes, as JSON.
 #[pyfunction]
 fn tuning_apply_json(tuning_json: &str, schema_json: &str) -> PyResult<String> {
@@ -736,6 +757,7 @@ fn _gil(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<OpenRecord>()?;
     m.add_class::<AskPlanner>()?;
     m.add_function(wrap_pyfunction!(tuning_capture_json, m)?)?;
+    m.add_function(wrap_pyfunction!(schema_with_layers_json, m)?)?;
     m.add_function(wrap_pyfunction!(tuning_apply_json, m)?)?;
     m.add_function(wrap_pyfunction!(tuning_promise_json, m)?)?;
     m.add_function(wrap_pyfunction!(tuning_stale_json, m)?)?;
