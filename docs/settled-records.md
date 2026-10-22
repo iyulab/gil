@@ -17,17 +17,17 @@ One JSON object per line, one line per settlement:
 | Entry | Type | Required | What it is |
 |---|---|---|---|
 | `id` | string | yes | The record's id, unique within its form. A record settled again is written again, with the same id and the later time |
-| `settled_at` | integer | yes | When it was settled: 100-nanosecond ticks since the Unix epoch, UTC (.NET `DateTimeOffset.UtcTicks` − `DateTimeOffset.UnixEpoch.UtcTicks`) |
+| `settled_at` | integer or string | yes | When it was settled: 100-nanosecond ticks since the Unix epoch, UTC (.NET `DateTimeOffset.UtcTicks` − `DateTimeOffset.UnixEpoch.UtcTicks`), or the time as text `yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM` (.NET's round-trip `"O"` format) |
 | `values` | object of strings | no | The value of each attribute that takes one, observed and decided alike, as it was when the record was settled |
 | `sets` | object of string arrays | no | The values of each attribute that takes several |
 | `settlements` | object of kinds | no | How each decided attribute was settled — see below |
 | `probabilities` | object of numbers | no | For an attribute settled as a `Check`, the probability it was drawn with |
 | `arrival` | string array | no | The attributes with a value, in the order their current values arrived, oldest first |
+| `batch` | string | no | The batch the record was settled in — records settled together, several at once from one source |
 
-An entry left out reads as empty (`arrival` as unknown). An entry the table does not name does not read: the line is
-refused rather than half understood. Python also takes `settled_at` as text in the form
-`yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM` (.NET's round-trip `"O"` format) and reads `null` as left out; the other two take
-ticks only, so ticks are the form to keep.
+An entry left out, or given as `null`, reads as empty (`arrival` and `batch` as unknown). An entry the table does not
+name does not read, and neither does a time out of range (`2025-02-29`, `24:00`, an offset past ±14:00): the line is
+refused rather than half understood. Lines are written back with `settled_at` in ticks.
 
 Lines may come in any order: a replay orders them by `settled_at`, then by `id`. A blank line is skipped.
 
@@ -58,6 +58,9 @@ Lines may come in any order: a replay orders them by `settled_at`, then by `id`.
   suggestion in view, so a person's own entry is `Enter`, and a value kept or changed from what the application
   proposed is `AcceptOther` or `CorrectOther`. A value no person looked at is `Fill`: it must not teach memory, or Gil
   learns to repeat whatever filled it.
+- **`batch`** says which records were settled together. Records of one batch tend to be right or wrong together, and a
+  promise chosen on them can be optimistic; a layers replay counts by how much when the latest records name their
+  batch.
 - **`arrival`** says which values were there when a decided attribute was settled. Without it, the observed values
   count as there from the start and the decided ones as settled in the form's order — right for a form filled top to
   bottom, optimistic for one where a later value is typed after the decided one was chosen.
