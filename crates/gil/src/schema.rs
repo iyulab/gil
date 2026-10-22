@@ -2,6 +2,8 @@
 
 use std::collections::BTreeMap;
 
+use crate::replay::LayerThresholds;
+
 /// Whether an attribute is read (observed) or decided (decided).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -263,6 +265,55 @@ impl Schema {
     /// The schema's attributes, in order.
     pub fn attributes(&self) -> &[Attribute] {
         &self.attributes
+    }
+
+    /// The schema with what a layers replay chose ([`crate::replay::select_layers`]) put on the decided attribute
+    /// `attribute`: the key layer's threshold as its key threshold, the similar record layer's as its memory threshold
+    /// with the similarity floor as its memory floor. A layer the replay chose no threshold for is left unset, so it does
+    /// not answer the attribute. The error names an attribute the schema does not have or that is not decided, or the
+    /// first rule the result breaks ([`Schema::new`]).
+    pub fn with_layers(&self, attribute: &str, layers: &LayerThresholds) -> Result<Self, String> {
+        let (key, memory, floor) = chosen(layers);
+        self.with_decided(attribute, |a| {
+            a.key_threshold = key;
+            a.memory_threshold = memory;
+            a.memory_floor = floor;
+            Ok(())
+        })
+    }
+
+    /// As [`Schema::with_layers`], for what a coarse replay chose ([`crate::replay::select_coarse`]): the thresholds go
+    /// on the attribute's coarse level. The error also names an attribute with no coarse level.
+    pub fn with_coarse(&self, attribute: &str, layers: &LayerThresholds) -> Result<Self, String> {
+        let (key, memory, floor) = chosen(layers);
+        self.with_decided(attribute, |a| {
+            let level = a
+                .coarse
+                .as_mut()
+                .ok_or_else(|| format!("attribute '{}' has no coarse level", a.name))?;
+            level.key_threshold = key;
+            level.memory_threshold = memory;
+            level.memory_floor = floor;
+            Ok(())
+        })
+    }
+
+    /// The schema with `change` made to the decided attribute `attribute`, checked.
+    fn with_decided(
+        &self,
+        attribute: &str,
+        change: impl FnOnce(&mut Attribute) -> Result<(), String>,
+    ) -> Result<Self, String> {
+        let mut attributes = self.attributes.clone();
+        let a = attributes
+            .iter_mut()
+            .find(|a| a.name == attribute)
+            .ok_or_else(|| self.no_attribute(attribute))?;
+        if a.role != AttributeRole::Decided {
+            return Err(format!("attribute '{attribute}' is not decided"));
+        }
+        change(a)?;
+        Self::new(self.name.clone(), attributes)
     }
 
     /// The schema with `change` made to the attribute named `attribute`, unchecked — only for a change that keeps the
@@ -914,6 +965,16 @@ fn ticks(text: &str) -> Option<i64> {
     let days = era * 146_097 + doe - 719_468;
     let seconds = days * 86_400 + hour * 3_600 + (minute - offset) * 60 + second;
     Some(seconds * 10_000_000 + fraction)
+}
+
+/// The key threshold, memory threshold and similarity floor a layers replay chose; `None` for a layer it chose none for.
+fn chosen(layers: &LayerThresholds) -> (Option<f64>, Option<f64>, Option<f64>) {
+    let memory = layers.memory.chosen.as_ref();
+    (
+        layers.key.chosen.as_ref().map(|c| c.threshold),
+        memory.map(|c| c.threshold),
+        memory.and_then(|c| c.similarity_floor),
+    )
 }
 
 #[cfg(test)]

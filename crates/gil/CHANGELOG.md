@@ -26,6 +26,13 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Added
 
+- **A replay's choice goes on the schema in one call, and an answer's promise reads from the tuning by its source.**
+  `Schema::with_layers(attribute, &layers)` puts what `select_layers` chose on a decided attribute — the key threshold,
+  the memory threshold and its similarity floor, a layer with no chosen threshold left unset — and
+  `Schema::with_coarse` does the same on the coarse level for what `select_coarse` chose; both check the result as
+  `Schema::new` does. `Tuning::promise_of(attribute, source)` gives the promise of the layer an answer came from
+  (`Source::KeyMemory` or `Source::SimilarRecord`). Setting the three fields by hand and matching the source to
+  `key_promise` / `memory_promise` still work.
 - **What batches do to a promise.** `Record::batch` names the batch a record was settled in — records settled
   together, several at once from one source. When any of the latest `RECENT_RECORDS` records names one,
   `LayerThresholds::batches` (`BatchCheck`) gives the precision of thresholds chosen on half of them and counted on
