@@ -169,11 +169,19 @@ public sealed class Decider : IDisposable
 
     /// <summary>A decider with empty memories.</summary>
     /// <param name="similarRecords">Whether to keep the similar record memory.</param>
-    public unsafe Decider(bool similarRecords = true)
+    /// <param name="threads">The most threads one similar-record lookup over a large memory is split among; null for
+    /// as many as the machine offers, up to eight; 1 keeps every lookup on the caller's thread. Answers are the same
+    /// whatever it is. A host answering many requests at once on one decider multiplies it by their number.</param>
+    public unsafe Decider(bool similarRecords = true, int? threads = null)
     {
+        if (threads is { } most)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(most, 1, nameof(threads));
+        }
+
         Native.EnsureCompatible();
         nint output;
-        Native.Check(Native.DeciderNew(similarRecords ? (byte)1 : (byte)0, &output));
+        Native.Check(Native.DeciderNew(similarRecords ? (byte)1 : (byte)0, (nuint)(threads ?? 0), &output));
         Handle = DeciderHandle.Of(output);
     }
 

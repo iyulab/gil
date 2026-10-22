@@ -96,7 +96,7 @@ impl Pair {
         let json = serde_json::to_string(&schema).unwrap();
         ok(unsafe { gil_schema_new(s(&json), &mut schema_handle) });
         let mut decider_handle = ptr::null_mut();
-        ok(unsafe { gil_decider_new(true, &mut decider_handle) });
+        ok(unsafe { gil_decider_new(true, 0, &mut decider_handle) });
         let lines: String = records
             .iter()
             .map(|r| serde_json::to_string(r).unwrap() + "\n")

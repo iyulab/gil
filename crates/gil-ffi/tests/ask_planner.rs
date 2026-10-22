@@ -87,7 +87,7 @@ fn the_ask_planner_reproduces_its_golden_through_the_c_abi() {
     let mut schema = ptr::null_mut();
     ok(unsafe { gil_schema_new(s(&schema_json), &mut schema) });
     let mut decider = ptr::null_mut();
-    ok(unsafe { gil_decider_new(true, &mut decider) });
+    ok(unsafe { gil_decider_new(true, 0, &mut decider) });
     let early = records_of(&records[..CHOSEN]);
     ok(unsafe { gil_decider_put(decider, schema, early) });
     unsafe { gil_records_free(early) };

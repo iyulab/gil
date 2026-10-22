@@ -128,6 +128,20 @@ fn the_layers_selection_reproduces_its_golden() {
         };
         let found = result(status, len);
         assert!(found.get("decisions").is_none());
+        // A replay kept on one thread chooses the same.
+        let single = format!(
+            r#"{{"target_precision":0.8,"minimum_answered":10,"counting":{COUNTING},"threads":1}}"#
+        );
+        let status = unsafe {
+            gil_select_layers(
+                handles.schema,
+                s(attribute),
+                handles.records,
+                s(&single),
+                &mut len,
+            )
+        };
+        assert_eq!(result(status, len), found);
         let layers: LayerThresholds = serde_json::from_value(found["thresholds"].clone()).unwrap();
         let actual = json!({
             "kind": "layers",

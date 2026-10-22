@@ -23,6 +23,8 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   order and ranked on its own — the similarities and the leaders are the same to the bit with any number of threads,
   and one thread is used where none are available. Replaying 40,000 public food inspection records took 27 s against
   60 s. The lists keep each row's count of an n-gram rather than its weight, a third less memory.
+  `LexicalMemory::with_threads(n)` caps the threads a lookup is split among — 1 keeps it on the caller's thread — for
+  a host that answers many requests at once or keeps its own budget of threads.
 
 ### Added
 

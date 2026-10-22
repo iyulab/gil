@@ -136,6 +136,12 @@ public static class Replay
             writer.WriteString("rule", options.Rule == ThresholdRule.Pooled ? "pooled" : "every_band");
             writer.WriteBoolean("decisions", options.Decisions);
             writer.WriteNumber("typed_longest", options.TypedLongest);
+            if (options.Threads is { } threads)
+            {
+                ArgumentOutOfRangeException.ThrowIfLessThan(threads, 1, nameof(options));
+                writer.WriteNumber("threads", threads);
+            }
+
             writer.WriteEndObject();
         }
 

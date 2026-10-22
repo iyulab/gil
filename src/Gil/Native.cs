@@ -56,7 +56,7 @@ internal static unsafe partial class Native
     internal static partial void RecordsFree(nint records);
 
     [LibraryImport(Library, EntryPoint = "gil_decider_new")]
-    internal static partial int DeciderNew(byte similarRecords, nint* output);
+    internal static partial int DeciderNew(byte similarRecords, nuint threads, nint* output);
 
     [LibraryImport(Library, EntryPoint = "gil_decider_free")]
     internal static partial void DeciderFree(nint decider);

@@ -25,6 +25,8 @@ pub struct Match {
 pub struct LexicalMemory {
     min_gram: usize,
     max_gram: usize,
+    /// The most threads a lookup is split among.
+    threads: usize,
     indexes: HashMap<String, Index>,
 }
 
@@ -42,8 +44,24 @@ impl LexicalMemory {
         Self {
             min_gram,
             max_gram,
+            threads: MOST_THREADS,
             indexes: HashMap::new(),
         }
+    }
+
+    /// The memory with a lookup split among at most `threads` threads — 1 keeps every lookup on the caller's thread. By
+    /// default a lookup over a large memory is split among as many as the machine offers, up to eight; a host that
+    /// answers many requests at once, or keeps its own budget of threads, sets it. The answers are the same to the bit
+    /// whatever the number.
+    pub fn with_threads(mut self, threads: usize) -> Self {
+        assert!(threads >= 1, "threads must be at least 1");
+        self.threads = threads;
+        self
+    }
+
+    /// The most threads a lookup is split among.
+    pub fn threads(&self) -> usize {
+        self.threads
     }
 
     /// How many answers the task's memory holds.
@@ -77,7 +95,11 @@ impl LexicalMemory {
         };
 
         index
-            .nearest(&text::grams(state, self.min_gram, self.max_gram), count)
+            .nearest(
+                &text::grams(state, self.min_gram, self.max_gram),
+                count,
+                self.threads,
+            )
             .into_iter()
             .map(|(r, similarity)| Match {
                 source: index.rows[r].key.clone(),
@@ -112,8 +134,8 @@ struct Postings {
 /// A slot whose row is gone.
 const GONE: u32 = u32::MAX;
 
-/// The products a lookup adds before it is split among threads, and the most threads it is split among: below the
-/// first, starting threads costs more than it saves.
+/// The products a lookup adds before it is split among threads, and the most threads it is split among by default:
+/// below the first, starting threads costs more than it saves.
 const SPLIT_AT: usize = 1 << 18;
 const MOST_THREADS: usize = 8;
 
@@ -249,17 +271,17 @@ impl Index {
 
     /// The `count` rows most similar to the query and their similarities, most similar first; on a tie, the one
     /// remembered first.
-    fn nearest(&self, query: &[(String, u32)], count: usize) -> Vec<(usize, f64)> {
+    fn nearest(&self, query: &[(String, u32)], count: usize, most: usize) -> Vec<(usize, f64)> {
         let (ids, weights, query_norm) = self.weigh_query(query);
         let products: usize = ids
             .iter()
             .filter_map(|&id| self.postings.get(id))
             .map(|p| p.slots.len())
             .sum();
-        let threads = if products < SPLIT_AT || query_norm == 0.0 {
+        let threads = if products < SPLIT_AT || query_norm == 0.0 || most == 1 {
             1
         } else {
-            std::thread::available_parallelism().map_or(1, |n| n.get().min(MOST_THREADS))
+            std::thread::available_parallelism().map_or(1, |n| n.get().min(most))
         };
         let slots = self.next_slot as usize;
         let span = slots.div_ceil(threads).max(1);
@@ -739,6 +761,41 @@ mod tests {
             .into_iter()
             .map(|(r, s)| (index.rows[r].key.clone(), s.to_bits()))
             .collect()
+    }
+
+    #[test]
+    fn a_lookup_kept_on_one_thread_finds_what_a_split_one_finds() {
+        let text = |i: usize| {
+            format!(
+                "license inspection restaurant canvass risk high zip 606 {i} {}",
+                i * 7
+            )
+        };
+        let mut split = LexicalMemory::default();
+        let mut single = LexicalMemory::default().with_threads(1);
+        for i in 0..4_000 {
+            split.remember("task", &format!("k{i}"), &text(i), &format!("a{}", i % 13));
+            single.remember("task", &format!("k{i}"), &text(i), &format!("a{}", i % 13));
+        }
+        let index = &split.indexes["task"];
+        let (ids, _, _) = index.weigh_query(&text::grams(&text(4_001), 2, 3));
+        let products: usize = ids
+            .iter()
+            .filter_map(|&id| index.postings.get(id))
+            .map(|p| p.slots.len())
+            .sum();
+        assert!(products >= SPLIT_AT, "the lookup is large enough to split");
+        assert_eq!((split.threads(), single.threads()), (MOST_THREADS, 1));
+        assert_eq!(
+            split.nearest("task", &text(4_001), 10),
+            single.nearest("task", &text(4_001), 10)
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "threads must be at least 1")]
+    fn no_threads_is_refused() {
+        let _ = LexicalMemory::default().with_threads(0);
     }
 
     #[test]

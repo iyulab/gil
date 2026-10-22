@@ -366,17 +366,30 @@ pub unsafe extern "C" fn gil_schema_free(schema: *mut GilSchema) {
     unsafe { release(schema) }
 }
 
-/// A decider with empty memories — with the similar record memory unless `similar_records` is false — handed out
-/// through `out`.
+/// A similar record memory whose lookups are split among at most `threads` threads — 0 for the core's default.
+fn record_memory(memory: LexicalMemory, threads: usize) -> LexicalMemory {
+    if threads == 0 {
+        memory
+    } else {
+        memory.with_threads(threads)
+    }
+}
+
+/// A decider with empty memories — with the similar record memory unless `similar_records` is false, its lookups split
+/// among at most `threads` threads (0: the core's default, 1: none) — handed out through `out`.
 ///
 /// # Safety
 /// `out` points to one writable pointer.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gil_decider_new(similar_records: bool, out: *mut *mut GilDecider) -> i32 {
+pub unsafe extern "C" fn gil_decider_new(
+    similar_records: bool,
+    threads: usize,
+    out: *mut *mut GilDecider,
+) -> i32 {
     call(|| {
         let decider = Decider::new(
             KeyMemory::default(),
-            similar_records.then(LexicalMemory::default),
+            similar_records.then(|| record_memory(LexicalMemory::default(), threads)),
         );
         // SAFETY: forwarded from the caller.
         unsafe {
@@ -948,6 +961,9 @@ struct Options {
     decisions: bool,
     #[serde(default)]
     typed_longest: usize,
+    /// The most threads a similar-record lookup of the replay is split among; 0 for the core's default.
+    #[serde(default)]
+    threads: usize,
 }
 
 impl Options {
@@ -1041,7 +1057,7 @@ pub unsafe extern "C" fn gil_select_layers(
         let mut decisions = options.decisions.then(Vec::new);
         let thresholds = select_layers(
             &mut KeyMemory::default(),
-            &mut LexicalMemory::default(),
+            &mut record_memory(LexicalMemory::default(), options.threads),
             schema,
             attribute,
             records,
@@ -1080,7 +1096,7 @@ pub unsafe extern "C" fn gil_select_coarse(
         let mut decisions = options.decisions.then(Vec::new);
         let thresholds = select_coarse_with(
             &mut KeyMemory::default(),
-            &mut LexicalMemory::default(),
+            &mut record_memory(LexicalMemory::default(), options.threads),
             schema,
             attribute,
             records,
@@ -1512,7 +1528,8 @@ pub unsafe extern "C" fn gil_ask_planner_advise(
 }
 
 /// A lexical memory comparing runs of `min_gram` to `max_gram` Unicode scalars (at least 1, and `max_gram` at least
-/// `min_gram` — else `GIL_INVALID_INPUT`), handed out through `out`.
+/// `min_gram` — else `GIL_INVALID_INPUT`), its lookups split among at most `threads` threads (0: the core's default,
+/// 1: none), handed out through `out`.
 ///
 /// # Safety
 /// `out` points to one writable pointer.
@@ -1520,6 +1537,7 @@ pub unsafe extern "C" fn gil_ask_planner_advise(
 pub unsafe extern "C" fn gil_lexical_memory_new(
     min_gram: usize,
     max_gram: usize,
+    threads: usize,
     out: *mut *mut GilLexicalMemory,
 ) -> i32 {
     call(|| {
@@ -1530,7 +1548,7 @@ pub unsafe extern "C" fn gil_lexical_memory_new(
             return Err(input("max_gram must be at least min_gram"));
         }
         let memory = GilLexicalMemory {
-            memory: LexicalMemory::new(min_gram, max_gram),
+            memory: record_memory(LexicalMemory::new(min_gram, max_gram), threads),
             broken: AtomicBool::new(false),
         };
         // SAFETY: forwarded from the caller.
@@ -1665,7 +1683,7 @@ mod tests {
     #[test]
     fn a_panic_in_a_changing_call_breaks_the_handles_it_was_changing() {
         let mut decider = std::ptr::null_mut();
-        assert_eq!(unsafe { gil_decider_new(false, &mut decider) }, GIL_OK);
+        assert_eq!(unsafe { gil_decider_new(false, 0, &mut decider) }, GIL_OK);
 
         // A refusal is not a panic: the handle stays usable.
         unsafe { break_on_panic(GIL_INVALID_INPUT, decider) };

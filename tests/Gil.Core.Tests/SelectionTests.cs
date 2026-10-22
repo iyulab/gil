@@ -152,6 +152,24 @@ public sealed class SelectionTests
     });
 
     [Fact]
+    public void A_replay_or_a_decider_kept_on_one_thread_gives_the_same()
+    {
+        var (schema, records) = Early();
+        using var _ = schema;
+        using var __ = records;
+        var call = Of("layers").First();
+        var options = Options(call["options"]!);
+        var single = Replay.SelectLayersJson(schema, (string)call["attribute"]!, records, options with { Threads = 1 });
+        Same(single, call["result"], "one thread");
+
+        using var decider = new Decider(threads: 1);
+        decider.Put(schema, records);
+        FluentActions.Invoking(() => new Decider(threads: 0)).Should().Throw<ArgumentOutOfRangeException>();
+        FluentActions.Invoking(() => Replay.SelectLayersJson(schema, (string)call["attribute"]!, records, options with { Threads = 0 }))
+            .Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
     public void A_tuning_round_trip_gives_what_the_C_ABI_gave()
     {
         var (schema, records) = Early();

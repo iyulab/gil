@@ -112,6 +112,10 @@ public sealed record SelectionOptions(double TargetPrecision, int MinimumAnswere
 
     /// <summary>The key attributes' selection: count typing up to that many characters (0: none).</summary>
     public int TypedLongest { get; init; }
+
+    /// <summary>The most threads one similar-record lookup of the replay is split among; null for as many as the machine
+    /// offers, up to eight; 1 keeps the replay on the caller's thread. The choice is the same whatever it is.</summary>
+    public int? Threads { get; init; }
 }
 
 /// <summary>One decision for the usage counts: the attribute, the value answered (null: none), the value settled (null:

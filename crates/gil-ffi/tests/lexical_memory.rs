@@ -41,7 +41,7 @@ fn task(attribute: &str) -> String {
 
 fn new_memory() -> *mut GilLexicalMemory {
     let mut memory = ptr::null_mut();
-    ok(unsafe { gil_lexical_memory_new(2, 3, &mut memory) });
+    ok(unsafe { gil_lexical_memory_new(2, 3, 0, &mut memory) });
     memory
 }
 
@@ -151,12 +151,12 @@ fn an_empty_memory_finds_nothing_and_counts_none() {
 fn rules_broken_are_refused_as_input() {
     let mut memory = ptr::null_mut();
     assert_eq!(
-        unsafe { gil_lexical_memory_new(0, 3, &mut memory) },
+        unsafe { gil_lexical_memory_new(0, 3, 0, &mut memory) },
         GIL_INVALID_INPUT
     );
     assert_eq!(copied(gil_last_error), "min_gram must be at least 1");
     assert_eq!(
-        unsafe { gil_lexical_memory_new(3, 2, &mut memory) },
+        unsafe { gil_lexical_memory_new(3, 2, 0, &mut memory) },
         GIL_INVALID_INPUT
     );
     assert_eq!(copied(gil_last_error), "max_gram must be at least min_gram");
