@@ -802,13 +802,24 @@ fn tuning_capture_json(
     )
 }
 
-/// The tuning with what `attribute`'s layer replay (JSON, as `select_layers_json` gives it) promised, as JSON.
+/// The tuning with what `attribute`'s layer replay (JSON, as `select_layers_json` gives it) promised — its coarse
+/// level's, from `select_coarse_json`, when `coarse` — as JSON.
 #[pyfunction]
-fn tuning_promise_json(tuning_json: &str, attribute: &str, layers_json: &str) -> PyResult<String> {
+#[pyo3(signature = (tuning_json, attribute, layers_json, coarse = false))]
+fn tuning_promise_json(
+    tuning_json: &str,
+    attribute: &str,
+    layers_json: &str,
+    coarse: bool,
+) -> PyResult<String> {
     let mut tuned = tuning(tuning_json)?;
     let layers: LayerThresholds = serde_json::from_str(layers_json)
         .map_err(|e| invalid(format!("a layer replay does not read: {e}")))?;
-    guarded(|| tuned.promise(attribute, &layers))?;
+    if coarse {
+        guarded(|| tuned.promise_coarse(attribute, &layers))?;
+    } else {
+        guarded(|| tuned.promise(attribute, &layers))?;
+    }
     Ok(to_json(&tuned))
 }
 

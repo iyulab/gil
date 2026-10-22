@@ -18,6 +18,10 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   value thresholds just chosen (`KeeperChoice.Coarse`), on the same replay. A record settled out of order, or
   `Remove(decider, id)`, has the next choice replay from the start. The native library speaks version 5 of its C
   interface.
+- **A coarse class has a promise of its own.** `Tuning.PromiseCoarse(attribute, thresholds)` records what a coarse
+  selection's chosen thresholds promised (`AttributeTuning.CoarseKeyPromise` · `CoarseMemoryPromise`), and
+  `CoarsePromiseOf(attribute, source)` reads it back by the coarse candidate's source; `PromiseOf` reads the value's
+  layers only. A keeper records both.
 - **A settled record can say what was in view, how long it took and who settled it.** `Record.Suggested` (the value
   in view when a decided attribute was settled), `Sources` (the layer of the answer in view), `Promises` (the precision
   promised for it then, in [0, 1] — `Tuning.PromiseOf`), `SettleMs` (per attribute, the milliseconds from reaching it

@@ -129,6 +129,9 @@ internal static unsafe partial class Native
     [LibraryImport(Library, EntryPoint = "gil_tuning_promise")]
     internal static partial int TuningPromise(Str tuning, Str attribute, Str thresholds, nuint* resultLen);
 
+    [LibraryImport(Library, EntryPoint = "gil_tuning_promise_coarse")]
+    internal static partial int TuningPromiseCoarse(Str tuning, Str attribute, Str thresholds, nuint* resultLen);
+
     [LibraryImport(Library, EntryPoint = "gil_schema_with_layers")]
     internal static partial int SchemaWithLayers(SchemaHandle schema, Str attribute, Str thresholds, nint* output);
 

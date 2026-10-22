@@ -563,6 +563,18 @@ def test_a_keeper_rechooses_as_a_selection_from_the_start() -> None:
                     decisions=False,
                 )
                 assert choice["coarse"][attribute] == level, f"{attribute} coarse at {at}"
+                # The tuning carries the level's promises, apart from the value's.
+                memory = level["memory"]["chosen"]
+                assert gil.coarse_promise_of(keeper.tuning, attribute, "SimilarRecord") == (
+                    None if memory is None else memory["promise"]
+                )
+                promised = gil.record_coarse_promise(
+                    gil.capture_tuning(schema, at, 0.8), attribute, level
+                )
+                assert gil.coarse_promise_of(promised, attribute, "SimilarRecord") == (
+                    None if memory is None else memory["promise"]
+                )
+                assert gil.promise_of(promised, attribute, "SimilarRecord") is None
         assert set(choice["coarse"]) == {"code"}
     # The schema carries the choice, and the tuning its promises.
     team = keeper.state()["chosen"]["team"]

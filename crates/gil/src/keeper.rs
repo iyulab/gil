@@ -259,6 +259,9 @@ impl Keeper {
         for (attribute, thresholds) in &chosen {
             tuning.promise(attribute, thresholds);
         }
+        for (attribute, level) in &coarse {
+            tuning.promise_coarse(attribute, level);
+        }
         self.schema = schema;
         self.chosen = chosen;
         self.coarse = coarse;
@@ -531,6 +534,12 @@ mod tests {
                 format!("{:?}", keeper.chosen_coarse("team").unwrap()),
                 format!("{level:?}"),
                 "level at {at}"
+            );
+            assert_eq!(
+                keeper
+                    .tuning()
+                    .coarse_promise_of("team", crate::decider::Source::SimilarRecord),
+                level.memory.chosen.as_ref().map(|c| c.promise)
             );
             let on_schema = keeper.schema().attribute("team").coarse.as_ref().unwrap();
             assert_eq!(

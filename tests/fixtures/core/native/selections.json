@@ -7804,8 +7804,10 @@
       "attributes": [
         {
           "attribute": "team",
+          "coarse_key_promise": null,
           "coarse_key_threshold": null,
           "coarse_memory_floor": null,
+          "coarse_memory_promise": null,
           "coarse_memory_threshold": null,
           "key_concentrations": {
             "product": 0.5639739377730799
@@ -7822,8 +7824,10 @@
         },
         {
           "attribute": "code",
+          "coarse_key_promise": null,
           "coarse_key_threshold": 0.8180606243999566,
           "coarse_memory_floor": null,
+          "coarse_memory_promise": null,
           "coarse_memory_threshold": null,
           "key_concentrations": {},
           "key_fields": null,
@@ -7836,8 +7840,10 @@
         },
         {
           "attribute": "tags",
+          "coarse_key_promise": null,
           "coarse_key_threshold": null,
           "coarse_memory_floor": null,
+          "coarse_memory_promise": null,
           "coarse_memory_threshold": null,
           "key_concentrations": {},
           "key_fields": null,
@@ -7858,8 +7864,10 @@
       "attributes": [
         {
           "attribute": "team",
+          "coarse_key_promise": null,
           "coarse_key_threshold": null,
           "coarse_memory_floor": null,
+          "coarse_memory_promise": null,
           "coarse_memory_threshold": null,
           "key_concentrations": {
             "product": 0.5639739377730799
@@ -7876,8 +7884,10 @@
         },
         {
           "attribute": "code",
+          "coarse_key_promise": null,
           "coarse_key_threshold": 0.8180606243999566,
           "coarse_memory_floor": null,
+          "coarse_memory_promise": null,
           "coarse_memory_threshold": null,
           "key_concentrations": {},
           "key_fields": null,
@@ -7890,8 +7900,10 @@
         },
         {
           "attribute": "tags",
+          "coarse_key_promise": null,
           "coarse_key_threshold": null,
           "coarse_memory_floor": null,
+          "coarse_memory_promise": null,
           "coarse_memory_threshold": null,
           "key_concentrations": {},
           "key_fields": null,

@@ -182,7 +182,7 @@ using var current = kept.Stale(schema, saved.Count) is null ? kept.Apply(schema)
 `WithLayers` puts the key threshold, the memory threshold and its similarity floor on the attribute, leaving a layer
 with no chosen threshold unset (`WithCoarse` does the same for a coarse level). `Promise` records the precision each
 chosen threshold promises for the next answers, and `PromiseOf` reads back the one an answer was made under, by the
-layer it came from; `Usage.Count` over what was answered and settled since reports how each attribute's answers fared
+layer it came from (a coarse class's is `CoarsePromiseOf`, recorded with `PromiseCoarse`); `Usage.Count` over what was answered and settled since reports how each attribute's answers fared
 against it:
 
 ```csharp

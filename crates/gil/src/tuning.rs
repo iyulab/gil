@@ -37,6 +37,10 @@ pub struct AttributeTuning {
     pub key_promise: Option<f64>,
     /// The precision the similar record layer's chosen threshold promised for the next answers.
     pub memory_promise: Option<f64>,
+    /// The precision the coarse level's chosen key threshold promised for the next classes it offers.
+    pub coarse_key_promise: Option<f64>,
+    /// The precision the coarse level's chosen memory threshold promised for the next classes it offers.
+    pub coarse_memory_promise: Option<f64>,
 }
 
 /// The chosen settings of a schema's decided attributes and what they were chosen on.
@@ -89,6 +93,8 @@ impl Tuning {
                 coarse_memory_floor: a.coarse.as_ref().and_then(|c| c.memory_floor),
                 key_promise: None,
                 memory_promise: None,
+                coarse_key_promise: None,
+                coarse_memory_promise: None,
             })
             .collect();
         Self {
@@ -118,12 +124,40 @@ impl Tuning {
     /// memory, the similar record layer's for one from the similar records; `None` for no answer, an outside judgement,
     /// an attribute the tuning does not name, or a promise it did not record ([`Tuning::promise`]). It reads the value's
     /// layers only: a coarse class offered instead ([`crate::decider::Answer::coarse`]) names the layer that backs the
-    /// class, and what the value's layer promised is not what the class's does.
+    /// class, and its promise is [`Tuning::coarse_promise_of`]'s.
     pub fn promise_of(&self, attribute: &str, source: Source) -> Option<f64> {
         let tuned = self.attributes.iter().find(|a| a.attribute == attribute)?;
         match source {
             Source::KeyMemory => tuned.key_promise,
             Source::SimilarRecord => tuned.memory_promise,
+            Source::None | Source::External => None,
+        }
+    }
+
+    /// Records the promises of `attribute`'s coarse replay ([`crate::replay::select_coarse`]): what its coarse level's
+    /// chosen key and memory thresholds promised.
+    ///
+    /// # Panics
+    /// When the tuning has no such attribute.
+    pub fn promise_coarse(&mut self, attribute: &str, layers: &LayerThresholds) {
+        let tuned = self
+            .attributes
+            .iter_mut()
+            .find(|a| a.attribute == attribute)
+            .unwrap_or_else(|| panic!("the tuning has no attribute '{attribute}'"));
+        tuned.coarse_key_promise = layers.key.chosen.as_ref().map(|c| c.promise);
+        tuned.coarse_memory_promise = layers.memory.chosen.as_ref().map(|c| c.promise);
+    }
+
+    /// What the coarse level promised for a class it offered for `attribute`, by the layer that backs the class (the
+    /// coarse candidate's source): the level's key promise for the keys' class, its memory promise for the similar
+    /// records'; `None` as for [`Tuning::promise_of`] ([`Tuning::promise_coarse`] records them). A class offered as a
+    /// guess — not trusted — was not promised anything.
+    pub fn coarse_promise_of(&self, attribute: &str, source: Source) -> Option<f64> {
+        let tuned = self.attributes.iter().find(|a| a.attribute == attribute)?;
+        match source {
+            Source::KeyMemory => tuned.coarse_key_promise,
+            Source::SimilarRecord => tuned.coarse_memory_promise,
             Source::None | Source::External => None,
         }
     }

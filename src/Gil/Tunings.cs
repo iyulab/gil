@@ -58,7 +58,7 @@ public sealed record Tuning(
     /// <see cref="Source.SimilarRecord"/>; null for no answer, an outside judgement, an attribute the tuning does not
     /// name, or a promise it did not record (<see cref="Promise"/>). It reads the value's layers only: a coarse class
     /// offered instead (the answer's <c>Coarse</c>) names the layer that backs the class, and what the value's layer
-    /// promised is not what the class's does.</summary>
+    /// promised is not what the class's does — its promise is <see cref="CoarsePromiseOf"/>'s.</summary>
     public double? PromiseOf(string attribute, Source source)
     {
         ArgumentNullException.ThrowIfNull(attribute);
@@ -67,6 +67,34 @@ public sealed record Tuning(
         {
             Source.KeyMemory => tuned?.KeyPromise,
             Source.SimilarRecord => tuned?.MemoryPromise,
+            _ => null,
+        };
+    }
+
+    /// <summary>The tuning with what <paramref name="attribute"/>'s coarse selection
+    /// (<see cref="Replay.SelectCoarse"/>) promised: the precisions its coarse level's chosen thresholds promised for the
+    /// next classes it offers.</summary>
+    /// <exception cref="ArgumentException">The tuning has no such attribute.</exception>
+    public Tuning PromiseCoarse(string attribute, LayerThresholds thresholds)
+    {
+        ArgumentNullException.ThrowIfNull(thresholds);
+        return Read(TuningJson.PromiseJson(
+            ToJson(), attribute, JsonSerializer.Serialize(thresholds, CoreJson.Default.LayerThresholds), coarse: true));
+    }
+
+    /// <summary>What the coarse level promised for a class it offered for <paramref name="attribute"/>, by the layer that
+    /// backs the class (the coarse candidate's source): the level's key promise for <see cref="Source.KeyMemory"/>, its
+    /// memory promise for <see cref="Source.SimilarRecord"/>; null as for <see cref="PromiseOf"/>
+    /// (<see cref="PromiseCoarse"/> records them). A class offered as a guess — not trusted — was not promised
+    /// anything.</summary>
+    public double? CoarsePromiseOf(string attribute, Source source)
+    {
+        ArgumentNullException.ThrowIfNull(attribute);
+        var tuned = Attributes.FirstOrDefault(a => a.Attribute == attribute);
+        return source switch
+        {
+            Source.KeyMemory => tuned?.CoarseKeyPromise,
+            Source.SimilarRecord => tuned?.CoarseMemoryPromise,
             _ => null,
         };
     }
@@ -124,6 +152,13 @@ public sealed record AttributeTuning(string Attribute)
 
     /// <summary>The precision the similar record layer's chosen threshold promised for the next answers.</summary>
     public double? MemoryPromise { get; init; }
+
+    /// <summary>The precision the coarse level's chosen key threshold promised for the next classes it offers.</summary>
+    public double? CoarseKeyPromise { get; init; }
+
+    /// <summary>The precision the coarse level's chosen memory threshold promised for the next classes it
+    /// offers.</summary>
+    public double? CoarseMemoryPromise { get; init; }
 }
 
 /// <summary>Why a tuning no longer stands.</summary>

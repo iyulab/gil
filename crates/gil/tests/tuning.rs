@@ -284,3 +284,35 @@ fn an_answer_reads_its_promise_from_the_layer_it_came_from() {
     assert_eq!(tuning.promise_of("team", Source::External), None);
     assert_eq!(tuning.promise_of("nothing", Source::KeyMemory), None);
 }
+
+#[test]
+fn a_coarse_class_reads_its_promise_from_the_level_not_the_value() {
+    let mut tuning = Tuning::capture(&schema(), 1_000, 0.8);
+    tuning.promise(
+        "team",
+        &LayerThresholds {
+            key: choice(1.25, 0.86),
+            memory: choice(0.6, 0.82),
+            batches: None,
+        },
+    );
+    assert_eq!(tuning.coarse_promise_of("team", Source::KeyMemory), None);
+    tuning.promise_coarse(
+        "team",
+        &LayerThresholds {
+            key: choice(2.0, 0.93),
+            memory: choice(0.4, 0.9),
+            batches: None,
+        },
+    );
+    assert_eq!(
+        tuning.coarse_promise_of("team", Source::KeyMemory),
+        Some(0.93)
+    );
+    assert_eq!(
+        tuning.coarse_promise_of("team", Source::SimilarRecord),
+        Some(0.9)
+    );
+    assert_eq!(tuning.coarse_promise_of("team", Source::External), None);
+    assert_eq!(tuning.promise_of("team", Source::KeyMemory), Some(0.86));
+}

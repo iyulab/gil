@@ -52,9 +52,15 @@ public sealed class KeeperTests
                 {
                     // The level on the lookups the value thresholds just chosen leave.
                     using var withValues = schema.WithLayers(attribute, alone);
-                    Json(level).Should().Be(
-                        Json(Replay.SelectCoarse(withValues, attribute, all, options).Thresholds),
-                        $"{attribute}'s coarse level at {at}");
+                    var coarse = Replay.SelectCoarse(withValues, attribute, all, options).Thresholds;
+                    Json(level).Should().Be(Json(coarse), $"{attribute}'s coarse level at {at}");
+
+                    // The tuning carries the level's promises, apart from the value's.
+                    keeper.Tuning.CoarsePromiseOf(attribute, Source.SimilarRecord).Should().Be(coarse.Memory.Chosen?.Promise);
+                    keeper.Tuning.CoarsePromiseOf(attribute, Source.KeyMemory).Should().Be(coarse.Key.Chosen?.Promise);
+                    var promised = Gil.Tuning.Capture(schema, at, 0.8).PromiseCoarse(attribute, coarse);
+                    promised.CoarsePromiseOf(attribute, Source.SimilarRecord).Should().Be(coarse.Memory.Chosen?.Promise);
+                    promised.PromiseOf(attribute, Source.SimilarRecord).Should().BeNull();
                 }
             }
 

@@ -1304,6 +1304,52 @@ pub unsafe extern "C" fn gil_tuning_promise(
     thresholds: GilStr,
     result_len: *mut usize,
 ) -> i32 {
+    // SAFETY: forwarded from the caller.
+    unsafe {
+        tuning_with(
+            tuning_json,
+            attribute,
+            thresholds,
+            result_len,
+            Tuning::promise,
+        )
+    }
+}
+
+/// As [`gil_tuning_promise`], for what a coarse selection (`gil_select_coarse`) promised: the coarse level's promises.
+///
+/// # Safety
+/// As [`gil_tuning_promise`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_tuning_promise_coarse(
+    tuning_json: GilStr,
+    attribute: GilStr,
+    thresholds: GilStr,
+    result_len: *mut usize,
+) -> i32 {
+    // SAFETY: forwarded from the caller.
+    unsafe {
+        tuning_with(
+            tuning_json,
+            attribute,
+            thresholds,
+            result_len,
+            Tuning::promise_coarse,
+        )
+    }
+}
+
+/// Keeps as the result the tuning with `record` made of `attribute`'s thresholds.
+///
+/// # Safety
+/// As [`gil_tuning_promise`].
+unsafe fn tuning_with(
+    tuning_json: GilStr,
+    attribute: GilStr,
+    thresholds: GilStr,
+    result_len: *mut usize,
+    record: fn(&mut Tuning, &str, &LayerThresholds),
+) -> i32 {
     call(|| {
         if result_len.is_null() {
             return Err(argument("result_len is null"));
@@ -1312,7 +1358,7 @@ pub unsafe extern "C" fn gil_tuning_promise(
         let mut tuned = unsafe { tuning(tuning_json) }?;
         let attribute = unsafe { text(attribute, "attribute") }?;
         let thresholds = unsafe { layer_thresholds(thresholds) }?;
-        tuned.promise(attribute, &thresholds);
+        record(&mut tuned, attribute, &thresholds);
         let value = serde_json::to_value(tuned).expect("a tuning serializes");
         unsafe { result(&value, result_len) }
     })

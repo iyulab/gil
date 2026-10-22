@@ -81,8 +81,10 @@ __all__ = [
     "TypedLook",
     "apply_tuning",
     "capture_tuning",
+    "coarse_promise_of",
     "promise_of",
     "read_records",
+    "record_coarse_promise",
     "record_promise",
     "records",
     "select_coarse",
@@ -832,8 +834,38 @@ def promise_of(tuning: dict[str, Any], attribute: str, source: str) -> float | N
     ``source`` is ``"KeyMemory"``, the similar record layer's for ``"SimilarRecord"``; ``None`` for no answer, an
     outside judgement, an attribute the tuning does not name, or a promise it did not record (:func:`record_promise`).
     It reads the value's layers only: a coarse class offered instead (the answer's ``coarse``) names the layer that backs
-    the class, and what the value's layer promised is not what the class's does."""
+    the class, and its promise is :func:`coarse_promise_of`'s."""
     field = {"KeyMemory": "key_promise", "SimilarRecord": "memory_promise"}.get(source)
+    tuned = next(
+        (a for a in tuning["attributes"] if a["attribute"] == attribute), None
+    )
+    return None if field is None or tuned is None else tuned.get(field)
+
+
+def record_coarse_promise(
+    tuning: dict[str, Any], attribute: str, layers: LayerThresholds
+) -> dict[str, Any]:
+    """``tuning`` with what ``attribute``'s coarse level's chosen thresholds promised (from :func:`select_coarse`)."""
+    return cast(
+        dict[str, Any],
+        json.loads(
+            tuning_promise_json(
+                json.dumps(tuning), attribute, json.dumps(layers), coarse=True
+            )
+        ),
+    )
+
+
+def coarse_promise_of(
+    tuning: dict[str, Any], attribute: str, source: str
+) -> float | None:
+    """What the coarse level promised for a class it offered for ``attribute``, by the layer that backs the class (the
+    coarse candidate's ``source``): the level's key promise for ``"KeyMemory"``, its memory promise for
+    ``"SimilarRecord"``; ``None`` as for :func:`promise_of` (:func:`record_coarse_promise` records them). A class offered
+    as a guess — not trusted — was not promised anything."""
+    field = {"KeyMemory": "coarse_key_promise", "SimilarRecord": "coarse_memory_promise"}.get(
+        source
+    )
     tuned = next(
         (a for a in tuning["attributes"] if a["attribute"] == attribute), None
     )

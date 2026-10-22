@@ -163,9 +163,10 @@ internal static class TuningJson
     }
 
     /// <summary>The tuning with what <paramref name="attribute"/>'s layers selection promised — its
-    /// <c>thresholds</c>, JSON as <see cref="Replay.SelectLayersJson"/> gives them.</summary>
+    /// <c>thresholds</c>, JSON as <see cref="Replay.SelectLayersJson"/> gives them — or, when <paramref name="coarse"/>,
+    /// what its coarse selection promised.</summary>
     /// <exception cref="ArgumentException">The tuning or the thresholds do not read.</exception>
-    internal static unsafe string PromiseJson(string tuningJson, string attribute, string thresholdsJson)
+    internal static unsafe string PromiseJson(string tuningJson, string attribute, string thresholdsJson, bool coarse = false)
     {
         ArgumentNullException.ThrowIfNull(tuningJson);
         ArgumentNullException.ThrowIfNull(attribute);
@@ -178,7 +179,9 @@ internal static class TuningJson
         fixed (byte* a = &name.Pin())
         fixed (byte* h = &thresholds.Pin())
         {
-            return Native.Result(Native.TuningPromise(tuning.At(t), name.At(a), thresholds.At(h), &length));
+            return Native.Result(coarse
+                ? Native.TuningPromiseCoarse(tuning.At(t), name.At(a), thresholds.At(h), &length)
+                : Native.TuningPromise(tuning.At(t), name.At(a), thresholds.At(h), &length));
         }
     }
 

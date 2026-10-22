@@ -209,8 +209,9 @@ class OpenRecord:
 def tuning_capture_json(schema_json: str, settled: int, target_precision: float) -> str:
     """The chosen settings of the schema's decided attributes, chosen on `settled` records for `target_precision`, as JSON."""
 
-def tuning_promise_json(tuning_json: str, attribute: str, layers_json: str) -> str:
-    """The tuning with what `attribute`'s layer replay (JSON, as `select_layers_json` gives it) promised, as JSON."""
+def tuning_promise_json(tuning_json: str, attribute: str, layers_json: str, coarse: bool = False) -> str:
+    """The tuning with what `attribute`'s layer replay (JSON, as `select_layers_json` gives it) promised — its coarse
+    level's, from `select_coarse_json`, when `coarse` — as JSON."""
 
 def schema_with_layers_json(
     schema_json: str, attribute: str, layers_json: str, coarse: bool

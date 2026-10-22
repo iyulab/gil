@@ -200,7 +200,8 @@ one taken out with `keeper.remove(decider, id)`, has the next choice replay from
 the process: a keeper made at start-up replays the saved records once.
 
 An answer does not carry its promise; the promise is its layer's, which `gil.promise_of` reads from the tuning by the
-answer's `source` (`keeper.tuning` for a keeper's).
+answer's `source` (`keeper.tuning` for a keeper's). A coarse class offered instead reads its promise with
+`gil.coarse_promise_of` by the coarse candidate's `source` — the value's layer promised nothing for it.
 `gil.usage(decisions)` counts, without content, how the answers shown were settled and the precision they realized —
 `right_weight / judged_weight`, to read against `promise_sum / promised`:
 
