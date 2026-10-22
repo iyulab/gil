@@ -87,7 +87,7 @@ jobs:
       - run: dotnet test --solution bindings/csharp/Gil.Review.slnx
 
       # The Python bindings (bindings/python): built as a wheel and tested against the same goldens. Nothing is published.
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - run: cargo clippy -p gil-py --all-targets --locked -- -D warnings

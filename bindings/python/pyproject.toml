@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "iyulab-gil"
-description = "Suggests and decides form field values from how settled documents were filled."
+description = "Answers the decided attributes of a record from the records people already settled, with the precision each answer layer promises."
 requires-python = ">=3.11"
 license = "Apache-2.0"
 readme = "README.md"
@@ -19,7 +19,7 @@ classifiers = [
 
 [project.urls]
 Repository = "https://github.com/iyulab/gil"
-Changelog = "https://github.com/iyulab/gil/blob/rust-core/crates/gil/CHANGELOG.md"
+Changelog = "https://github.com/iyulab/gil/blob/main/crates/gil/CHANGELOG.md"
 
 [tool.maturin]
 python-source = "python"

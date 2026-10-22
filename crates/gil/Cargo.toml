@@ -1,7 +1,7 @@
 [package]
 name = "iyulab-gil"
 version = "0.7.0"
-description = "Suggests and decides form field values from how settled documents were filled - the decision core, with no I/O."
+description = "Answers the decided attributes of a record from the records people already settled, with the precision each answer layer promises - the decision core, with no I/O."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

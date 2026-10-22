@@ -6,11 +6,11 @@ be right. A record can be a form being filled in, an issue waiting for its compo
 class, a patent waiting for its group: the core knows attributes and settled values, not forms.
 
 This crate is its decision core, with no I/O. It is published as `iyulab-gil` and imported as `gil`
-(`cargo add iyulab-gil`, then `use gil::…`). It reproduces the language-neutral goldens of the .NET library published
-on NuGet as `Gil` (`tests/fixtures/core` in the repository) to the bit.
+(`cargo add iyulab-gil`, then `use gil::…`). It writes the language-neutral goldens (`tests/fixtures/core` in the repository)
+that the .NET library on NuGet, `Gil`, is checked against — `Gil` runs on this core through its C ABI.
 
 **Status: early.** The API may still change within 0.x — each change is listed in
-[CHANGELOG.md](https://github.com/iyulab/gil/blob/rust-core/crates/gil/CHANGELOG.md) with what to do about it.
+[CHANGELOG.md](https://github.com/iyulab/gil/blob/main/crates/gil/CHANGELOG.md) with what to do about it.
 
 ## Vocabulary
 
@@ -66,8 +66,10 @@ most of the attribute's latest `POOLED_RECENT_LOOKUPS` lookups while all those a
 their Wilson interval at `POOLED_STANDARD_ERRORS` (1.645) standard errors. The bound is on the answers together, not on
 any group of them. Split by who sent the records in — the recalling firm, the bug's reporter, the maintenance report's
 submitter, the hospital — on four public collections, `Pooled` placed 19–22% of its answers with senders whose own
-precision was below the target beyond doubt (the top of a 95% Wilson interval under 0.8), and `EveryBand` none. If you
-read a promise per customer or per site, choose `EveryBand`.
+precision was below the target beyond doubt (the top of a 95% Wilson interval under 0.8), and `EveryBand` none. `EveryBand`
+does not look at the sender, though: when one sender's own settlements are less reliable than the others', it answers
+below the target for that sender too. If you read a promise per customer or per site, choose `EveryBand`, and count
+`usage` over each sender's decisions to see it hold.
 
 ## License
 

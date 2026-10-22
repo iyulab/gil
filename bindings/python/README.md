@@ -66,8 +66,10 @@ layer's own precision and promise.
 The bound is on the answers together, not on any group of them. Split by who sent the records in — the recalling firm,
 the bug's reporter, the maintenance report's submitter, the hospital — on four public collections, `"pooled"` placed
 19–22% of its answers with senders whose own precision was below the target beyond doubt (the top of a 95% Wilson
-interval under 0.8), and the default `"every_band"` none. If you read a promise per customer or per site, keep
-`"every_band"`.
+interval under 0.8), and the default `"every_band"` none. `"every_band"` does not look at the sender, though: when one sender's own
+settlements are less reliable than the others', it answers below the target for that sender too. If you read a
+promise per customer or per site, keep `"every_band"`, and count `gil.usage` over each sender's decisions to see it
+hold.
 
 ```python
 thresholds, _ = gil.select_layers(schema, "team", records, target_precision=0.8, rule="pooled")
@@ -125,6 +127,6 @@ again — another package version, a changed setting, or a tenth more (or fewer)
 counts, without content, how the answers shown were settled and the precision they realized against the promise.
 
 **Status: early.** The API may change within 0.x — each change is listed in
-[CHANGELOG.md](https://github.com/iyulab/gil/blob/rust-core/crates/gil/CHANGELOG.md) with what to do about it.
+[CHANGELOG.md](https://github.com/iyulab/gil/blob/main/crates/gil/CHANGELOG.md) with what to do about it.
 
 Apache-2.0 — see `LICENSE`.

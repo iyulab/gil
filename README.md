@@ -44,6 +44,7 @@ nobody settles (memory then stays empty), or for choosing between models (a rout
 |---|---|
 | `Gil.Abstractions` | The model ports: `IChatModel` and `IEmbeddingModel` with their requests and results |
 | `Gil` | The decision core, native (Rust) behind its C ABI: schemas, settled records, deciders, open records and their typed answers, threshold replay and tuning, usage counts, asking advice (`GIL0005`). It needs no other package |
+| `Gil.Review` | Review statistics for checking automated decisions by hand: stratified samples, Neyman allocation, weighted estimates with intervals, agreement between reviewers — native (Rust) behind its C ABI. It needs no other package |
 | `Gil.Tree` | Everything experimental (`GIL0001`–`GIL0004`): the tree judgment path — the tree YAML reader/writer, the single-token judge, the greedy traverser, output contracts, the fallback generator, slot filling, the resolver (memory → tree → narrowed fallback → full fallback), habits and their promotion, deactivation and differentiation, shadows — and what it is built on: the memories of confirmed answers, the call recorders and energy model, the telemetry contracts |
 | `Gil.IronHive` | Chat and embedding models through any IronHive generator, with ready-made ones for OpenAI-compatible servers (retry rules for busy shared servers, the response kept as received). Optional: implement `IChatModel` and `IEmbeddingModel` yourself and `Gil` needs nothing else |
 | `Gil.Sqlite` | The telemetry store: every trace and model call, habit statistics, promotion and review logs in one SQLite file whose layout is the contract below. Optional: `Gil.Tree` takes any `ITelemetrySink`, and a consumer that keeps no telemetry ships no SQLite native library |
@@ -489,7 +490,9 @@ component classifier had moved out of triage — harder than the rest — `Poole
 `EveryBand` a tenth at 0.90, against the classifier's 0.70. Split by who sent the records in — the recalling firm, the
 bug's reporter, the maintenance report's submitter, the hospital — on four public collections, `Pooled` placed 19–22%
 of its answers with senders whose own precision was below the target beyond doubt (the top of a 95% Wilson interval
-under 0.8), and `EveryBand` none. If you read a promise per customer or per site, choose `EveryBand`.
+under 0.8), and `EveryBand` none. `EveryBand` does not look at the sender, though: when one sender's own settlements are less
+reliable than the others', it answers below the target for that sender too. If you read a promise per customer or per
+site, choose `EveryBand`, and count `Usage.Count` over each sender's answers to see it hold.
 
 A value a person accepted with the answer in view may be right because it was answered. A value the application filled
 was never checked. To know how right a layer is on its own, count only the settlements that saw no answer. Every record

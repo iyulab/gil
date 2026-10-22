@@ -76,7 +76,14 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   its floor, what each layer answers, evidence from another form, key attributes and concentrations, coarse levels,
   typing, attributes that take several values, upgrades, asking first — is carried to the native API under "Choosing
   what to trust", with a new measurement: on four public collections `Pooled` placed 19–22% of its answers with senders
-  whose own precision was below the target beyond doubt, and `EveryBand` none.
+  whose own precision was below the target beyond doubt, and `EveryBand` none — and the note that `EveryBand` does not
+  look at the sender: when one sender's own settlements are less reliable than the others', it answers below the
+  target for that sender too, so count `Usage.Count` over each sender's answers to see a per-sender promise hold.
+- The crate's README says which way the goldens run: the Rust core writes them and `Gil` is checked against them.
+
+### Dependencies
+
+- `IronHive.Providers.OpenAI.Compatible` 0.66.1 → 0.68.0. Gil builds against it and its tests pass unchanged.
 
 ## 0.25.0
 
