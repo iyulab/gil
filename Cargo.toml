@@ -2,7 +2,7 @@
 members = [
     "crates/gil",
     "crates/gil-review",
-    "crates/gil-ffi-support",
+    "crates/ffi-support",
     "crates/gil-review-ffi",
     "crates/gil-ffi",
     "bindings/python",
@@ -11,7 +11,7 @@ members = [
 default-members = [
     "crates/gil",
     "crates/gil-review",
-    "crates/gil-ffi-support",
+    "crates/ffi-support",
     "crates/gil-review-ffi",
     "crates/gil-ffi",
 ]

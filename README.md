@@ -861,7 +861,7 @@ what the C ABI gives (`tests/fixtures/core/native/selections.json`). Calls that 
 threads at once; a call that changes one needs it to itself, and is refused before it changes anything when the core's
 contract rules it out — a failure after that marks what it was changing broken. Each library says which version of its
 interface it speaks (`gil_abi_version`, `gil_review_abi_version`), and both .NET bindings check it before their first
-call. The plumbing both C ABIs share — statuses, the last error, the panic guard — is `crates/gil-ffi-support`.
+call. The plumbing both C ABIs share — statuses, the last error, the panic guard — is `crates/ffi-support` (`iyulab-ffi-support`).
 
 Its tests are `tests/Gil.Core.Tests`, run with the rest of `Gil.slnx` as above.
 

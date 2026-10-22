@@ -37,7 +37,7 @@ use gil::replay::{
 use gil::schema::{AttributePolicy, Record, Schema, Settlement, SettlementKind};
 use gil::tuning::Tuning;
 use gil::usage::{Decision, usage};
-use gil_ffi_support::{
+use iyulab_ffi_support::{
     BUFFER_TOO_SMALL, Failure, Utf8, argument, call, hand_out, handle, handle_mut, input, release,
     set_result, slice, slice_mut, write,
 };
@@ -45,17 +45,17 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 /// The call succeeded.
-pub const GIL_OK: i32 = gil_ffi_support::OK;
+pub const GIL_OK: i32 = iyulab_ffi_support::OK;
 /// The core refused its input (a schema that does not check, a record that does not read); the message says what.
-pub const GIL_INVALID_INPUT: i32 = gil_ffi_support::INVALID_INPUT;
+pub const GIL_INVALID_INPUT: i32 = iyulab_ffi_support::INVALID_INPUT;
 /// The call itself was malformed: a null pointer, text that is not UTF-8, or a buffer too small.
-pub const GIL_INVALID_ARGUMENT: i32 = gil_ffi_support::INVALID_ARGUMENT;
+pub const GIL_INVALID_ARGUMENT: i32 = iyulab_ffi_support::INVALID_ARGUMENT;
 /// The core panicked — a call its contract rules out, or a defect — reported instead of unwinding into the caller.
-pub const GIL_PANIC: i32 = gil_ffi_support::PANIC;
+pub const GIL_PANIC: i32 = iyulab_ffi_support::PANIC;
 /// The caller's buffers are too small for the answer; the sizes it needs are in the answer header.
-pub const GIL_BUFFER_TOO_SMALL: i32 = gil_ffi_support::BUFFER_TOO_SMALL;
+pub const GIL_BUFFER_TOO_SMALL: i32 = iyulab_ffi_support::BUFFER_TOO_SMALL;
 /// A decider or record is broken: an earlier call that changed it panicked partway. Free it and build it again.
-pub const GIL_BROKEN: i32 = gil_ffi_support::BROKEN;
+pub const GIL_BROKEN: i32 = iyulab_ffi_support::BROKEN;
 
 /// The version of this interface — its functions, structures and statuses. It changes whenever a binding built for one
 /// version would misread the library of another.
@@ -173,7 +173,7 @@ fn refuse_broken<T: Breakable>(h: &T) -> Result<(), Failure> {
 /// The live object behind a handle, refused when broken.
 ///
 /// # Safety
-/// As [`gil_ffi_support::handle`].
+/// As [`iyulab_ffi_support::handle`].
 unsafe fn live<'a, T: Breakable>(h: *const T) -> Result<&'a T, Failure> {
     // SAFETY: forwarded from the caller.
     let found = unsafe { handle(h, T::WHAT) }?;
@@ -184,7 +184,7 @@ unsafe fn live<'a, T: Breakable>(h: *const T) -> Result<&'a T, Failure> {
 /// As [`live`], exclusively.
 ///
 /// # Safety
-/// As [`gil_ffi_support::handle_mut`].
+/// As [`iyulab_ffi_support::handle_mut`].
 unsafe fn live_mut<'a, T: Breakable>(h: *mut T) -> Result<&'a mut T, Failure> {
     // SAFETY: forwarded from the caller.
     let found = unsafe { handle_mut(h, T::WHAT) }?;
@@ -252,16 +252,16 @@ pub struct GilExternalCandidate {
 }
 
 /// # Safety
-/// As [`gil_ffi_support::text`].
+/// As [`iyulab_ffi_support::text`].
 unsafe fn text<'a>(s: GilStr, what: &str) -> Result<&'a str, Failure> {
     // SAFETY: forwarded from the caller.
-    unsafe { gil_ffi_support::text(s, what) }
+    unsafe { iyulab_ffi_support::text(s, what) }
 }
 
 /// Text that may be absent: a null pointer is none (with length 0), anything else is text.
 ///
 /// # Safety
-/// As [`gil_ffi_support::text`].
+/// As [`iyulab_ffi_support::text`].
 unsafe fn optional<'a>(s: GilStr, what: &str) -> Result<Option<&'a str>, Failure> {
     if s.ptr.is_null() && s.len == 0 {
         return Ok(None);
@@ -278,7 +278,7 @@ unsafe fn result(value: &Value, result_len: *mut usize) -> Result<(), Failure> {
     let text = value.to_string();
     let len = text.len();
     // SAFETY: forwarded from the caller.
-    unsafe { gil_ffi_support::write(result_len, len, "result_len") }?;
+    unsafe { iyulab_ffi_support::write(result_len, len, "result_len") }?;
     set_result(text);
     Ok(())
 }
@@ -320,7 +320,7 @@ fn answer_json(a: &Answer) -> Value {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn gil_last_error(buffer: *mut u8, capacity: usize) -> usize {
     // SAFETY: forwarded from the caller.
-    unsafe { gil_ffi_support::copy_last_error(buffer, capacity) }
+    unsafe { iyulab_ffi_support::copy_last_error(buffer, capacity) }
 }
 
 /// Copies the text result of the last call on this thread (the length that call wrote to its `result_len`) into
@@ -332,7 +332,7 @@ pub unsafe extern "C" fn gil_last_error(buffer: *mut u8, capacity: usize) -> usi
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn gil_last_result(buffer: *mut u8, capacity: usize) -> usize {
     // SAFETY: forwarded from the caller.
-    unsafe { gil_ffi_support::copy_last_result(buffer, capacity) }
+    unsafe { iyulab_ffi_support::copy_last_result(buffer, capacity) }
 }
 
 /// Reads a schema from JSON in the core's `serde` form — the settings an attribute leaves out take their defaults — and
@@ -977,7 +977,7 @@ impl Options {
 }
 
 /// # Safety
-/// As [`gil_ffi_support::text`].
+/// As [`iyulab_ffi_support::text`].
 unsafe fn read_options(json: GilStr) -> Result<Options, Failure> {
     // SAFETY: forwarded from the caller.
     let json = unsafe { text(json, "options") }?;
@@ -1183,7 +1183,7 @@ pub unsafe extern "C" fn gil_schema_json(schema: *const GilSchema, result_len: *
 }
 
 /// # Safety
-/// As [`gil_ffi_support::text`].
+/// As [`iyulab_ffi_support::text`].
 unsafe fn layer_thresholds(json: GilStr) -> Result<LayerThresholds, Failure> {
     // SAFETY: forwarded from the caller.
     let json = unsafe { text(json, "thresholds") }?;
@@ -1247,7 +1247,7 @@ unsafe fn schema_with(
 }
 
 /// # Safety
-/// As [`gil_ffi_support::text`].
+/// As [`iyulab_ffi_support::text`].
 unsafe fn tuning(json: GilStr) -> Result<Tuning, Failure> {
     // SAFETY: forwarded from the caller.
     let json = unsafe { text(json, "tuning") }?;

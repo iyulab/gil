@@ -5,17 +5,17 @@
 
 use std::collections::HashMap;
 
-use gil_ffi_support::{Failure, Utf8, argument, call, slice, slice_mut, write};
 use gil_review::{Estimate, PopulationStratum, ScoredItem, Stratum, StratumSpread, Verdict};
+use iyulab_ffi_support::{Failure, Utf8, argument, call, slice, slice_mut, write};
 
 /// The call succeeded.
-pub const GIL_REVIEW_OK: i32 = gil_ffi_support::OK;
+pub const GIL_REVIEW_OK: i32 = iyulab_ffi_support::OK;
 /// The review computation refused its input (`ReviewError`); the message says what was wrong.
-pub const GIL_REVIEW_INVALID_INPUT: i32 = gil_ffi_support::INVALID_INPUT;
+pub const GIL_REVIEW_INVALID_INPUT: i32 = iyulab_ffi_support::INVALID_INPUT;
 /// The call itself was malformed: a null pointer with a length, text that is not UTF-8, or a buffer too small.
-pub const GIL_REVIEW_INVALID_ARGUMENT: i32 = gil_ffi_support::INVALID_ARGUMENT;
+pub const GIL_REVIEW_INVALID_ARGUMENT: i32 = iyulab_ffi_support::INVALID_ARGUMENT;
 /// The computation panicked — a defect in the library, reported instead of unwinding into the caller.
-pub const GIL_REVIEW_PANIC: i32 = gil_ffi_support::PANIC;
+pub const GIL_REVIEW_PANIC: i32 = iyulab_ffi_support::PANIC;
 
 /// The version of this interface — its functions, structures and statuses. It changes whenever a binding built for one
 /// version would misread the library of another.
@@ -114,10 +114,10 @@ pub struct GilReviewAgreement {
 }
 
 /// # Safety
-/// As [`gil_ffi_support::text`].
+/// As [`iyulab_ffi_support::text`].
 unsafe fn text<'a>(s: GilReviewStr, what: &str) -> Result<&'a str, Failure> {
     // SAFETY: forwarded from the caller.
-    unsafe { gil_ffi_support::text(s, what) }
+    unsafe { iyulab_ffi_support::text(s, what) }
 }
 
 fn flat(e: &Estimate) -> GilReviewEstimate {
@@ -145,7 +145,7 @@ fn flat(e: &Estimate) -> GilReviewEstimate {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn gil_review_last_error(buffer: *mut u8, capacity: usize) -> usize {
     // SAFETY: forwarded from the caller.
-    unsafe { gil_ffi_support::copy_last_error(buffer, capacity) }
+    unsafe { iyulab_ffi_support::copy_last_error(buffer, capacity) }
 }
 
 /// `gil_review::draw_pilot` over strata whose records are ranges of `record_ids`. Writes one `GilReviewDrawnStratum`

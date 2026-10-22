@@ -1,0 +1,15 @@
+[package]
+name = "iyulab-ffi-support"
+version = "0.0.0"
+description = "Plumbing for a C ABI over Rust: status codes, a per-thread last error and last result, a panic guard, (pointer, length) UTF-8 and caller-owned output buffers, and handle rules."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+keywords = ["ffi", "c-abi", "panic", "interop"]
+categories = ["development-tools::ffi"]
+
+[lib]
+# Published as iyulab-ffi-support; imported as iyulab_ffi_support. Each native library links its own copy.
+name = "iyulab_ffi_support"

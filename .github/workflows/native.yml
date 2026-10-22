@@ -13,7 +13,7 @@ on:
       - crates/gil/src/**
       - crates/gil-review/src/**
       - crates/gil-ffi/**
-      - crates/gil-ffi-support/**
+      - crates/ffi-support/**
       - crates/gil-review-ffi/**
       - bindings/csharp/Gil.Review/**
       - src/Gil/**
