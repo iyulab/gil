@@ -9,6 +9,7 @@ __all__ = [
     "RECENT_RECORDS",
     "AskPlanner",
     "Decider",
+    "Keeper",
     "OpenRecord",
     "Records",
     "check_schema",
@@ -115,6 +116,41 @@ class Decider:
     ) -> str:
         """The answer for one open decided attribute of record `id` from the values given, writing nothing to memory, as JSON
         — with `decision`, the lookup's decision record, when `decisions` is true."""
+
+@final
+class Keeper:
+    """The promise-keeping loop of one schema: the records settled and the replays the thresholds are chosen on."""
+
+    def __new__(
+        cls,
+        schema_json: str,
+        target_precision: float,
+        minimum_answered: int,
+        counting: list[str] | None = None,
+        rule: str = "every_band",
+        threads: int | None = None,
+    ) -> Keeper: ...
+    def settle(self, decider: Decider, records: Records) -> None:
+        """Puts `records` into `decider` and into the next choice."""
+
+    def remove(self, decider: Decider, record_id: str) -> None:
+        """Takes record `record_id`, which the host deleted, out of `decider` and out of the records."""
+
+    def stale(self) -> str | None:
+        """Why the last choice no longer stands, as JSON, or `None` while it does."""
+
+    def settled(self) -> int:
+        """How many records were settled, a record settled again counting again."""
+
+    def rechoose(self, decisions: bool = False) -> tuple[str, str | None]:
+        """Chooses again; returns the choice as JSON and, when `decisions` is true, the decision records of the records
+        replayed this time as JSON lines."""
+
+    def state(self) -> str:
+        """The choice as it stands, as JSON."""
+
+    def schema_json(self) -> str:
+        """The schema as chosen, as JSON."""
 
 @final
 class AskPlanner:

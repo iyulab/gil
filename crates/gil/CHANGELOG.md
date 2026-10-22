@@ -38,6 +38,9 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   `remove(&mut decider, id)`, has the next choice replay from the start. Answer with the decider and `schema()`; an
   answer's promise is `tuning().promise_of(attribute, source)`. Nothing is stored outside the process. The coarse level
   is not chosen by it yet.
+- **Python `gil.Keeper`**, the same loop: `Keeper(schema, target_precision, minimum_answered, counting, rule, threads)`
+  · `settle(decider, records)` · `remove(decider, id)` · `stale()` · `settled` · `rechoose(decisions=False)` → `{"tuning",
+  "chosen", "decisions"?}` · `state()` · `schema` · `tuning`.
 - **A settled record can say what was in view, how long it took and who settled it.** Seven optional entries of the
   line format — `suggested` (the value in view when a decided attribute was settled), `sources` (the layer of the
   answer in view, named as answers name it), `promises` (the precision promised for it then, in [0, 1]), `settle_ms`

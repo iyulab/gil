@@ -534,3 +534,34 @@ def test_records_carry_what_was_in_view_how_long_it_took_and_who_settled_it() ->
     for wrong in ({"promises": {"team": 1.2}}, {"sources": {"team": "Key"}}, {"open_ms": -1}):
         with pytest.raises(ValueError):
             gil.records([{**line, **wrong}])
+
+
+def test_a_keeper_rechooses_as_a_selection_from_the_start() -> None:
+    items = lines("records.jsonl")
+    schema = gil.Schema.from_dict(golden_form("team"))
+    keeper = gil.Keeper(schema, counting=COUNTED, rule="pooled")
+    decider = gil.Decider(schema)
+    assert keeper.stale() is None and keeper.state()["chosen"] == {}
+    done = 0
+    for at in (CHOSEN, CHOSEN + 1, 300, len(items)):
+        keeper.settle(decider, gil.records(items[done:at]))
+        done = at
+        choice = keeper.rechoose(decisions=True)
+        assert keeper.stale() is None and keeper.settled == at
+        assert "decisions" in choice
+        for attribute, thresholds in choice["chosen"].items():
+            alone, _ = gil.select_layers(
+                schema, attribute, gil.records(items[:at]), counting=COUNTED, rule="pooled", decisions=False
+            )
+            assert thresholds == alone, f"{attribute} at {at}"
+    # The schema carries the choice, and the tuning its promises.
+    team = keeper.state()["chosen"]["team"]
+    chosen = team["key"]["chosen"]
+    assert chosen is not None
+    on_schema = next(a for a in json.loads(keeper.schema.json)["attributes"] if a["name"] == "team")
+    assert on_schema["key_threshold"] == chosen["threshold"]
+    assert gil.promise_of(keeper.tuning, "team", "KeyMemory") == chosen["promise"]
+    # A record the host deleted leaves the decider and the next choice.
+    removed = items[5]["id"]
+    keeper.remove(decider, removed)
+    assert keeper.settled == len([i for i in items if i["id"] != removed])

@@ -119,6 +119,17 @@ fn selection_input(
     Ok((schema, counting))
 }
 
+/// A threshold rule by its name.
+fn threshold_rule(name: &str) -> PyResult<ThresholdRule> {
+    match name {
+        "every_band" => Ok(ThresholdRule::EveryBand),
+        "pooled" => Ok(ThresholdRule::Pooled),
+        other => Err(invalid(format!(
+            "unknown threshold rule '{other}' (every_band or pooled)"
+        ))),
+    }
+}
+
 /// A similar record memory whose lookups are split among at most `threads` threads, or as many as the core's default.
 fn record_memory(threads: Option<usize>) -> PyResult<LexicalMemory> {
     match threads {
@@ -144,15 +155,7 @@ fn select_layers_json(
     rule: &str,
     threads: Option<usize>,
 ) -> PyResult<(String, Option<String>)> {
-    let rule = match rule {
-        "every_band" => ThresholdRule::EveryBand,
-        "pooled" => ThresholdRule::Pooled,
-        other => {
-            return Err(invalid(format!(
-                "unknown threshold rule '{other}' (every_band or pooled)"
-            )));
-        }
-    };
+    let rule = threshold_rule(rule)?;
     let (schema, counting) = selection_input(schema_json, counting)?;
     let mut memory = record_memory(threads)?;
     let choice = Choice {
@@ -412,6 +415,132 @@ impl Decider {
             value["decision"] = record;
         }
         Ok(value.to_string())
+    }
+}
+
+/// The promise-keeping loop of one schema: the records settled and the replays the thresholds are chosen on.
+#[pyclass(module = "gil._gil", unsendable)]
+struct Keeper {
+    inner: gil::keeper::Keeper,
+    broken: bool,
+}
+
+/// A keeper's choice as JSON: `{"tuning": …, "chosen": {attribute: thresholds, …}}`.
+fn keeper_json(keeper: &gil::keeper::Keeper) -> String {
+    let chosen: serde_json::Map<String, Value> = keeper
+        .attributes()
+        .filter_map(|a| {
+            keeper.chosen(a).map(|t| {
+                (
+                    a.to_owned(),
+                    serde_json::to_value(t).expect("thresholds serialize"),
+                )
+            })
+        })
+        .collect();
+    json!({ "tuning": keeper.tuning(), "chosen": chosen }).to_string()
+}
+
+#[pymethods]
+impl Keeper {
+    /// A keeper of the schema with nothing settled, choosing for every decided attribute that takes one value.
+    #[new]
+    #[pyo3(signature = (schema_json, target_precision, minimum_answered, counting=None, rule="every_band", threads=None))]
+    fn new(
+        schema_json: &str,
+        target_precision: f64,
+        minimum_answered: usize,
+        counting: Option<Vec<String>>,
+        rule: &str,
+        threads: Option<usize>,
+    ) -> PyResult<Self> {
+        let rule = threshold_rule(rule)?;
+        let (schema, counting) = selection_input(schema_json, counting)?;
+        if threads == Some(0) {
+            return Err(invalid("threads must be at least 1".to_owned()));
+        }
+        let keep = gil::keeper::Keep {
+            target_precision,
+            minimum_answered,
+            counting,
+            rule,
+        };
+        let inner = guarded(|| {
+            let keeper = gil::keeper::Keeper::new(schema, keep);
+            match threads {
+                Some(n) => keeper.with_threads(n),
+                None => keeper,
+            }
+        })?;
+        Ok(Self {
+            inner,
+            broken: false,
+        })
+    }
+
+    /// Puts `records` into `decider` and into the next choice.
+    fn settle(&mut self, decider: &mut Decider, records: &Records) -> PyResult<()> {
+        usable(self.broken, "keeper")?;
+        usable(decider.broken, "decider")?;
+        placed(self.inner.schema(), &records.records)?;
+        let (inner, memories) = (&mut self.inner, &mut decider.inner);
+        changing(|| inner.settle(memories, &records.records)).map_err(|m| {
+            self.broken = true;
+            decider.broken = true;
+            defect("keeper", m)
+        })
+    }
+
+    /// Takes record `record_id`, which the host deleted, out of `decider` and out of the records.
+    fn remove(&mut self, decider: &mut Decider, record_id: &str) -> PyResult<()> {
+        usable(self.broken, "keeper")?;
+        usable(decider.broken, "decider")?;
+        let (inner, memories) = (&mut self.inner, &mut decider.inner);
+        changing(|| inner.remove(memories, record_id)).map_err(|m| {
+            self.broken = true;
+            decider.broken = true;
+            defect("keeper", m)
+        })
+    }
+
+    /// Why the last choice no longer stands, as JSON, or `None` while it does.
+    fn stale(&self) -> PyResult<Option<String>> {
+        usable(self.broken, "keeper")?;
+        Ok(self.inner.stale().map(|s| to_json(&s)))
+    }
+
+    /// How many records were settled, a record settled again counting again.
+    fn settled(&self) -> usize {
+        self.inner.settled()
+    }
+
+    /// Chooses again; returns the choice as JSON and, when `decisions` is true, the decision records of the records
+    /// replayed this time as JSON lines.
+    #[pyo3(signature = (decisions=false))]
+    fn rechoose(&mut self, decisions: bool) -> PyResult<(String, Option<String>)> {
+        usable(self.broken, "keeper")?;
+        let mut lines = decisions.then(String::new);
+        let inner = &mut self.inner;
+        changing(|| {
+            inner.rechoose_with(&mut |r| push_record(&mut lines, r));
+        })
+        .map_err(|m| {
+            self.broken = true;
+            defect("keeper", m)
+        })?;
+        Ok((keeper_json(&self.inner), lines))
+    }
+
+    /// The choice as it stands, as JSON.
+    fn state(&self) -> PyResult<String> {
+        usable(self.broken, "keeper")?;
+        Ok(keeper_json(&self.inner))
+    }
+
+    /// The schema as chosen, as JSON.
+    fn schema_json(&self) -> PyResult<String> {
+        usable(self.broken, "keeper")?;
+        Ok(to_json(self.inner.schema()))
     }
 }
 
@@ -774,6 +903,7 @@ fn _gil(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Decider>()?;
     m.add_class::<OpenRecord>()?;
     m.add_class::<AskPlanner>()?;
+    m.add_class::<Keeper>()?;
     m.add_function(wrap_pyfunction!(tuning_capture_json, m)?)?;
     m.add_function(wrap_pyfunction!(schema_with_layers_json, m)?)?;
     m.add_function(wrap_pyfunction!(tuning_apply_json, m)?)?;

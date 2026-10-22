@@ -27,6 +27,7 @@ from typing import Any, Literal, TypedDict, cast
 
 from gil._gil import AskPlanner as _AskPlanner
 from gil._gil import Decider as _Decider
+from gil._gil import Keeper as _Keeper
 from gil._gil import OpenRecord as _OpenRecord
 from gil._gil import (
     POOLED_RECENT_ANSWERS,
@@ -63,6 +64,8 @@ __all__ = [
     "Decider",
     "DecisionRecord",
     "ExternalCandidate",
+    "Keeper",
+    "KeeperChoice",
     "KeyFieldsChoice",
     "KeyFieldsTrial",
     "KeyLook",
@@ -706,6 +709,96 @@ class OpenRecord:
     def snapshot(self) -> dict[str, Any]:
         """The record as it stands, to save: in the form :func:`records` and :meth:`reopen` read."""
         return cast(dict[str, Any], json.loads(self._inner.snapshot()))
+
+
+class KeeperChoice(TypedDict, total=False):
+    """A keeper's choice: the tuning with its promises (the core's ``Tuning``), each attribute's thresholds with how they
+    did on the replay, and — from :meth:`Keeper.rechoose` when asked for — the decision records of the records replayed
+    that time."""
+
+    tuning: dict[str, Any]
+    chosen: dict[str, LayerThresholds]
+    decisions: list[DecisionRecord]
+
+
+class Keeper:
+    """The promise-keeping loop as one object: settled records go in once, the decider learns them, and the thresholds
+    are chosen again when they are stale — on a replay carried on from where the last choice left it, not from the
+    start.
+
+    It holds the records and, for each decided attribute of ``schema`` that takes one value, the replay as it stands.
+    :meth:`settle` puts records into the decider and into the next choice, :meth:`stale` says when the choice no longer
+    stands, and :meth:`rechoose` replays only the records settled since and chooses again — the same thresholds, to the
+    bit, as :func:`select_layers` on all the records. Answer with the decider and :attr:`schema`; an answer's promise is
+    ``promise_of(keeper.tuning, attribute, answer["source"])``. Give it the same decider every time. The choosing
+    arguments are :func:`select_layers`'; the coarse level is not chosen by it. Nothing is stored outside the process.
+    """
+
+    __slots__ = ("_inner",)
+
+    def __init__(
+        self,
+        schema: Schema,
+        target_precision: float = 0.8,
+        minimum_answered: int = 10,
+        counting: Iterable[str] | None = None,
+        rule: Literal["every_band", "pooled"] = "every_band",
+        threads: int | None = None,
+    ) -> None:
+        self._inner = _Keeper(
+            schema.json,
+            target_precision,
+            minimum_answered,
+            None if counting is None else list(counting),
+            rule,
+            threads,
+        )
+
+    def settle(self, decider: Decider, records: Records) -> None:
+        """Puts ``records`` into ``decider`` and into the next choice. Records may come in any order; one settled before
+        the last a replay has gone through has the next choice replay from the start."""
+        self._inner.settle(decider._inner, records)
+
+    def remove(self, decider: Decider, record_id: str) -> None:
+        """Takes record ``record_id``, which the host deleted, out of ``decider`` and out of the records; the next
+        choice replays from the start without it."""
+        self._inner.remove(decider._inner, record_id)
+
+    def stale(self) -> dict[str, Any] | str | None:
+        """Why the last choice no longer stands — ``{"settled": {"chosen": ..., "now": ...}}`` once a tenth more or fewer
+        records are settled — or ``None`` while it does."""
+        text = self._inner.stale()
+        return None if text is None else cast(dict[str, Any] | str, json.loads(text))
+
+    @property
+    def settled(self) -> int:
+        """How many records were settled, a record settled again counting again."""
+        return self._inner.settled()
+
+    def rechoose(self, decisions: bool = False) -> KeeperChoice:
+        """Chooses every attribute's thresholds again on all the records settled — replaying only those settled since
+        the last choice where it can — puts them on :attr:`schema` and captures :attr:`tuning` with their promises."""
+        text, lines = self._inner.rechoose(decisions)
+        choice = cast(KeeperChoice, json.loads(text))
+        if lines is not None:
+            choice["decisions"] = [
+                cast(DecisionRecord, json.loads(line)) for line in lines.splitlines()
+            ]
+        return choice
+
+    def state(self) -> KeeperChoice:
+        """The choice as it stands; ``chosen`` is empty before the first :meth:`rechoose`."""
+        return cast(KeeperChoice, json.loads(self._inner.state()))
+
+    @property
+    def schema(self) -> Schema:
+        """The schema as chosen: the one given, with the thresholds the last :meth:`rechoose` put on it."""
+        return Schema(self._inner.schema_json())
+
+    @property
+    def tuning(self) -> dict[str, Any]:
+        """The last choice as a tuning, with each attribute's promises."""
+        return self.state()["tuning"]
 
 
 def capture_tuning(
