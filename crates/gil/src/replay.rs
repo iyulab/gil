@@ -1631,6 +1631,38 @@ fn replay(
     counting: Option<&[SettlementKind]>,
     replaying: Replaying,
 ) -> (Vec<Step>, usize) {
+    let mut state = ReplayState::default();
+    carry_on(
+        &mut state, key_memory, memory, schema, attribute, records, counting, replaying,
+    );
+    (state.steps, state.order)
+}
+
+/// Where a replay stands: its steps, the records the record memory holds and the case each represents, how many
+/// records it has gone through, and the last of them in settlement order.
+#[derive(Default)]
+struct ReplayState {
+    steps: Vec<Step>,
+    remembered: usize,
+    cases: HashMap<String, String>,
+    case_of: HashMap<String, String>,
+    order: usize,
+    last: Option<(i64, String)>,
+}
+
+/// Carries a replay on through `records`, all settled after those it has gone through, with the memories it left —
+/// the same steps, and the same memories, as replaying them all from the start.
+#[allow(clippy::too_many_arguments)]
+fn carry_on(
+    state: &mut ReplayState,
+    key_memory: &mut KeyMemory,
+    memory: &mut LexicalMemory,
+    schema: &Schema,
+    attribute: &str,
+    records: &[Record],
+    counting: Option<&[SettlementKind]>,
+    replaying: Replaying,
+) {
     let (coarse, sink) = match replaying {
         Replaying::Values(sink) => (false, sink),
         Replaying::Coarse(sink) => (true, sink),
@@ -1645,11 +1677,17 @@ fn replay(
             .then_with(|| a.id.cmp(&b.id))
     });
 
-    let mut steps = Vec::new();
-    let mut remembered = 0_usize;
-    let mut cases: HashMap<String, String> = HashMap::new(); // case → the record representing it
-    let mut case_of: HashMap<String, String> = HashMap::new(); // record → the case it represents
-    let mut order = 0;
+    if let (Some(last), Some(first)) = (&state.last, ordered.first()) {
+        assert!(
+            (first.settled_at, first.id.as_str()) > (last.0, last.1.as_str()),
+            "records carried on with must be settled after those replayed"
+        );
+    }
+    let mut steps = std::mem::take(&mut state.steps);
+    let mut remembered = state.remembered;
+    let mut cases = std::mem::take(&mut state.cases); // case → the record representing it
+    let mut case_of = std::mem::take(&mut state.case_of); // record → the case it represents
+    let mut order = state.order;
     for record in &ordered {
         order += 1;
         let Some(settled) = record.values.get(attribute) else {
@@ -1808,7 +1846,16 @@ fn replay(
         remembered += 1;
     }
 
-    (steps, order)
+    if let Some(last) = ordered.last() {
+        state.last = Some((last.settled_at, last.id.clone()));
+    }
+    (
+        state.steps,
+        state.remembered,
+        state.cases,
+        state.case_of,
+        state.order,
+    ) = (steps, remembered, cases, case_of, order);
 }
 
 /// The similarity choice over the given lookups: every one counts, answered or not. With more than one voter each
@@ -2156,7 +2203,151 @@ fn likeliest(unseen: u64, totals: &[f64]) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    use super::{Choice, ReplayState, Replaying, ThresholdRule, carry_on, layers};
     use super::{fnv1a, intraclass};
+    use crate::decision_record::DecisionRecord;
+    use crate::key_memory::KeyMemory;
+    use crate::lexical_memory::LexicalMemory;
+    use crate::schema::{Attribute, AttributeRole, Record, Schema};
+    use std::collections::BTreeMap;
+
+    /// Records alike in their products and apart in their summaries, some settled again later under the same id.
+    fn settled(n: usize) -> Vec<Record> {
+        let teams = ["network", "billing", "hardware", "auth"];
+        let words = [
+            "vpn drops",
+            "invoice twice",
+            "screen broken",
+            "password reset",
+            "slow link",
+            "refund",
+        ];
+        (0..n)
+            .map(|i| {
+                let id = if i % 9 == 8 {
+                    format!("t{}", i / 3)
+                } else {
+                    format!("t{i}")
+                };
+                let team = teams[(i * 7 + i / 5) % teams.len()];
+                Record {
+                    id,
+                    values: BTreeMap::from([
+                        ("product".into(), format!("p{}", i % 5)),
+                        (
+                            "summary".into(),
+                            format!("{} {}", words[(i * 3) % words.len()], i % 4),
+                        ),
+                        ("team".into(), team.into()),
+                    ]),
+                    settled_at: 1_000 + i as i64,
+                    ..Record::default()
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_replay_carried_on_is_the_replay_from_the_start() {
+        let schema = Schema::new(
+            "ticket",
+            vec![
+                Attribute::new("product", AttributeRole::Observed),
+                Attribute::new("summary", AttributeRole::Observed),
+                Attribute::new("team", AttributeRole::Decided),
+            ],
+        )
+        .expect("a valid schema");
+        let records = settled(600);
+        let choice = Choice {
+            target_precision: 0.8,
+            minimum_answered: 10,
+            counting: None,
+        };
+        let definition = schema.attribute("team");
+
+        let run = |parts: &[&[Record]]| {
+            let (mut keys, mut memory, mut state) = (
+                KeyMemory::default(),
+                LexicalMemory::default(),
+                ReplayState::default(),
+            );
+            let mut lines: Vec<String> = Vec::new();
+            for part in parts {
+                let mut sink = |r: &DecisionRecord| lines.push(format!("{r:?}"));
+                carry_on(
+                    &mut state,
+                    &mut keys,
+                    &mut memory,
+                    &schema,
+                    "team",
+                    part,
+                    None,
+                    Replaying::Values(&mut sink),
+                );
+            }
+            let chosen = layers(
+                &state.steps,
+                state.order,
+                definition,
+                choice,
+                ThresholdRule::EveryBand,
+            );
+            (format!("{chosen:?}"), lines)
+        };
+        let whole = run(&[&records]);
+        for at in [1, 37, 300, 599] {
+            assert_eq!(
+                run(&[&records[..at], &records[at..]]),
+                whole,
+                "split at {at}"
+            );
+        }
+        assert_eq!(
+            run(&[&records[..100], &records[100..400], &records[400..]]),
+            whole
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "settled after those replayed")]
+    fn a_replay_is_not_carried_on_with_earlier_records() {
+        let schema = Schema::new(
+            "ticket",
+            vec![
+                Attribute::new("summary", AttributeRole::Observed),
+                Attribute::new("team", AttributeRole::Decided),
+            ],
+        )
+        .expect("a valid schema");
+        let records = settled(20);
+        let (mut keys, mut memory, mut state) = (
+            KeyMemory::default(),
+            LexicalMemory::default(),
+            ReplayState::default(),
+        );
+        let mut ignore = |_: &DecisionRecord| {};
+        carry_on(
+            &mut state,
+            &mut keys,
+            &mut memory,
+            &schema,
+            "team",
+            &records[10..],
+            None,
+            Replaying::Values(&mut ignore),
+        );
+        carry_on(
+            &mut state,
+            &mut keys,
+            &mut memory,
+            &schema,
+            "team",
+            &records[..10],
+            None,
+            Replaying::Values(&mut ignore),
+        );
+    }
 
     #[test]
     fn intraclass_matches_a_one_way_analysis_of_variance() {
