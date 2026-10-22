@@ -2156,7 +2156,22 @@ fn likeliest(unseen: u64, totals: &[f64]) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use super::fnv1a;
+    use super::{fnv1a, intraclass};
+
+    #[test]
+    fn intraclass_matches_a_one_way_analysis_of_variance() {
+        // Batches of (answers, matched): 1 1 1 0 · 0 0 1 · 1 1 · 0 1 0 0 0 — the same ICC(1) and n₀ as a one-way ANOVA on
+        // the 0/1 values (the experiments' `batch_icc.icc1` gives 0.215697674… and 3.380952…).
+        let (n0, icc) = intraclass([(4, 3), (3, 1), (2, 2), (5, 1)].into_iter());
+        assert!((n0.unwrap() - 3.380_952_380_952_381).abs() < 1e-12);
+        assert!((icc.unwrap() - 0.215_697_674_418_604_63).abs() < 1e-12);
+        // One batch, or no answer beyond one per batch, says nothing.
+        assert_eq!(intraclass([(5, 2)].into_iter()), (None, None));
+        assert_eq!(intraclass([(1, 1), (1, 0)].into_iter()), (None, None));
+        // Every answer alike: no variance at all, so no correlation, but a size.
+        let (n0, icc) = intraclass([(3, 3), (3, 3)].into_iter());
+        assert_eq!((n0, icc), (Some(3.0), None));
+    }
 
     #[test]
     fn fnv1a_matches_the_published_vectors() {
