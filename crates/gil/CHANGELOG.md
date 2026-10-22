@@ -29,6 +29,14 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Added
 
+- **`keeper::Keeper`: the promise-keeping loop as one object.** `Keeper::new(schema, Keep::new(target))` holds a
+  decider, the records settled and, for each decided attribute that takes one value, the replay as it stands.
+  `settle(&record)` feeds the decider and the next choice; `stale()` is `Tuning::stale` on the records settled;
+  `rechoose()` replays only the records settled since the last choice, chooses each attribute's thresholds, puts them
+  on `schema()` and captures `tuning()` with their promises — the same thresholds, to the bit, as `select_layers` on
+  all the records. A record settled out of order, or `remove(id)`, has the next choice replay from the start. Answer
+  with `decider()` and `schema()`; an answer's promise is `tuning().promise_of(attribute, source)`. Nothing is stored
+  outside the process. The coarse level is not chosen by it yet.
 - **A settled record can say what was in view, how long it took and who settled it.** Seven optional entries of the
   line format — `suggested` (the value in view when a decided attribute was settled), `sources` (the layer of the
   answer in view, named as answers name it), `promises` (the precision promised for it then, in [0, 1]), `settle_ms`

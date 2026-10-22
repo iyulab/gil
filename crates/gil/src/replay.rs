@@ -83,7 +83,7 @@ impl Choice<'_> {
     ///
     /// # Panics
     /// When `target_precision` is outside (0, 1] or `minimum_answered` is 0.
-    fn check(&self) {
+    pub(crate) fn check(&self) {
         assert!(
             self.target_precision > 0.0 && self.target_precision <= 1.0,
             "target_precision must be in (0, 1]"
@@ -946,7 +946,7 @@ struct Vote {
 /// One record of a layers replay: whether the key layer was asked and what its best value was, whether the similar
 /// record layer was asked and how it voted, the record's weight and its place in settlement order.
 #[derive(Clone, Debug)]
-struct Step {
+pub(crate) struct Step {
     key_looked: bool,
     key: Option<First>,
     looked: bool,
@@ -1038,7 +1038,7 @@ pub fn select_layers(
 }
 
 /// The layer thresholds chosen on a layers replay's steps, `batches` left out.
-fn layers(
+pub(crate) fn layers(
     steps: &[Step],
     latest: usize,
     definition: &crate::schema::Attribute,
@@ -1329,7 +1329,7 @@ fn answering(thresholds: &LayerThresholds) -> (Option<f64>, Option<f64>, Option<
 }
 
 /// [`BatchCheck`] over the steps of the latest [`RECENT_RECORDS`] records; `None` when none of them names its batch.
-fn batch_check(
+pub(crate) fn batch_check(
     steps: &[Step],
     latest: usize,
     definition: &crate::schema::Attribute,
@@ -1615,7 +1615,7 @@ pub fn select_coarse_with(
 }
 
 /// What a replay is for: the value layers or the coarse level as well, handing each lookup's decision record to a sink.
-enum Replaying<'s> {
+pub(crate) enum Replaying<'s> {
     Values(&'s mut dyn FnMut(&DecisionRecord)),
     Coarse(&'s mut dyn FnMut(&DecisionRecord)),
 }
@@ -1641,19 +1641,19 @@ fn replay(
 /// Where a replay stands: its steps, the records the record memory holds and the case each represents, how many
 /// records it has gone through, and the last of them in settlement order.
 #[derive(Default)]
-struct ReplayState {
-    steps: Vec<Step>,
+pub(crate) struct ReplayState {
+    pub(crate) steps: Vec<Step>,
     remembered: usize,
     cases: HashMap<String, String>,
     case_of: HashMap<String, String>,
-    order: usize,
-    last: Option<(i64, String)>,
+    pub(crate) order: usize,
+    pub(crate) last: Option<(i64, String)>,
 }
 
 /// Carries a replay on through `records`, all settled after those it has gone through, with the memories it left —
 /// the same steps, and the same memories, as replaying them all from the start.
 #[allow(clippy::too_many_arguments)]
-fn carry_on(
+pub(crate) fn carry_on(
     state: &mut ReplayState,
     key_memory: &mut KeyMemory,
     memory: &mut LexicalMemory,
