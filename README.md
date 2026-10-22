@@ -327,7 +327,13 @@ records of two public streams — an issue tracker and aircraft maintenance repo
 time on the forty thousand that followed, and 0.82 to 0.91 for the six attributes of a smaller stream of biological
 sample records. Version 0.6.0, on two other streams of sample records, saw 0.63 to 0.74 at 0.8 and 0.64 to 0.72 at
 0.7; wider statistical margins did not close that gap. To know the precision an attribute actually delivers, check it
-on your own records: choose on those settled up to a date and count the answers on those settled after it.
+on your own records: choose on those settled up to a date and count the answers on those settled after it. Where you
+know which records came in one batch, the optimism the batches add can be counted without waiting: choose on half of
+the batches and count the answers on the other half. On a month of public medical device event reports, which
+manufacturers send many at a time, the precision of thresholds chosen for 0.8, counted on the records they were chosen
+on, was 1.9 points above what the reports that followed got; counted across halves of the batches it was 0.1 points
+above, and across halves of the records, batch mates split between them, still 1.7. That is right on average only: the
+reports between two choices, a few batches each, came out anywhere from 0.64 to 0.89.
 
 Settle a record that arrives again — a retransmission, a re-save — under the same record id. The memories keep one
 version per id, and the replay asks a record settled again without its earlier version. Under a new id the copy is new
