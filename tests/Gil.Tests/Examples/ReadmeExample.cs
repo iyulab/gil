@@ -64,6 +64,20 @@ internal static class ReadmeExample
         var promise = team.Answered ? tuning.PromiseOf("team", team.Source) : null;
         var counts = Usage.Count([new UsageDecision("team", shown, "network", SettlementKind.Accept, Promise: promise)]);
 
+        using var keeper = new Keeper(keyed, options);
+        keeper.Settle(decider, saved);
+        keeper.Rechoose();
+
+        // ... as records are settled ...
+        using var settledNow = SettledRecords.From(savedRecords);
+        keeper.Settle(decider, settledNow);
+        if (keeper.Stale() is not null)
+        {
+            keeper.Rechoose();
+        }
+
+        using var chosen = keeper.Schema; // answer with this and the decider; keeper.Tuning.PromiseOf gives the promise
+
         var pooled = Replay.SelectLayers(schema, "team", saved, options with { TargetPrecision = 0.8, Rule = ThresholdRule.Pooled });
         var unprompted = Replay.SelectLayers(schema, "team", saved, options with { Counting = [SettlementKind.Enter] });
 

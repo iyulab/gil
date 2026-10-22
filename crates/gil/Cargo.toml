@@ -33,3 +33,7 @@ serde_json = { version = "1", features = ["float_roundtrip"] }
 [[example]]
 name = "replay_timing"
 required-features = ["serde"]
+
+[[example]]
+name = "keeper_loop"
+required-features = ["serde"]
