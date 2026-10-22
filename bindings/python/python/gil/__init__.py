@@ -299,7 +299,9 @@ def records(items: Iterable[dict[str, Any]]) -> Records:
 
     Each has ``id``, ``settled_at`` (``yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM`` or 100-nanosecond ticks since the Unix
     epoch) and ``values``; ``sets``, ``settlements``, ``probabilities``, ``arrival`` and ``batch`` (the batch the
-    record was settled in, for ``select_layers`` to count what batches do to its promise) are optional.
+    record was settled in, for ``select_layers`` to count what batches do to its promise) are optional, as are what the
+    host saw and timed — ``suggested``, ``sources``, ``promises``, ``settle_ms``, ``open_ms``, ``settled_by`` and
+    ``form_version`` (see the line format in ``docs/settled-records.md``).
     """
     return Records.from_json_lines(
         "\n".join(json.dumps(item, ensure_ascii=False) for item in items)

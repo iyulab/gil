@@ -98,6 +98,7 @@ pub fn to_record(log: &Value) -> Record {
                     .collect()
             }),
         batch: log.get("batch").and_then(Value::as_str).map(str::to_owned),
+        ..Record::default()
     }
 }
 

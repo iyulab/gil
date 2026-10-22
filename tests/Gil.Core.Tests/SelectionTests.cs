@@ -143,6 +143,40 @@ public sealed class SelectionTests
         JsonNode.Parse(JsonSerializer.Serialize(record with { Batch = null }, CoreJson.Default.Record))!.AsObject().ContainsKey("batch").Should().BeFalse();
     }
 
+    /// <summary>What was in view, how long it took and who settled it cross to the core under the names the line format
+    /// gives them; one it cannot take — a promise out of [0, 1] — is refused as input.</summary>
+    [Fact]
+    public void RecordCarriesWhatWasInViewHowLongItTookAndWhoSettledIt()
+    {
+        var record = new Record("r1", DateTimeOffset.UnixEpoch)
+        {
+            Values = new Dictionary<string, string> { ["team"] = "network" },
+            Settlements = new Dictionary<string, SettlementKind> { ["team"] = SettlementKind.Correct },
+            Suggested = new Dictionary<string, string> { ["team"] = "desk" },
+            Sources = new Dictionary<string, Source> { ["team"] = Source.External },
+            Promises = new Dictionary<string, double> { ["team"] = 0.9 },
+            SettleMs = new Dictionary<string, ulong> { ["team"] = 4200 },
+            OpenMs = 61000,
+            SettledBy = "p-17",
+            FormVersion = "9f2c",
+        };
+        var line = JsonNode.Parse(JsonSerializer.Serialize(record, CoreJson.Default.Record))!.AsObject();
+        line["suggested"]!["team"]!.GetValue<string>().Should().Be("desk");
+        line["sources"]!["team"]!.GetValue<string>().Should().Be("Model");
+        line["promises"]!["team"]!.GetValue<double>().Should().Be(0.9);
+        line["settle_ms"]!["team"]!.GetValue<ulong>().Should().Be(4200);
+        line["open_ms"]!.GetValue<ulong>().Should().Be(61000);
+        line["settled_by"]!.GetValue<string>().Should().Be("p-17");
+        line["form_version"]!.GetValue<string>().Should().Be("9f2c");
+        using (SettledRecords.From([record])) { }
+
+        var bare = JsonNode.Parse(JsonSerializer.Serialize(new Record("r2", DateTimeOffset.UnixEpoch), CoreJson.Default.Record))!.AsObject();
+        bare.Select(p => p.Key).Should().NotIntersectWith(["suggested", "sources", "promises", "settle_ms", "open_ms", "settled_by", "form_version"]);
+
+        FluentActions.Invoking(() => SettledRecords.From([record with { Promises = new Dictionary<string, double> { ["team"] = 1.2 } }]))
+            .Should().Throw<ArgumentException>().WithMessage("*not in [0, 1]*");
+    }
+
     /// <summary>The C ABI writes nulls the binding leaves out — the core reads both as nothing.</summary>
     private static JsonNode? Comparable(JsonNode? node) => Doubles(node switch
     {

@@ -29,6 +29,15 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Added
 
+- **A settled record can say what was in view, how long it took and who settled it.** Seven optional entries of the
+  line format — `suggested` (the value in view when a decided attribute was settled), `sources` (the layer of the
+  answer in view, named as answers name it), `promises` (the precision promised for it then, in [0, 1]), `settle_ms`
+  (per attribute, the milliseconds from reaching it to settling it), `open_ms` (the milliseconds the record was open),
+  `settled_by` (an opaque id of who settled it) and `form_version` — are fields of `Record`, read and written back.
+  Nothing in the replays reads them yet; they are what a host keeps from its first record so that whether promises
+  hold for the answers people saw, what settling costs them and how settlers differ can be measured later. A promise
+  out of [0, 1], a layer other than the three and negative milliseconds are refused. Readers before this version refuse a
+  line that carries them.
 - **A replay's choice goes on the schema in one call, and an answer's promise reads from the tuning by its source.**
   `Schema::with_layers(attribute, &layers)` puts what `select_layers` chose on a decided attribute — the key threshold,
   the memory threshold and its similarity floor, a layer with no chosen threshold left unset — and
@@ -46,6 +55,10 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   differed only where batches were large and right or wrong together (device event reports, design effect about 7:
   1.6 points), not where batches were small (vehicle complaints, 1.5) or not right or wrong together (food
   inspections, 1.1).
+
+### Breaking
+
+- `Record` has seven more public fields (above). A struct literal that names every field needs `..Record::default()`.
 
 ### Fixed
 

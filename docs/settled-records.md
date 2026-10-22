@@ -24,10 +24,21 @@ One JSON object per line, one line per settlement:
 | `probabilities` | object of numbers | no | For an attribute settled as a `Check`, the probability it was drawn with |
 | `arrival` | string array | no | The attributes with a value, in the order their current values arrived, oldest first |
 | `batch` | string | no | The batch the record was settled in — records settled together, several at once from one source |
+| `suggested` | object of strings | no | For each decided attribute settled with a suggestion in view, the value suggested — Gil's answer, or what the application showed in its place (the kind says which); for a coarse level, the class shown |
+| `sources` | object of layer names | no | For each decided attribute settled with Gil's answer in view, the layer that gave it: `KeyMemory`, `SimilarRecord` or `Model` |
+| `promises` | object of numbers | no | For each decided attribute settled with Gil's answer in view, the precision promised for it when it was shown (the tuning's promise for its layer), in [0, 1] |
+| `settle_ms` | object of integers | no | For each decided attribute, the milliseconds from when the person reached it — its suggestion came into view, or it was reached with nothing in view — to when it was settled |
+| `open_ms` | integer | no | The milliseconds the record was open, from opening it to this settlement |
+| `settled_by` | string | no | Who settled the record, as an opaque id the application gives — one person, one id; never a name |
+| `form_version` | string | no | The version of the form the record was settled on, as the application identifies it — a fingerprint of its schema suits |
 
-An entry left out, or given as `null`, reads as empty (`arrival` and `batch` as unknown). An entry the table does not
-name does not read, and neither does a time out of range (`2025-02-29`, `24:00`, an offset past ±14:00): the line is
-refused rather than half understood. Lines are written back with `settled_at` in ticks.
+An entry left out, or given as `null`, reads as empty (`arrival`, `batch` and the last seven as unknown). An entry the
+table does not name does not read, and neither does a time out of range (`2025-02-29`, `24:00`, an offset past
+±14:00), a promise outside [0, 1], a layer other than the three or a negative number of milliseconds: the line is refused
+rather than half understood. Lines are written back with `settled_at` in ticks.
+
+The last seven entries are read from `Gil` 0.27.0 and `iyulab-gil` 0.9.0; earlier versions refuse a line that carries
+them, so write them for a reader that knows them.
 
 Lines may come in any order: a replay orders them by `settled_at`, then by `id`. A blank line is skipped.
 
@@ -64,6 +75,21 @@ Lines may come in any order: a replay orders them by `settled_at`, then by `id`.
 - **`arrival`** says which values were there when a decided attribute was settled. Without it, the observed values
   count as there from the start and the decided ones as settled in the form's order — right for a form filled top to
   bottom, optimistic for one where a later value is typed after the decided one was chosen.
+
+## What was in view, what it cost, who settled it
+
+The replays choose thresholds from `settled_at`, the values and the kinds; nothing in them reads the last seven entries
+yet. They are kept because a record cannot be given them afterwards, and each answers a question the others cannot:
+
+- **`suggested`, `sources` and `promises`** — whether the promise held for the answers people actually saw, answer by
+  answer and layer by layer, rather than for the answers a replay would have given. With `Check` settlements they also
+  say how far a suggestion in view moves what people settle.
+- **`settle_ms` and `open_ms`** — what settling costs a person, and whether it falls as settled records accumulate and
+  more is left to Gil. A monotonic clock's difference is enough; the wall clock is `settled_at`.
+- **`settled_by`** — whether settlers differ in how often they are right, which a promise counted over everyone hides.
+  An opaque id is all it needs: the same person, the same id.
+- **`form_version`** — which records were settled on which version of a form, so that a changed form is known as one
+  and its first thresholds can be compared with the old form's.
 
 ## What to keep, before Gil is in use
 

@@ -513,3 +513,24 @@ def test_records_that_name_their_batch_get_a_batch_check() -> None:
     assert check["across_batches_answered"] > 0 and check["across_records_answered"] > 0
     # The check moves no threshold.
     assert named["key"] == plain["key"] and named["memory"] == plain["memory"]
+
+
+def test_records_carry_what_was_in_view_how_long_it_took_and_who_settled_it() -> None:
+    line = {
+        "id": "t1",
+        "settled_at": 5,
+        "values": {"summary": "vpn drops", "team": "network"},
+        "settlements": {"team": "Correct"},
+        "suggested": {"team": "desk"},
+        "sources": {"team": "KeyMemory"},
+        "promises": {"team": 0.9},
+        "settle_ms": {"team": 4200},
+        "open_ms": 61000,
+        "settled_by": "p-17",
+        "form_version": "9f2c",
+    }
+    gil.records([line])
+    # Refused rather than half understood.
+    for wrong in ({"promises": {"team": 1.2}}, {"sources": {"team": "Key"}}, {"open_ms": -1}):
+        with pytest.raises(ValueError):
+            gil.records([{**line, **wrong}])

@@ -816,6 +816,68 @@ pub struct Record {
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub batch: Option<String>,
+    /// For each decided attribute settled with a suggestion in view, the value suggested — this decider's answer, or what
+    /// the host showed in its place (the kind says which). For a coarse level, the class shown.
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            default,
+            deserialize_with = "or_empty",
+            skip_serializing_if = "BTreeMap::is_empty"
+        )
+    )]
+    pub suggested: BTreeMap<String, String>,
+    /// For each decided attribute settled with this decider's answer in view, the layer that gave it.
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            default,
+            deserialize_with = "sources",
+            skip_serializing_if = "BTreeMap::is_empty"
+        )
+    )]
+    pub sources: BTreeMap<String, crate::decider::Source>,
+    /// For each decided attribute settled with this decider's answer in view, the precision promised for it when it was
+    /// shown — what [`crate::tuning::Tuning::promise_of`] gave for its layer. Each is in [0, 1].
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            default,
+            deserialize_with = "promises",
+            skip_serializing_if = "BTreeMap::is_empty"
+        )
+    )]
+    pub promises: BTreeMap<String, f64>,
+    /// For each decided attribute, the milliseconds from when the person reached it — its suggestion came into view, or
+    /// it was reached with nothing in view — to when it was settled.
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            default,
+            deserialize_with = "or_empty",
+            skip_serializing_if = "BTreeMap::is_empty"
+        )
+    )]
+    pub settle_ms: BTreeMap<String, u64>,
+    /// The milliseconds the record was open, from opening it to this settlement.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub open_ms: Option<u64>,
+    /// Who settled the record, as an opaque id the host gives — one person, one id; not a name.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub settled_by: Option<String>,
+    /// The version of the form the record was settled on, as the host identifies it — [`crate::tuning::fingerprint`]
+    /// of its schema suits.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub form_version: Option<String>,
 }
 
 impl Record {
@@ -866,6 +928,37 @@ where
 {
     use serde::Deserialize;
     Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
+}
+
+/// A record's `sources`: each a layer that answers — `None` is no answer, so no source.
+#[cfg(feature = "serde")]
+fn sources<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<BTreeMap<String, crate::decider::Source>, D::Error> {
+    let sources: BTreeMap<String, crate::decider::Source> = or_empty(deserializer)?;
+    match sources
+        .iter()
+        .find(|(_, s)| **s == crate::decider::Source::None)
+    {
+        Some((attribute, _)) => Err(serde::de::Error::custom(format!(
+            "the source for '{attribute}' is None; a source is the layer that answered"
+        ))),
+        None => Ok(sources),
+    }
+}
+
+/// A record's `promises`: each in [0, 1].
+#[cfg(feature = "serde")]
+fn promises<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<BTreeMap<String, f64>, D::Error> {
+    let promises: BTreeMap<String, f64> = or_empty(deserializer)?;
+    match promises.iter().find(|(_, p)| !(0.0..=1.0).contains(*p)) {
+        Some((attribute, p)) => Err(serde::de::Error::custom(format!(
+            "the promise for '{attribute}' is {p}, not in [0, 1]"
+        ))),
+        None => Ok(promises),
+    }
 }
 
 /// A record's `settled_at`: ticks, or a time as text.

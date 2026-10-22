@@ -102,6 +102,7 @@ fn a_record_reads_back_with_how_each_value_was_settled() {
         probabilities: BTreeMap::new(),
         arrival: Some(vec!["summary".into(), "team".into(), "tags".into()]),
         batch: Some("import-7".into()),
+        ..Record::default()
     };
     let (written, read) = round_trip(&record);
     assert_eq!(written["settlements"]["team"], "AcceptOther");
@@ -115,6 +116,85 @@ fn a_record_reads_back_with_how_each_value_was_settled() {
     // A record that names no batch writes none.
     assert!(serde_json::to_value(&bare).unwrap().get("batch").is_none());
     assert!(serde_json::from_value::<Record>(json!({ "settled_at": 5 })).is_err());
+}
+
+#[test]
+fn a_record_carries_what_was_in_view_how_long_it_took_and_who_settled_it() {
+    let line = json!({
+        "id": "t1",
+        "settled_at": 5,
+        "values": { "summary": "vpn drops", "team": "network" },
+        "settlements": { "team": "Correct" },
+        "suggested": { "team": "desk" },
+        "sources": { "team": "KeyMemory" },
+        "promises": { "team": 0.9 },
+        "settle_ms": { "team": 4200 },
+        "open_ms": 61000,
+        "settled_by": "p-17",
+        "form_version": "9f2c"
+    });
+    let record: Record = serde_json::from_value(line.clone()).expect("a record");
+    assert_eq!(record.suggested["team"], "desk");
+    assert_eq!(record.sources["team"], Source::KeyMemory);
+    assert_eq!(record.promises["team"], 0.9);
+    assert_eq!(record.settle_ms["team"], 4200);
+    assert_eq!(record.open_ms, Some(61000));
+    assert_eq!(record.settled_by.as_deref(), Some("p-17"));
+    assert_eq!(record.form_version.as_deref(), Some("9f2c"));
+    let written = serde_json::to_value(&record).unwrap();
+    for entry in [
+        "suggested",
+        "sources",
+        "promises",
+        "settle_ms",
+        "open_ms",
+        "settled_by",
+        "form_version",
+    ] {
+        assert_eq!(written[entry], line[entry], "{entry}");
+    }
+    // A layer named as answers name it; the host's model is "Model".
+    let model: Record = serde_json::from_value(
+        json!({ "id": "t1", "settled_at": 5, "sources": { "team": "Model" } }),
+    )
+    .expect("a record");
+    assert_eq!(model.sources["team"], Source::External);
+
+    // None of them written when none is known, and null reads as left out.
+    let bare: Record = serde_json::from_value(json!({
+        "id": "t2", "settled_at": 5, "suggested": null, "promises": null, "open_ms": null
+    }))
+    .expect("a record");
+    assert!(bare.suggested.is_empty() && bare.promises.is_empty() && bare.open_ms.is_none());
+    let written = serde_json::to_value(&bare).unwrap();
+    for entry in [
+        "suggested",
+        "sources",
+        "promises",
+        "settle_ms",
+        "open_ms",
+        "settled_by",
+        "form_version",
+    ] {
+        assert!(written.get(entry).is_none(), "{entry}");
+    }
+
+    // Refused rather than half understood: a promise out of [0, 1], a layer by another name, negative milliseconds.
+    let refused = |extra: Value| {
+        let mut line = json!({ "id": "t3", "settled_at": 5 });
+        line.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        serde_json::from_value::<Record>(line)
+            .unwrap_err()
+            .to_string()
+    };
+    assert!(refused(json!({ "promises": { "team": 1.2 } })).contains("not in [0, 1]"));
+    assert!(refused(json!({ "promises": { "team": -0.1 } })).contains("not in [0, 1]"));
+    refused(json!({ "sources": { "team": "Key" } }));
+    assert!(refused(json!({ "sources": { "team": "None" } })).contains("layer that answered"));
+    refused(json!({ "open_ms": -1 }));
+    refused(json!({ "settle_ms": { "team": 1.5 } }));
 }
 
 #[test]
