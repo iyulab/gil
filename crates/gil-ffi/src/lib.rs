@@ -1504,8 +1504,9 @@ pub unsafe extern "C" fn gil_keeper_settled(keeper: *const GilKeeper) -> usize {
     unsafe { keeper.as_ref() }.map_or(0, |k| k.keeper.settled())
 }
 
-/// The keeper's choice as it stands: `{"tuning": …, "chosen": {attribute: thresholds, …}}` in the core's `serde` form —
-/// `chosen` empty before the first choice.
+/// The keeper's choice as it stands: `{"tuning": …, "chosen": {attribute: thresholds, …}, "coarse": {attribute:
+/// thresholds, …}}` in the core's `serde` form — `chosen` empty before the first choice, `coarse` for the attributes
+/// with a coarse level.
 fn keeper_state(keeper: &Keeper, decisions: Option<Vec<Value>>) -> Value {
     let chosen: serde_json::Map<String, Value> = keeper
         .attributes()
@@ -1518,7 +1519,18 @@ fn keeper_state(keeper: &Keeper, decisions: Option<Vec<Value>>) -> Value {
             })
         })
         .collect();
-    let mut value = json!({ "tuning": keeper.tuning(), "chosen": chosen });
+    let coarse: serde_json::Map<String, Value> = keeper
+        .attributes()
+        .filter_map(|a| {
+            keeper.chosen_coarse(a).map(|t| {
+                (
+                    a.to_owned(),
+                    serde_json::to_value(t).expect("thresholds serialize"),
+                )
+            })
+        })
+        .collect();
+    let mut value = json!({ "tuning": keeper.tuning(), "chosen": chosen, "coarse": coarse });
     if let Some(decisions) = decisions {
         value["decisions"] = Value::Array(decisions);
     }
@@ -1552,7 +1564,7 @@ pub unsafe extern "C" fn gil_keeper_rechoose(
     status
 }
 
-/// Keeps as the result the keeper's choice as it stands — `{"tuning": …, "chosen": {…}}`.
+/// Keeps as the result the keeper's choice as it stands — `{"tuning": …, "chosen": {…}, "coarse": {…}}`.
 ///
 /// # Safety
 /// `keeper` is a live handle; `result_len` points to one writable `usize`.

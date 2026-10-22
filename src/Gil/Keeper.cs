@@ -7,10 +7,11 @@ namespace Gil;
 /// the start. It holds the records and, for each decided attribute that takes one value, the replay as it stands.
 /// <see cref="Settle"/> puts records into the decider and into the next choice, <see cref="Stale"/> says when the choice
 /// no longer stands, and <see cref="Rechoose"/> replays only the records settled since and chooses again — the same
-/// thresholds, to the bit, as <see cref="Replay.SelectLayers"/> on all the records. Answer with the decider and
+/// thresholds, to the bit, as <see cref="Replay.SelectLayers"/> on all the records. An attribute with a coarse level has
+/// the level's thresholds chosen on the same replay, after its value layers' — as <see cref="Replay.SelectCoarse"/> with
+/// the value thresholds just chosen. Answer with the decider and
 /// <see cref="Schema"/>; an answer's promise is <see cref="Tuning"/>'s <see cref="Gil.Tuning.PromiseOf"/>. Give it the
-/// same decider every time. Calls on one keeper run one at a time. Nothing is stored outside the process; the coarse
-/// level is not chosen by it.</summary>
+/// same decider every time. Calls on one keeper run one at a time. Nothing is stored outside the process.</summary>
 public sealed class Keeper : IDisposable
 {
     private readonly Lock sync = new();
@@ -149,8 +150,10 @@ public sealed class Keeper : IDisposable
 }
 
 /// <summary>A keeper's choice: the tuning with its promises, each attribute's thresholds with how they did on the
-/// replay, and — when asked for — the decision records of the records replayed this time.</summary>
+/// replay, its coarse level's for an attribute that has one, and — when asked for — the decision records of the records
+/// replayed this time.</summary>
 public sealed record KeeperChoice(
     Tuning Tuning,
     IReadOnlyDictionary<string, LayerThresholds> Chosen,
+    IReadOnlyDictionary<string, LayerThresholds> Coarse,
     IReadOnlyList<DecisionRecord>? Decisions = null);

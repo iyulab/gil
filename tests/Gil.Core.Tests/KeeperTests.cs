@@ -26,6 +26,7 @@ public sealed class KeeperTests
         using var decider = new Decider();
         keeper.Stale().Should().BeNull();
         keeper.State().Chosen.Should().BeEmpty();
+        keeper.State().Coarse.Should().BeEmpty();
 
         var done = 0;
         foreach (var at in new[] { 120, 121, 300, lines.Length })
@@ -45,9 +46,19 @@ public sealed class KeeperTests
             using var all = Of(lines[..at]);
             foreach (var attribute in choice.Chosen.Keys)
             {
-                Json(choice.Chosen[attribute]).Should().Be(
-                    Json(Replay.SelectLayers(schema, attribute, all, options).Thresholds), $"{attribute} at {at}");
+                var alone = Replay.SelectLayers(schema, attribute, all, options).Thresholds;
+                Json(choice.Chosen[attribute]).Should().Be(Json(alone), $"{attribute} at {at}");
+                if (choice.Coarse.TryGetValue(attribute, out var level))
+                {
+                    // The level on the lookups the value thresholds just chosen leave.
+                    using var withValues = schema.WithLayers(attribute, alone);
+                    Json(level).Should().Be(
+                        Json(Replay.SelectCoarse(withValues, attribute, all, options).Thresholds),
+                        $"{attribute}'s coarse level at {at}");
+                }
             }
+
+            choice.Coarse.Keys.Should().BeEquivalentTo(["code"]);
         }
 
         // The schema carries the choice, and the tuning its promises.

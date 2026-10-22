@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, HashMap};
 use crate::decision_record::{CoarseLook, DecisionRecord, KeyLook, SimilarLook, TypedLook};
 use crate::key_memory::{First, KeyMemory, Lookup};
 use crate::lexical_memory::LexicalMemory;
-use crate::schema::{AttributeRole, Record, Schema, SettlementKind};
+use crate::schema::{Attribute, AttributeRole, Record, Schema, SettlementKind};
 use crate::{coarse_groups, similar_vote, text};
 
 /// How many of the latest records replayed [`ThresholdChoice::promise`] is taken over — every record in settlement
@@ -959,12 +959,11 @@ pub(crate) struct Step {
     coarse: Option<CoarseStep>,
 }
 
-/// What an attribute's coarse level made of one lookup: whether the attribute's own layers answered the value at its thresholds,
-/// the score of the class the keys back and whether it was the settled value's, and how the similar records voted
-/// for a class.
+/// What an attribute's coarse level made of one lookup: the score of the class the keys back and whether it was the
+/// settled value's, and how the similar records voted for a class. Whether the value layers answered first depends on
+/// their thresholds, so it is read off the step when the level's thresholds are chosen ([`value_answered`]).
 #[derive(Clone, Copy, Debug)]
 struct CoarseStep {
-    value_answered: bool,
     keys: Option<(f64, bool)>,
     vote: Option<Vote>,
 }
@@ -1555,6 +1554,33 @@ pub fn select_coarse_with(
         choice.counting,
         Replaying::Coarse(sink),
     );
+    coarse_layers(&steps, latest, definition, choice)
+}
+
+/// Whether `definition`'s value layers answered a lookup at its thresholds — the key layer with a strong enough key that
+/// settled no value to catch, or the similar record layer with a strong enough vote whose nearest voter, when several
+/// voted, clears the floor. Only where they do not is the coarse level offered.
+fn value_answered(key: Option<&First>, vote: Option<Vote>, definition: &Attribute) -> bool {
+    let caught = key.is_some_and(|first| first.caught);
+    key.is_some_and(|f| !f.caught && definition.key_threshold.is_some_and(|t| f.score >= t))
+        || !caught
+            && vote.is_some_and(|v| {
+                definition.memory_threshold.is_some_and(|t| v.score >= t)
+                    && !(v.voted
+                        && definition
+                            .memory_floor
+                            .is_some_and(|floor| v.nearest < floor))
+            })
+}
+
+/// Chooses the coarse level's thresholds from a coarse replay's steps, on the lookups `definition`'s value layers leave
+/// at the thresholds it has — what [`select_coarse`] does once it has replayed.
+pub(crate) fn coarse_layers(
+    steps: &[Step],
+    latest: usize,
+    definition: &Attribute,
+    choice: Choice,
+) -> LayerThresholds {
     // What the level made of each lookup the value layers left, as a step whose vote is the class's — not one under a
     // key that settled a value to catch, where the level is not offered either.
     let left: Vec<(Step, Option<(f64, bool)>)> = steps
@@ -1562,7 +1588,8 @@ pub fn select_coarse_with(
         .filter_map(|s| {
             let coarse = s.coarse.expect("a coarse replay's step");
             let caught = s.key.as_ref().is_some_and(|first| first.caught);
-            ((s.key_looked || s.looked) && !coarse.value_answered && !caught).then(|| {
+            let answered = value_answered(s.key.as_ref(), s.vote, definition);
+            ((s.key_looked || s.looked) && !answered && !caught).then(|| {
                 let step = Step {
                     vote: coarse.vote,
                     ..s.clone()
@@ -1738,16 +1765,7 @@ pub(crate) fn carry_on(
             Some(level) if coarse => {
                 // As a suggestion: the value layers answer at the attribute's own thresholds; only where they do not is
                 // the level offered.
-                let value_answered = first.as_ref().is_some_and(|f| {
-                    !f.caught && definition.key_threshold.is_some_and(|t| f.score >= t)
-                }) || !first.as_ref().is_some_and(|f| f.caught)
-                    && vote.is_some_and(|v| {
-                        definition.memory_threshold.is_some_and(|t| v.score >= t)
-                            && !(v.voted
-                                && definition
-                                    .memory_floor
-                                    .is_some_and(|floor| v.nearest < floor))
-                    });
+                let value_answered = value_answered(first.as_ref(), vote, definition);
                 let class = level.of(settled);
                 let keys = if key_looked {
                     coarse_groups::keys(&key_memory.keyed_values(&asked), level)
@@ -1756,7 +1774,6 @@ pub(crate) fn carry_on(
                 };
                 let voted_class = coarse_groups::vote(&found, votes, level);
                 let step = CoarseStep {
-                    value_answered,
                     keys: keys.as_ref().map(|(c, score, _)| (*score, *c == class)),
                     vote: voted_class.as_ref().map(|(c, score, nearest, voted)| Vote {
                         score: *score,

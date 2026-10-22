@@ -425,7 +425,8 @@ struct Keeper {
     broken: bool,
 }
 
-/// A keeper's choice as JSON: `{"tuning": …, "chosen": {attribute: thresholds, …}}`.
+/// A keeper's choice as JSON: `{"tuning": …, "chosen": {attribute: thresholds, …}, "coarse": {attribute: thresholds, …}}`
+/// — `coarse` for the attributes with a coarse level.
 fn keeper_json(keeper: &gil::keeper::Keeper) -> String {
     let chosen: serde_json::Map<String, Value> = keeper
         .attributes()
@@ -438,7 +439,18 @@ fn keeper_json(keeper: &gil::keeper::Keeper) -> String {
             })
         })
         .collect();
-    json!({ "tuning": keeper.tuning(), "chosen": chosen }).to_string()
+    let coarse: serde_json::Map<String, Value> = keeper
+        .attributes()
+        .filter_map(|a| {
+            keeper.chosen_coarse(a).map(|t| {
+                (
+                    a.to_owned(),
+                    serde_json::to_value(t).expect("thresholds serialize"),
+                )
+            })
+        })
+        .collect();
+    json!({ "tuning": keeper.tuning(), "chosen": chosen, "coarse": coarse }).to_string()
 }
 
 #[pymethods]

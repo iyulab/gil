@@ -554,6 +554,16 @@ def test_a_keeper_rechooses_as_a_selection_from_the_start() -> None:
                 schema, attribute, gil.records(items[:at]), counting=COUNTED, rule="pooled", decisions=False
             )
             assert thresholds == alone, f"{attribute} at {at}"
+            if attribute in choice["coarse"]:
+                level, _ = gil.select_coarse(
+                    schema.with_layers(attribute, alone),
+                    attribute,
+                    gil.records(items[:at]),
+                    counting=COUNTED,
+                    decisions=False,
+                )
+                assert choice["coarse"][attribute] == level, f"{attribute} coarse at {at}"
+        assert set(choice["coarse"]) == {"code"}
     # The schema carries the choice, and the tuning its promises.
     team = keeper.state()["chosen"]["team"]
     chosen = team["key"]["chosen"]

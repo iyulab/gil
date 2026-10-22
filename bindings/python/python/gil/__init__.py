@@ -713,11 +713,12 @@ class OpenRecord:
 
 class KeeperChoice(TypedDict, total=False):
     """A keeper's choice: the tuning with its promises (the core's ``Tuning``), each attribute's thresholds with how they
-    did on the replay, and — from :meth:`Keeper.rechoose` when asked for — the decision records of the records replayed
-    that time."""
+    did on the replay, its coarse level's for an attribute that has one, and — from :meth:`Keeper.rechoose` when asked
+    for — the decision records of the records replayed that time."""
 
     tuning: dict[str, Any]
     chosen: dict[str, LayerThresholds]
+    coarse: dict[str, LayerThresholds]
     decisions: list[DecisionRecord]
 
 
@@ -729,9 +730,10 @@ class Keeper:
     It holds the records and, for each decided attribute of ``schema`` that takes one value, the replay as it stands.
     :meth:`settle` puts records into the decider and into the next choice, :meth:`stale` says when the choice no longer
     stands, and :meth:`rechoose` replays only the records settled since and chooses again — the same thresholds, to the
-    bit, as :func:`select_layers` on all the records. Answer with the decider and :attr:`schema`; an answer's promise is
+    bit, as :func:`select_layers` on all the records. An attribute with a coarse level has the level's thresholds chosen
+    on the same replay, after its value layers' — as :func:`select_coarse` with the value thresholds just chosen. Answer with the decider and :attr:`schema`; an answer's promise is
     ``promise_of(keeper.tuning, attribute, answer["source"])``. Give it the same decider every time. The choosing
-    arguments are :func:`select_layers`'; the coarse level is not chosen by it. Nothing is stored outside the process.
+    arguments are :func:`select_layers`'. Nothing is stored outside the process.
     """
 
     __slots__ = ("_inner",)

@@ -14,8 +14,10 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   into the decider and into the next choice; `Stale()` says when the choice no longer stands (a tenth more or fewer
   records); `Rechoose()` replays only the records settled since the last choice, chooses each attribute's thresholds,
   puts them on `Schema` and captures `Tuning` with their promises — the same thresholds as `Replay.SelectLayers` on all
-  the records. A record settled out of order, or `Remove(decider, id)`, has the next choice replay from the start. The
-  native library speaks version 5 of its C interface.
+  the records, and for an attribute with a coarse level the level's thresholds as `Replay.SelectCoarse` would with the
+  value thresholds just chosen (`KeeperChoice.Coarse`), on the same replay. A record settled out of order, or
+  `Remove(decider, id)`, has the next choice replay from the start. The native library speaks version 5 of its C
+  interface.
 - **A settled record can say what was in view, how long it took and who settled it.** `Record.Suggested` (the value
   in view when a decided attribute was settled), `Sources` (the layer of the answer in view), `Promises` (the precision
   promised for it then, in [0, 1] — `Tuning.PromiseOf`), `SettleMs` (per attribute, the milliseconds from reaching it

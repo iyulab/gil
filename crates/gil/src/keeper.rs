@@ -7,7 +7,10 @@
 //! decided attribute it keeps, the replay as it stands: [`Keeper::settle`] puts records into the host's decider and into
 //! the next choice, [`Keeper::stale`] says when the choice no longer stands, and [`Keeper::rechoose`] replays only the
 //! records settled since and chooses again — the same thresholds, to the bit, as [`crate::replay::select_layers`] on all
-//! the records. The host answers with its decider and [`Keeper::schema`]; an answer's promise is [`Keeper::tuning`]'s.
+//! the records. An attribute with a coarse level has the level's thresholds chosen on the same replay, after its value
+//! layers' — the same, to the bit, as [`crate::replay::select_coarse`] on all the records with the value thresholds just
+//! chosen — so a level costs no second replay. The host answers with its decider and [`Keeper::schema`]; an answer's
+//! promise is [`Keeper::tuning`]'s.
 //! The decider stays the host's, so that records being filled in ([`crate::open_record::OpenRecord`]) use it as before;
 //! give the keeper the same decider every time.
 //!
@@ -22,7 +25,8 @@ use crate::decision_record::DecisionRecord;
 use crate::key_memory::KeyMemory;
 use crate::lexical_memory::LexicalMemory;
 use crate::replay::{
-    Choice, LayerThresholds, ReplayState, Replaying, ThresholdRule, batch_check, carry_on, layers,
+    Choice, LayerThresholds, ReplayState, Replaying, ThresholdRule, batch_check, carry_on,
+    coarse_layers, layers,
 };
 use crate::schema::{AttributeRole, Record, Schema, SettlementKind};
 use crate::tuning::{Stale, Tuning};
@@ -79,6 +83,7 @@ pub struct Keeper {
     records: Vec<Record>,
     replays: BTreeMap<String, Replay>,
     chosen: BTreeMap<String, LayerThresholds>,
+    coarse: BTreeMap<String, LayerThresholds>,
     tuning: Tuning,
 }
 
@@ -99,6 +104,7 @@ impl Keeper {
             records: Vec::new(),
             replays: BTreeMap::new(),
             chosen: BTreeMap::new(),
+            coarse: BTreeMap::new(),
             tuning,
         };
         keeper.restart();
@@ -135,6 +141,12 @@ impl Keeper {
     /// and for an attribute the keeper does not choose for.
     pub fn chosen(&self, attribute: &str) -> Option<&LayerThresholds> {
         self.chosen.get(attribute)
+    }
+
+    /// What the last [`Keeper::rechoose`] chose for `attribute`'s coarse level; `None` before the first, and for an
+    /// attribute with no coarse level or that the keeper does not choose for.
+    pub fn chosen_coarse(&self, attribute: &str) -> Option<&LayerThresholds> {
+        self.coarse.get(attribute)
     }
 
     /// The attributes the keeper chooses thresholds for.
@@ -175,7 +187,9 @@ impl Keeper {
     }
 
     /// As [`Keeper::rechoose`], handing `sink` the decision record of every record the replays go through this time, in
-    /// settlement order, attribute by attribute.
+    /// settlement order, attribute by attribute. For an attribute with a coarse level the record says what the level made
+    /// of it ([`DecisionRecord::coarse`]), with whether the value layers answered first at the thresholds the schema held
+    /// when the record was replayed.
     pub fn rechoose_with(&mut self, sink: &mut dyn FnMut(&DecisionRecord)) -> &Tuning {
         if self.replays.values().any(|r| !self.carries_on(r)) {
             self.restart();
@@ -184,7 +198,14 @@ impl Keeper {
         let choice = self.keep.choice();
         let mut schema = self.schema.clone();
         let mut chosen = BTreeMap::new();
+        let mut coarse = BTreeMap::new();
         for (attribute, replay) in &mut self.replays {
+            let definition = self.schema.attribute(attribute);
+            let replaying = if definition.coarse.is_some() {
+                Replaying::Coarse(&mut *sink)
+            } else {
+                Replaying::Values(&mut *sink)
+            };
             carry_on(
                 &mut replay.state,
                 &mut replay.key_memory,
@@ -193,10 +214,9 @@ impl Keeper {
                 attribute,
                 &self.records[replay.through..],
                 choice.counting,
-                Replaying::Values(sink),
+                replaying,
             );
             replay.through = self.records.len();
-            let definition = self.schema.attribute(attribute);
             let thresholds = layers(
                 &replay.state.steps,
                 replay.state.order,
@@ -220,6 +240,19 @@ impl Keeper {
                 .with_layers(attribute, &thresholds)
                 .expect("a chosen threshold fits the attribute it was chosen for");
             chosen.insert(attribute.clone(), thresholds);
+            if definition.coarse.is_some() {
+                // On the lookups the value layers leave at the thresholds just chosen.
+                let level = coarse_layers(
+                    &replay.state.steps,
+                    replay.state.order,
+                    schema.attribute(attribute),
+                    choice,
+                );
+                schema = schema
+                    .with_coarse(attribute, &level)
+                    .expect("a chosen threshold fits the level it was chosen for");
+                coarse.insert(attribute.clone(), level);
+            }
         }
 
         let mut tuning = Tuning::capture(&schema, self.records.len(), self.keep.target_precision);
@@ -228,6 +261,7 @@ impl Keeper {
         }
         self.schema = schema;
         self.chosen = chosen;
+        self.coarse = coarse;
         self.tuning = tuning;
         &self.tuning
     }
@@ -279,8 +313,8 @@ mod tests {
     use crate::decider::{Decider, Source};
     use crate::key_memory::KeyMemory;
     use crate::lexical_memory::LexicalMemory;
-    use crate::replay::{LayerOptions, ThresholdRule, select_layers};
-    use crate::schema::{Attribute, AttributeRole, Record, Schema, SettlementKind};
+    use crate::replay::{LayerOptions, ThresholdRule, select_coarse, select_layers};
+    use crate::schema::{Attribute, AttributeRole, CoarseLevel, Record, Schema, SettlementKind};
     use crate::tuning::Stale;
     use std::collections::BTreeMap;
 
@@ -414,6 +448,107 @@ mod tests {
                 team.key.chosen.as_ref().map(|c| c.promise)
             );
         }
+    }
+
+    /// The schema with a coarse level on `team`: the network and the hardware teams one class, billing and auth another.
+    fn coarse_schema() -> Schema {
+        let mut team = Attribute::new("team", AttributeRole::Decided);
+        team.coarse = Some(CoarseLevel {
+            classes: Some(BTreeMap::from([
+                ("network".to_owned(), "infra".to_owned()),
+                ("hardware".to_owned(), "infra".to_owned()),
+                ("billing".to_owned(), "account".to_owned()),
+                ("auth".to_owned(), "account".to_owned()),
+            ])),
+            ..CoarseLevel::default()
+        });
+        Schema::new(
+            "ticket",
+            vec![
+                Attribute::new("product", AttributeRole::Observed),
+                Attribute::new("summary", AttributeRole::Observed),
+                team,
+                Attribute::new("queue", AttributeRole::Decided),
+            ],
+        )
+        .expect("a valid schema")
+    }
+
+    #[test]
+    fn a_coarse_level_is_chosen_as_a_coarse_replay_from_the_start_after_the_values() {
+        // The product says the class; within it, the team is a coin the records do not show.
+        let records: Vec<Record> = settled(700)
+            .into_iter()
+            .enumerate()
+            .map(|(i, mut r)| {
+                let infra = ["p0", "p1", "p2"].contains(&r.values["product"].as_str());
+                let team = match (infra, (i * 13 + i / 7) % 2 == 0) {
+                    (true, true) => "network",
+                    (true, false) => "hardware",
+                    (false, true) => "billing",
+                    (false, false) => "auth",
+                };
+                r.values.insert("team".into(), team.into());
+                r
+            })
+            .collect();
+        let keep = Keep::new(0.8);
+        let mut keeper = Keeper::new(coarse_schema(), keep.clone());
+        let mut decider = decider();
+        let mut done = 0;
+        for at in [1, 40, 300, 700] {
+            keeper.settle(&mut decider, &records[done..at]);
+            done = at;
+            keeper.rechoose();
+
+            let values = select_layers(
+                &mut KeyMemory::default(),
+                &mut LexicalMemory::default(),
+                &coarse_schema(),
+                "team",
+                &records[..at],
+                keep.choice(),
+                LayerOptions {
+                    rule: keep.rule,
+                    sink: None,
+                },
+            );
+            let with_values = coarse_schema().with_layers("team", &values).unwrap();
+            let level = select_coarse(
+                &mut KeyMemory::default(),
+                &mut LexicalMemory::default(),
+                &with_values,
+                "team",
+                &records[..at],
+                keep.choice(),
+            );
+            assert_eq!(
+                format!("{:?}", keeper.chosen("team").unwrap()),
+                format!("{values:?}"),
+                "values at {at}"
+            );
+            assert_eq!(
+                format!("{:?}", keeper.chosen_coarse("team").unwrap()),
+                format!("{level:?}"),
+                "level at {at}"
+            );
+            let on_schema = keeper.schema().attribute("team").coarse.as_ref().unwrap();
+            assert_eq!(
+                on_schema.memory_threshold,
+                level.memory.chosen.as_ref().map(|c| c.threshold)
+            );
+        }
+        assert!(keeper.chosen_coarse("queue").is_none());
+        assert!(
+            keeper
+                .chosen_coarse("team")
+                .unwrap()
+                .memory
+                .chosen
+                .is_some()
+                || keeper.chosen_coarse("team").unwrap().key.chosen.is_some(),
+            "the level chose something to compare"
+        );
     }
 
     #[test]

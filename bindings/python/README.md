@@ -194,7 +194,8 @@ if keeper.stale() is not None:
 schema = keeper.schema  # answer with this and the decider
 ```
 
-It chooses for every decided attribute that takes one value, but not a coarse level. A record settled out of order, or
+It chooses for every decided attribute that takes one value, and for an attribute with a coarse level the level's
+thresholds too, on the same replay — as `select_coarse` would with the value thresholds just chosen. A record settled out of order, or
 one taken out with `keeper.remove(decider, id)`, has the next choice replay from the start. Nothing is stored outside
 the process: a keeper made at start-up replays the saved records once.
 

@@ -35,7 +35,8 @@ that the .NET library on NuGet, `Gil`, is checked against — `Gil` runs on this
   gives an answer the promise of the layer it came from.
 - **Keeper** — `keeper::Keeper` keeps the loop as records arrive: `settle` puts them into the decider and into the
   next choice, `stale` says when the choice no longer stands, and `rechoose` replays only the records settled since the
-  last choice — the same thresholds as `select_layers` on all of them. On 50,000 public food-inspection records
+  last choice — the same thresholds as `select_layers` on all of them, and a coarse level's as `select_coarse` with
+  them, on the same replay. On 50,000 public food-inspection records
   chosen again at every tenth more, the 23 choices took 35 s in all against 215 s replaying from the start each time.
 - **Decision records** — every lookup a replay or an answer makes can be handed to a sink, so a host can recount a
   choice or follow a layer over time without reaching into the replay.
