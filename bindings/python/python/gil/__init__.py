@@ -56,6 +56,7 @@ __all__ = [
     "AskAdvice",
     "AskPlanner",
     "AttributeUsage",
+    "BatchCheck",
     "Candidate",
     "CoarseLook",
     "Decider",
@@ -125,11 +126,35 @@ class ThresholdReplay(TypedDict):
     keys: list[KeyState] | None
 
 
-class LayerThresholds(TypedDict):
-    """The key layer's replay and the memory layer's, chosen on what the key threshold would not have answered."""
+class BatchCheck(TypedDict):
+    """What the batches among the latest records do to a promise — see the crate's ``BatchCheck``.
 
+    Thresholds chosen on half of the latest records and counted on the other half, split by batch and split by record;
+    ``across_records`` above ``across_batches`` beyond chance means the batches flatter the promise.
+    """
+
+    across_batches: float | None
+    across_batches_answered: int
+    across_records: float | None
+    across_records_answered: int
+    batches: int
+    batch_size: float | None
+    correlation: float | None
+    design_effect: float | None
+
+
+class _Layers(TypedDict):
     key: ThresholdReplay
     memory: ThresholdReplay
+
+
+class LayerThresholds(_Layers, total=False):
+    """The key layer's replay and the memory layer's, chosen on what the key threshold would not have answered.
+
+    ``batches`` is there only when some of the latest records name their ``batch``.
+    """
+
+    batches: BatchCheck
 
 
 class TypedKeyThresholds(TypedDict):
@@ -254,7 +279,8 @@ def records(items: Iterable[dict[str, Any]]) -> Records:
     """Settled records from dictionaries, in settlement order.
 
     Each has ``id``, ``settled_at`` (``yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM`` or 100-nanosecond ticks since the Unix
-    epoch) and ``values``; ``sets``, ``settlements``, ``probabilities`` and ``arrival`` are optional.
+    epoch) and ``values``; ``sets``, ``settlements``, ``probabilities``, ``arrival`` and ``batch`` (the batch the
+    record was settled in, for ``select_layers`` to count what batches do to its promise) are optional.
     """
     return Records.from_json_lines(
         "\n".join(json.dumps(item, ensure_ascii=False) for item in items)
@@ -286,6 +312,10 @@ def select_layers(
     at the target) or ``"pooled"`` (the pair answering the most of the attribute's latest lookups while all their
     answers together hold the target at the bottom of their Wilson interval at 1.645 standard errors — see the crate's
     ``ThresholdRule::Pooled``).
+
+    When some of the latest records name their ``batch``, the thresholds carry ``batches`` (``BatchCheck``): the
+    precision of thresholds chosen on half of those records and counted on the other half, split by batch and by
+    record, with the batches' size, correlation and design effect. It moves no threshold.
     """
     thresholds, lines = select_layers_json(
         schema.json,

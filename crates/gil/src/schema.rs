@@ -754,6 +754,13 @@ pub struct Record {
     /// the start and the decided ones as settled in the schema's order.
     #[cfg_attr(feature = "serde", serde(default))]
     pub arrival: Option<Vec<String>>,
+    /// The batch the record was settled in — records settled together, several at once from one source — when known.
+    /// A layers replay counts what the batches do to its promise (`BatchCheck`); records of one batch name the same.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub batch: Option<String>,
 }
 
 impl Record {

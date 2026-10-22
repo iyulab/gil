@@ -6,6 +6,27 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ## Unreleased
 
+### Changed
+
+- **Breaking: `replay::select_layers` takes `LayerOptions`, and `select_layers_by_rule`, `select_layers_with` and
+  `select_layers_by_rule_with` are gone.** The four were one choice with the rule and the decision-record sink each
+  optional. Pass `LayerOptions::default()` for what `select_layers` did, `LayerOptions { rule, ..Default::default() }`
+  for `select_layers_by_rule`, `LayerOptions { sink: Some(&mut sink), ..Default::default() }` for
+  `select_layers_with`, and both fields for `select_layers_by_rule_with`. Python's `select_layers` and the C ABI are
+  unchanged.
+
+### Added
+
+- **What batches do to a promise.** `Record::batch` names the batch a record was settled in — records settled
+  together, several at once from one source. When any of the latest `RECENT_RECORDS` records names one,
+  `LayerThresholds::batches` (`BatchCheck`) gives the precision of thresholds chosen on half of them and counted on
+  the other half, split by batch and split by record, over `BATCH_SPLITS` splits; how many answers a batch holds; how
+  much they are right or wrong together (ICC(1)); and the design effect. Thresholds are chosen as before. Records that
+  name no batch write and read as before, and Python records take a `batch` key. On public records the two counts
+  differed only where batches were large and right or wrong together (device event reports, design effect about 7:
+  1.6 points), not where batches were small (vehicle complaints, 1.5) or not right or wrong together (food
+  inspections, 1.1).
+
 ### Fixed
 
 - **Python: a record that keeps an attribute where its kind does not belong is a `ValueError` and leaves the decider

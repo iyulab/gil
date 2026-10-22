@@ -15,7 +15,7 @@ use gil::decision_record::DecisionRecord;
 use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::replay::{
-    Choice, KeyState, ThresholdChoice, select_key_threshold, select_layers, select_layers_with,
+    Choice, KeyState, LayerOptions, ThresholdChoice, select_key_threshold, select_layers,
 };
 use gil::schema::{
     Attribute, AttributeRole, CoarseLevel, Record, Schema, Settlement, SettlementKind,
@@ -308,6 +308,7 @@ fn choosing_thresholds_counts_a_check_as_the_decisions_it_stands_for() {
         "team",
         &records,
         choice(0.75, 1),
+        LayerOptions::default(),
     );
     assert!((layers.key.chosen.unwrap().precision - 0.8).abs() < 1e-12);
 
@@ -587,6 +588,7 @@ fn choosing_the_similar_record_threshold_does_not_count_lookups_no_layer_would_a
             "risk",
             &written_lines(),
             choice(0.5, 1),
+            LayerOptions::default(),
         )
     };
     let plain = layers(&written(None));
@@ -658,17 +660,20 @@ fn requests(seed: u64, count: i64) -> Vec<Record> {
 /// left to the similar record layer.
 fn similar(schema: &Schema, records: &[Record]) -> (gil::replay::ThresholdReplay, Vec<(f64, f64)>) {
     let mut voted = Vec::new();
-    let layers = select_layers_with(
+    let layers = select_layers(
         &mut KeyMemory::new(4, 1.0),
         &mut LexicalMemory::default(),
         schema,
         "category",
         records,
         choice(0.01, 1),
-        &mut |d: &DecisionRecord| {
-            if let Some(look) = d.similar.as_ref().filter(|l| l.voted) {
-                voted.push((look.score, look.nearest));
-            }
+        LayerOptions {
+            sink: Some(&mut |d: &DecisionRecord| {
+                if let Some(look) = d.similar.as_ref().filter(|l| l.voted) {
+                    voted.push((look.score, look.nearest));
+                }
+            }),
+            ..Default::default()
         },
     );
     assert_eq!(layers.key.chosen, None);

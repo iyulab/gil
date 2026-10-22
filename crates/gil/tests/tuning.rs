@@ -75,6 +75,7 @@ fn a_tuning_puts_back_on_a_fresh_schema_exactly_what_was_chosen() {
         &LayerThresholds {
             key: choice(1.25, 0.86),
             memory: choice(0.6, 0.82),
+            batches: None,
         },
     );
     assert_eq!(tuning.version, VERSION);

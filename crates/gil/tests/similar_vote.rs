@@ -19,7 +19,7 @@ use gil::decider::{Answer, Candidate, Decider, Evidence, Source};
 use gil::decision_record::{DecisionRecord, SimilarLook};
 use gil::key_memory::{KeyMemory, Lookup};
 use gil::lexical_memory::{LexicalMemory, Match};
-use gil::replay::{Choice, select_coarse, select_layers};
+use gil::replay::{Choice, LayerOptions, select_coarse, select_layers};
 use gil::schema::{Attribute, AttributeRole, CoarseLevel, Record, Schema};
 
 const MINUTE: i64 = 60 * 10_000_000;
@@ -302,6 +302,7 @@ fn a_replay_scores_lookups_as_suggestions_do() {
         "category",
         &records,
         choice(0.01, 1),
+        LayerOptions::default(),
     )
     .memory;
 

@@ -13,8 +13,8 @@ use common::{CHOSEN, COUNTED, doubles, fixture, lines, replay, schema, to_record
 use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::replay::{
-    Choice, LayerThresholds, ThresholdRule, select_key_concentrations, select_key_fields,
-    select_layers_by_rule,
+    Choice, LayerOptions, LayerThresholds, ThresholdRule, select_key_concentrations,
+    select_key_fields, select_layers,
 };
 use gil::schema::{Record, Schema, SettlementKind};
 use gil::tuning::Tuning;
@@ -197,14 +197,17 @@ fn the_other_selections_and_a_tuning_come_back_as_the_core_gives_them() {
         )
     };
     let pooled = result(status, len);
-    let core = select_layers_by_rule(
+    let core = select_layers(
         &mut KeyMemory::default(),
         &mut LexicalMemory::default(),
         &schema,
         "team",
         &early,
         choice,
-        ThresholdRule::Pooled,
+        LayerOptions {
+            rule: ThresholdRule::Pooled,
+            ..Default::default()
+        },
     );
     assert_eq!(pooled["thresholds"], serde_json::to_value(&core).unwrap());
     assert!(!pooled["decisions"].as_array().unwrap().is_empty());

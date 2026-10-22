@@ -14,8 +14,8 @@ use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::open_record;
 use gil::replay::{
-    Choice, LayerThresholds, ThresholdRule, select_coarse_with, select_key_concentrations,
-    select_key_fields, select_layers_by_rule_with,
+    Choice, LayerOptions, LayerThresholds, ThresholdRule, select_coarse_with,
+    select_key_concentrations, select_key_fields, select_layers,
 };
 use gil::schema::{Record, Schema, Settlement, SettlementKind};
 use gil::tuning::Tuning;
@@ -198,15 +198,17 @@ fn select_layers_json(
     };
     let mut lines = decisions.then(String::new);
     let layers = guarded(|| {
-        select_layers_by_rule_with(
+        select_layers(
             &mut KeyMemory::default(),
             &mut LexicalMemory::default(),
             &schema,
             attribute,
             &records.records,
             choice,
-            rule,
-            &mut |r| push_record(&mut lines, r),
+            LayerOptions {
+                rule,
+                sink: Some(&mut |r| push_record(&mut lines, r)),
+            },
         )
     })?;
     Ok((to_json(&layers), lines))

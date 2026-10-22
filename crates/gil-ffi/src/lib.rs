@@ -31,8 +31,8 @@ use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::open_record::OpenRecord;
 use gil::replay::{
-    Choice, LayerThresholds, ThresholdRule, select_coarse_with, select_key_concentrations,
-    select_key_fields, select_layers_by_rule_with,
+    Choice, LayerOptions, LayerThresholds, ThresholdRule, select_coarse_with,
+    select_key_concentrations, select_key_fields, select_layers,
 };
 use gil::schema::{AttributePolicy, Record, Schema, Settlement, SettlementKind};
 use gil::tuning::Tuning;
@@ -1039,15 +1039,17 @@ pub unsafe extern "C" fn gil_select_layers(
         let (schema, attribute, records) = unsafe { selection(schema, attribute, records) }?;
         let options = unsafe { read_options(options) }?;
         let mut decisions = options.decisions.then(Vec::new);
-        let thresholds = select_layers_by_rule_with(
+        let thresholds = select_layers(
             &mut KeyMemory::default(),
             &mut LexicalMemory::default(),
             schema,
             attribute,
             records,
             options.choice(),
-            options.rule,
-            &mut |r| keep(&mut decisions, r),
+            LayerOptions {
+                rule: options.rule,
+                sink: Some(&mut |r| keep(&mut decisions, r)),
+            },
         );
         unsafe { result(&chosen(&thresholds, decisions), result_len) }
     })

@@ -235,7 +235,9 @@ def test_results_carry_exactly_the_typed_keys() -> None:
     thresholds, records = gil.select_layers(
         schema, "team", gil.records(settled_again()), 0.8, 10, counting=COUNTED
     )
-    assert set(thresholds) == set(gil.LayerThresholds.__annotations__)
+    # `batches` is there only when records name their batch.
+    assert set(thresholds) == gil.LayerThresholds.__required_keys__
+    assert gil.LayerThresholds.__optional_keys__ == {"batches"}
     for layer in thresholds.values():
         assert set(layer) == set(gil.ThresholdReplay.__annotations__)
         for choice in (layer["chosen"], layer["most_precise"]):
@@ -493,3 +495,19 @@ def test_an_answer_with_its_decision_record_and_a_removed_record() -> None:
         decider.remove(schema, id)
     decider.remove(schema, "never-put")
     assert not (cited() & before)
+
+
+def test_records_that_name_their_batch_get_a_batch_check() -> None:
+    items = lines("records.jsonl")[:CHOSEN]
+    schema = gil.Schema.from_dict(golden_form("team"))
+    plain, _ = gil.select_layers(schema, "team", gil.records(items), decisions=False)
+    batched = [{**item, "batch": f"b{i // 4}"} for i, item in enumerate(items)]
+    named, _ = gil.select_layers(schema, "team", gil.records(batched), decisions=False)
+
+    assert "batches" not in plain
+    check = named["batches"]
+    assert set(check) == set(gil.BatchCheck.__annotations__)
+    assert check["batches"] == (CHOSEN + 3) // 4
+    assert check["across_batches_answered"] > 0 and check["across_records_answered"] > 0
+    # The check moves no threshold.
+    assert named["key"] == plain["key"] and named["memory"] == plain["memory"]

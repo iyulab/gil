@@ -101,15 +101,19 @@ fn a_record_reads_back_with_how_each_value_was_settled() {
         ]),
         probabilities: BTreeMap::new(),
         arrival: Some(vec!["summary".into(), "team".into(), "tags".into()]),
+        batch: Some("import-7".into()),
     };
     let (written, read) = round_trip(&record);
     assert_eq!(written["settlements"]["team"], "AcceptOther");
+    assert_eq!(written["batch"], "import-7");
     assert_eq!(serde_json::to_value(&read).unwrap(), written);
 
     // A record with nothing but its id and time.
     let bare: Record =
         serde_json::from_value(json!({ "id": "t2", "settled_at": 5 })).expect("a record");
-    assert!(bare.values.is_empty() && bare.arrival.is_none());
+    assert!(bare.values.is_empty() && bare.arrival.is_none() && bare.batch.is_none());
+    // A record that names no batch writes none.
+    assert!(serde_json::to_value(&bare).unwrap().get("batch").is_none());
     assert!(serde_json::from_value::<Record>(json!({ "settled_at": 5 })).is_err());
 }
 

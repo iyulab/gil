@@ -62,18 +62,29 @@ stream of biological sample records with costs counted this way, thresholds chos
 time — a loss once a wrong value costs ten entries; chosen for a target at or above 1 − 1/ρ, they cost less than asking
 at every ρ from 2 to 20. When you do not know ρ, time how long undoing a wrong value takes against entering one.
 
-A target can be read two ways. By default (`replay::ThresholdRule::EveryBand`, the rule of `replay::select_layers`)
-each layer's threshold is the lowest down to which every band of its answers meets the target — a floor under every
-kind of answer. When the target is a share of all the attribute's answers instead, choose with
-`replay::select_layers_by_rule` and `ThresholdRule::Pooled`: the two thresholds together, as the pair that answers the
-most of the attribute's latest `POOLED_RECENT_LOOKUPS` lookups while all those answers hold the target at the bottom of
-their Wilson interval at `POOLED_STANDARD_ERRORS` (1.645) standard errors. The bound is on the answers together, not on
-any group of them. Split by who sent the records in — the recalling firm, the bug's reporter, the maintenance report's
-submitter, the hospital — on four public collections, `Pooled` placed 19–22% of its answers with senders whose own
-precision was below the target beyond doubt (the top of a 95% Wilson interval under 0.8), and `EveryBand` none. `EveryBand`
-does not look at the sender, though: when one sender's own settlements are less reliable than the others', it answers
-below the target for that sender too. If you read a promise per customer or per site, choose `EveryBand`, and count
-`usage` over each sender's decisions to see it hold.
+A target can be read two ways. By default (`replay::ThresholdRule::EveryBand`, the default `rule` of
+`replay::LayerOptions`) each layer's threshold is the lowest down to which every band of its answers meets the target —
+a floor under every kind of answer. When the target is a share of all the attribute's answers instead, choose with
+`replay::select_layers` and `LayerOptions { rule: ThresholdRule::Pooled, .. }`: the two thresholds together, as the pair
+that answers the most of the attribute's latest `POOLED_RECENT_LOOKUPS` lookups while all those answers hold the target
+at the bottom of their Wilson interval at `POOLED_STANDARD_ERRORS` (1.645) standard errors. The bound is on the answers
+together, not on any group of them. Split by who sent the records in — the recalling firm, the bug's reporter, the
+maintenance report's submitter, the hospital — on four public collections, `Pooled` placed 19–22% of its answers with
+senders whose own precision was below the target beyond doubt (the top of a 95% Wilson interval under 0.8), and
+`EveryBand` none. `EveryBand` does not look at the sender, though: when one sender's own settlements are less reliable
+than the others', it answers below the target for that sender too. If you read a promise per customer or per site,
+choose `EveryBand`, and count `usage` over each sender's decisions to see it hold.
+
+Records settled together — several at once from one source, alike in what they show — can be right or wrong together,
+and the replay then counts more independent answers than there are. Name each record's batch in `Record::batch` and
+`select_layers` reports, in `LayerThresholds::batches`, what the batches among the latest `RECENT_RECORDS` records do:
+the precision of thresholds chosen on half of them, counted on the other half, split by batch (`across_batches`) and
+split by record (`across_records`), with how many answers a batch holds, how much they are right or wrong together and
+the design effect of the two. Where `across_records` is above `across_batches` beyond chance, read `across_batches` as
+the closer promise. The check moves no threshold. On public records, batches flattered a promise only where they were
+large and right or wrong together: device event reports sent many at a time by one manufacturer (design effect about 7)
+by 1.6 points; food inspections (1.1) and vehicle complaints, whose small batches were right or wrong together as much
+(1.5), by nothing.
 
 ## License
 
