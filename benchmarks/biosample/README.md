@@ -17,7 +17,9 @@ vs 0.309 in time order). The difference is in what each can promise: with a scor
 for 90% precision, the recommender answered 160 test lookups at 82.5%; Gil, choosing its thresholds by replaying the
 records in the order they were settled and narrowing the fields that key each one, answered 1,065 at 95.6%. At 80% the
 recommender kept its target (489 answers at 80.8%) and Gil answered 1,344 at 93.2%; at 95% the recommender found no
-threshold that reached it.
+threshold that reached it. Mining the recommender's rules again as test records settle, as Gil keeps learning from
+them, raised its answers at 80% only to 577 (from 489, at 78.9%), and no recommender arm kept a target by the lower
+end of its interval — the end Gil states its own promise by.
 
 ## What is compared
 
@@ -48,7 +50,9 @@ over the rules for the field whose antecedent shares an item with the context, t
 antecedent and context times the rule's confidence; values scoring zero are dropped. To answer at a target precision it
 takes the lowest threshold on its top score at which at least 10 answers hold the target on a calibration split of the
 training records — 85/15 at random (`recommender-tau-random`) or in submission order (`recommender-tau-time`) — and
-answers a test lookup when its top score reaches that threshold.
+answers a test lookup when its top score reaches that threshold. The `-online` arms keep those thresholds and mine
+the rules again from every record settled so far each time 100 more test records have settled, so the recommender also
+learns during the test records.
 
 **Gil.** One schema per field, the field decided and the other five observed. `select_layers` chooses the key and
 similar-record thresholds by replaying the training records in submission order; the test lookups are answered at those
@@ -58,7 +62,8 @@ settled — so Gil keeps learning from settled test records, as it would in use,
 (at least 30 answers). `gil-context` also observes the owner and every other attribute named in at least 50 records;
 `gil-context-key-fields` narrows those too.
 
-A target is **held** unless the upper end of the answers' 95% Wilson interval falls below it.
+A target is **held** unless the upper end of the answers' 95% Wilson interval falls below it, and **kept** when the
+interval's lower end reaches it — the sense in which Gil states its own promise.
 
 ## Running it
 
@@ -90,16 +95,19 @@ Measured with `iyulab-gil` 0.7.0 on the 2026-09-27 dump.
 The difference, +0.007, has a 95% interval of −0.004 to +0.019 (2,000 bootstrap resamples of the test records): a
 random split did not overstate the recommender here.
 
-**Answers at a target precision.** Answers to the 11,347 test lookups, and their precision; ✗ marks a target not held.
+**Answers at a target precision.** Answers to the 11,347 test lookups, and their precision; ✓ marks a target kept,
+✗ a target not held, and no mark a target held but not kept.
 
 | Arm | Target 0.8 | Target 0.9 | Target 0.95 |
 |---|---|---|---|
 | `recommender-tau-random` | 489 · 0.808 | 160 · 0.825 ✗ | none |
+| `recommender-tau-random-online` | 577 · 0.789 | 193 · 0.819 ✗ | none |
 | `recommender-tau-time` | 168 · 0.768 | none | none |
-| `gil` | 1,457 · 0.877 | 748 · 0.969 | 698 · 0.976 |
-| `gil-key-fields` | 1,344 · 0.932 | 1,065 · 0.956 | 952 · 0.961 |
-| `gil-context` | 2,187 · 0.829 | 1,092 · 0.872 ✗ | 741 · 0.955 |
-| `gil-context-key-fields` | 1,739 · 0.915 | 1,364 · 0.943 | 1,130 · 0.958 |
+| `recommender-tau-time-online` | 215 · 0.809 | none | none |
+| `gil` | 1,457 · 0.877 ✓ | 748 · 0.969 ✓ | 698 · 0.976 ✓ |
+| `gil-key-fields` | 1,344 · 0.932 ✓ | 1,065 · 0.956 ✓ | 952 · 0.961 |
+| `gil-context` | 2,187 · 0.829 ✓ | 1,092 · 0.872 ✗ | 741 · 0.955 |
+| `gil-context-key-fields` | 1,739 · 0.915 ✓ | 1,364 · 0.943 ✓ | 1,130 · 0.958 |
 
 "none" means no threshold reached the target on the calibration split, so the arm answered nothing.
 
@@ -107,6 +115,11 @@ random split did not overstate the recommender here.
   recommender's threshold at 0.9 answers nothing rather than answer below the target.
 - At 0.9, Gil answers `sex` and `tissue` almost alone (568 and 172 of `gil`'s 748); narrowing the fields that key `sex`
   to `cell_line` and `tissue` raises its answers to 847.
+- Learning during the test records is not what separates the two: mined again every 100 settled records, the
+  recommender answers 18–28% more at 0.8 and 21% more at 0.9, while Gil's arms answer 2.3 to 3.8 times as many as
+  the better online arm at 0.8 and 3.9 to 7.1 times at 0.9.
+- At 0.95, where the recommender answers nothing, three of Gil's arms are held but not kept: their precision
+  (0.955–0.961) sits on the target, with an interval wide enough to reach below it.
 - `gil-context` falls short at 0.9 because values of fields unrelated to the decision became keys: in the training
   records an age written one way appeared with a single cell type, and in the test records with others. Narrowing the
   key fields with `select_key_fields` is what keeps such a field from answering, as `gil-context-key-fields` shows.
@@ -124,7 +137,7 @@ random split did not overstate the recommender here.
 - The contrast at 0.9 — a threshold chosen on a random split falls short, Gil's holds — depends on the target: at 0.8
   the recommender held it as well, and at 0.95 it answered nothing. What holds at all three targets is how many
   lookups each answers at the same target.
-- During the test records Gil keeps learning from each settled record and the recommender does not. That is how each is
-  meant to be used, and it is part of what is compared.
+- The online recommender mines its rules again every 100 settled test records, not after each one; mining after each
+  would only add the records of the last block.
 - "Held" is judged by the Wilson interval's upper end, so a target is called held when the answers cannot show it was
-  missed; with few answers that is weak evidence.
+  missed; with few answers that is weak evidence. "Kept" asks the opposite, that the answers show it was reached.

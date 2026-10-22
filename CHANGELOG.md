@@ -56,7 +56,8 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 - A benchmark, `benchmarks/biosample/`, compares Gil with an association-rule value recommender on public NCBI
   BioSample records: scripts that build the stream from the NCBI dump and run both, and the results — how many values
-  each answers at the same target precision on records that come later.
+  each answers at the same target precision on records that come later, with the recommender also learning as the
+  test records settle, and whether each target is kept by the lower end of its interval.
 - A record that keeps an attribute where its kind does not belong — a set for an attribute that takes one value, or
   one value for one that takes several — is refused with an `ArgumentException` naming the record and the attribute,
   wherever records or values reach the core (`Decider.Put`, `Decider.Answer`, `OpenRecord.Reopen`, the `Replay`

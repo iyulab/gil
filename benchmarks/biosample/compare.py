@@ -17,6 +17,9 @@ Arms:
   recommender-τ     The recommender, answering only when its top score reaches a threshold: the lowest threshold whose
                     answers hold the target precision (at least 10 answers) on a calibration split of the training
                     records — 85/15 at random, or 85/15 in submission order.
+  recommender-τ-online
+                    The same thresholds, with the rules mined again from every record settled so far each time 100 more
+                    test records have settled — learning during the test records as Gil does.
   gil               Gil's ``select_layers``: the other five fields observed; thresholds chosen by replaying the training
                     records in settlement order, then applied to the test records' decisions from a replay of all records.
   gil-context       Also observing the owner and every other attribute that appears in at least 50 records.
@@ -49,6 +52,8 @@ MIN_ANSWERED = 10
 KEY_FIELDS_MINIMUM = 30
 CONTEXT_MIN_RECORDS = 50
 TRAIN = 0.85
+# test records settled between two minings of the online recommender
+RETRAIN_EVERY = 100
 EPOCH_2000 = 946_684_800  # seconds since the Unix epoch; records settle one second apart from here
 
 
@@ -186,6 +191,22 @@ def thresholded(
         if r and r[0][1] >= tau:
             n += 1
             ok += r[0][0] == v
+    return {"tau": tau, "answered": n, "correct": ok}
+
+
+def thresholded_online(docs: list[dict[str, str]], cut: int, tau: float | None) -> dict:
+    """``thresholded`` on the test records ``docs[cut:]``, mining the rules again from every record before each block
+    of ``RETRAIN_EVERY`` test records."""
+    if tau is None:
+        return {"tau": None, "answered": 0, "correct": 0}
+    n = ok = 0
+    for start in range(cut, len(docs), RETRAIN_EVERY):
+        model = Recommender(docs[:start], FIELDS)
+        for _, f, v, ctx in lookups(docs[start : start + RETRAIN_EVERY]):
+            r = model.rank(f, ctx)
+            if r and r[0][1] >= tau:
+                n += 1
+                ok += r[0][0] == v
     return {"tau": tau, "answered": n, "correct": ok}
 
 
@@ -388,6 +409,8 @@ def promise(answered: int, correct: int, target: float) -> dict:
         "wilson95": [lo, hi],
         # held unless the interval's upper end falls below the target
         "held": None if hi is None else bool(hi >= target),
+        # kept when the interval's lower end reaches it: the sense in which Gil states its own promise
+        "kept": None if lo is None else bool(lo >= target),
     }
 
 
@@ -440,6 +463,13 @@ def main() -> int:
             "tau": t["tau"],
             "calibration_lookups": calibration,
         } | promise(t["answered"], t["correct"], target)
+        print(f"recommender-tau-{split}-online ...", file=sys.stderr, flush=True)
+        o = thresholded_online(docs, cut, tau)
+        arms[f"recommender-tau-{split}-online"] = {
+            "tau": o["tau"],
+            "calibration_lookups": calibration,
+            "retrain_every": RETRAIN_EVERY,
+        } | promise(o["answered"], o["correct"], target)
     extra = context_attributes(rows)
     for name, observed, narrow in (
         ("gil", [], False),
@@ -463,12 +493,14 @@ def main() -> int:
         f"[{report['mrr']['difference_ci95'][0]:+.3f}, {report['mrr']['difference_ci95'][1]:+.3f}]"
     )
     print(f"\ntarget {target}  test lookups {report['test_lookups']:,}")
-    print(f"{'arm':<26}{'answered':>9}{'precision':>11}  wilson95         held")
+    print(f"{'arm':<33}{'answered':>9}{'precision':>11}  wilson95         held   kept")
     for name, a in arms.items():
         p = "-" if a["precision"] is None else f"{a['precision']:.3f}"
         lo, hi = a["wilson95"]
         w = "-" if lo is None else f"{lo:.3f} - {hi:.3f}"
-        print(f"{name:<26}{a['answered']:>9,}{p:>11}  {w:<16} {a['held']}")
+        print(
+            f"{name:<33}{a['answered']:>9,}{p:>11}  {w:<16} {a['held']!s:<6} {a['kept']}"
+        )
     return 0
 
 
