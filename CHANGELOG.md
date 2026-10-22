@@ -9,6 +9,13 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Added
 
+- **A selection's choice goes on the schema in one call, and an answer's promise reads from the tuning by its source.**
+  `Schema.WithLayers(attribute, thresholds)` puts what `Replay.SelectLayers` chose on a decided attribute — the key
+  threshold, the memory threshold and its similarity floor, a layer with no chosen threshold left unset — and
+  `Schema.WithCoarse` does the same on the coarse level for `Replay.SelectCoarse`; both refuse a schema that would not
+  check. `Tuning.PromiseOf(attribute, source)` gives the promise of the layer an answer came from, for
+  `UsageDecision.Promise`. Setting the three properties with `with` and matching `KeyPromise` / `MemoryPromise` by hand
+  still work. The native library speaks version 4 of its C interface.
 - **What batches do to a promise.** `Record.Batch` names the batch a record was settled in — records settled together,
   several at once from one source. When any of the latest `Replay.RecentRecords` records names one,
   `LayerThresholds.Batches` (`BatchCheck`) gives the precision of thresholds chosen on half of them and counted on the

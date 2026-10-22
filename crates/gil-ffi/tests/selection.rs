@@ -262,6 +262,24 @@ fn the_other_selections_and_a_tuning_come_back_as_the_core_gives_them() {
         serde_json::to_value(&core_applied).unwrap()
     );
 
+    // The pooled choice put on the schema, as the core puts it; an attribute with no coarse level refuses a coarse one.
+    let mut with_layers = ptr::null_mut();
+    ok(unsafe {
+        gil_schema_with_layers(handles.schema, s("team"), s(&thresholds), &mut with_layers)
+    });
+    let status = unsafe { gil_schema_json(with_layers, &mut len) };
+    assert_eq!(
+        result(status, len),
+        serde_json::to_value(schema.with_layers("team", &core).expect("a valid schema")).unwrap()
+    );
+    unsafe { gil_schema_free(with_layers) };
+    let mut refused = ptr::null_mut();
+    let status =
+        unsafe { gil_schema_with_coarse(handles.schema, s("team"), s(&thresholds), &mut refused) };
+    assert_eq!(status, GIL_INVALID_INPUT);
+    assert!(refused.is_null());
+    assert!(last_error().contains("no coarse level"), "{}", last_error());
+
     let stale = |settled: usize, len: &mut usize| {
         let status =
             unsafe { gil_tuning_stale(s(&promised.to_string()), handles.schema, settled, len) };

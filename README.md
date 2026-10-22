@@ -165,15 +165,13 @@ same core version, the same settings it rests on, about as many records — and 
 
 ```csharp
 var options = new SelectionOptions(TargetPrecision: 0.9, MinimumAnswered: 30);
-var layers = Replay.SelectLayers(schema, "team", saved, options);
 var keyFields = Replay.SelectKeyFields(schema, "team", saved, options);
-using var tuned = new Schema(schema.Name, schema.Attributes.Select(a => a.Name != "team" ? a : a with
+using var keyed = new Schema(schema.Name, schema.Attributes.Select(a => a.Name != "team" ? a : a with
 {
     KeyFields = keyFields.KeyFields,
-    KeyThreshold = layers.Thresholds.Key.Chosen?.Threshold,
-    MemoryThreshold = layers.Thresholds.Memory.Chosen?.Threshold,
-    MemoryFloor = layers.Thresholds.Memory.Chosen?.SimilarityFloor,
 }));
+var layers = Replay.SelectLayers(keyed, "team", saved, options);
+using var tuned = keyed.WithLayers("team", layers.Thresholds);
 var tuning = Tuning.Capture(tuned, saved.Count, options.TargetPrecision).Promise("team", layers.Thresholds);
 File.WriteAllText("ticket.tuning.json", tuning.ToJson());
 
@@ -181,8 +179,17 @@ var kept = Tuning.FromJson(File.ReadAllText("ticket.tuning.json"));
 using var current = kept.Stale(schema, saved.Count) is null ? kept.Apply(schema) : null;
 ```
 
-`Promise` records the precision each chosen threshold promises for the next answers; `Usage.Count` over what was
-answered and settled since reports how each attribute's answers fared against it.
+`WithLayers` puts the key threshold, the memory threshold and its similarity floor on the attribute, leaving a layer
+with no chosen threshold unset (`WithCoarse` does the same for a coarse level). `Promise` records the precision each
+chosen threshold promises for the next answers, and `PromiseOf` reads back the one an answer was made under, by the
+layer it came from; `Usage.Count` over what was answered and settled since reports how each attribute's answers fared
+against it:
+
+```csharp
+var shown = team.Answered ? team.Candidates[0].Value : null;
+var promise = team.Answered ? tuning.PromiseOf("team", team.Source) : null;
+var counts = Usage.Count([new UsageDecision("team", shown, "network", SettlementKind.Accept, Promise: promise)]);
+```
 
 ### Choosing what to trust
 

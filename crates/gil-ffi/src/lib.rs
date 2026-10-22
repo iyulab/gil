@@ -59,7 +59,7 @@ pub const GIL_BROKEN: i32 = gil_ffi_support::BROKEN;
 
 /// The version of this interface — its functions, structures and statuses. It changes whenever a binding built for one
 /// version would misread the library of another.
-pub const GIL_ABI_VERSION: u32 = 3;
+pub const GIL_ABI_VERSION: u32 = 4;
 
 /// [`GilCandidate::source`]: no layer.
 pub const GIL_SOURCE_NONE: u8 = 0;
@@ -1168,6 +1168,70 @@ pub unsafe extern "C" fn gil_schema_json(schema: *const GilSchema, result_len: *
 
 /// # Safety
 /// As [`gil_ffi_support::text`].
+unsafe fn layer_thresholds(json: GilStr) -> Result<LayerThresholds, Failure> {
+    // SAFETY: forwarded from the caller.
+    let json = unsafe { text(json, "thresholds") }?;
+    serde_json::from_str(json).map_err(|e| input(format!("layer thresholds do not read: {e}")))
+}
+
+/// Hands out through `out` a new schema: `schema` with what a layers selection chose — `thresholds`, as
+/// `gil_select_layers` gives them — put on the decided attribute: the key threshold, the memory threshold and its
+/// similarity floor, a layer with none chosen left unset. An attribute the schema does not have or that is not decided,
+/// or a result that breaks a schema rule, is refused as input, and the error says which.
+///
+/// # Safety
+/// `schema` is a live handle; the texts are valid for the call; `out` points to one writable pointer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_schema_with_layers(
+    schema: *const GilSchema,
+    attribute: GilStr,
+    thresholds: GilStr,
+    out: *mut *mut GilSchema,
+) -> i32 {
+    // SAFETY: forwarded from the caller.
+    unsafe { schema_with(schema, attribute, thresholds, out, Schema::with_layers) }
+}
+
+/// As [`gil_schema_with_layers`], for what a coarse selection (`gil_select_coarse`) chose: the thresholds go on the
+/// attribute's coarse level, and an attribute with none is refused as input.
+///
+/// # Safety
+/// As [`gil_schema_with_layers`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_schema_with_coarse(
+    schema: *const GilSchema,
+    attribute: GilStr,
+    thresholds: GilStr,
+    out: *mut *mut GilSchema,
+) -> i32 {
+    // SAFETY: forwarded from the caller.
+    unsafe { schema_with(schema, attribute, thresholds, out, Schema::with_coarse) }
+}
+
+/// # Safety
+/// As [`gil_schema_with_layers`].
+unsafe fn schema_with(
+    schema: *const GilSchema,
+    attribute: GilStr,
+    thresholds: GilStr,
+    out: *mut *mut GilSchema,
+    put: fn(&Schema, &str, &LayerThresholds) -> Result<Schema, String>,
+) -> i32 {
+    call(|| {
+        if out.is_null() {
+            return Err(argument("out is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let schema = unsafe { handle(schema, "schema") }?;
+        let attribute = unsafe { text(attribute, "attribute") }?;
+        let thresholds = unsafe { layer_thresholds(thresholds) }?;
+        let changed = put(&schema.0, attribute, &thresholds).map_err(input)?;
+        unsafe { hand_out(out, GilSchema(changed), "out") }
+    })
+}
+
+/// # Safety
+/// As [`gil_ffi_support::text`].
 unsafe fn tuning(json: GilStr) -> Result<Tuning, Failure> {
     // SAFETY: forwarded from the caller.
     let json = unsafe { text(json, "tuning") }?;
@@ -1217,9 +1281,7 @@ pub unsafe extern "C" fn gil_tuning_promise(
         // SAFETY: forwarded from the caller, for every pointer below.
         let mut tuned = unsafe { tuning(tuning_json) }?;
         let attribute = unsafe { text(attribute, "attribute") }?;
-        let thresholds = unsafe { text(thresholds, "thresholds") }?;
-        let thresholds: LayerThresholds = serde_json::from_str(thresholds)
-            .map_err(|e| input(format!("layer thresholds do not read: {e}")))?;
+        let thresholds = unsafe { layer_thresholds(thresholds) }?;
         tuned.promise(attribute, &thresholds);
         let value = serde_json::to_value(tuned).expect("a tuning serializes");
         unsafe { result(&value, result_len) }

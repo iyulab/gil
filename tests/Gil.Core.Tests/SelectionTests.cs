@@ -173,6 +173,21 @@ public sealed class SelectionTests
             Same(applied.ToJson(), call["applied"], "applied");
         }
 
+        using (var withLayers = schema.WithLayers((string)call["attribute"]!, layers.Thresholds))
+        {
+            Same(withLayers.ToJson(), call["with_layers"], "with layers");
+        }
+
+        FluentActions.Invoking(() => schema.WithCoarse((string)call["attribute"]!, layers.Thresholds))
+            .Should().Throw<ArgumentException>().WithMessage("*no coarse level*");
+        var attribute = (string)call["attribute"]!;
+        var tuned = promised.Attributes.Single(a => a.Attribute == attribute);
+        promised.PromiseOf(attribute, Source.KeyMemory).Should().Be(tuned.KeyPromise);
+        promised.PromiseOf(attribute, Source.SimilarRecord).Should().Be(tuned.MemoryPromise);
+        promised.PromiseOf(attribute, Source.None).Should().BeNull();
+        promised.PromiseOf(attribute, Source.External).Should().BeNull();
+        promised.PromiseOf("nowhere", Source.KeyMemory).Should().BeNull();
+
         promised.Stale(schema, Chosen).Should().BeNull();
         var stale = promised.Stale(schema, (int)call["stale_at"]!);
         stale.Should().BeOfType<Stale.Settled>().Which.Now.Should().Be((int)call["stale_at"]!);

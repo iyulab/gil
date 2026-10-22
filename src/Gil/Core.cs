@@ -44,6 +44,20 @@ public sealed class Schema : IDisposable
 
     internal static Schema Own(nint handle) => new(SchemaHandle.Of(handle));
 
+    /// <summary>A new schema: this one with what a layers selection chose (<see cref="Replay.SelectLayers"/>) put on the
+    /// decided attribute <paramref name="attribute"/> — the key threshold, the memory threshold and its similarity floor;
+    /// a layer with no chosen threshold is left unset, so it does not answer the attribute.</summary>
+    /// <exception cref="ArgumentException">The schema has no such decided attribute, or the schema it makes breaks a
+    /// schema rule.</exception>
+    public unsafe Schema WithLayers(string attribute, LayerThresholds layers) =>
+        With(&Native.SchemaWithLayers, attribute, layers);
+
+    /// <summary>As <see cref="WithLayers"/>, for what a coarse selection (<see cref="Replay.SelectCoarse"/>) chose: the
+    /// thresholds go on the attribute's coarse level.</summary>
+    /// <exception cref="ArgumentException">As <see cref="WithLayers"/>, or the attribute has no coarse level.</exception>
+    public unsafe Schema WithCoarse(string attribute, LayerThresholds layers) =>
+        With(&Native.SchemaWithCoarse, attribute, layers);
+
     /// <summary>The schema as JSON in the core's form.</summary>
     public unsafe string ToJson()
     {
@@ -53,6 +67,23 @@ public sealed class Schema : IDisposable
 
     /// <inheritdoc/>
     public void Dispose() => Handle.Dispose();
+
+    private unsafe Schema With(
+        delegate*<SchemaHandle, Native.Str, Native.Str, nint*, int> put, string attribute, LayerThresholds layers)
+    {
+        ArgumentNullException.ThrowIfNull(attribute);
+        ArgumentNullException.ThrowIfNull(layers);
+        var name = new Utf8(attribute);
+        var thresholds = new Utf8(JsonSerializer.Serialize(layers, CoreJson.Default.LayerThresholds));
+        nint output;
+        fixed (byte* a = &name.Pin())
+        fixed (byte* t = &thresholds.Pin())
+        {
+            Native.Check(put(Handle, name.At(a), thresholds.At(t), &output));
+        }
+
+        return Own(output);
+    }
 
     private static SchemaHandle Check(string name, IEnumerable<AttributeDefinition> attributes)
     {
