@@ -177,8 +177,29 @@ if gil.tuning_stale(tuning, base, len(records)) is not None:
 schema = gil.apply_tuning(tuning, base)
 ```
 
+While records keep arriving, `gil.Keeper` keeps the loop in one object. `settle` puts records into the decider and into
+the next choice, `stale` says when the choice no longer stands, and `rechoose` replays only the records settled since the
+last choice — the same thresholds as `select_layers` on all of them, without replaying them all again:
+
+```python
+keeper = gil.Keeper(gil.Schema.from_dict(definition), target_precision=TARGET)
+decider = gil.Decider(keeper.schema)
+keeper.settle(decider, records)
+keeper.rechoose()
+
+# ... as records are settled ...
+keeper.settle(decider, gil.records([saved]))
+if keeper.stale() is not None:
+    keeper.rechoose()
+schema = keeper.schema  # answer with this and the decider
+```
+
+It chooses for every decided attribute that takes one value, but not a coarse level. A record settled out of order, or
+one taken out with `keeper.remove(decider, id)`, has the next choice replay from the start. Nothing is stored outside
+the process: a keeper made at start-up replays the saved records once.
+
 An answer does not carry its promise; the promise is its layer's, which `gil.promise_of` reads from the tuning by the
-answer's `source`.
+answer's `source` (`keeper.tuning` for a keeper's).
 `gil.usage(decisions)` counts, without content, how the answers shown were settled and the precision they realized —
 `right_weight / judged_weight`, to read against `promise_sum / promised`:
 

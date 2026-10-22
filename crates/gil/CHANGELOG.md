@@ -37,7 +37,8 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   thresholds, to the bit, as `select_layers` on all the records. A record settled out of order, or
   `remove(&mut decider, id)`, has the next choice replay from the start. Answer with the decider and `schema()`; an
   answer's promise is `tuning().promise_of(attribute, source)`. Nothing is stored outside the process. The coarse level
-  is not chosen by it yet.
+  is not chosen by it yet. On 50,000 public food-inspection records chosen again at every tenth more, the 23 choices
+  took 35 s in all against 215 s replaying from the start each time (example `keeper_loop`).
 - **Python `gil.Keeper`**, the same loop: `Keeper(schema, target_precision, minimum_answered, counting, rule, threads)`
   · `settle(decider, records)` · `remove(decider, id)` · `stale()` · `settled` · `rechoose(decisions=False)` → `{"tuning",
   "chosen", "decisions"?}` · `state()` · `schema` · `tuning`.

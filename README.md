@@ -191,6 +191,29 @@ var promise = team.Answered ? tuning.PromiseOf("team", team.Source) : null;
 var counts = Usage.Count([new UsageDecision("team", shown, "network", SettlementKind.Accept, Promise: promise)]);
 ```
 
+While records keep arriving, a `Keeper` keeps that loop in one object. `Settle` puts records into the decider and into
+the next choice, `Stale` says when the choice no longer stands, and `Rechoose` replays only the records settled since the
+last choice — the same thresholds as `SelectLayers` on all of them, without replaying them all again:
+
+```csharp
+using var keeper = new Keeper(keyed, options);
+keeper.Settle(decider, saved);
+keeper.Rechoose();
+
+// ... as records are settled ...
+keeper.Settle(decider, settledNow);
+if (keeper.Stale() is not null)
+{
+    keeper.Rechoose();
+}
+
+using var chosen = keeper.Schema; // answer with this and the decider; keeper.Tuning.PromiseOf gives the promise
+```
+
+It chooses for every decided attribute that takes one value, but not a coarse level. A record settled out of order, or
+one taken out with `Remove(decider, id)`, has the next choice replay from the start. Nothing is stored outside the
+process: a keeper made at start-up replays the saved records once.
+
 ### Choosing what to trust
 
 A threshold trades precision for coverage — the share of lookups answered, `AnswerRate`, the word selective prediction
