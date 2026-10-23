@@ -7,7 +7,7 @@
 //! same to the bit on every run and every platform.
 
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::decision_record::{CoarseLook, DecisionRecord, KeyLook, SimilarLook, TypedLook};
 use crate::key_memory::{First, KeyMemory, Lookup};
@@ -955,6 +955,8 @@ pub(crate) struct Step {
     order: usize,
     /// The batch the record was settled in, when it names one.
     batch: Option<String>,
+    /// Whether no other record settled before it named its batch — the first of its batch, as one that names none is.
+    pub(crate) first: bool,
     /// For a coarse replay: the level as the keys and the vote back it, and whether the attribute's value layers answered.
     coarse: Option<CoarseStep>,
 }
@@ -1034,6 +1036,27 @@ pub fn select_layers(
         batches,
         ..thresholds
     }
+}
+
+/// A layers replay's steps with the lookups of records in the other situation — first of their batch when `first` is
+/// false, not first when it is — left uncounted, as a settlement kind not counted leaves them: in memory, not asked
+/// about.
+pub(crate) fn in_situation(steps: &[Step], first: bool) -> Vec<Step> {
+    steps
+        .iter()
+        .map(|s| {
+            if s.first == first {
+                s.clone()
+            } else {
+                Step {
+                    key_looked: false,
+                    looked: false,
+                    weight: 0.0,
+                    ..s.clone()
+                }
+            }
+        })
+        .collect()
 }
 
 /// The layer thresholds chosen on a layers replay's steps, `batches` left out.
@@ -1554,7 +1577,7 @@ pub fn select_coarse_with(
         choice.counting,
         Replaying::Coarse(sink),
     );
-    coarse_layers(&steps, latest, definition, choice)
+    coarse_layers(&steps, latest, definition, None, choice)
 }
 
 /// Whether `definition`'s value layers answered a lookup at its thresholds — the key layer with a strong enough key that
@@ -1579,6 +1602,7 @@ pub(crate) fn coarse_layers(
     steps: &[Step],
     latest: usize,
     definition: &Attribute,
+    first_of_batch: Option<&Attribute>,
     choice: Choice,
 ) -> LayerThresholds {
     // What the level made of each lookup the value layers left, as a step whose vote is the class's — not one under a
@@ -1588,7 +1612,9 @@ pub(crate) fn coarse_layers(
         .filter_map(|s| {
             let coarse = s.coarse.expect("a coarse replay's step");
             let caught = s.key.as_ref().is_some_and(|first| first.caught);
-            let answered = value_answered(s.key.as_ref(), s.vote, definition);
+            // A first record of its batch was answered at the thresholds for one, when the attribute has them.
+            let values = first_of_batch.filter(|_| s.first).unwrap_or(definition);
+            let answered = value_answered(s.key.as_ref(), s.vote, values);
             ((s.key_looked || s.looked) && !answered && !caught).then(|| {
                 let step = Step {
                     vote: coarse.vote,
@@ -1675,6 +1701,8 @@ pub(crate) struct ReplayState {
     case_of: HashMap<String, String>,
     pub(crate) order: usize,
     pub(crate) last: Option<(i64, String)>,
+    /// The records gone through by the batch they name.
+    batches: HashMap<String, HashSet<String>>,
 }
 
 /// Carries a replay on through `records`, all settled after those it has gone through, with the memories it left —
@@ -1717,6 +1745,15 @@ pub(crate) fn carry_on(
     let mut order = state.order;
     for record in &ordered {
         order += 1;
+        let first_of_batch = match &record.batch {
+            None => true,
+            Some(batch) => {
+                let mates = state.batches.entry(batch.clone()).or_default();
+                let first = !mates.iter().any(|r| r != &record.id);
+                mates.insert(record.id.clone());
+                first
+            }
+        };
         let Some(settled) = record.values.get(attribute) else {
             continue;
         };
@@ -1846,6 +1883,7 @@ pub(crate) fn carry_on(
             weight,
             order,
             batch: record.batch.clone(),
+            first: first_of_batch,
             coarse: coarse_step,
         });
         key_memory.put(schema, record);

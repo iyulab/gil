@@ -65,6 +65,11 @@ pub struct Attribute {
     /// The attribute's coarse level, offered when neither layer answers the value.
     #[cfg_attr(feature = "serde", serde(default))]
     pub coarse: Option<CoarseLevel>,
+    /// Experimental. The value layers' thresholds for the first record of a batch — one whose batch has no settled record
+    /// yet ([`Record::batch`]) — chosen apart from the rest ([`crate::keeper::Keep::first_of_batch`]); `None` answers
+    /// every record at the thresholds above. [`Schema::for_first_of_batch`] puts them in place.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub first_of_batch: Option<FirstOfBatch>,
     /// The values the attribute may take; `None` is any. A value settled outside them is remembered but never offered.
     #[cfg_attr(feature = "serde", serde(default))]
     pub candidates: Option<Vec<String>>,
@@ -112,6 +117,7 @@ impl Attribute {
             memory_threshold: None,
             memory_floor: None,
             coarse: None,
+            first_of_batch: None,
             candidates: None,
             candidates_from: None,
             must_catch: None,
@@ -213,6 +219,20 @@ impl CoarseLevel {
     }
 }
 
+/// Experimental. A decided attribute's value-layer thresholds for the first record of a batch — the same three an
+/// attribute holds for every other record.
+#[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default, deny_unknown_fields))]
+pub struct FirstOfBatch {
+    /// The score the first keyed value must reach to be trusted; `None` trusts none.
+    pub key_threshold: Option<f64>,
+    /// The vote's score at or above which the similar record layer is trusted; `None` trusts none.
+    pub memory_threshold: Option<f64>,
+    /// The similarity the nearest record voting for the value must also reach when more than one voted.
+    pub memory_floor: Option<f64>,
+}
+
 /// A schema: its name scopes memory, its attributes are in order. A schema is checked when it is made
 /// ([`Schema::new`], or deserializing one), so every schema in hand keeps the rules.
 #[derive(Clone, Debug)]
@@ -296,6 +316,46 @@ impl Schema {
             level.memory_floor = floor;
             Ok(())
         })
+    }
+
+    /// Experimental. As [`Schema::with_layers`], for what a replay of the first records of batches chose
+    /// ([`crate::keeper::Keep::first_of_batch`]): the thresholds go on the attribute's [`Attribute::first_of_batch`],
+    /// which they make. The error is as [`Schema::with_layers`]'s.
+    pub fn with_first_of_batch(
+        &self,
+        attribute: &str,
+        layers: &LayerThresholds,
+    ) -> Result<Self, String> {
+        let (key_threshold, memory_threshold, memory_floor) = chosen(layers);
+        self.with_decided(attribute, |a| {
+            a.first_of_batch = Some(FirstOfBatch {
+                key_threshold,
+                memory_threshold,
+                memory_floor,
+            });
+            Ok(())
+        })
+    }
+
+    /// Experimental. Whether an attribute holds thresholds for the first record of a batch.
+    pub fn has_first_of_batch(&self) -> bool {
+        self.attributes.iter().any(|a| a.first_of_batch.is_some())
+    }
+
+    /// Experimental. The schema a first record of a batch is answered with: each attribute's [`Attribute::first_of_batch`]
+    /// key and memory thresholds in place of its value layers' — its thresholds for typed text as they are — and the
+    /// attributes without them as they are.
+    pub fn for_first_of_batch(&self) -> Self {
+        let mut schema = self.clone();
+        for a in &mut schema.attributes {
+            if let Some(first) = &a.first_of_batch {
+                a.key_threshold = first.key_threshold;
+                a.memory_threshold = first.memory_threshold;
+                a.memory_floor = first.memory_floor;
+            }
+        }
+        debug_assert_eq!(schema.check(), Ok(()), "a derived schema stays valid");
+        schema
     }
 
     /// The schema with `change` made to the decided attribute `attribute`, checked.
@@ -396,6 +456,11 @@ impl Schema {
                         "attribute '{n}' takes a coarse level, which only a decided attribute with a single value has"
                     ));
                 }
+            }
+            if a.first_of_batch.is_some() && !decided_one {
+                return Err(format!(
+                    "attribute '{n}' takes thresholds for the first record of a batch, which only a decided attribute with a single value has"
+                ));
             }
             if a.must_catch.as_ref().is_some_and(|m| !m.is_empty()) && !decided_one {
                 return Err(format!(

@@ -90,6 +90,7 @@ type may change shape or be removed in any release without a migration note.
 | `GIL0003` | Recording and pricing: `ITelemetrySink` and `SqliteTelemetryStore`, the call recorders, `EnergyModel`, `EmbeddingGeneratorModel`, statistics, rebuilding a memory from the feedback log |
 | `GIL0004` | The memory of confirmed answers: `IMemory`, `MemoryMatch`, `LexicalMemory`, `EmbeddingMemory`, `CircuitBreakingMemory` |
 | `GIL0005` | Asking advice in the decision core: `AskPlanner`, `AskAdvice` |
+| `GIL0006` | The first record of a batch in the decision core: thresholds and promises chosen apart for a record whose batch has no settled record yet, and answering it at them |
 
 Suppress the ids of what you use, in the project file or around the code:
 

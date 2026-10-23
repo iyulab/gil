@@ -41,6 +41,18 @@ pub struct AttributeTuning {
     pub coarse_key_promise: Option<f64>,
     /// The precision the coarse level's chosen memory threshold promised for the next classes it offers.
     pub coarse_memory_promise: Option<f64>,
+    /// Experimental. The value layers' thresholds for the first record of a batch
+    /// ([`crate::schema::Attribute::first_of_batch`]); all `None`, with their promises, when none were chosen apart.
+    pub first_key_threshold: Option<f64>,
+    pub first_memory_threshold: Option<f64>,
+    pub first_memory_floor: Option<f64>,
+    /// Experimental. The precision the key layer's threshold for first records promised for the next first records.
+    pub first_key_promise: Option<f64>,
+    /// Experimental. The precision the similar record layer's threshold for first records promised for the next ones.
+    pub first_memory_promise: Option<f64>,
+    /// Experimental. Whether thresholds for first records were chosen apart at all.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub first_of_batch: bool,
 }
 
 /// The chosen settings of a schema's decided attributes and what they were chosen on.
@@ -95,6 +107,12 @@ impl Tuning {
                 memory_promise: None,
                 coarse_key_promise: None,
                 coarse_memory_promise: None,
+                first_key_threshold: a.first_of_batch.as_ref().and_then(|f| f.key_threshold),
+                first_memory_threshold: a.first_of_batch.as_ref().and_then(|f| f.memory_threshold),
+                first_memory_floor: a.first_of_batch.as_ref().and_then(|f| f.memory_floor),
+                first_key_promise: None,
+                first_memory_promise: None,
+                first_of_batch: a.first_of_batch.is_some(),
             })
             .collect();
         Self {
@@ -130,6 +148,35 @@ impl Tuning {
         match source {
             Source::KeyMemory => tuned.key_promise,
             Source::SimilarRecord => tuned.memory_promise,
+            Source::None | Source::External => None,
+        }
+    }
+
+    /// Experimental. Records the promises of `attribute`'s replay of first records of batches
+    /// ([`crate::keeper::Keep::first_of_batch`]): what its chosen key and memory thresholds promised for the next first
+    /// records.
+    ///
+    /// # Panics
+    /// When the tuning has no such attribute.
+    pub fn promise_first_of_batch(&mut self, attribute: &str, layers: &LayerThresholds) {
+        let tuned = self
+            .attributes
+            .iter_mut()
+            .find(|a| a.attribute == attribute)
+            .unwrap_or_else(|| panic!("the tuning has no attribute '{attribute}'"));
+        tuned.first_key_promise = layers.key.chosen.as_ref().map(|c| c.promise);
+        tuned.first_memory_promise = layers.memory.chosen.as_ref().map(|c| c.promise);
+    }
+
+    /// Experimental. What the layer an answer came from promised for `attribute` when the record was answered as the
+    /// first of its batch ([`crate::open_record::OpenRecord::is_first_of_batch`]); `None` as for [`Tuning::promise_of`],
+    /// and when no thresholds for first records were chosen apart — the answer's promise is then
+    /// [`Tuning::promise_of`]'s.
+    pub fn first_of_batch_promise_of(&self, attribute: &str, source: Source) -> Option<f64> {
+        let tuned = self.attributes.iter().find(|a| a.attribute == attribute)?;
+        match source {
+            Source::KeyMemory => tuned.first_key_promise,
+            Source::SimilarRecord => tuned.first_memory_promise,
             Source::None | Source::External => None,
         }
     }
@@ -184,6 +231,11 @@ impl Tuning {
                 level.memory_threshold = tuned.coarse_memory_threshold;
                 level.memory_floor = tuned.coarse_memory_floor;
             }
+            a.first_of_batch = tuned.first_of_batch.then_some(crate::schema::FirstOfBatch {
+                key_threshold: tuned.first_key_threshold,
+                memory_threshold: tuned.first_memory_threshold,
+                memory_floor: tuned.first_memory_floor,
+            });
         }
         Schema::new(schema.name(), attributes)
     }

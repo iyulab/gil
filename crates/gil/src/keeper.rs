@@ -26,7 +26,7 @@ use crate::key_memory::KeyMemory;
 use crate::lexical_memory::LexicalMemory;
 use crate::replay::{
     Choice, LayerThresholds, ReplayState, Replaying, ThresholdRule, batch_check, carry_on,
-    coarse_layers, layers,
+    coarse_layers, in_situation, layers,
 };
 use crate::schema::{AttributeRole, Record, Schema, SettlementKind};
 use crate::tuning::{Stale, Tuning};
@@ -42,6 +42,14 @@ pub struct Keep {
     pub counting: Option<Vec<SettlementKind>>,
     /// How the two thresholds are chosen.
     pub rule: ThresholdRule,
+    /// Experimental. Whether the first records of batches — whose batch had no settled record when they were answered
+    /// ([`Record::batch`]) — have the value layers' thresholds chosen and promised apart from the rest
+    /// ([`crate::schema::Attribute::first_of_batch`]), each on its own lookups and resting on the minimum number of
+    /// answers. Where a source sends records in batches that are right or wrong together, a promise taken on every
+    /// answer holds for the records after a batch's first and flatters the first; chosen apart, the first records are
+    /// held to the target on their own. False chooses one set of thresholds for every record, and leaves none for the
+    /// first records on the schema.
+    pub first_of_batch: bool,
 }
 
 impl Keep {
@@ -53,6 +61,7 @@ impl Keep {
             minimum_answered: 10,
             counting: None,
             rule: ThresholdRule::EveryBand,
+            first_of_batch: false,
         }
     }
 
@@ -83,6 +92,7 @@ pub struct Keeper {
     records: Vec<Record>,
     replays: BTreeMap<String, Replay>,
     chosen: BTreeMap<String, LayerThresholds>,
+    first: BTreeMap<String, LayerThresholds>,
     coarse: BTreeMap<String, LayerThresholds>,
     tuning: Tuning,
 }
@@ -104,6 +114,7 @@ impl Keeper {
             records: Vec::new(),
             replays: BTreeMap::new(),
             chosen: BTreeMap::new(),
+            first: BTreeMap::new(),
             coarse: BTreeMap::new(),
             tuning,
         };
@@ -141,6 +152,13 @@ impl Keeper {
     /// and for an attribute the keeper does not choose for.
     pub fn chosen(&self, attribute: &str) -> Option<&LayerThresholds> {
         self.chosen.get(attribute)
+    }
+
+    /// Experimental. What the last [`Keeper::rechoose`] chose for `attribute`'s first records of batches
+    /// ([`Keep::first_of_batch`]); `None` before the first, when the keeper does not choose them apart, and for an
+    /// attribute it does not choose for.
+    pub fn chosen_first_of_batch(&self, attribute: &str) -> Option<&LayerThresholds> {
+        self.first.get(attribute)
     }
 
     /// What the last [`Keeper::rechoose`] chose for `attribute`'s coarse level; `None` before the first, and for an
@@ -198,6 +216,7 @@ impl Keeper {
         let choice = self.keep.choice();
         let mut schema = self.schema.clone();
         let mut chosen = BTreeMap::new();
+        let mut first = BTreeMap::new();
         let mut coarse = BTreeMap::new();
         for (attribute, replay) in &mut self.replays {
             let definition = self.schema.attribute(attribute);
@@ -217,8 +236,13 @@ impl Keeper {
                 replaying,
             );
             replay.through = self.records.len();
+            // Apart, the value thresholds are the later records' and the first records' are chosen on their own.
+            let later = self
+                .keep
+                .first_of_batch
+                .then(|| in_situation(&replay.state.steps, false));
             let thresholds = layers(
-                &replay.state.steps,
+                later.as_deref().unwrap_or(&replay.state.steps),
                 replay.state.order,
                 definition,
                 choice,
@@ -240,12 +264,39 @@ impl Keeper {
                 .with_layers(attribute, &thresholds)
                 .expect("a chosen threshold fits the attribute it was chosen for");
             chosen.insert(attribute.clone(), thresholds);
+            if self.keep.first_of_batch {
+                let firsts = layers(
+                    &in_situation(&replay.state.steps, true),
+                    replay.state.order,
+                    definition,
+                    choice,
+                    self.keep.rule,
+                );
+                schema = schema
+                    .with_first_of_batch(attribute, &firsts)
+                    .expect("a chosen threshold fits the attribute it was chosen for");
+                first.insert(attribute.clone(), firsts);
+            } else if definition.first_of_batch.is_some() {
+                schema = schema.derived(attribute, |a| a.first_of_batch = None);
+            }
             if definition.coarse.is_some() {
-                // On the lookups the value layers leave at the thresholds just chosen.
+                // On the lookups the value layers leave at the thresholds just chosen — a first record's at the first
+                // records' when they are chosen apart.
+                let values = schema.attribute(attribute);
+                let firsts = values
+                    .first_of_batch
+                    .as_ref()
+                    .map(|f| crate::schema::Attribute {
+                        key_threshold: f.key_threshold,
+                        memory_threshold: f.memory_threshold,
+                        memory_floor: f.memory_floor,
+                        ..values.clone()
+                    });
                 let level = coarse_layers(
                     &replay.state.steps,
                     replay.state.order,
-                    schema.attribute(attribute),
+                    values,
+                    firsts.as_ref(),
                     choice,
                 );
                 schema = schema
@@ -259,11 +310,15 @@ impl Keeper {
         for (attribute, thresholds) in &chosen {
             tuning.promise(attribute, thresholds);
         }
+        for (attribute, thresholds) in &first {
+            tuning.promise_first_of_batch(attribute, thresholds);
+        }
         for (attribute, level) in &coarse {
             tuning.promise_coarse(attribute, level);
         }
         self.schema = schema;
         self.chosen = chosen;
+        self.first = first;
         self.coarse = coarse;
         self.tuning = tuning;
         &self.tuning
@@ -411,6 +466,172 @@ mod tests {
             .iter()
             .map(|a| format!("{:?}", keeper.chosen(a).expect("chosen")))
             .collect()
+    }
+
+    /// `records` in batches of four, a record settled again joining the batch of its place.
+    fn in_batches(records: &[Record]) -> Vec<Record> {
+        records
+            .iter()
+            .enumerate()
+            .map(|(i, r)| Record {
+                batch: Some(format!("b{}", i / 4)),
+                ..r.clone()
+            })
+            .collect()
+    }
+
+    /// Whether each record is the first of its batch: no other record settled before it named the batch.
+    fn firsts(records: &[Record]) -> Vec<bool> {
+        let mut seen: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        records
+            .iter()
+            .map(|r| match &r.batch {
+                None => true,
+                Some(b) => {
+                    let mates = seen.entry(b.clone()).or_default();
+                    let first = !mates.iter().any(|m| m != &r.id);
+                    mates.push(r.id.clone());
+                    first
+                }
+            })
+            .collect()
+    }
+
+    /// `records` with the settlements of the records in the other situation made a kind `counting` leaves out — what a
+    /// host would do to choose for one situation by hand.
+    fn only(records: &[Record], first: bool) -> Vec<Record> {
+        let marks = firsts(records);
+        records
+            .iter()
+            .zip(marks)
+            .map(|(r, f)| {
+                let mut r = r.clone();
+                for attribute in ["team", "queue"] {
+                    let kind = if f == first {
+                        r.settlements
+                            .get(attribute)
+                            .copied()
+                            .unwrap_or(SettlementKind::Enter)
+                    } else {
+                        SettlementKind::Correct
+                    };
+                    r.settlements.insert(attribute.into(), kind);
+                }
+                r
+            })
+            .collect()
+    }
+
+    fn layers_of(t: &crate::replay::LayerThresholds) -> String {
+        format!("{:?} {:?}", t.key, t.memory)
+    }
+
+    #[test]
+    fn first_records_apart_are_chosen_as_a_replay_counting_only_them() {
+        let records = in_batches(&settled(700));
+        let keep = Keep {
+            first_of_batch: true,
+            ..Keep::new(0.8)
+        };
+        let mut keeper = Keeper::new(schema(), keep.clone());
+        let mut decider = decider();
+        for part in records.chunks(150) {
+            keeper.settle(&mut decider, part);
+            keeper.rechoose();
+        }
+
+        let counted = Keep {
+            counting: Some(vec![SettlementKind::Enter, SettlementKind::Check]),
+            first_of_batch: false,
+            ..keep
+        };
+        for (first, chosen) in [
+            (true, keeper.chosen_first_of_batch("team")),
+            (false, keeper.chosen("team")),
+        ] {
+            let by_hand = select_layers(
+                &mut KeyMemory::default(),
+                &mut LexicalMemory::default(),
+                &schema(),
+                "team",
+                &only(&records, first),
+                counted.choice(),
+                LayerOptions {
+                    rule: counted.rule,
+                    sink: None,
+                },
+            );
+            assert_eq!(
+                layers_of(chosen.expect("chosen")),
+                layers_of(&by_hand),
+                "first: {first}"
+            );
+        }
+
+        let first = keeper
+            .chosen_first_of_batch("team")
+            .expect("chosen for first records");
+        assert!(
+            first.key.chosen.is_some(),
+            "the first records answer on their own"
+        );
+        let on_schema = keeper
+            .schema()
+            .attribute("team")
+            .first_of_batch
+            .clone()
+            .expect("on the schema");
+        assert_eq!(
+            on_schema.key_threshold,
+            first.key.chosen.as_ref().map(|c| c.threshold)
+        );
+        assert_eq!(
+            keeper
+                .tuning()
+                .first_of_batch_promise_of("team", Source::KeyMemory),
+            first.key.chosen.as_ref().map(|c| c.promise)
+        );
+        // A tuning puts the thresholds for first records back.
+        let applied = keeper.tuning().apply(&schema()).expect("applies");
+        assert_eq!(
+            applied.attribute("team").first_of_batch,
+            keeper.schema().attribute("team").first_of_batch
+        );
+    }
+
+    #[test]
+    fn records_that_name_no_batch_are_all_first_records() {
+        let records = settled(700);
+        let mut keeper = Keeper::new(
+            schema(),
+            Keep {
+                first_of_batch: true,
+                ..Keep::new(0.8)
+            },
+        );
+        let mut decider = decider();
+        keeper.settle(&mut decider, &records);
+        keeper.rechoose();
+        let mut alike = Keeper::new(schema(), Keep::new(0.8));
+        alike.settle(&mut decider, &records);
+        alike.rechoose();
+        assert_eq!(
+            layers_of(keeper.chosen_first_of_batch("team").expect("chosen")),
+            layers_of(alike.chosen("team").expect("chosen"))
+        );
+        assert!(keeper.chosen("team").expect("chosen").key.chosen.is_none());
+    }
+
+    #[test]
+    fn a_keeper_not_choosing_first_records_apart_leaves_none_on_the_schema() {
+        let records = in_batches(&settled(300));
+        let mut keeper = Keeper::new(schema().for_first_of_batch(), Keep::new(0.8));
+        let mut decider = decider();
+        keeper.settle(&mut decider, &records);
+        keeper.rechoose();
+        assert!(!keeper.schema().has_first_of_batch());
+        assert!(keeper.chosen_first_of_batch("team").is_none());
+        assert!(keeper.tuning().attributes.iter().all(|a| !a.first_of_batch));
     }
 
     #[test]

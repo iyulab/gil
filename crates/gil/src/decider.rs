@@ -6,7 +6,7 @@
 //! ([`Decider::offer_external`]) — the core calls nothing outside itself. Not yet carried over from the
 //! reference: telemetry.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::coarse_groups;
 use crate::decision_record::{Answered, CoarseLook, DecisionRecord, KeyLook, SimilarLook};
@@ -208,6 +208,9 @@ pub struct Decider {
     key_memory: KeyMemory,
     record_memory: Option<LexicalMemory>,
     cases: HashMap<String, Cases>,
+    /// The settled records in memory by the batch they name, and the batch of each.
+    batches: HashMap<String, HashSet<String>>,
+    batch_of: HashMap<String, String>,
     candidate_count: usize,
     similar_document_count: usize,
 }
@@ -219,6 +222,8 @@ impl Decider {
             key_memory,
             record_memory,
             cases: HashMap::new(),
+            batches: HashMap::new(),
+            batch_of: HashMap::new(),
             candidate_count: 3,
             similar_document_count: 0,
         }
@@ -243,6 +248,7 @@ impl Decider {
     /// moved by a tenth.
     pub fn remove(&mut self, schema: &Schema, record: &str) {
         self.key_memory.remove(schema.name(), record);
+        self.place(record, None);
         let Some(memory) = self.record_memory.as_mut() else {
             return;
         };
@@ -272,6 +278,7 @@ impl Decider {
     fn put(&mut self, schema: &Schema, record: &Record) {
         let record = record.remembered();
         self.key_memory.put(schema, &record);
+        self.place(&record.id, record.batch.as_deref());
         let Some(memory) = self.record_memory.as_mut() else {
             return;
         };
@@ -300,6 +307,51 @@ impl Decider {
             for latest in remember {
                 memory.remember(&task, &latest.record, &latest.evidence, &latest.value);
             }
+        }
+    }
+
+    /// Experimental. Whether a record of `batch` now is the first of its batch
+    /// ([`crate::schema::Attribute::first_of_batch`]): memory holds no settled record of the batch but `excluding` (the
+    /// record asked about, whose saved version is not evidence for itself). A record that names no batch is a batch of
+    /// its own, and always the first.
+    pub fn is_first_of_batch(&self, batch: Option<&str>, excluding: Option<&str>) -> bool {
+        let Some(records) = batch.and_then(|b| self.batches.get(b)) else {
+            return true;
+        };
+        !records.iter().any(|r| Some(r.as_str()) != excluding)
+    }
+
+    /// `schema` as a record of `batch` is answered with — [`crate::schema::Schema::for_first_of_batch`] when it is the
+    /// first of its batch ([`Decider::is_first_of_batch`]) and the schema holds thresholds for one, `schema` otherwise.
+    pub fn schema_for<'s>(
+        &self,
+        schema: &'s Schema,
+        batch: Option<&str>,
+        excluding: Option<&str>,
+    ) -> std::borrow::Cow<'s, Schema> {
+        if schema.has_first_of_batch() && self.is_first_of_batch(batch, excluding) {
+            std::borrow::Cow::Owned(schema.for_first_of_batch())
+        } else {
+            std::borrow::Cow::Borrowed(schema)
+        }
+    }
+
+    /// Files `record` under `batch`, out of the batch it named before; `None` files it nowhere.
+    fn place(&mut self, record: &str, batch: Option<&str>) {
+        if let Some(earlier) = self.batch_of.remove(record)
+            && let Some(records) = self.batches.get_mut(&earlier)
+        {
+            records.remove(record);
+            if records.is_empty() {
+                self.batches.remove(&earlier);
+            }
+        }
+        if let Some(batch) = batch {
+            self.batch_of.insert(record.to_owned(), batch.to_owned());
+            self.batches
+                .entry(batch.to_owned())
+                .or_default()
+                .insert(record.to_owned());
         }
     }
 

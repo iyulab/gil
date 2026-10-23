@@ -6,7 +6,7 @@
     ids are suppressed here. A consumer's use is checked by tests/SupportedSurface, which suppresses none.
   -->
   <PropertyGroup>
-    <NoWarn>$(NoWarn);GIL0001;GIL0002;GIL0003;GIL0004;GIL0005</NoWarn>
+    <NoWarn>$(NoWarn);GIL0001;GIL0002;GIL0003;GIL0004;GIL0005;GIL0006</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

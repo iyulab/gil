@@ -47,6 +47,7 @@ pub struct OpenRecord {
     settlements: BTreeMap<String, SettlementKind>,
     probabilities: BTreeMap<String, f64>,
     settled_at: i64,
+    batch: Option<String>,
 }
 
 impl OpenRecord {
@@ -68,6 +69,7 @@ impl OpenRecord {
             settlements: BTreeMap::new(),
             probabilities: BTreeMap::new(),
             settled_at,
+            batch: None,
         }
     }
 
@@ -84,6 +86,7 @@ impl OpenRecord {
         }
 
         let mut open = Self::new(schema, &saved.id, saved.settled_at);
+        open.batch.clone_from(&saved.batch);
         for (attribute, value) in &saved.values {
             open.values.insert(attribute.clone(), value.clone());
         }
@@ -146,6 +149,27 @@ impl OpenRecord {
     /// The record's schema.
     pub fn schema(&self) -> &Schema {
         &self.schema
+    }
+
+    /// Experimental. The record as one of `batch` — records settled together, several at once from one source
+    /// ([`Record::batch`]). When the schema holds thresholds for the first record of a batch
+    /// ([`crate::schema::Attribute::first_of_batch`]), a record whose batch has no other settled record in memory is
+    /// answered at those; a record that names no batch always is.
+    pub fn with_batch(mut self, batch: &str) -> Self {
+        self.batch = Some(batch.to_owned());
+        self
+    }
+
+    /// Experimental. The batch the record names, if any ([`OpenRecord::with_batch`]).
+    pub fn batch(&self) -> Option<&str> {
+        self.batch.as_deref()
+    }
+
+    /// Experimental. Whether the record is answered as the first of its batch now: the schema holds thresholds for one
+    /// and `decider` holds no other settled record of its batch ([`Decider::is_first_of_batch`]).
+    pub fn is_first_of_batch(&self, decider: &Decider) -> bool {
+        self.schema.has_first_of_batch()
+            && decider.is_first_of_batch(self.batch.as_deref(), Some(&self.id))
     }
 
     /// The record's id — the key its contribution to memory is kept under.
@@ -246,11 +270,12 @@ impl OpenRecord {
         decider: &Decider,
         sink: &mut dyn FnMut(&DecisionRecord),
     ) -> Vec<Answer> {
+        let schema = self.answering(decider);
         self.schema
             .attributes()
             .iter()
             .filter(|a| self.is_open(a))
-            .map(|a| decider.answer_one_with(&self.lookup(&a.name, None), sink))
+            .map(|a| decider.answer_one_with(&self.lookup(&schema, &a.name, None), sink))
             .collect()
     }
 
@@ -268,7 +293,8 @@ impl OpenRecord {
         partial: Option<&str>,
     ) -> Answer {
         self.assert_open(attribute);
-        decider.answer_one_with(&self.lookup(attribute, partial), &mut |_| {})
+        let schema = self.answering(decider);
+        decider.answer_one_with(&self.lookup(&schema, attribute, partial), &mut |_| {})
     }
 
     /// The answer for an open decided attribute with an external judgement's ranked values in it — what the host's model
@@ -283,14 +309,15 @@ impl OpenRecord {
         ranked: &[ExternalCandidate],
     ) -> Answer {
         self.assert_open(attribute);
-        decider.offer_external(&self.lookup(attribute, None), ranked)
+        let schema = self.answering(decider);
+        decider.offer_external(&self.lookup(&schema, attribute, None), ranked)
     }
 
     /// The record's values as they stand — observed and settled — which is what the host saves, with the time an
     /// attribute was last settled (or the time the record was opened with, if none was since), the order the values
     /// arrived in, by which choosing thresholds replays the record, and how each decided value was settled — with the
-    /// probability a checked one was drawn with. The record names no batch and carries none of what the host saw and
-    /// timed (the suggestions in view, their layers and promises, the milliseconds, who settled it, the form's version);
+    /// probability a checked one was drawn with, and the batch it names ([`OpenRecord::with_batch`]). It carries none
+    /// of what the host saw and timed (the suggestions in view, their layers and promises, the milliseconds, who settled it, the form's version);
     /// a host that keeps those sets them on the record before saving it.
     pub fn snapshot(&self) -> Record {
         Record {
@@ -301,12 +328,23 @@ impl OpenRecord {
             settlements: self.settlements.clone(),
             probabilities: self.probabilities.clone(),
             arrival: Some(self.arrival.clone()),
+            batch: self.batch.clone(),
             ..Record::default()
         }
     }
 
-    fn lookup<'a>(&'a self, attribute: &'a str, partial: Option<&'a str>) -> Lookup<'a> {
-        Lookup::new(&self.schema, attribute, &self.values)
+    /// The schema the record is answered with now ([`Decider::schema_for`]).
+    fn answering<'s>(&'s self, decider: &Decider) -> std::borrow::Cow<'s, Schema> {
+        decider.schema_for(&self.schema, self.batch.as_deref(), Some(&self.id))
+    }
+
+    fn lookup<'a>(
+        &'a self,
+        schema: &'a Schema,
+        attribute: &'a str,
+        partial: Option<&'a str>,
+    ) -> Lookup<'a> {
+        Lookup::new(schema, attribute, &self.values)
             .sets(&self.sets)
             .typed(partial)
             .excluding(Some(&self.id))
@@ -408,6 +446,7 @@ impl OpenRecord {
 
     fn changed(&self, decider: &mut Decider, changed: &str, reopened: bool) -> Vec<Answer> {
         decider.rebuild(&self.schema, std::slice::from_ref(&self.snapshot()));
+        let schema = self.answering(decider);
         self.schema
             .attributes()
             .iter()
@@ -417,7 +456,7 @@ impl OpenRecord {
                 self.schema.supports(changed, &a.name)
                     || (a.name == changed && (reopened || a.multiple))
             })
-            .map(|a| decider.answer_one_with(&self.lookup(&a.name, None), &mut |_| {}))
+            .map(|a| decider.answer_one_with(&self.lookup(&schema, &a.name, None), &mut |_| {}))
             .collect()
     }
 }

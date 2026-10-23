@@ -476,6 +476,7 @@ impl Keeper {
             minimum_answered,
             counting,
             rule,
+            first_of_batch: false,
         };
         let inner = guarded(|| {
             let keeper = gil::keeper::Keeper::new(schema, keep);

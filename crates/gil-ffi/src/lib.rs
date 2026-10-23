@@ -1438,6 +1438,7 @@ pub unsafe extern "C" fn gil_keeper_new(
             minimum_answered: options.minimum_answered,
             counting: options.counting.clone(),
             rule: options.rule,
+            first_of_batch: false,
         };
         let mut keeper = Keeper::new(schema.0.clone(), keep);
         if options.threads > 0 {

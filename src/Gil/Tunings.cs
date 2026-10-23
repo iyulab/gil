@@ -159,6 +159,30 @@ public sealed record AttributeTuning(string Attribute)
     /// <summary>The precision the coarse level's chosen memory threshold promised for the next classes it
     /// offers.</summary>
     public double? CoarseMemoryPromise { get; init; }
+
+    /// <summary>The key layer's threshold for the first record of a batch.</summary>
+    [Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
+    public double? FirstKeyThreshold { get; init; }
+
+    /// <summary>The similar record layer's threshold for the first record of a batch.</summary>
+    [Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
+    public double? FirstMemoryThreshold { get; init; }
+
+    /// <summary>The similar record layer's similarity floor for the first record of a batch.</summary>
+    [Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
+    public double? FirstMemoryFloor { get; init; }
+
+    /// <summary>The precision the key layer's threshold for first records promised for the next first records.</summary>
+    [Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
+    public double? FirstKeyPromise { get; init; }
+
+    /// <summary>The precision the similar record layer's threshold for first records promised for the next ones.</summary>
+    [Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
+    public double? FirstMemoryPromise { get; init; }
+
+    /// <summary>Whether thresholds for the first record of a batch were chosen apart at all.</summary>
+    [Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
+    public bool FirstOfBatch { get; init; }
 }
 
 /// <summary>Why a tuning no longer stands.</summary>
