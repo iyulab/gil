@@ -113,6 +113,10 @@ yet. They are kept because a record cannot be given them afterwards, and each an
 2. Give each decided attribute its kind. Where the screen showed a proposal, keep whether it was taken.
 3. Keep the lines in a place the application can read back in full. A replay needs all of them; a store that keeps only
    the latest state of each record loses the order and the corrections.
+   An export of the latest state also replays values that were not there when the record was settled. On public bug
+   reports whose product, keywords and other attributes were edited after filing, thresholds replayed on the exported
+   values promised 0.93, and the few answers they gave when asked with the values as filed were 0.63 right; replayed on
+   the values as filed, no threshold held the target at all.
 
 Leave out what Gil does not need and the form should not carry: free text that holds personal data can stay out of the
 line, and the attribute then simply has no value to learn from.
