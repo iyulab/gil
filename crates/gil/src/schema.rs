@@ -865,14 +865,20 @@ pub struct Record {
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub open_ms: Option<u64>,
-    /// Who settled the record, as an opaque id the host gives — one person, one id; not a name.
+    /// For each decided attribute, who settled it, as an opaque id the host gives — one person, one id; not a name. One
+    /// record may be settled by several people, an attribute each.
     #[cfg_attr(
         feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
+        serde(
+            default,
+            deserialize_with = "or_empty",
+            skip_serializing_if = "BTreeMap::is_empty"
+        )
     )]
-    pub settled_by: Option<String>,
-    /// The version of the form the record was settled on, as the host identifies it — [`crate::tuning::fingerprint`]
-    /// of its schema suits.
+    pub settled_by: BTreeMap<String, String>,
+    /// The version of the form the record was settled on, as the host identifies it — the edition of the code lists
+    /// its decided attributes are settled from, which changes when a value comes to mean something else (a code
+    /// renumbered, merged or split), not when only a label or the schema's layout changes.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")

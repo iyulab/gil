@@ -33,7 +33,8 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   line format — `suggested` (the value in view when a decided attribute was settled), `sources` (the layer of the
   answer in view, named as answers name it), `promises` (the precision promised for it then, in [0, 1]), `settle_ms`
   (per attribute, the milliseconds from reaching it to settling it), `open_ms` (the milliseconds the record was open),
-  `settled_by` (an opaque id of who settled it) and `form_version` — are fields of `Record`, read and written back.
+  `settled_by` (per attribute, an opaque id of who settled it) and `form_version` (the edition of the code lists, new
+  when a value comes to mean something else) — are fields of `Record`, read and written back.
   Nothing in the replays reads them yet; they are what a host keeps from its first record so that whether promises
   hold for the answers people saw, what settling costs them and how settlers differ can be measured later. A promise
   out of [0, 1], a layer other than the three and negative milliseconds are refused. Readers before this version refuse a

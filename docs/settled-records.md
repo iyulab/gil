@@ -29,8 +29,8 @@ One JSON object per line, one line per settlement:
 | `promises` | object of numbers | no | For each decided attribute settled with Gil's answer in view, the precision promised for it when it was shown (the tuning's promise for its layer), in [0, 1] |
 | `settle_ms` | object of integers | no | For each decided attribute, the milliseconds from when the person reached it — its suggestion came into view, or it was reached with nothing in view — to when it was settled |
 | `open_ms` | integer | no | The milliseconds the record was open, from opening it to this settlement |
-| `settled_by` | string | no | Who settled the record, as an opaque id the application gives — one person, one id; never a name |
-| `form_version` | string | no | The version of the form the record was settled on, as the application identifies it — a fingerprint of its schema suits |
+| `settled_by` | object of strings | no | For each decided attribute, who settled it, as an opaque id the application gives — one person, one id; never a name |
+| `form_version` | string | no | The version of the form the record was settled on: the edition of the code lists its decided attributes are settled from, as the application identifies it |
 
 An entry left out, or given as `null`, reads as empty (`arrival`, `batch` and the last seven as unknown). An entry the
 table does not name does not read, and neither does a time out of range (`2025-02-29`, `24:00`, an offset past
@@ -92,8 +92,19 @@ yet. They are kept because a record cannot be given them afterwards, and each an
   records says which. What tells them apart is records settled twice — drawn at random, settled again by a second
   person who sees neither the answer nor the first settlement, written as a `Check` under the same id. Between them,
   with three settlers or more, how often each pair agrees gives each settler's rate of being right.
-- **`form_version`** — which records were settled on which version of a form, so that a changed form is known as one
-  and its first thresholds can be compared with the old form's.
+- **`settled_by`** is kept for each attribute because one record is often settled by more than one person — a clerk
+  enters some attributes, a reviewer others — and a settler's rate of being right is a rate over the attributes they
+  settled.
+- **`form_version`** — which records were settled on which version of a form. Give it a new value when a revision
+  makes a value mean something else: a code renumbered, two codes merged into one, one split into several. Do not
+  change it when only a label, a description or the order of the form changes. Records settled before a revision that
+  renumbers codes answer the new form wrongly: on public food inspection records whose violation numbers were all
+  reassigned, memory that went on across the revision answered 44% of the first 1,000 new records' answers right where
+  94% was promised, and once its promise had come down it still answered a third less often than a fresh memory, for
+  the year and a half the records ran. Starting
+  memory again on a revision that changed nothing costs answers instead — on public injury product codes, 0.63 times
+  as many in the first 5,000 records. Start from the records of the new version when the values changed meaning, and
+  only then.
 
 ## What to keep, before Gil is in use
 

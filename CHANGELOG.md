@@ -12,8 +12,8 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 - **A settled record can say what was in view, how long it took and who settled it.** `Record.Suggested` (the value
   in view when a decided attribute was settled), `Sources` (the layer of the answer in view), `Promises` (the precision
   promised for it then, in [0, 1] — `Tuning.PromiseOf`), `SettleMs` (per attribute, the milliseconds from reaching it
-  to settling it), `OpenMs` (the milliseconds the record was open), `SettledBy` (an opaque id of who settled it) and
-  `FormVersion` — the line format's seven new optional entries. Nothing in the replays reads them yet; they are what a
+  to settling it), `OpenMs` (the milliseconds the record was open), `SettledBy` (per attribute, an opaque id of who settled it) and
+  `FormVersion` (the edition of the code lists, new when a value comes to mean something else) — the line format's seven new optional entries. Nothing in the replays reads them yet; they are what a
   host keeps from its first record so that whether promises hold for the answers people saw, what settling costs and
   how settlers differ can be measured later. A promise out of [0, 1] is refused. Earlier versions refuse a line that
   carries them.
