@@ -36,6 +36,8 @@ from gil._gil import (
     RECENT_RECORDS,
     Records,
     check_schema,
+    schema_for_first_of_batch_json,
+    schema_with_first_of_batch_json,
     schema_with_layers_json,
     select_coarse_json,
     select_key_concentrations_json,
@@ -82,9 +84,11 @@ __all__ = [
     "apply_tuning",
     "capture_tuning",
     "coarse_promise_of",
+    "first_of_batch_promise_of",
     "promise_of",
     "read_records",
     "record_coarse_promise",
+    "record_first_of_batch_promise",
     "record_promise",
     "records",
     "select_coarse",
@@ -298,6 +302,20 @@ class Schema:
             schema_with_layers_json(self._json, attribute, json.dumps(layers), True)
         )
 
+    def with_first_of_batch(self, attribute: str, layers: LayerThresholds) -> Schema:
+        """Experimental. As :meth:`with_layers`, for what a replay of the first records of batches chose: the
+        thresholds go on the attribute's ``first_of_batch``."""
+        return Schema(
+            schema_with_first_of_batch_json(self._json, attribute, json.dumps(layers))
+        )
+
+    def for_first_of_batch(self) -> Schema:
+        """Experimental. The schema a first record of a batch — one whose batch has no settled record yet — is
+        answered with: each attribute's ``first_of_batch`` key and memory thresholds in place of its value layers'. Pass
+        it to :meth:`Decider.answer` when :meth:`Decider.is_first_of_batch` says so; :class:`OpenRecord` does this
+        itself."""
+        return Schema(schema_for_first_of_batch_json(self._json))
+
 
 def records(items: Iterable[dict[str, Any]]) -> Records:
     """Settled records from dictionaries, in settlement order.
@@ -510,6 +528,11 @@ class Decider:
         it again."""
         self._inner.remove(schema.json, record_id)
 
+    def is_first_of_batch(self, batch: str | None, excluding: str | None = None) -> bool:
+        """Experimental. Whether a record of ``batch`` now is the first of its batch: the memories hold no settled
+        record of the batch but ``excluding`` (the record asked about). A record that names no batch always is."""
+        return self._inner.is_first_of_batch(batch, excluding)
+
     def answer(
         self,
         schema: Schema,
@@ -621,8 +644,14 @@ class OpenRecord:
 
     __slots__ = ("_inner",)
 
-    def __init__(self, schema: Schema, id: str, settled_at: int) -> None:
-        self._inner = _OpenRecord(schema.json, id, settled_at)
+    def __init__(
+        self, schema: Schema, id: str, settled_at: int, batch: str | None = None
+    ) -> None:
+        """Experimental: ``batch`` names the batch the record is one of — records settled together, several at once
+        from one source. When the schema holds thresholds for the first record of a batch (``first_of_batch``), a
+        record whose batch has no other settled record in the decider is answered at those; one that names no batch
+        always is."""
+        self._inner = _OpenRecord(schema.json, id, settled_at, batch)
 
     @classmethod
     def reopen(cls, schema: Schema, saved: dict[str, Any]) -> OpenRecord:
@@ -636,6 +665,16 @@ class OpenRecord:
     @property
     def id(self) -> str:
         return self._inner.id
+
+    @property
+    def batch(self) -> str | None:
+        """Experimental. The batch the record names, if any."""
+        return self._inner.batch
+
+    def is_first_of_batch(self, decider: Decider) -> bool:
+        """Experimental. Whether the record is answered as the first of its batch now; its answers' promises are then
+        :func:`first_of_batch_promise_of`'s."""
+        return self._inner.is_first_of_batch(decider._inner)
 
     def observe(
         self, decider: Decider, attribute: str, value: str | None
@@ -721,6 +760,7 @@ class KeeperChoice(TypedDict, total=False):
     tuning: dict[str, Any]
     chosen: dict[str, LayerThresholds]
     coarse: dict[str, LayerThresholds]
+    first_of_batch: dict[str, LayerThresholds]
     decisions: list[DecisionRecord]
 
 
@@ -736,6 +776,11 @@ class Keeper:
     on the same replay, after its value layers' — as :func:`select_coarse` with the value thresholds just chosen. Answer with the decider and :attr:`schema`; an answer's promise is
     ``promise_of(keeper.tuning, attribute, answer["source"])``. Give it the same decider every time. The choosing
     arguments are :func:`select_layers`'. Nothing is stored outside the process.
+
+    Experimental: with ``first_of_batch``, the first records of batches — whose batch had no settled record when they
+    were answered — have the value layers' thresholds chosen and promised apart from the rest, each on its own lookups
+    and resting on ``minimum_answered``; the choice's ``first_of_batch`` holds theirs, :attr:`schema` carries them, and
+    a first record's promise is ``first_of_batch_promise_of(keeper.tuning, attribute, answer["source"])``.
     """
 
     __slots__ = ("_inner",)
@@ -748,6 +793,7 @@ class Keeper:
         counting: Iterable[str] | None = None,
         rule: Literal["every_band", "pooled"] = "every_band",
         threads: int | None = None,
+        first_of_batch: bool = False,
     ) -> None:
         self._inner = _Keeper(
             schema.json,
@@ -756,6 +802,7 @@ class Keeper:
             None if counting is None else list(counting),
             rule,
             threads,
+            first_of_batch,
         )
 
     def settle(self, decider: Decider, records: Records) -> None:
@@ -836,6 +883,35 @@ def promise_of(tuning: dict[str, Any], attribute: str, source: str) -> float | N
     It reads the value's layers only: a coarse class offered instead (the answer's ``coarse``) names the layer that backs
     the class, and its promise is :func:`coarse_promise_of`'s."""
     field = {"KeyMemory": "key_promise", "SimilarRecord": "memory_promise"}.get(source)
+    tuned = next(
+        (a for a in tuning["attributes"] if a["attribute"] == attribute), None
+    )
+    return None if field is None or tuned is None else tuned.get(field)
+
+
+def record_first_of_batch_promise(
+    tuning: dict[str, Any], attribute: str, layers: LayerThresholds
+) -> dict[str, Any]:
+    """Experimental. ``tuning`` with what ``attribute``'s thresholds for first records of batches promised."""
+    return cast(
+        dict[str, Any],
+        json.loads(
+            tuning_promise_json(
+                json.dumps(tuning), attribute, json.dumps(layers), first_of_batch=True
+            )
+        ),
+    )
+
+
+def first_of_batch_promise_of(
+    tuning: dict[str, Any], attribute: str, source: str
+) -> float | None:
+    """Experimental. What the layer an answer came from promised for ``attribute`` when the record was answered as the
+    first of its batch (:meth:`OpenRecord.is_first_of_batch`); ``None`` as for :func:`promise_of`, and when no
+    thresholds for first records were chosen apart — the answer's promise is then :func:`promise_of`'s."""
+    field = {"KeyMemory": "first_key_promise", "SimilarRecord": "first_memory_promise"}.get(
+        source
+    )
     tuned = next(
         (a for a in tuning["attributes"] if a["attribute"] == attribute), None
     )

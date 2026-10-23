@@ -376,6 +376,14 @@ impl Decider {
         })
     }
 
+    /// Experimental. Whether a record of `batch` now is the first of its batch: memory holds no settled record of the
+    /// batch but `excluding`. A record that names no batch always is.
+    #[pyo3(signature = (batch, excluding=None))]
+    fn is_first_of_batch(&self, batch: Option<&str>, excluding: Option<&str>) -> PyResult<bool> {
+        usable(self.broken, "decider")?;
+        Ok(self.inner.is_first_of_batch(batch, excluding))
+    }
+
     /// The answer for one open decided attribute of record `id` from the values given (a JSON object, and the sets of
     /// the attributes that take several as another), writing nothing to memory; the saved version of the record, if
     /// memory holds one, is not evidence for itself. As JSON — with `decision`, the lookup's decision record, when
@@ -425,8 +433,9 @@ struct Keeper {
     broken: bool,
 }
 
-/// A keeper's choice as JSON: `{"tuning": …, "chosen": {attribute: thresholds, …}, "coarse": {attribute: thresholds, …}}`
-/// — `coarse` for the attributes with a coarse level.
+/// A keeper's choice as JSON: `{"tuning": …, "chosen": {attribute: thresholds, …}, "coarse": {attribute: thresholds, …},
+/// "first_of_batch": {attribute: thresholds, …}}` — `coarse` for the attributes with a coarse level, `first_of_batch`
+/// when the keeper chooses the first records of batches apart.
 fn keeper_json(keeper: &gil::keeper::Keeper) -> String {
     let chosen: serde_json::Map<String, Value> = keeper
         .attributes()
@@ -450,14 +459,32 @@ fn keeper_json(keeper: &gil::keeper::Keeper) -> String {
             })
         })
         .collect();
-    json!({ "tuning": keeper.tuning(), "chosen": chosen, "coarse": coarse }).to_string()
+    let first: serde_json::Map<String, Value> = keeper
+        .attributes()
+        .filter_map(|a| {
+            keeper.chosen_first_of_batch(a).map(|t| {
+                (
+                    a.to_owned(),
+                    serde_json::to_value(t).expect("thresholds serialize"),
+                )
+            })
+        })
+        .collect();
+    json!({
+        "tuning": keeper.tuning(),
+        "chosen": chosen,
+        "coarse": coarse,
+        "first_of_batch": first,
+    })
+    .to_string()
 }
 
 #[pymethods]
 impl Keeper {
     /// A keeper of the schema with nothing settled, choosing for every decided attribute that takes one value.
     #[new]
-    #[pyo3(signature = (schema_json, target_precision, minimum_answered, counting=None, rule="every_band", threads=None))]
+    #[pyo3(signature = (schema_json, target_precision, minimum_answered, counting=None, rule="every_band", threads=None, first_of_batch=false))]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         schema_json: &str,
         target_precision: f64,
@@ -465,6 +492,7 @@ impl Keeper {
         counting: Option<Vec<String>>,
         rule: &str,
         threads: Option<usize>,
+        first_of_batch: bool,
     ) -> PyResult<Self> {
         let rule = threshold_rule(rule)?;
         let (schema, counting) = selection_input(schema_json, counting)?;
@@ -476,7 +504,7 @@ impl Keeper {
             minimum_answered,
             counting,
             rule,
-            first_of_batch: false,
+            first_of_batch,
         };
         let inner = guarded(|| {
             let keeper = gil::keeper::Keeper::new(schema, keep);
@@ -623,13 +651,35 @@ struct OpenRecord {
 #[pymethods]
 impl OpenRecord {
     /// A new record `id`, starting at `settled_at` (100-nanosecond ticks since the Unix epoch, UTC).
+    /// Experimental: `batch` names the batch the record is one of.
     #[new]
-    fn new(schema_json: &str, id: &str, settled_at: i64) -> PyResult<Self> {
+    #[pyo3(signature = (schema_json, id, settled_at, batch=None))]
+    fn new(schema_json: &str, id: &str, settled_at: i64, batch: Option<&str>) -> PyResult<Self> {
         let schema = schema(schema_json).map_err(invalid)?;
-        guarded(|| open_record::OpenRecord::new(schema, id, settled_at)).map(|inner| Self {
+        guarded(|| {
+            let open = open_record::OpenRecord::new(schema, id, settled_at);
+            match batch {
+                Some(batch) => open.with_batch(batch),
+                None => open,
+            }
+        })
+        .map(|inner| Self {
             inner,
             broken: false,
         })
+    }
+
+    /// Experimental. The batch the record names, if any.
+    #[getter]
+    fn batch(&self) -> Option<String> {
+        self.inner.batch().map(str::to_owned)
+    }
+
+    /// Experimental. Whether the record is answered as the first of its batch now.
+    fn is_first_of_batch(&self, decider: &Decider) -> PyResult<bool> {
+        usable(self.broken, "record")?;
+        usable(decider.broken, "decider")?;
+        Ok(self.inner.is_first_of_batch(&decider.inner))
     }
 
     /// A saved record (JSON, as a snapshot gives it) reopened as it was left.
@@ -806,18 +856,26 @@ fn tuning_capture_json(
 /// The tuning with what `attribute`'s layer replay (JSON, as `select_layers_json` gives it) promised — its coarse
 /// level's, from `select_coarse_json`, when `coarse` — as JSON.
 #[pyfunction]
-#[pyo3(signature = (tuning_json, attribute, layers_json, coarse = false))]
+#[pyo3(signature = (tuning_json, attribute, layers_json, coarse = false, first_of_batch = false))]
 fn tuning_promise_json(
     tuning_json: &str,
     attribute: &str,
     layers_json: &str,
     coarse: bool,
+    first_of_batch: bool,
 ) -> PyResult<String> {
     let mut tuned = tuning(tuning_json)?;
     let layers: LayerThresholds = serde_json::from_str(layers_json)
         .map_err(|e| invalid(format!("a layer replay does not read: {e}")))?;
+    if coarse && first_of_batch {
+        return Err(invalid(
+            "a promise is the coarse level's or the first records', not both".to_owned(),
+        ));
+    }
     if coarse {
         guarded(|| tuned.promise_coarse(attribute, &layers))?;
+    } else if first_of_batch {
+        guarded(|| tuned.promise_first_of_batch(attribute, &layers))?;
     } else {
         guarded(|| tuned.promise(attribute, &layers))?;
     }
@@ -843,6 +901,30 @@ fn schema_with_layers_json(
     }
     .map_err(invalid)?;
     Ok(serde_json::to_string(&changed).expect("a schema serializes"))
+}
+
+/// Experimental. The schema with what a replay of the first records of batches chose put on `attribute`'s thresholds for
+/// them, as JSON.
+#[pyfunction]
+fn schema_with_first_of_batch_json(
+    schema_json: &str,
+    attribute: &str,
+    layers_json: &str,
+) -> PyResult<String> {
+    let schema = schema(schema_json).map_err(invalid)?;
+    let layers: LayerThresholds = serde_json::from_str(layers_json)
+        .map_err(|e| invalid(format!("a layer replay does not read: {e}")))?;
+    let changed = schema
+        .with_first_of_batch(attribute, &layers)
+        .map_err(invalid)?;
+    Ok(serde_json::to_string(&changed).expect("a schema serializes"))
+}
+
+/// Experimental. The schema a first record of a batch is answered with, as JSON.
+#[pyfunction]
+fn schema_for_first_of_batch_json(schema_json: &str) -> PyResult<String> {
+    let schema = schema(schema_json).map_err(invalid)?;
+    Ok(serde_json::to_string(&schema.for_first_of_batch()).expect("a schema serializes"))
 }
 
 /// The schema with the tuning's settings put back on its attributes, as JSON.
@@ -930,6 +1012,8 @@ fn _gil(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Keeper>()?;
     m.add_function(wrap_pyfunction!(tuning_capture_json, m)?)?;
     m.add_function(wrap_pyfunction!(schema_with_layers_json, m)?)?;
+    m.add_function(wrap_pyfunction!(schema_with_first_of_batch_json, m)?)?;
+    m.add_function(wrap_pyfunction!(schema_for_first_of_batch_json, m)?)?;
     m.add_function(wrap_pyfunction!(tuning_apply_json, m)?)?;
     m.add_function(wrap_pyfunction!(tuning_promise_json, m)?)?;
     m.add_function(wrap_pyfunction!(tuning_stale_json, m)?)?;

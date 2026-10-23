@@ -13,6 +13,8 @@ __all__ = [
     "OpenRecord",
     "Records",
     "check_schema",
+    "schema_for_first_of_batch_json",
+    "schema_with_first_of_batch_json",
     "schema_with_layers_json",
     "select_coarse_json",
     "select_key_concentrations_json",
@@ -105,6 +107,10 @@ class Decider:
     def remove(self, schema_json: str, record_id: str) -> None:
         """Takes record `record_id` out of the memories — a record the host deleted; nothing happens when they do not hold it."""
 
+    def is_first_of_batch(self, batch: str | None, excluding: str | None = None) -> bool:
+        """Experimental. Whether a record of `batch` now is the first of its batch: memory holds no settled record of the
+        batch but `excluding`. A record that names no batch always is."""
+
     def answer(
         self,
         schema_json: str,
@@ -129,6 +135,7 @@ class Keeper:
         counting: list[str] | None = None,
         rule: str = "every_band",
         threads: int | None = None,
+        first_of_batch: bool = False,
     ) -> Keeper: ...
     def settle(self, decider: Decider, records: Records) -> None:
         """Puts `records` into `decider` and into the next choice."""
@@ -169,13 +176,22 @@ class AskPlanner:
 class OpenRecord:
     """One record of a schema while its values arrive; each change returns the answers it causes, as JSON."""
 
-    def __new__(cls, schema_json: str, id: str, settled_at: int) -> OpenRecord: ...
+    def __new__(
+        cls, schema_json: str, id: str, settled_at: int, batch: str | None = None
+    ) -> OpenRecord: ...
     @staticmethod
     def reopen(schema_json: str, record_json: str) -> OpenRecord:
         """A saved record (JSON, as a snapshot gives it) reopened as it was left."""
 
     @property
     def id(self) -> str: ...
+    @property
+    def batch(self) -> str | None:
+        """Experimental. The batch the record names, if any."""
+
+    def is_first_of_batch(self, decider: Decider) -> bool:
+        """Experimental. Whether the record is answered as the first of its batch now."""
+
     def observe(self, decider: Decider, attribute: str, value: str | None) -> str:
         """Sets (or with `None` clears) an observed attribute's value; the answers it changes, as JSON."""
 
@@ -209,14 +225,27 @@ class OpenRecord:
 def tuning_capture_json(schema_json: str, settled: int, target_precision: float) -> str:
     """The chosen settings of the schema's decided attributes, chosen on `settled` records for `target_precision`, as JSON."""
 
-def tuning_promise_json(tuning_json: str, attribute: str, layers_json: str, coarse: bool = False) -> str:
+def tuning_promise_json(
+    tuning_json: str,
+    attribute: str,
+    layers_json: str,
+    coarse: bool = False,
+    first_of_batch: bool = False,
+) -> str:
     """The tuning with what `attribute`'s layer replay (JSON, as `select_layers_json` gives it) promised — its coarse
-    level's, from `select_coarse_json`, when `coarse` — as JSON."""
+    level's, from `select_coarse_json`, when `coarse`; the first records', when `first_of_batch` — as JSON."""
 
 def schema_with_layers_json(
     schema_json: str, attribute: str, layers_json: str, coarse: bool
 ) -> str:
     """The schema with what the attribute's layer replay chose put on it — on its coarse level when `coarse` — as JSON."""
+
+def schema_with_first_of_batch_json(schema_json: str, attribute: str, layers_json: str) -> str:
+    """Experimental. The schema with what a replay of the first records of batches chose put on the attribute's
+    thresholds for them, as JSON."""
+
+def schema_for_first_of_batch_json(schema_json: str) -> str:
+    """Experimental. The schema a first record of a batch is answered with, as JSON."""
 
 def tuning_apply_json(tuning_json: str, schema_json: str) -> str:
     """The schema with the tuning's settings put back on its attributes, as JSON."""
