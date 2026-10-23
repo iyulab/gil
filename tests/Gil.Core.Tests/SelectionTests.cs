@@ -157,7 +157,7 @@ public sealed class SelectionTests
             Promises = new Dictionary<string, double> { ["team"] = 0.9 },
             SettleMs = new Dictionary<string, ulong> { ["team"] = 4200 },
             OpenMs = 61000,
-            SettledBy = "p-17",
+            SettledBy = new Dictionary<string, string> { ["team"] = "p-17" },
             FormVersion = "9f2c",
         };
         var line = JsonNode.Parse(JsonSerializer.Serialize(record, CoreJson.Default.Record))!.AsObject();
@@ -166,7 +166,7 @@ public sealed class SelectionTests
         line["promises"]!["team"]!.GetValue<double>().Should().Be(0.9);
         line["settle_ms"]!["team"]!.GetValue<ulong>().Should().Be(4200);
         line["open_ms"]!.GetValue<ulong>().Should().Be(61000);
-        line["settled_by"]!.GetValue<string>().Should().Be("p-17");
+        line["settled_by"]!["team"]!.GetValue<string>().Should().Be("p-17");
         line["form_version"]!.GetValue<string>().Should().Be("9f2c");
         using (SettledRecords.From([record])) { }
 

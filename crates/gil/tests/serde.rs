@@ -130,7 +130,7 @@ fn a_record_carries_what_was_in_view_how_long_it_took_and_who_settled_it() {
         "promises": { "team": 0.9 },
         "settle_ms": { "team": 4200 },
         "open_ms": 61000,
-        "settled_by": "p-17",
+        "settled_by": { "team": "p-17" },
         "form_version": "9f2c"
     });
     let record: Record = serde_json::from_value(line.clone()).expect("a record");
@@ -139,7 +139,7 @@ fn a_record_carries_what_was_in_view_how_long_it_took_and_who_settled_it() {
     assert_eq!(record.promises["team"], 0.9);
     assert_eq!(record.settle_ms["team"], 4200);
     assert_eq!(record.open_ms, Some(61000));
-    assert_eq!(record.settled_by.as_deref(), Some("p-17"));
+    assert_eq!(record.settled_by["team"], "p-17");
     assert_eq!(record.form_version.as_deref(), Some("9f2c"));
     let written = serde_json::to_value(&record).unwrap();
     for entry in [

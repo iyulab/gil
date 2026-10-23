@@ -227,9 +227,12 @@ public sealed record Record(string Id, DateTimeOffset SettledAt)
     /// <summary>The milliseconds the record was open, from opening it to this settlement.</summary>
     public ulong? OpenMs { get; init; }
 
-    /// <summary>Who settled the record, as an opaque id the host gives — one person, one id; not a name.</summary>
-    public string? SettledBy { get; init; }
+    /// <summary>For each decided attribute, who settled it, as an opaque id the host gives — one person, one id; not a
+    /// name. One record may be settled by several people, an attribute each.</summary>
+    public IReadOnlyDictionary<string, string>? SettledBy { get; init; }
 
-    /// <summary>The version of the form the record was settled on, as the host identifies it.</summary>
+    /// <summary>The version of the form the record was settled on, as the host identifies it — the edition of the code
+    /// lists its decided attributes are settled from, which changes when a value comes to mean something else, not when
+    /// only a label changes.</summary>
     public string? FormVersion { get; init; }
 }
