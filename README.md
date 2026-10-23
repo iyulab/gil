@@ -307,6 +307,14 @@ is counted only when `Counting` is left out:
 var unprompted = Replay.SelectLayers(schema, "team", saved, options with { Counting = [SettlementKind.Enter] });
 ```
 
+Settlements that saw no answer are not a sample of the answers, though. Where the application shows every answer it has,
+they are the records the thresholds did not answer, so a promise counted on them speaks of the records just below the
+thresholds. Replaying two public streams that way, the thresholds stayed close to where counting every settlement put
+them, but on one stream the promise fell from 0.98 to 0.90 while the answers were 0.98 right; on the other it moved
+less than a point. To know how right the answers themselves are, have a few drawn at random settled again without the
+answer in view (`SettlementKind.Check`, below). Counting the settlements that saw an answer leans the other way: if
+people keep a wrong answer they see one time in three, a layer that is 0.90 right reads 0.93.
+
 A value settled as `Fill` stays in the record, but memory does not learn it and choosing thresholds does not ask about
 it. Remembered, an answer's own value would come back as evidence for itself. Replaying a public stream with nine in ten
 trusted answers filled, a replay that learned from them promised 0.97 where 0.73 was right, and one stream's key layer
