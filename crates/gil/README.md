@@ -96,6 +96,13 @@ large and right or wrong together: device event reports sent many at a time by o
 by 1.6 points; food inspections (1.1) and vehicle complaints, whose small batches were right or wrong together as much
 (1.5), by nothing.
 
+A promise bounds all the answers its thresholds give; it says nothing apart about a batch's first record, answered
+before any of its mates is settled, and the check above does not see it either. Where a batch's records come from one
+source at once and show nearly the same things, the first one has nothing in memory to go on and the rest decide the
+promise: on device event reports the answers to a batch's first report fell below the promise in two quarters, by 5.0
+and 2.6 points (753 and 505 batches), while on food inspections and vehicle complaints they held it. If a new batch's
+first record matters to you, count its answers apart with `usage` over its decisions.
+
 ## License
 
 Apache-2.0 — see `LICENSE`.

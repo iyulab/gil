@@ -90,6 +90,11 @@ split by record (`across_records`), and how many answers a batch holds and how m
 (`batch_size`, `correlation`, `design_effect`). Read `across_batches` as the promise only where `across_records` stands
 above it and the design effect is well above one. The thresholds are chosen as before.
 
+A promise bounds all the answers its thresholds give, not a batch's first record apart. Where a batch comes from one
+source at once and its records show nearly the same things, the first record has nothing in memory to go on: on device
+event reports its answers fell below the promise by 5.0 and 2.6 points in two quarters, while on food inspections and
+vehicle complaints they held it. If a new batch's first record matters, count its answers apart with `usage`.
+
 ```python
 records = gil.records({**r, "batch": r["import_id"]} for r in rows)
 thresholds, _ = gil.select_layers(schema, "team", records, target_precision=0.8)
