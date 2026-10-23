@@ -823,12 +823,12 @@ to a directory to write the files afresh) and check them, and is published as
 cargo test
 ```
 
-`cargo test` also checks `crates/gil-review` (`iyulab-gil-review`, imported as `gil_review`; not yet published): the
+`cargo test` also checks `crates/gil-review` (`iyulab-gil-review`, imported as `gil_review`): the
 statistics for checking decisions by hand — a seeded stratified sample, Neyman allocation, a stratified weighted
 estimate with normal and bootstrap intervals, agreement between two reviewers. It depends on nothing, the decision core
 included, and its golden is `tests/fixtures/review/golden.jsonl`, for a binding to reproduce.
 
-Its .NET binding, `bindings/csharp/Gil.Review` (not yet published), calls the crate through a flat C ABI
+Its .NET binding, `bindings/csharp/Gil.Review`, calls the crate through a flat C ABI
 (`crates/gil-review-ffi`) and reproduces that golden bit for bit. Packing it takes the native library of each runtime
 (`-p:GilReviewNativeRoot=<folder>`, one `<rid>/` subfolder per runtime), which the package carries under
 `runtimes/<rid>/native/`. The workflow `.github/workflows/native.yml` builds both native libraries (this one and the

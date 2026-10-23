@@ -7852,7 +7852,7 @@
       "schema": 12584556226891677434,
       "settled": 200,
       "target_precision": 0.8,
-      "version": "0.7.0"
+      "version": "0.8.0"
     },
     "promised": {
       "attributes": [
@@ -7906,7 +7906,7 @@
       "schema": 12584556226891677434,
       "settled": 200,
       "target_precision": 0.8,
-      "version": "0.7.0"
+      "version": "0.8.0"
     },
     "settled": 200,
     "stale": {

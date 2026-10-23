@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>Gil.Review</RootNamespace>
-    <!-- The binding shares its version line with the iyulab-gil-review crate it calls. 0.0.0 is the unreleased
-         placeholder: setting the first version (0.1.0) here and in the crate is what publishes them. -->
-    <Version>0.0.0</Version>
+    <!-- The binding shares its version line with the iyulab-gil-review crate it calls: a release sets the same
+         version here and in the crate. -->
+    <Version>0.1.0</Version>
     <Description>Review statistics for checking automated decisions by hand: seeded stratified samples, the Neyman allocation, weighted population estimates with normal and bootstrap intervals, and agreement between two reviewers. A binding to the Rust crate iyulab-gil-review.</Description>
     <PackageTags>sampling;survey;stratified;bootstrap;agreement;review</PackageTags>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "gil-ffi"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "gil-ffi-support",
  "iyulab-gil",
@@ -18,7 +18,7 @@ version = "0.1.0"
 
 [[package]]
 name = "gil-py"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "iyulab-gil",
  "pyo3",
@@ -48,7 +48,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "iyulab-gil"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -57,7 +57,7 @@ dependencies = [
 
 [[package]]
 name = "iyulab-gil-review"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "libc"
