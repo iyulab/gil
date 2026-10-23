@@ -247,8 +247,8 @@ the target at the bottom of its Wilson interval at `Replay.PooledStandardErrors`
 attribute's thresholds as they stand would have answered fewer than `Replay.PooledRecentAnswers` of those lookups, it
 reaches further back. In eight forward replays on seven public collections — medical device product codes, bug
 components, aircraft fault codes, patent groups and the attributes of three kinds of biological samples — each on
-records the rule was not tuned on, it kept a 0.8 target every time and answered 0.92–1.80 times as often as
-`EveryBand` (1.52 in the middle); holding the bound at one standard error instead broke the target on an attribute
+records the rule was not tuned on, it kept a 0.8 target every time and answered 1.10–1.80 times as often as
+`EveryBand` (1.55 in the middle); holding the bound at one standard error instead broke the target on an attribute
 answered a few hundred times. Each layer's `Chosen` still reports that layer's own precision and `Promise` (one
 standard error, its own answers); the bound the pair was chosen under is on the answers together, and is the one to
 show:

@@ -115,6 +115,11 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Documentation
 
+- The figures for `Pooled` (eight forward replays, 0.8 target) are now those of the rule as published, which reaches
+  back while the thresholds as they stand answer too few lookups: 1.10–1.80 times as many answers as `EveryBand`, 1.55
+  in the middle. The figures given before, 0.92–1.80 and 1.52, were of a near variant that counted the answers each
+  earlier choice had actually given, which differs only where answers are few; the target held and no attribute broke
+  under either.
 - `docs/settled-records.md` specifies the settled-record line every binding reads — its entries, why the time and
   the kind of settlement matter, and what an application should keep before it uses Gil — and the READMEs point to
   it.

@@ -71,6 +71,11 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Documentation
 
+- The figures for `Pooled` (eight forward replays, 0.8 target) are now those of the rule as published, which reaches
+  back while the thresholds as they stand answer too few lookups: 1.10–1.80 times as many answers as `EveryBand`, 1.55
+  in the middle. The figures given before, 0.92–1.80 and 1.52, were of a near variant that counted the answers each
+  earlier choice had actually given, which differs only where answers are few; the target held and no attribute broke
+  under either.
 - The README's measured guidance on choosing a target and what to trust — choosing again as memory grows, the cost of
   a wrong answer, "A target can be read two ways", counting unprompted settlements and checks, batches and forward
   checking, repeated records, values that must not be missed, the promise's recent window, the similar record vote and
