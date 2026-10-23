@@ -9,6 +9,17 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Added
 
+- **Experimental (`GIL0006`): the first record of a batch, chosen and promised apart.** A promise taken on every
+  answer holds for the records after a batch's first and can flatter the first, where a source sends records in
+  batches that are right or wrong together. `SelectionOptions.FirstOfBatch` has the `Keeper` choose the value layers'
+  thresholds for the first records of batches — no other settled record names the batch yet — on their own lookups and
+  the rest on theirs, each resting on `MinimumAnswered`: `KeeperChoice.FirstOfBatch` gives them, the schema carries them
+  (`AttributeDefinition.FirstOfBatch`, `Schema.WithFirstOfBatch`), and the tuning their promises
+  (`AttributeTuning.FirstKeyPromise`, `FirstMemoryPromise`, `Tuning.PromiseFirstOfBatch`, `FirstOfBatchPromiseOf`).
+  `OpenRecord.Open(schema, id, at, batch)` names a record's batch, its snapshot carries it, and a record that is the
+  first of its batch (`OpenRecord.IsFirstOfBatch`, `Decider.IsFirstOfBatch`) is answered at the first records'
+  thresholds (`Schema.ForFirstOfBatch`). A record that names no batch always counts as a first record, so with no
+  batches named a keeper choosing apart chooses as before for every record. The native interface is version 6.
 - **`Keeper`: the promise-keeping loop as one object.** `new Keeper(schema, options)` holds the records settled and,
   for each decided attribute that takes one value, the replay as it stands. `Settle(decider, records)` puts records
   into the decider and into the next choice; `Stale()` says when the choice no longer stands (a tenth more or fewer

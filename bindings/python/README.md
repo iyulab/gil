@@ -95,6 +95,13 @@ source at once and its records show nearly the same things, the first record has
 event reports its answers fell below the promise by 5.0 and 2.6 points in two quarters, while on food inspections and
 vehicle complaints they held it. If a new batch's first record matters, count its answers apart with `usage`.
 
+To hold a batch's first records to the target on their own (experimental), make the keeper with
+`gil.Keeper(schema, ..., first_of_batch=True)` and open records with `gil.OpenRecord(schema, id, at, batch=...)`. The
+keeper chooses the first records' thresholds on their own lookups and the rest on theirs — the choice's
+`first_of_batch` holds them, `keeper.schema` carries them — and an open record whose batch has no other settled record
+in the decider (`is_first_of_batch`) is answered at them, its promise `gil.first_of_batch_promise_of(...)`. A record
+that names no batch always counts as a first record, so with no batches named it answers as before.
+
 ```python
 records = gil.records({**r, "batch": r["import_id"]} for r in rows)
 thresholds, _ = gil.select_layers(schema, "team", records, target_precision=0.8)

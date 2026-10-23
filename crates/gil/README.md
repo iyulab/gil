@@ -103,6 +103,15 @@ promise: on device event reports the answers to a batch's first report fell belo
 and 2.6 points (753 and 505 batches), while on food inspections and vehicle complaints they held it. If a new batch's
 first record matters to you, count its answers apart with `usage` over its decisions.
 
+To hold a batch's first records to the target on their own (experimental), give the keeper `Keep { first_of_batch:
+true, .. }` and open records with `OpenRecord::with_batch`. The keeper then chooses the value layers' thresholds for
+first records on their own lookups and the rest on theirs, each resting on `minimum_answered`, puts the first records'
+on `Attribute::first_of_batch` and their promises in the tuning (`Tuning::first_of_batch_promise_of`). An open record
+whose batch has no other settled record in the decider (`OpenRecord::is_first_of_batch`) is answered at them; a record
+that names no batch always is, so with no batches named it answers as before. On the first 20,000 device event reports
+of a quarter, the first records' own lookups held no threshold to the target, so they went unanswered, while the later
+records were answered at thresholds chosen on theirs.
+
 ## License
 
 Apache-2.0 — see `LICENSE`.

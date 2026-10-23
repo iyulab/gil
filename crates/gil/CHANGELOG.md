@@ -29,6 +29,21 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Added
 
+- **Experimental: the first record of a batch, chosen and promised apart.** A promise taken on every answer holds for
+  the records after a batch's first and can flatter the first, where a source sends records in batches that are right
+  or wrong together. `Keep { first_of_batch: true, .. }` has the keeper choose the value layers' thresholds for the first
+  records of batches — no other settled record names the batch yet — on their own lookups and the rest on theirs, each
+  resting on `minimum_answered`; `Keeper::chosen_first_of_batch` gives them, the schema carries them
+  (`Attribute::first_of_batch`, `FirstOfBatch`, `Schema::with_first_of_batch`), and the tuning their promises
+  (`first_key_promise`, `first_memory_promise`, `Tuning::promise_first_of_batch`, `first_of_batch_promise_of`).
+  `OpenRecord::with_batch` names a record's batch, `snapshot` and `reopen` carry it, and a record that is the first of
+  its batch (`OpenRecord::is_first_of_batch`, `Decider::is_first_of_batch`) is answered at the first records'
+  thresholds (`Schema::for_first_of_batch`, `Decider::schema_for`). A record that names no batch always counts as a
+  first record, so a keeper that chooses apart with no batches named chooses as before for every record. On public
+  food inspection records and a quarter of device event reports, 20,000 each, all sixteen choices were the same, to the
+  threshold and promise, as two keepers each counting only one kind of record. Python: `Keeper(first_of_batch=True)`, `OpenRecord(batch=...)`,
+  `is_first_of_batch`, `Schema.with_first_of_batch` / `for_first_of_batch`, `record_first_of_batch_promise`,
+  `first_of_batch_promise_of`.
 - **`keeper::Keeper`: the promise-keeping loop as one object.** `Keeper::new(schema, Keep::new(target))` holds the
   records settled and, for each decided attribute that takes one value, the replay as it stands.
   `settle(&mut decider, &records)` puts records into the host's decider and into the next choice; `stale()` is
@@ -78,6 +93,8 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 ### Breaking
 
 - `Record` has seven more public fields (above). A struct literal that names every field needs `..Record::default()`.
+- `schema::Attribute` has one more public field, `first_of_batch`, and `tuning::AttributeTuning` six (below); a struct
+  literal that names every field names them too (`None`, `false`).
 
 ### Fixed
 

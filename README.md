@@ -380,6 +380,18 @@ batch holds three complaints or so: halves of the batches and halves of the reco
 point. Read `AcrossBatches` as the promise only where `AcrossRecords` stands above it and the design effect is well
 above one; elsewhere the promise is the closer count.
 
+A promise bounds all the answers its thresholds give; it says nothing apart about a batch's first record, answered
+before any of its mates is settled, and `Batches` does not see it either. Where a batch's records come from one source at
+once and show nearly the same things, the first one has nothing in memory to go on: on the device event reports its
+answers fell below the promise by 5.0 and 2.6 points in two quarters, while on the food inspections and vehicle
+complaints they held it. To hold first records to the target on their own (experimental, `GIL0006`), set
+`SelectionOptions.FirstOfBatch` for the `Keeper` and open records with `OpenRecord.Open(schema, id, at, batch)`. The
+keeper chooses the first records' thresholds on their own lookups and the rest on theirs, each resting on
+`MinimumAnswered`; `KeeperChoice.FirstOfBatch` holds them, the keeper's schema carries them
+(`AttributeDefinition.FirstOfBatch`), and an open record whose batch has no other settled record in the decider
+(`IsFirstOfBatch`) is answered at them, its promise `Tuning.FirstOfBatchPromiseOf`. A record that names no batch always
+counts as a first record, so with no batches named it answers as before.
+
 Settle a record that arrives again — a retransmission, a re-save — under the same record id. The memories keep one
 version per id, and the replay asks a record settled again without its earlier version. Under a new id the copy is new
 evidence: copies answer each other in the replay, and the threshold promises far more than other records get.
