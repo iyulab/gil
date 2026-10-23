@@ -156,4 +156,11 @@ public sealed record KeeperChoice(
     Tuning Tuning,
     IReadOnlyDictionary<string, LayerThresholds> Chosen,
     IReadOnlyDictionary<string, LayerThresholds> Coarse,
-    IReadOnlyList<DecisionRecord>? Decisions = null);
+    IReadOnlyList<DecisionRecord>? Decisions = null)
+{
+    /// <summary>Each attribute's thresholds for the first records of batches, when the keeper chooses them apart
+    /// (<see cref="SelectionOptions.FirstOfBatch"/>); empty otherwise.</summary>
+    [Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
+    public IReadOnlyDictionary<string, LayerThresholds> FirstOfBatch { get; init; } =
+        System.Collections.ObjectModel.ReadOnlyDictionary<string, LayerThresholds>.Empty;
+}

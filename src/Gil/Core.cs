@@ -58,6 +58,25 @@ public sealed class Schema : IDisposable
     public unsafe Schema WithCoarse(string attribute, LayerThresholds layers) =>
         With(&Native.SchemaWithCoarse, attribute, layers);
 
+    /// <summary>As <see cref="WithLayers"/>, for what a replay of the first records of batches chose: the thresholds go on
+    /// the attribute's <see cref="AttributeDefinition.FirstOfBatch"/>.</summary>
+    /// <exception cref="ArgumentException">As <see cref="WithLayers"/>.</exception>
+    [Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
+    public unsafe Schema WithFirstOfBatch(string attribute, LayerThresholds layers) =>
+        With(&Native.SchemaWithFirstOfBatch, attribute, layers);
+
+    /// <summary>The schema a first record of a batch — one whose batch has no settled record yet — is answered with:
+    /// each attribute's <see cref="AttributeDefinition.FirstOfBatch"/> key and memory thresholds in place of its value
+    /// layers'. Pass it to <see cref="Decider.Answer"/> when <see cref="Decider.IsFirstOfBatch"/> says so;
+    /// <see cref="OpenRecord"/> does this itself. A new schema, for the caller to dispose.</summary>
+    [Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
+    public unsafe Schema ForFirstOfBatch()
+    {
+        nint output;
+        Native.Check(Native.SchemaForFirstOfBatch(Handle, &output));
+        return Own(output);
+    }
+
     /// <summary>The schema as JSON in the core's form.</summary>
     public unsafe string ToJson()
     {
@@ -216,6 +235,27 @@ public sealed class Decider : IDisposable
         }
     }
 
+    /// <summary>Whether a record of <paramref name="batch"/> (null: it names none) now is the first of its batch: the
+    /// memories hold no settled record of the batch but <paramref name="excluding"/> (the record asked about). A record
+    /// that names no batch always is.</summary>
+    [Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
+    public unsafe bool IsFirstOfBatch(string? batch, string? excluding = null)
+    {
+        var b = new Utf8(batch);
+        var e = new Utf8(excluding);
+        byte found;
+        using (Gate.Reading())
+        {
+            fixed (byte* pb = &b.Pin())
+            fixed (byte* pe = &e.Pin())
+            {
+                Native.Check(Native.DeciderIsFirstOfBatch(Handle, b.At(pb), e.At(pe), &found));
+            }
+        }
+
+        return found != 0;
+    }
+
     /// <summary>The answers for every open decided attribute of record <paramref name="recordId"/> from the values
     /// given, writing nothing to memory, in the schema's order — each with its lookup's decision record when
     /// <paramref name="decisions"/> is true.</summary>
@@ -287,18 +327,53 @@ public sealed class OpenRecord : IDisposable
     /// <summary>A new record <paramref name="id"/> of <paramref name="schema"/>, starting at
     /// <paramref name="settledAt"/> — the present for a new record.</summary>
     /// <exception cref="ArgumentException">The id is blank.</exception>
-    public static unsafe OpenRecord Open(Schema schema, string id, DateTimeOffset settledAt)
+    public static OpenRecord Open(Schema schema, string id, DateTimeOffset settledAt) =>
+        New(schema, id, settledAt, null);
+
+    /// <summary>As <see cref="Open(Schema, string, DateTimeOffset)"/>, for a record of <paramref name="batch"/> —
+    /// records settled together, several at once from one source. When the schema holds thresholds for the first record
+    /// of a batch (<see cref="AttributeDefinition.FirstOfBatch"/>), a record whose batch has no other settled record in
+    /// the decider is answered at those.</summary>
+    /// <exception cref="ArgumentException">The id is blank.</exception>
+    [Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
+    public static OpenRecord Open(Schema schema, string id, DateTimeOffset settledAt, string batch)
+    {
+        ArgumentNullException.ThrowIfNull(batch);
+        return New(schema, id, settledAt, batch);
+    }
+
+    private static unsafe OpenRecord New(Schema schema, string id, DateTimeOffset settledAt, string? batch)
     {
         ArgumentNullException.ThrowIfNull(schema);
         ArgumentNullException.ThrowIfNull(id);
         var text = new Utf8(id);
+        var named = new Utf8(batch);
         nint output;
         fixed (byte* p = &text.Pin())
+        fixed (byte* b = &named.Pin())
         {
-            Native.Check(Native.OpenRecordNew(schema.Handle, text.At(p), Time.Ticks(settledAt), &output));
+            Native.Check(Native.OpenRecordNew(
+                schema.Handle, text.At(p), Time.Ticks(settledAt), named.At(b), &output));
         }
 
         return new OpenRecord(OpenRecordHandle.Of(output), schema);
+    }
+
+    /// <summary>Whether the record is answered as the first of its batch now: the schema holds thresholds for one and
+    /// <paramref name="decider"/> holds no other settled record of its batch. Its answers' promises are then
+    /// <see cref="Tuning.FirstOfBatchPromiseOf"/>'s.</summary>
+    [Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
+    public unsafe bool IsFirstOfBatch(Decider decider)
+    {
+        ArgumentNullException.ThrowIfNull(decider);
+        byte found;
+        lock (_gate)
+        using (decider.Gate.Reading())
+        {
+            Native.Check(Native.OpenRecordIsFirstOfBatch(Handle, decider.Handle, &found));
+        }
+
+        return found != 0;
     }
 
     /// <summary>A saved record — as <see cref="Snapshot"/> gives it — reopened as it was left.</summary>

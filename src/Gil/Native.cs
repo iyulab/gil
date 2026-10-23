@@ -73,7 +73,13 @@ internal static unsafe partial class Native
     internal static partial int DeciderRemove(DeciderHandle decider, SchemaHandle schema, Str recordId);
 
     [LibraryImport(Library, EntryPoint = "gil_open_record_new")]
-    internal static partial int OpenRecordNew(SchemaHandle schema, Str id, long settledAt, nint* output);
+    internal static partial int OpenRecordNew(SchemaHandle schema, Str id, long settledAt, Str batch, nint* output);
+
+    [LibraryImport(Library, EntryPoint = "gil_open_record_is_first_of_batch")]
+    internal static partial int OpenRecordIsFirstOfBatch(OpenRecordHandle record, DeciderHandle decider, byte* output);
+
+    [LibraryImport(Library, EntryPoint = "gil_decider_is_first_of_batch")]
+    internal static partial int DeciderIsFirstOfBatch(DeciderHandle decider, Str batch, Str excluding, byte* output);
 
     [LibraryImport(Library, EntryPoint = "gil_open_record_reopen")]
     internal static partial int OpenRecordReopen(SchemaHandle schema, Str record, nint* output);
@@ -132,11 +138,20 @@ internal static unsafe partial class Native
     [LibraryImport(Library, EntryPoint = "gil_tuning_promise_coarse")]
     internal static partial int TuningPromiseCoarse(Str tuning, Str attribute, Str thresholds, nuint* resultLen);
 
+    [LibraryImport(Library, EntryPoint = "gil_tuning_promise_first_of_batch")]
+    internal static partial int TuningPromiseFirstOfBatch(Str tuning, Str attribute, Str thresholds, nuint* resultLen);
+
     [LibraryImport(Library, EntryPoint = "gil_schema_with_layers")]
     internal static partial int SchemaWithLayers(SchemaHandle schema, Str attribute, Str thresholds, nint* output);
 
     [LibraryImport(Library, EntryPoint = "gil_schema_with_coarse")]
     internal static partial int SchemaWithCoarse(SchemaHandle schema, Str attribute, Str thresholds, nint* output);
+
+    [LibraryImport(Library, EntryPoint = "gil_schema_with_first_of_batch")]
+    internal static partial int SchemaWithFirstOfBatch(SchemaHandle schema, Str attribute, Str thresholds, nint* output);
+
+    [LibraryImport(Library, EntryPoint = "gil_schema_for_first_of_batch")]
+    internal static partial int SchemaForFirstOfBatch(SchemaHandle schema, nint* output);
 
     [LibraryImport(Library, EntryPoint = "gil_tuning_apply")]
     internal static partial int TuningApply(Str tuning, SchemaHandle schema, nint* output);

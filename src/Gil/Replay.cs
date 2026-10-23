@@ -136,6 +136,11 @@ public static class Replay
             writer.WriteString("rule", options.Rule == ThresholdRule.Pooled ? "pooled" : "every_band");
             writer.WriteBoolean("decisions", options.Decisions);
             writer.WriteNumber("typed_longest", options.TypedLongest);
+            if (options.FirstOfBatch)
+            {
+                writer.WriteBoolean("first_of_batch", true);
+            }
+
             if (options.Threads is { } threads)
             {
                 ArgumentOutOfRangeException.ThrowIfLessThan(threads, 1, nameof(options));
@@ -166,7 +171,8 @@ internal static class TuningJson
     /// <c>thresholds</c>, JSON as <see cref="Replay.SelectLayersJson"/> gives them — or, when <paramref name="coarse"/>,
     /// what its coarse selection promised.</summary>
     /// <exception cref="ArgumentException">The tuning or the thresholds do not read.</exception>
-    internal static unsafe string PromiseJson(string tuningJson, string attribute, string thresholdsJson, bool coarse = false)
+    internal static unsafe string PromiseJson(
+        string tuningJson, string attribute, string thresholdsJson, bool coarse = false, bool firstOfBatch = false)
     {
         ArgumentNullException.ThrowIfNull(tuningJson);
         ArgumentNullException.ThrowIfNull(attribute);
@@ -181,7 +187,9 @@ internal static class TuningJson
         {
             return Native.Result(coarse
                 ? Native.TuningPromiseCoarse(tuning.At(t), name.At(a), thresholds.At(h), &length)
-                : Native.TuningPromise(tuning.At(t), name.At(a), thresholds.At(h), &length));
+                : firstOfBatch
+                    ? Native.TuningPromiseFirstOfBatch(tuning.At(t), name.At(a), thresholds.At(h), &length)
+                    : Native.TuningPromise(tuning.At(t), name.At(a), thresholds.At(h), &length));
         }
     }
 

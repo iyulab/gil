@@ -99,6 +99,34 @@ public sealed record Tuning(
         };
     }
 
+    /// <summary>The tuning with what <paramref name="attribute"/>'s thresholds for the first records of batches
+    /// promised for the next first records.</summary>
+    /// <exception cref="ArgumentException">The tuning has no such attribute.</exception>
+    [Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
+    public Tuning PromiseFirstOfBatch(string attribute, LayerThresholds thresholds)
+    {
+        ArgumentNullException.ThrowIfNull(thresholds);
+        return Read(TuningJson.PromiseJson(
+            ToJson(), attribute, JsonSerializer.Serialize(thresholds, CoreJson.Default.LayerThresholds),
+            firstOfBatch: true));
+    }
+
+    /// <summary>What the layer an answer came from promised for <paramref name="attribute"/> when the record was answered
+    /// as the first of its batch (<see cref="OpenRecord.IsFirstOfBatch"/>); null as for <see cref="PromiseOf"/>, and when
+    /// no thresholds for first records were chosen apart — the answer's promise is then <see cref="PromiseOf"/>'s.</summary>
+    [Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
+    public double? FirstOfBatchPromiseOf(string attribute, Source source)
+    {
+        ArgumentNullException.ThrowIfNull(attribute);
+        var tuned = Attributes.FirstOrDefault(a => a.Attribute == attribute);
+        return source switch
+        {
+            Source.KeyMemory => tuned?.FirstKeyPromise,
+            Source.SimilarRecord => tuned?.FirstMemoryPromise,
+            _ => null,
+        };
+    }
+
     /// <summary>A new schema: <paramref name="schema"/> with these settings put back on its attributes.</summary>
     /// <exception cref="ArgumentException">The schema they make breaks a schema rule — settings chosen for another schema
     /// may name key attributes this one does not have.</exception>

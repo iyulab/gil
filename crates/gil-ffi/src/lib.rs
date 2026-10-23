@@ -60,7 +60,7 @@ pub const GIL_BROKEN: i32 = iyulab_ffi_support::BROKEN;
 
 /// The version of this interface — its functions, structures and statuses. It changes whenever a binding built for one
 /// version would misread the library of another.
-pub const GIL_ABI_VERSION: u32 = 5;
+pub const GIL_ABI_VERSION: u32 = 6;
 
 /// [`GilCandidate::source`]: no layer.
 pub const GIL_SOURCE_NONE: u8 = 0;
@@ -598,15 +598,17 @@ fn policy_code(policy: AttributePolicy) -> u8 {
 }
 
 /// A new open record `id` of `schema` (the record keeps its own copy), starting at `settled_at` in ticks — the present
-/// for a new record — handed out through `out`.
+/// for a new record — handed out through `out`. Experimental: `batch` (null text when none) names the batch the record
+/// is one of; a first record of its batch is answered at the schema's thresholds for one.
 ///
 /// # Safety
-/// `schema` is a live handle; `id` is valid for the call; `out` points to one writable pointer.
+/// `schema` is a live handle; the texts are valid for the call; `out` points to one writable pointer.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn gil_open_record_new(
     schema: *const GilSchema,
     id: GilStr,
     settled_at: i64,
+    batch: GilStr,
     out: *mut *mut GilOpenRecord,
 ) -> i32 {
     call(|| {
@@ -616,10 +618,15 @@ pub unsafe extern "C" fn gil_open_record_new(
         // SAFETY: forwarded from the caller, for every pointer below.
         let schema = unsafe { handle(schema, "schema") }?;
         let id = unsafe { text(id, "id") }?;
+        let batch = unsafe { optional(batch, "batch") }?;
         if id.trim().is_empty() {
             return Err(input("a record needs an id"));
         }
         let record = OpenRecord::new(schema.0.clone(), id, settled_at);
+        let record = match batch {
+            Some(batch) => record.with_batch(batch),
+            None => record,
+        };
         unsafe {
             hand_out(
                 out,
@@ -957,11 +964,55 @@ pub unsafe extern "C" fn gil_open_record_snapshot(
     })
 }
 
+/// Experimental. Writes to `out` whether the record is answered as the first of its batch now: the schema holds
+/// thresholds for one and `decider` holds no other settled record of its batch.
+///
+/// # Safety
+/// `record` and `decider` are live handles; `out` points to one writable `bool`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_open_record_is_first_of_batch(
+    record: *const GilOpenRecord,
+    decider: *const GilDecider,
+    out: *mut bool,
+) -> i32 {
+    call(|| {
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let record = &unsafe { live(record) }?.record;
+        let decider = &unsafe { live(decider) }?.decider;
+        unsafe { iyulab_ffi_support::write(out, record.is_first_of_batch(decider), "out") }
+    })
+}
+
+/// Experimental. Writes to `out` whether a record of `batch` (null text when it names none) now is the first of its
+/// batch: the decider's memory holds no settled record of the batch but `excluding` (null text when none). A record
+/// that names no batch always is.
+///
+/// # Safety
+/// `decider` is a live handle; the texts are valid for the call; `out` points to one writable `bool`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_decider_is_first_of_batch(
+    decider: *const GilDecider,
+    batch: GilStr,
+    excluding: GilStr,
+    out: *mut bool,
+) -> i32 {
+    call(|| {
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let decider = &unsafe { live(decider) }?.decider;
+        let batch = unsafe { optional(batch, "batch") }?;
+        let excluding = unsafe { optional(excluding, "excluding") }?;
+        unsafe {
+            iyulab_ffi_support::write(out, decider.is_first_of_batch(batch, excluding), "out")
+        }
+    })
+}
+
 /// What a threshold is chosen for, as the selections read it from JSON: `target_precision` in (0, 1] and
 /// `minimum_answered` at least 1, and optionally `counting` (the settlement kinds whose lookups count, by name; all when
 /// left out), `rule` (`every_band`, the default, or `pooled` — the layers' selection only), `decisions` (whether to keep
-/// the decision records of the replay — the layers' and the coarse level's selections) and `typed_longest` (the key
-/// attributes' selection: count typing up to that many characters).
+/// the decision records of the replay — the layers' and the coarse level's selections), `typed_longest` (the key
+/// attributes' selection: count typing up to that many characters) and, experimental, `first_of_batch` (the keeper's
+/// only: choose and promise the first records of batches apart).
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Options {
@@ -978,6 +1029,8 @@ struct Options {
     /// The most threads a similar-record lookup of the replay is split among; 0 for the core's default.
     #[serde(default)]
     threads: usize,
+    #[serde(default)]
+    first_of_batch: bool,
 }
 
 impl Options {
@@ -1238,6 +1291,47 @@ pub unsafe extern "C" fn gil_schema_with_coarse(
     unsafe { schema_with(schema, attribute, thresholds, out, Schema::with_coarse) }
 }
 
+/// Experimental. As [`gil_schema_with_layers`], for what a replay of the first records of batches chose: the thresholds
+/// go on the attribute's thresholds for them.
+///
+/// # Safety
+/// As [`gil_schema_with_layers`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_schema_with_first_of_batch(
+    schema: *const GilSchema,
+    attribute: GilStr,
+    thresholds: GilStr,
+    out: *mut *mut GilSchema,
+) -> i32 {
+    // SAFETY: forwarded from the caller.
+    unsafe {
+        schema_with(
+            schema,
+            attribute,
+            thresholds,
+            out,
+            Schema::with_first_of_batch,
+        )
+    }
+}
+
+/// Experimental. The schema a first record of a batch is answered with — each attribute's thresholds for one in place
+/// of its value layers' — handed out through `out`.
+///
+/// # Safety
+/// `schema` is a live handle; `out` points to one writable pointer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_schema_for_first_of_batch(
+    schema: *const GilSchema,
+    out: *mut *mut GilSchema,
+) -> i32 {
+    call(|| {
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let schema = unsafe { handle(schema, "schema") }?;
+        unsafe { hand_out(out, GilSchema(schema.0.for_first_of_batch()), "out") }
+    })
+}
+
 /// # Safety
 /// As [`gil_schema_with_layers`].
 unsafe fn schema_with(
@@ -1312,6 +1406,29 @@ pub unsafe extern "C" fn gil_tuning_promise(
             thresholds,
             result_len,
             Tuning::promise,
+        )
+    }
+}
+
+/// Experimental. As [`gil_tuning_promise`], for what a replay of the first records of batches promised.
+///
+/// # Safety
+/// As [`gil_tuning_promise`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_tuning_promise_first_of_batch(
+    tuning_json: GilStr,
+    attribute: GilStr,
+    thresholds: GilStr,
+    result_len: *mut usize,
+) -> i32 {
+    // SAFETY: forwarded from the caller.
+    unsafe {
+        tuning_with(
+            tuning_json,
+            attribute,
+            thresholds,
+            result_len,
+            Tuning::promise_first_of_batch,
         )
     }
 }
@@ -1438,7 +1555,7 @@ pub unsafe extern "C" fn gil_keeper_new(
             minimum_answered: options.minimum_answered,
             counting: options.counting.clone(),
             rule: options.rule,
-            first_of_batch: false,
+            first_of_batch: options.first_of_batch,
         };
         let mut keeper = Keeper::new(schema.0.clone(), keep);
         if options.threads > 0 {
@@ -1577,7 +1694,23 @@ fn keeper_state(keeper: &Keeper, decisions: Option<Vec<Value>>) -> Value {
             })
         })
         .collect();
-    let mut value = json!({ "tuning": keeper.tuning(), "chosen": chosen, "coarse": coarse });
+    let first: serde_json::Map<String, Value> = keeper
+        .attributes()
+        .filter_map(|a| {
+            keeper.chosen_first_of_batch(a).map(|t| {
+                (
+                    a.to_owned(),
+                    serde_json::to_value(t).expect("thresholds serialize"),
+                )
+            })
+        })
+        .collect();
+    let mut value = json!({
+        "tuning": keeper.tuning(),
+        "chosen": chosen,
+        "coarse": coarse,
+        "first_of_batch": first,
+    });
     if let Some(decisions) = decisions {
         value["decisions"] = Value::Array(decisions);
     }

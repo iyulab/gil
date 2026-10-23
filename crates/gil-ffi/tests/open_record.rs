@@ -125,7 +125,7 @@ impl Drop for Pair {
 
 fn open(pair: &Pair, id: &str, at: i64) -> (OpenRecord, *mut GilOpenRecord) {
     let mut handle = ptr::null_mut();
-    ok(unsafe { gil_open_record_new(pair.schema_handle, s(id), at, &mut handle) });
+    ok(unsafe { gil_open_record_new(pair.schema_handle, s(id), at, NONE, &mut handle) });
     (OpenRecord::new(pair.schema.clone(), id, at), handle)
 }
 
@@ -555,7 +555,7 @@ fn refused_settlements_and_contract_violations_come_back_as_statuses() {
     assert!(!last_error().is_empty());
 
     let mut out = ptr::null_mut();
-    let status = unsafe { gil_open_record_new(pair.schema_handle, s("  "), 0, &mut out) };
+    let status = unsafe { gil_open_record_new(pair.schema_handle, s("  "), 0, NONE, &mut out) };
     assert_eq!(status, GIL_INVALID_INPUT);
     assert_eq!(last_error(), "a record needs an id");
     assert!(out.is_null());
@@ -570,5 +570,5 @@ fn refused_settlements_and_contract_violations_come_back_as_statuses() {
 #[test]
 fn the_library_says_which_interface_it_speaks() {
     assert_eq!(gil_abi_version(), GIL_ABI_VERSION);
-    assert_eq!(GIL_ABI_VERSION, 5);
+    assert_eq!(GIL_ABI_VERSION, 6);
 }

@@ -35,6 +35,22 @@ public enum AttributePolicy : byte
     Off = 2,
 }
 
+/// <summary>A decided attribute's value-layer thresholds for the first record of a batch — the same three an attribute
+/// holds for every other record.</summary>
+[Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
+public sealed record FirstOfBatch
+{
+    /// <summary>The score the first keyed value must reach to be trusted; null trusts none.</summary>
+    public double? KeyThreshold { get; init; }
+
+    /// <summary>The vote's score at or above which the similar record layer is trusted; null trusts none.</summary>
+    public double? MemoryThreshold { get; init; }
+
+    /// <summary>The similarity the nearest record voting for the value must also reach when more than one
+    /// voted.</summary>
+    public double? MemoryFloor { get; init; }
+}
+
 /// <summary>A decided attribute's coarse level, offered when neither layer answers the value: the class a value belongs to
 /// — its first <see cref="Prefix"/> characters, or what <see cref="Classes"/> says — and the thresholds at which the class
 /// the two layers back is trusted.</summary>
@@ -134,6 +150,12 @@ public sealed record AttributeDefinition(string Name, AttributeRole Role)
 
     /// <summary>Its coarse level, offered when neither layer answers the value.</summary>
     public CoarseLevel? Coarse { get; init; }
+
+    /// <summary>Its value layers' thresholds for the first record of a batch — one whose batch has no settled record
+    /// yet — chosen apart from the rest (<see cref="SelectionOptions.FirstOfBatch"/>); null answers every record at the
+    /// thresholds above.</summary>
+    [Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
+    public FirstOfBatch? FirstOfBatch { get; init; }
 
     /// <summary>The values it may take; null is any. A value settled outside them is remembered but never offered.
     /// </summary>

@@ -116,6 +116,14 @@ public sealed record SelectionOptions(double TargetPrecision, int MinimumAnswere
     /// <summary>The most threads one similar-record lookup of the replay is split among; null for as many as the machine
     /// offers, up to eight; 1 keeps the replay on the caller's thread. The choice is the same whatever it is.</summary>
     public int? Threads { get; init; }
+
+    /// <summary>The keeper's only: whether the first records of batches — whose batch had no settled record when they
+    /// were answered — have the value layers' thresholds chosen and promised apart from the rest, each on its own
+    /// lookups and resting on <see cref="MinimumAnswered"/>. Where a source sends records in batches that are right or
+    /// wrong together, a promise taken on every answer holds for the records after a batch's first and flatters the
+    /// first.</summary>
+    [Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
+    public bool FirstOfBatch { get; init; }
 }
 
 /// <summary>One decision for the usage counts: the attribute, the value answered (null: none), the value settled (null:
