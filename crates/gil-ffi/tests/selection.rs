@@ -13,8 +13,8 @@ use common::{CHOSEN, COUNTED, doubles, fixture, lines, replay, schema, to_record
 use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::replay::{
-    Choice, LayerThresholds, ThresholdRule, select_key_concentrations, select_key_fields,
-    select_layers_by_rule,
+    Choice, LayerOptions, LayerThresholds, ThresholdRule, select_key_concentrations,
+    select_key_fields, select_layers,
 };
 use gil::schema::{Record, Schema, SettlementKind};
 use gil::tuning::Tuning;
@@ -128,6 +128,20 @@ fn the_layers_selection_reproduces_its_golden() {
         };
         let found = result(status, len);
         assert!(found.get("decisions").is_none());
+        // A replay kept on one thread chooses the same.
+        let single = format!(
+            r#"{{"target_precision":0.8,"minimum_answered":10,"counting":{COUNTING},"threads":1}}"#
+        );
+        let status = unsafe {
+            gil_select_layers(
+                handles.schema,
+                s(attribute),
+                handles.records,
+                s(&single),
+                &mut len,
+            )
+        };
+        assert_eq!(result(status, len), found);
         let layers: LayerThresholds = serde_json::from_value(found["thresholds"].clone()).unwrap();
         let actual = json!({
             "kind": "layers",
@@ -197,14 +211,17 @@ fn the_other_selections_and_a_tuning_come_back_as_the_core_gives_them() {
         )
     };
     let pooled = result(status, len);
-    let core = select_layers_by_rule(
+    let core = select_layers(
         &mut KeyMemory::default(),
         &mut LexicalMemory::default(),
         &schema,
         "team",
         &early,
         choice,
-        ThresholdRule::Pooled,
+        LayerOptions {
+            rule: ThresholdRule::Pooled,
+            ..Default::default()
+        },
     );
     assert_eq!(pooled["thresholds"], serde_json::to_value(&core).unwrap());
     assert!(!pooled["decisions"].as_array().unwrap().is_empty());
@@ -258,6 +275,24 @@ fn the_other_selections_and_a_tuning_come_back_as_the_core_gives_them() {
         result(status, len),
         serde_json::to_value(&core_applied).unwrap()
     );
+
+    // The pooled choice put on the schema, as the core puts it; an attribute with no coarse level refuses a coarse one.
+    let mut with_layers = ptr::null_mut();
+    ok(unsafe {
+        gil_schema_with_layers(handles.schema, s("team"), s(&thresholds), &mut with_layers)
+    });
+    let status = unsafe { gil_schema_json(with_layers, &mut len) };
+    assert_eq!(
+        result(status, len),
+        serde_json::to_value(schema.with_layers("team", &core).expect("a valid schema")).unwrap()
+    );
+    unsafe { gil_schema_free(with_layers) };
+    let mut refused = ptr::null_mut();
+    let status =
+        unsafe { gil_schema_with_coarse(handles.schema, s("team"), s(&thresholds), &mut refused) };
+    assert_eq!(status, GIL_INVALID_INPUT);
+    assert!(refused.is_null());
+    assert!(last_error().contains("no coarse level"), "{}", last_error());
 
     let stale = |settled: usize, len: &mut usize| {
         let status =

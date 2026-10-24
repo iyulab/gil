@@ -181,4 +181,36 @@ public sealed record Record(string Id, DateTimeOffset SettledAt)
     /// is unknown — the observed values then count as there from the start and the decided ones as settled in the
     /// schema's order.</summary>
     public IReadOnlyList<string>? Arrival { get; init; }
+
+    /// <summary>The batch the record was settled in — records settled together, several at once from one source — when
+    /// known; records of one batch name the same. A layers selection counts what the batches do to its promise
+    /// (<see cref="LayerThresholds.Batches"/>).</summary>
+    public string? Batch { get; init; }
+
+    /// <summary>For each decided attribute settled with a suggestion in view, the value suggested — this decider's answer,
+    /// or what the host showed in its place (the settlement says which). For a coarse level, the class shown.</summary>
+    public IReadOnlyDictionary<string, string>? Suggested { get; init; }
+
+    /// <summary>For each decided attribute settled with this decider's answer in view, the layer that gave it.</summary>
+    public IReadOnlyDictionary<string, Source>? Sources { get; init; }
+
+    /// <summary>For each decided attribute settled with this decider's answer in view, the precision promised for it when
+    /// it was shown — what <see cref="Tuning.PromiseOf"/> gave for its layer; each in [0, 1].</summary>
+    public IReadOnlyDictionary<string, double>? Promises { get; init; }
+
+    /// <summary>For each decided attribute, the milliseconds from when the person reached it — its suggestion came into
+    /// view, or it was reached with nothing in view — to when it was settled.</summary>
+    public IReadOnlyDictionary<string, ulong>? SettleMs { get; init; }
+
+    /// <summary>The milliseconds the record was open, from opening it to this settlement.</summary>
+    public ulong? OpenMs { get; init; }
+
+    /// <summary>For each decided attribute, who settled it, as an opaque id the host gives — one person, one id; not a
+    /// name. One record may be settled by several people, an attribute each.</summary>
+    public IReadOnlyDictionary<string, string>? SettledBy { get; init; }
+
+    /// <summary>The version of the form the record was settled on, as the host identifies it — the edition of the code
+    /// lists its decided attributes are settled from, which changes when a value comes to mean something else, not when
+    /// only a label changes.</summary>
+    public string? FormVersion { get; init; }
 }

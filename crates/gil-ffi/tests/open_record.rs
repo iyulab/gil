@@ -96,7 +96,7 @@ impl Pair {
         let json = serde_json::to_string(&schema).unwrap();
         ok(unsafe { gil_schema_new(s(&json), &mut schema_handle) });
         let mut decider_handle = ptr::null_mut();
-        ok(unsafe { gil_decider_new(true, &mut decider_handle) });
+        ok(unsafe { gil_decider_new(true, 0, &mut decider_handle) });
         let lines: String = records
             .iter()
             .map(|r| serde_json::to_string(r).unwrap() + "\n")
@@ -570,5 +570,5 @@ fn refused_settlements_and_contract_violations_come_back_as_statuses() {
 #[test]
 fn the_library_says_which_interface_it_speaks() {
     assert_eq!(gil_abi_version(), GIL_ABI_VERSION);
-    assert_eq!(GIL_ABI_VERSION, 3);
+    assert_eq!(GIL_ABI_VERSION, 4);
 }

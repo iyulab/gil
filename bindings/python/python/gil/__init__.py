@@ -35,6 +35,7 @@ from gil._gil import (
     RECENT_RECORDS,
     Records,
     check_schema,
+    schema_with_layers_json,
     select_coarse_json,
     select_key_concentrations_json,
     select_key_fields_json,
@@ -56,6 +57,7 @@ __all__ = [
     "AskAdvice",
     "AskPlanner",
     "AttributeUsage",
+    "BatchCheck",
     "Candidate",
     "CoarseLook",
     "Decider",
@@ -76,6 +78,7 @@ __all__ = [
     "TypedLook",
     "apply_tuning",
     "capture_tuning",
+    "promise_of",
     "read_records",
     "record_promise",
     "records",
@@ -125,11 +128,35 @@ class ThresholdReplay(TypedDict):
     keys: list[KeyState] | None
 
 
-class LayerThresholds(TypedDict):
-    """The key layer's replay and the memory layer's, chosen on what the key threshold would not have answered."""
+class BatchCheck(TypedDict):
+    """What the batches among the latest records do to a promise — see the crate's ``BatchCheck``.
 
+    Thresholds chosen on half of the latest records and counted on the other half, split by batch and split by record;
+    ``across_records`` above ``across_batches`` beyond chance means the batches flatter the promise.
+    """
+
+    across_batches: float | None
+    across_batches_answered: int
+    across_records: float | None
+    across_records_answered: int
+    batches: int
+    batch_size: float | None
+    correlation: float | None
+    design_effect: float | None
+
+
+class _Layers(TypedDict):
     key: ThresholdReplay
     memory: ThresholdReplay
+
+
+class LayerThresholds(_Layers, total=False):
+    """The key layer's replay and the memory layer's, chosen on what the key threshold would not have answered.
+
+    ``batches`` is there only when some of the latest records name their ``batch``.
+    """
+
+    batches: BatchCheck
 
 
 class TypedKeyThresholds(TypedDict):
@@ -249,12 +276,32 @@ class Schema:
     def json(self) -> str:
         return self._json
 
+    def with_layers(self, attribute: str, layers: LayerThresholds) -> Schema:
+        """The schema with what :func:`select_layers` chose put on the decided ``attribute``: the key layer's
+        ``threshold`` as ``key_threshold``, the similar record layer's as ``memory_threshold`` with its
+        ``similarity_floor`` as ``memory_floor``. A layer with no ``chosen`` threshold is left unset, so it does not
+        answer the attribute. Raises ``ValueError`` for an attribute the schema does not have or that is not decided, or
+        a result that breaks a schema rule."""
+        return Schema(
+            schema_with_layers_json(self._json, attribute, json.dumps(layers), False)
+        )
+
+    def with_coarse(self, attribute: str, layers: LayerThresholds) -> Schema:
+        """As :meth:`with_layers`, for what :func:`select_coarse` chose: the thresholds go on the attribute's
+        ``coarse`` level; ``ValueError`` too for an attribute with none."""
+        return Schema(
+            schema_with_layers_json(self._json, attribute, json.dumps(layers), True)
+        )
+
 
 def records(items: Iterable[dict[str, Any]]) -> Records:
     """Settled records from dictionaries, in settlement order.
 
     Each has ``id``, ``settled_at`` (``yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM`` or 100-nanosecond ticks since the Unix
-    epoch) and ``values``; ``sets``, ``settlements``, ``probabilities`` and ``arrival`` are optional.
+    epoch) and ``values``; ``sets``, ``settlements``, ``probabilities``, ``arrival`` and ``batch`` (the batch the
+    record was settled in, for ``select_layers`` to count what batches do to its promise) are optional, as are what the
+    host saw and timed — ``suggested``, ``sources``, ``promises``, ``settle_ms``, ``open_ms``, ``settled_by`` and
+    ``form_version`` (see the line format in ``docs/settled-records.md``).
     """
     return Records.from_json_lines(
         "\n".join(json.dumps(item, ensure_ascii=False) for item in items)
@@ -275,6 +322,7 @@ def select_layers(
     counting: Iterable[str] | None = None,
     decisions: bool = True,
     rule: Literal["every_band", "pooled"] = "every_band",
+    threads: int | None = None,
 ) -> tuple[LayerThresholds, list[DecisionRecord] | None]:
     """Replays ``records`` and chooses ``attribute``'s key and memory thresholds.
 
@@ -286,6 +334,13 @@ def select_layers(
     at the target) or ``"pooled"`` (the pair answering the most of the attribute's latest lookups while all their
     answers together hold the target at the bottom of their Wilson interval at 1.645 standard errors — see the crate's
     ``ThresholdRule::Pooled``).
+
+    When some of the latest records name their ``batch``, the thresholds carry ``batches`` (``BatchCheck``): the
+    precision of thresholds chosen on half of those records and counted on the other half, split by batch and by
+    record, with the batches' size, correlation and design effect. It moves no threshold.
+
+    ``threads`` caps the threads a similar-record lookup over many records is split among (``None``: as many as the
+    machine offers, up to eight; ``1``: none). The choice is the same whatever it is.
     """
     thresholds, lines = select_layers_json(
         schema.json,
@@ -296,6 +351,7 @@ def select_layers(
         None if counting is None else list(counting),
         decisions,
         rule,
+        threads,
     )
     out = (
         None
@@ -346,13 +402,15 @@ def select_coarse(
     minimum_answered: int = 10,
     counting: Iterable[str] | None = None,
     decisions: bool = True,
+    threads: int | None = None,
 ) -> tuple[LayerThresholds, list[DecisionRecord] | None]:
     """Replays ``records`` and chooses the thresholds of ``attribute``'s coarse level.
 
     The coarse level answers with a class (``{"coarse": {"prefix": 2}}`` or a ``classes`` map) where the value layers
     did not answer at the attribute's thresholds — set the attribute's ``key_threshold`` and ``memory_threshold`` from
     :func:`select_layers` first. Returns the level's key and similar record replays and, unless ``decisions`` is false,
-    the decision records with what the level made of each lookup (``coarse``).
+    the decision records with what the level made of each lookup (``coarse``). ``threads`` is as for
+    :func:`select_layers`.
     """
     thresholds, lines = select_coarse_json(
         schema.json,
@@ -362,6 +420,7 @@ def select_coarse(
         minimum_answered,
         None if counting is None else list(counting),
         decisions,
+        threads,
     )
     out = (
         None
@@ -421,7 +480,9 @@ class ExternalCandidate(TypedDict):
 
 class Decider:
     """The memories that answer: the settled key memory and, unless ``similar_records`` is false, the lexical similar
-    record memory, holding ``records`` (settled records of ``schema``, in settlement order)."""
+    record memory, holding ``records`` (settled records of ``schema``, in settlement order). ``threads`` caps the
+    threads one similar-record lookup over a large memory is split among (``None``: as many as the machine offers, up
+    to eight; ``1``: none); answers are the same whatever it is."""
 
     __slots__ = ("_inner",)
 
@@ -430,8 +491,9 @@ class Decider:
         schema: Schema,
         records: Records | None = None,
         similar_records: bool = True,
+        threads: int | None = None,
     ) -> None:
-        self._inner = _Decider(schema.json, records, similar_records)
+        self._inner = _Decider(schema.json, records, similar_records, threads)
 
     def put(self, schema: Schema, records: Records) -> None:
         """Puts ``records`` — settled later than those the memories hold, in settlement order — into the memories."""
@@ -668,6 +730,19 @@ def record_promise(
             tuning_promise_json(json.dumps(tuning), attribute, json.dumps(layers))
         ),
     )
+
+
+def promise_of(tuning: dict[str, Any], attribute: str, source: str) -> float | None:
+    """What the layer an answer came from promised for ``attribute``: the key layer's promise for an answer whose
+    ``source`` is ``"KeyMemory"``, the similar record layer's for ``"SimilarRecord"``; ``None`` for no answer, an
+    outside judgement, an attribute the tuning does not name, or a promise it did not record (:func:`record_promise`).
+    It reads the value's layers only: a coarse class offered instead (the answer's ``coarse``) names the layer that backs
+    the class, and what the value's layer promised is not what the class's does."""
+    field = {"KeyMemory": "key_promise", "SimilarRecord": "memory_promise"}.get(source)
+    tuned = next(
+        (a for a in tuning["attributes"] if a["attribute"] == attribute), None
+    )
+    return None if field is None or tuned is None else tuned.get(field)
 
 
 def apply_tuning(tuning: dict[str, Any], schema: Schema) -> Schema:

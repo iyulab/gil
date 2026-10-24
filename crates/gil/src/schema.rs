@@ -2,6 +2,8 @@
 
 use std::collections::BTreeMap;
 
+use crate::replay::LayerThresholds;
+
 /// Whether an attribute is read (observed) or decided (decided).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -263,6 +265,55 @@ impl Schema {
     /// The schema's attributes, in order.
     pub fn attributes(&self) -> &[Attribute] {
         &self.attributes
+    }
+
+    /// The schema with what a layers replay chose ([`crate::replay::select_layers`]) put on the decided attribute
+    /// `attribute`: the key layer's threshold as its key threshold, the similar record layer's as its memory threshold
+    /// with the similarity floor as its memory floor. A layer the replay chose no threshold for is left unset, so it does
+    /// not answer the attribute. The error names an attribute the schema does not have or that is not decided, or the
+    /// first rule the result breaks ([`Schema::new`]).
+    pub fn with_layers(&self, attribute: &str, layers: &LayerThresholds) -> Result<Self, String> {
+        let (key, memory, floor) = chosen(layers);
+        self.with_decided(attribute, |a| {
+            a.key_threshold = key;
+            a.memory_threshold = memory;
+            a.memory_floor = floor;
+            Ok(())
+        })
+    }
+
+    /// As [`Schema::with_layers`], for what a coarse replay chose ([`crate::replay::select_coarse`]): the thresholds go
+    /// on the attribute's coarse level. The error also names an attribute with no coarse level.
+    pub fn with_coarse(&self, attribute: &str, layers: &LayerThresholds) -> Result<Self, String> {
+        let (key, memory, floor) = chosen(layers);
+        self.with_decided(attribute, |a| {
+            let level = a
+                .coarse
+                .as_mut()
+                .ok_or_else(|| format!("attribute '{}' has no coarse level", a.name))?;
+            level.key_threshold = key;
+            level.memory_threshold = memory;
+            level.memory_floor = floor;
+            Ok(())
+        })
+    }
+
+    /// The schema with `change` made to the decided attribute `attribute`, checked.
+    fn with_decided(
+        &self,
+        attribute: &str,
+        change: impl FnOnce(&mut Attribute) -> Result<(), String>,
+    ) -> Result<Self, String> {
+        let mut attributes = self.attributes.clone();
+        let a = attributes
+            .iter_mut()
+            .find(|a| a.name == attribute)
+            .ok_or_else(|| self.no_attribute(attribute))?;
+        if a.role != AttributeRole::Decided {
+            return Err(format!("attribute '{attribute}' is not decided"));
+        }
+        change(a)?;
+        Self::new(self.name.clone(), attributes)
     }
 
     /// The schema with `change` made to the attribute named `attribute`, unchecked — only for a change that keeps the
@@ -733,27 +784,106 @@ impl Settlement {
 }
 
 /// A record's values as last settled. `settled_at` is in 100-nanosecond ticks since the Unix epoch, UTC.
+///
+/// With the `serde` feature it is written with `settled_at` in ticks and reads `settled_at` as ticks or as text in the
+/// form `yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM` (.NET's round-trip format); an entry given as null reads as left out.
 #[derive(Clone, Debug, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 pub struct Record {
     pub id: String,
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[cfg_attr(feature = "serde", serde(default, deserialize_with = "or_empty"))]
     pub values: BTreeMap<String, String>,
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[cfg_attr(feature = "serde", serde(default, deserialize_with = "or_empty"))]
     pub sets: BTreeMap<String, Vec<String>>,
+    #[cfg_attr(feature = "serde", serde(deserialize_with = "settled_at"))]
     pub settled_at: i64,
     /// How each decided attribute was settled, where known.
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[cfg_attr(feature = "serde", serde(default, deserialize_with = "or_empty"))]
     pub settlements: BTreeMap<String, SettlementKind>,
     /// For an attribute settled as a check, the probability it was drawn with.
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[cfg_attr(feature = "serde", serde(default, deserialize_with = "or_empty"))]
     pub probabilities: BTreeMap<String, f64>,
     /// The attributes with a value, in the order their current values arrived, oldest first; an attribute the list leaves out
     /// counts as there from the start. `None` when the order is unknown: the observed values are then taken as there from
     /// the start and the decided ones as settled in the schema's order.
     #[cfg_attr(feature = "serde", serde(default))]
     pub arrival: Option<Vec<String>>,
+    /// The batch the record was settled in — records settled together, several at once from one source — when known.
+    /// A layers replay counts what the batches do to its promise (`BatchCheck`); records of one batch name the same.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub batch: Option<String>,
+    /// For each decided attribute settled with a suggestion in view, the value suggested — this decider's answer, or what
+    /// the host showed in its place (the kind says which). For a coarse level, the class shown.
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            default,
+            deserialize_with = "or_empty",
+            skip_serializing_if = "BTreeMap::is_empty"
+        )
+    )]
+    pub suggested: BTreeMap<String, String>,
+    /// For each decided attribute settled with this decider's answer in view, the layer that gave it.
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            default,
+            deserialize_with = "sources",
+            skip_serializing_if = "BTreeMap::is_empty"
+        )
+    )]
+    pub sources: BTreeMap<String, crate::decider::Source>,
+    /// For each decided attribute settled with this decider's answer in view, the precision promised for it when it was
+    /// shown — what [`crate::tuning::Tuning::promise_of`] gave for its layer. Each is in [0, 1].
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            default,
+            deserialize_with = "promises",
+            skip_serializing_if = "BTreeMap::is_empty"
+        )
+    )]
+    pub promises: BTreeMap<String, f64>,
+    /// For each decided attribute, the milliseconds from when the person reached it — its suggestion came into view, or
+    /// it was reached with nothing in view — to when it was settled.
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            default,
+            deserialize_with = "or_empty",
+            skip_serializing_if = "BTreeMap::is_empty"
+        )
+    )]
+    pub settle_ms: BTreeMap<String, u64>,
+    /// The milliseconds the record was open, from opening it to this settlement.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub open_ms: Option<u64>,
+    /// For each decided attribute, who settled it, as an opaque id the host gives — one person, one id; not a name. One
+    /// record may be settled by several people, an attribute each.
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            default,
+            deserialize_with = "or_empty",
+            skip_serializing_if = "BTreeMap::is_empty"
+        )
+    )]
+    pub settled_by: BTreeMap<String, String>,
+    /// The version of the form the record was settled on, as the host identifies it — the edition of the code lists
+    /// its decided attributes are settled from, which changes when a value comes to mean something else (a code
+    /// renumbered, merged or split), not when only a label or the schema's layout changes.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub form_version: Option<String>,
 }
 
 impl Record {
@@ -793,6 +923,157 @@ impl Record {
             ..self.clone()
         }
     }
+}
+
+/// An entry given as null reads as left out.
+#[cfg(feature = "serde")]
+fn or_empty<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de> + Default,
+{
+    use serde::Deserialize;
+    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
+}
+
+/// A record's `sources`: each a layer that answers — `None` is no answer, so no source.
+#[cfg(feature = "serde")]
+fn sources<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<BTreeMap<String, crate::decider::Source>, D::Error> {
+    let sources: BTreeMap<String, crate::decider::Source> = or_empty(deserializer)?;
+    match sources
+        .iter()
+        .find(|(_, s)| **s == crate::decider::Source::None)
+    {
+        Some((attribute, _)) => Err(serde::de::Error::custom(format!(
+            "the source for '{attribute}' is None; a source is the layer that answered"
+        ))),
+        None => Ok(sources),
+    }
+}
+
+/// A record's `promises`: each in [0, 1].
+#[cfg(feature = "serde")]
+fn promises<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<BTreeMap<String, f64>, D::Error> {
+    let promises: BTreeMap<String, f64> = or_empty(deserializer)?;
+    match promises.iter().find(|(_, p)| !(0.0..=1.0).contains(*p)) {
+        Some((attribute, p)) => Err(serde::de::Error::custom(format!(
+            "the promise for '{attribute}' is {p}, not in [0, 1]"
+        ))),
+        None => Ok(promises),
+    }
+}
+
+/// A record's `settled_at`: ticks, or a time as text.
+#[cfg(feature = "serde")]
+fn settled_at<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<i64, D::Error> {
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum Time {
+        Ticks(i64),
+        Text(String),
+    }
+
+    use serde::Deserialize;
+    match Time::deserialize(deserializer)? {
+        Time::Ticks(ticks) => Ok(ticks),
+        Time::Text(text) => ticks(&text).ok_or_else(|| {
+            serde::de::Error::custom(format!(
+                "settled_at '{text}' is neither ticks nor a time yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM"
+            ))
+        }),
+    }
+}
+
+/// `yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM` → 100-nanosecond ticks since the Unix epoch, UTC; `None` for any other text or a
+/// date, time or offset out of range.
+#[cfg(feature = "serde")]
+fn ticks(text: &str) -> Option<i64> {
+    let bytes = text.as_bytes();
+    if bytes.len() != 33
+        || [
+            (4, b'-'),
+            (7, b'-'),
+            (10, b'T'),
+            (13, b':'),
+            (16, b':'),
+            (19, b'.'),
+            (30, b':'),
+        ]
+        .iter()
+        .any(|&(at, separator)| bytes[at] != separator)
+    {
+        return None;
+    }
+    let number = |range: std::ops::Range<usize>| -> Option<i64> {
+        let digits = &bytes[range];
+        digits
+            .iter()
+            .all(u8::is_ascii_digit)
+            .then(|| digits.iter().fold(0, |n, d| n * 10 + i64::from(d - b'0')))
+    };
+    let (year, month, day) = (number(0..4)?, number(5..7)?, number(8..10)?);
+    let (hour, minute, second, fraction) = (
+        number(11..13)?,
+        number(14..16)?,
+        number(17..19)?,
+        number(20..27)?,
+    );
+    let sign = match bytes[27] {
+        b'+' => 1,
+        b'-' => -1,
+        _ => return None,
+    };
+    let (offset_hours, offset_minutes) = (number(28..30)?, number(31..33)?);
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let month_days = [
+        31,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+    if !(1..=12).contains(&month)
+        || !(1..=month_days[(month - 1) as usize]).contains(&day)
+        || hour > 23
+        || minute > 59
+        || second > 59
+        || offset_hours > 14
+        || offset_minutes > 59
+    {
+        return None;
+    }
+    let offset = sign * (offset_hours * 60 + offset_minutes);
+    // Days from civil (Howard Hinnant).
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (month + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    let seconds = days * 86_400 + hour * 3_600 + (minute - offset) * 60 + second;
+    Some(seconds * 10_000_000 + fraction)
+}
+
+/// The key threshold, memory threshold and similarity floor a layers replay chose; `None` for a layer it chose none for.
+fn chosen(layers: &LayerThresholds) -> (Option<f64>, Option<f64>, Option<f64>) {
+    let memory = layers.memory.chosen.as_ref();
+    (
+        layers.key.chosen.as_ref().map(|c| c.threshold),
+        memory.map(|c| c.threshold),
+        memory.and_then(|c| c.similarity_floor),
+    )
 }
 
 #[cfg(test)]

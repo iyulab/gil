@@ -152,7 +152,7 @@ fn the_selections_fixture_is_up_to_date() {
     calls.push(json!({"call": "key_concentrations", "attribute": "team", "result": found}));
 
     // A tuning: captured, given the first layers selection's promise, applied, and stale once the records grow by a
-    // tenth.
+    // tenth; and that selection put on the schema.
     let captured = result(unsafe { gil_tuning_capture(schema, CHOSEN, 0.8, &mut len) });
     let thresholds = calls[0]["result"]["thresholds"].to_string();
     let promised = result(unsafe {
@@ -170,6 +170,13 @@ fn the_selections_fixture_is_up_to_date() {
     );
     let applied_json = result(unsafe { gil_schema_json(applied, &mut len) });
     unsafe { gil_schema_free(applied) };
+    let mut with_layers = ptr::null_mut();
+    assert_eq!(
+        unsafe { gil_schema_with_layers(schema, s("team"), s(&thresholds), &mut with_layers) },
+        GIL_OK
+    );
+    let with_layers_json = result(unsafe { gil_schema_json(with_layers, &mut len) });
+    unsafe { gil_schema_free(with_layers) };
     let stale = result(unsafe {
         gil_tuning_stale(s(&promised.to_string()), schema, CHOSEN * 11 / 10, &mut len)
     });
@@ -181,6 +188,7 @@ fn the_selections_fixture_is_up_to_date() {
         "captured": captured,
         "promised": promised,
         "applied": applied_json,
+        "with_layers": with_layers_json,
         "stale_at": CHOSEN * 11 / 10,
         "stale": stale,
     }));

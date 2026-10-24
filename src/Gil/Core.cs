@@ -44,6 +44,20 @@ public sealed class Schema : IDisposable
 
     internal static Schema Own(nint handle) => new(SchemaHandle.Of(handle));
 
+    /// <summary>A new schema: this one with what a layers selection chose (<see cref="Replay.SelectLayers"/>) put on the
+    /// decided attribute <paramref name="attribute"/> — the key threshold, the memory threshold and its similarity floor;
+    /// a layer with no chosen threshold is left unset, so it does not answer the attribute.</summary>
+    /// <exception cref="ArgumentException">The schema has no such decided attribute, or the schema it makes breaks a
+    /// schema rule.</exception>
+    public unsafe Schema WithLayers(string attribute, LayerThresholds layers) =>
+        With(&Native.SchemaWithLayers, attribute, layers);
+
+    /// <summary>As <see cref="WithLayers"/>, for what a coarse selection (<see cref="Replay.SelectCoarse"/>) chose: the
+    /// thresholds go on the attribute's coarse level.</summary>
+    /// <exception cref="ArgumentException">As <see cref="WithLayers"/>, or the attribute has no coarse level.</exception>
+    public unsafe Schema WithCoarse(string attribute, LayerThresholds layers) =>
+        With(&Native.SchemaWithCoarse, attribute, layers);
+
     /// <summary>The schema as JSON in the core's form.</summary>
     public unsafe string ToJson()
     {
@@ -53,6 +67,23 @@ public sealed class Schema : IDisposable
 
     /// <inheritdoc/>
     public void Dispose() => Handle.Dispose();
+
+    private unsafe Schema With(
+        delegate*<SchemaHandle, Native.Str, Native.Str, nint*, int> put, string attribute, LayerThresholds layers)
+    {
+        ArgumentNullException.ThrowIfNull(attribute);
+        ArgumentNullException.ThrowIfNull(layers);
+        var name = new Utf8(attribute);
+        var thresholds = new Utf8(JsonSerializer.Serialize(layers, CoreJson.Default.LayerThresholds));
+        nint output;
+        fixed (byte* a = &name.Pin())
+        fixed (byte* t = &thresholds.Pin())
+        {
+            Native.Check(put(Handle, name.At(a), thresholds.At(t), &output));
+        }
+
+        return Own(output);
+    }
 
     private static SchemaHandle Check(string name, IEnumerable<AttributeDefinition> attributes)
     {
@@ -93,7 +124,8 @@ public sealed class SettledRecords : IDisposable
     public int Count => (int)Native.RecordsLen(Handle);
 
     /// <summary>Records from JSON lines, one record per line in the core's form (<c>settled_at</c> in 100-nanosecond
-    /// ticks since the Unix epoch, UTC); blank lines are skipped.</summary>
+    /// ticks since the Unix epoch, UTC, or as a time in the round-trip format <c>"O"</c>; an entry given as null is left
+    /// out); blank lines are skipped.</summary>
     /// <exception cref="ArgumentException">A line does not read as a record.</exception>
     public static unsafe SettledRecords FromJsonLines(string lines)
     {
@@ -137,11 +169,19 @@ public sealed class Decider : IDisposable
 
     /// <summary>A decider with empty memories.</summary>
     /// <param name="similarRecords">Whether to keep the similar record memory.</param>
-    public unsafe Decider(bool similarRecords = true)
+    /// <param name="threads">The most threads one similar-record lookup over a large memory is split among; null for
+    /// as many as the machine offers, up to eight; 1 keeps every lookup on the caller's thread. Answers are the same
+    /// whatever it is. A host answering many requests at once on one decider multiplies it by their number.</param>
+    public unsafe Decider(bool similarRecords = true, int? threads = null)
     {
+        if (threads is { } most)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(most, 1, nameof(threads));
+        }
+
         Native.EnsureCompatible();
         nint output;
-        Native.Check(Native.DeciderNew(similarRecords ? (byte)1 : (byte)0, &output));
+        Native.Check(Native.DeciderNew(similarRecords ? (byte)1 : (byte)0, (nuint)(threads ?? 0), &output));
         Handle = DeciderHandle.Of(output);
     }
 

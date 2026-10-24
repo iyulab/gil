@@ -53,6 +53,24 @@ public sealed record Tuning(
             ToJson(), attribute, JsonSerializer.Serialize(thresholds, CoreJson.Default.LayerThresholds)));
     }
 
+    /// <summary>What the layer an answer came from promised for <paramref name="attribute"/>: the key layer's promise for
+    /// an answer from <see cref="Source.KeyMemory"/>, the similar record layer's for one from
+    /// <see cref="Source.SimilarRecord"/>; null for no answer, an outside judgement, an attribute the tuning does not
+    /// name, or a promise it did not record (<see cref="Promise"/>). It reads the value's layers only: a coarse class
+    /// offered instead (the answer's <c>Coarse</c>) names the layer that backs the class, and what the value's layer
+    /// promised is not what the class's does.</summary>
+    public double? PromiseOf(string attribute, Source source)
+    {
+        ArgumentNullException.ThrowIfNull(attribute);
+        var tuned = Attributes.FirstOrDefault(a => a.Attribute == attribute);
+        return source switch
+        {
+            Source.KeyMemory => tuned?.KeyPromise,
+            Source.SimilarRecord => tuned?.MemoryPromise,
+            _ => null,
+        };
+    }
+
     /// <summary>A new schema: <paramref name="schema"/> with these settings put back on its attributes.</summary>
     /// <exception cref="ArgumentException">The schema they make breaks a schema rule — settings chosen for another schema
     /// may name key attributes this one does not have.</exception>

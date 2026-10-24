@@ -15,7 +15,8 @@ use gil::decider::{Answer, Candidate, Decider};
 use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::replay::{
-    Choice, select_coarse, select_key_threshold, select_layers, select_typed_key_thresholds,
+    Choice, LayerOptions, select_coarse, select_key_threshold, select_layers,
+    select_typed_key_thresholds,
 };
 use gil::schema::{Attribute, AttributeRole, CoarseLevel, Record, Schema};
 use serde_json::{Value, json};
@@ -134,23 +135,25 @@ fn the_note_settings_reproduce_their_golden() {
         let schema = note_form(&golden, |l| l["kind"] == kind && l["field"] == attribute);
         let actual = match kind {
             "layers" | "coarse" => {
-                let choose = if kind == "layers" {
-                    select_layers
-                } else {
-                    select_coarse
+                let choice = Choice {
+                    target_precision: 0.8,
+                    minimum_answered: 10,
+                    counting: counted,
                 };
-                let layers = choose(
-                    &mut KeyMemory::default(),
-                    &mut LexicalMemory::default(),
-                    &schema,
-                    attribute,
-                    early,
-                    Choice {
-                        target_precision: 0.8,
-                        minimum_answered: 10,
-                        counting: counted,
-                    },
-                );
+                let (mut keys, mut memory) = (KeyMemory::default(), LexicalMemory::default());
+                let layers = if kind == "layers" {
+                    select_layers(
+                        &mut keys,
+                        &mut memory,
+                        &schema,
+                        attribute,
+                        early,
+                        choice,
+                        LayerOptions::default(),
+                    )
+                } else {
+                    select_coarse(&mut keys, &mut memory, &schema, attribute, early, choice)
+                };
                 json!({ "kind": kind, "field": attribute, "key": replay(&layers.key), "memory": replay(&layers.memory) })
             }
             "typed" => {

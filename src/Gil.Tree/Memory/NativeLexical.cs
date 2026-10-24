@@ -6,7 +6,7 @@ namespace Gil;
 internal static unsafe partial class Native
 {
     [LibraryImport(Library, EntryPoint = "gil_lexical_memory_new")]
-    internal static partial int LexicalMemoryNew(nuint minGram, nuint maxGram, nint* output);
+    internal static partial int LexicalMemoryNew(nuint minGram, nuint maxGram, nuint threads, nint* output);
 
     [LibraryImport(Library, EntryPoint = "gil_lexical_memory_free")]
     internal static partial void LexicalMemoryFree(nint memory);

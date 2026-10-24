@@ -165,15 +165,13 @@ same core version, the same settings it rests on, about as many records — and 
 
 ```csharp
 var options = new SelectionOptions(TargetPrecision: 0.9, MinimumAnswered: 30);
-var layers = Replay.SelectLayers(schema, "team", saved, options);
 var keyFields = Replay.SelectKeyFields(schema, "team", saved, options);
-using var tuned = new Schema(schema.Name, schema.Attributes.Select(a => a.Name != "team" ? a : a with
+using var keyed = new Schema(schema.Name, schema.Attributes.Select(a => a.Name != "team" ? a : a with
 {
     KeyFields = keyFields.KeyFields,
-    KeyThreshold = layers.Thresholds.Key.Chosen?.Threshold,
-    MemoryThreshold = layers.Thresholds.Memory.Chosen?.Threshold,
-    MemoryFloor = layers.Thresholds.Memory.Chosen?.SimilarityFloor,
 }));
+var layers = Replay.SelectLayers(keyed, "team", saved, options);
+using var tuned = keyed.WithLayers("team", layers.Thresholds);
 var tuning = Tuning.Capture(tuned, saved.Count, options.TargetPrecision).Promise("team", layers.Thresholds);
 File.WriteAllText("ticket.tuning.json", tuning.ToJson());
 
@@ -181,8 +179,17 @@ var kept = Tuning.FromJson(File.ReadAllText("ticket.tuning.json"));
 using var current = kept.Stale(schema, saved.Count) is null ? kept.Apply(schema) : null;
 ```
 
-`Promise` records the precision each chosen threshold promises for the next answers; `Usage.Count` over what was
-answered and settled since reports how each attribute's answers fared against it.
+`WithLayers` puts the key threshold, the memory threshold and its similarity floor on the attribute, leaving a layer
+with no chosen threshold unset (`WithCoarse` does the same for a coarse level). `Promise` records the precision each
+chosen threshold promises for the next answers, and `PromiseOf` reads back the one an answer was made under, by the
+layer it came from; `Usage.Count` over what was answered and settled since reports how each attribute's answers fared
+against it:
+
+```csharp
+var shown = team.Answered ? team.Candidates[0].Value : null;
+var promise = team.Answered ? tuning.PromiseOf("team", team.Source) : null;
+var counts = Usage.Count([new UsageDecision("team", shown, "network", SettlementKind.Accept, Promise: promise)]);
+```
 
 ### Choosing what to trust
 
@@ -275,6 +282,14 @@ is counted only when `Counting` is left out:
 var unprompted = Replay.SelectLayers(schema, "team", saved, options with { Counting = [SettlementKind.Enter] });
 ```
 
+Settlements that saw no answer are not a sample of the answers, though. Where the application shows every answer it has,
+they are the records the thresholds did not answer, so a promise counted on them speaks of the records just below the
+thresholds. Replaying two public streams that way, the thresholds stayed close to where counting every settlement put
+them, but on one stream the promise fell from 0.98 to 0.90 while the answers were 0.98 right; on the other it moved
+less than a point. To know how right the answers themselves are, have a few drawn at random settled again without the
+answer in view (`SettlementKind.Check`, below). Counting the settlements that saw an answer leans the other way: if
+people keep a wrong answer they see one time in three, a layer that is 0.90 right reads 0.93.
+
 A value settled as `Fill` stays in the record, but memory does not learn it and choosing thresholds does not ask about
 it. Remembered, an answer's own value would come back as evidence for itself. Replaying a public stream with nine in ten
 trusted answers filled, a replay that learned from them promised 0.97 where 0.73 was right, and one stream's key layer
@@ -328,23 +343,25 @@ whether a near-identical record's value is right tends to hold or fail for the w
 independent cases than it counts. Key layer thresholds chosen once for a target of 0.8 on the first forty thousand
 records of two public streams — an issue tracker and aircraft maintenance reports — answered right 0.85 and 0.90 of the
 time on the forty thousand that followed, and 0.82 to 0.91 for the six attributes of a smaller stream of biological
-sample records. Version 0.6.0, on two other streams of sample records, saw 0.63 to 0.74 at 0.8 and 0.64 to 0.72 at
-0.7; wider statistical margins did not close that gap. To know the precision an attribute actually delivers, check it
-on your own records: choose on those settled up to a date and count the answers on those settled after it. Where you
-know which records came in one batch, the optimism the batches add can be counted without waiting: choose on half of
-the batches and count the answers on the other half. On a month of public medical device event reports, which
-manufacturers send many at a time, the precision of thresholds chosen for 0.8, counted on the records they were chosen
-on, was 1.9 points above what the reports that followed got; counted across halves of the batches it was 0.1 points
-above, and across halves of the records, batch mates split between them, still 1.7. That is right on average only: the
-reports between two choices, a few batches each, came out anywhere from 0.64 to 0.89. Batches add optimism only when
-they are large and the records of one batch tend to be right or wrong together. On two years of public food inspection
-records, where one inspection settles several different violations, they do not: halves of the batches and halves of
-the records gave the same count, both 1.5 points above what followed, and the count on the records chosen on was
-closest, 0.2 points above. On two years of public vehicle complaints, batched by model, model year and week received,
-batch mates are right or wrong together about as much as the device reports are, but a batch holds three complaints or
-so: halves of the batches and halves of the records again agreed within a tenth of a point. Check both on your own
-settled records — how many records a batch holds and whether batch mates are right or wrong together — before counting
-across halves of the batches.
+sample records. Version 0.6.0, on two other streams of sample records, saw 0.63 to 0.74 at 0.8 and 0.64 to 0.72 at 0.7;
+wider statistical margins did not close that gap. To know the precision an attribute actually delivers, check it on your
+own records: choose on those settled up to a date and count the answers on those settled after it. Where you know which
+records came in one batch, the optimism the batches add can be counted without waiting: name it in `Record.Batch`, and a
+layers selection reports in `LayerThresholds.Batches` the precision of thresholds chosen on half of the latest batches
+and counted on the other half (`AcrossBatches`), the same split by record (`AcrossRecords`), and how many answers a
+batch holds and how much they are right or wrong together (`BatchSize`, `Correlation`, `DesignEffect`). On a month of
+public medical device event reports, which manufacturers send many at a time, the precision of thresholds chosen for
+0.8, counted on the records they were chosen on, was 1.9 points above what the reports that followed got; counted across
+halves of the batches it was 0.1 points above, and across halves of the records, batch mates split between them, still
+1.7. That is right on average only: the reports between two choices, a few batches each, came out anywhere from 0.64 to
+0.89. Batches add optimism only when they are large and the records of one batch tend to be right or wrong together. On
+two years of public food inspection records, where one inspection settles several different violations, they do not:
+halves of the batches and halves of the records gave the same count, both 1.5 points above what followed, and the count
+on the records chosen on was closest, 0.2 points above. On two years of public vehicle complaints, batched by model,
+model year and week received, batch mates are right or wrong together about as much as the device reports are, but a
+batch holds three complaints or so: halves of the batches and halves of the records again agreed within a tenth of a
+point. Read `AcrossBatches` as the promise only where `AcrossRecords` stands above it and the design effect is well
+above one; elsewhere the promise is the closer count.
 
 Settle a record that arrives again — a retransmission, a re-save — under the same record id. The memories keep one
 version per id, and the replay asks a record settled again without its earlier version. Under a new id the copy is new
@@ -852,7 +869,7 @@ what the C ABI gives (`tests/fixtures/core/native/selections.json`). Calls that 
 threads at once; a call that changes one needs it to itself, and is refused before it changes anything when the core's
 contract rules it out — a failure after that marks what it was changing broken. Each library says which version of its
 interface it speaks (`gil_abi_version`, `gil_review_abi_version`), and both .NET bindings check it before their first
-call. The plumbing both C ABIs share — statuses, the last error, the panic guard — is `crates/gil-ffi-support`.
+call. The plumbing both C ABIs share — statuses, the last error, the panic guard — is `crates/ffi-support` (`iyulab-ffi-support`).
 
 Its tests are `tests/Gil.Core.Tests`, run with the rest of `Gil.slnx` as above.
 

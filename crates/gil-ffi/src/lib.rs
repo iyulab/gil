@@ -31,13 +31,13 @@ use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::open_record::OpenRecord;
 use gil::replay::{
-    Choice, LayerThresholds, ThresholdRule, select_coarse_with, select_key_concentrations,
-    select_key_fields, select_layers_by_rule_with,
+    Choice, LayerOptions, LayerThresholds, ThresholdRule, select_coarse_with,
+    select_key_concentrations, select_key_fields, select_layers,
 };
 use gil::schema::{AttributePolicy, Record, Schema, Settlement, SettlementKind};
 use gil::tuning::Tuning;
 use gil::usage::{Decision, usage};
-use gil_ffi_support::{
+use iyulab_ffi_support::{
     BUFFER_TOO_SMALL, Failure, Utf8, argument, call, hand_out, handle, handle_mut, input, release,
     set_result, slice, slice_mut, write,
 };
@@ -45,21 +45,21 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 /// The call succeeded.
-pub const GIL_OK: i32 = gil_ffi_support::OK;
+pub const GIL_OK: i32 = iyulab_ffi_support::OK;
 /// The core refused its input (a schema that does not check, a record that does not read); the message says what.
-pub const GIL_INVALID_INPUT: i32 = gil_ffi_support::INVALID_INPUT;
+pub const GIL_INVALID_INPUT: i32 = iyulab_ffi_support::INVALID_INPUT;
 /// The call itself was malformed: a null pointer, text that is not UTF-8, or a buffer too small.
-pub const GIL_INVALID_ARGUMENT: i32 = gil_ffi_support::INVALID_ARGUMENT;
+pub const GIL_INVALID_ARGUMENT: i32 = iyulab_ffi_support::INVALID_ARGUMENT;
 /// The core panicked — a call its contract rules out, or a defect — reported instead of unwinding into the caller.
-pub const GIL_PANIC: i32 = gil_ffi_support::PANIC;
+pub const GIL_PANIC: i32 = iyulab_ffi_support::PANIC;
 /// The caller's buffers are too small for the answer; the sizes it needs are in the answer header.
-pub const GIL_BUFFER_TOO_SMALL: i32 = gil_ffi_support::BUFFER_TOO_SMALL;
+pub const GIL_BUFFER_TOO_SMALL: i32 = iyulab_ffi_support::BUFFER_TOO_SMALL;
 /// A decider or record is broken: an earlier call that changed it panicked partway. Free it and build it again.
-pub const GIL_BROKEN: i32 = gil_ffi_support::BROKEN;
+pub const GIL_BROKEN: i32 = iyulab_ffi_support::BROKEN;
 
 /// The version of this interface — its functions, structures and statuses. It changes whenever a binding built for one
 /// version would misread the library of another.
-pub const GIL_ABI_VERSION: u32 = 3;
+pub const GIL_ABI_VERSION: u32 = 4;
 
 /// [`GilCandidate::source`]: no layer.
 pub const GIL_SOURCE_NONE: u8 = 0;
@@ -173,7 +173,7 @@ fn refuse_broken<T: Breakable>(h: &T) -> Result<(), Failure> {
 /// The live object behind a handle, refused when broken.
 ///
 /// # Safety
-/// As [`gil_ffi_support::handle`].
+/// As [`iyulab_ffi_support::handle`].
 unsafe fn live<'a, T: Breakable>(h: *const T) -> Result<&'a T, Failure> {
     // SAFETY: forwarded from the caller.
     let found = unsafe { handle(h, T::WHAT) }?;
@@ -184,7 +184,7 @@ unsafe fn live<'a, T: Breakable>(h: *const T) -> Result<&'a T, Failure> {
 /// As [`live`], exclusively.
 ///
 /// # Safety
-/// As [`gil_ffi_support::handle_mut`].
+/// As [`iyulab_ffi_support::handle_mut`].
 unsafe fn live_mut<'a, T: Breakable>(h: *mut T) -> Result<&'a mut T, Failure> {
     // SAFETY: forwarded from the caller.
     let found = unsafe { handle_mut(h, T::WHAT) }?;
@@ -252,16 +252,16 @@ pub struct GilExternalCandidate {
 }
 
 /// # Safety
-/// As [`gil_ffi_support::text`].
+/// As [`iyulab_ffi_support::text`].
 unsafe fn text<'a>(s: GilStr, what: &str) -> Result<&'a str, Failure> {
     // SAFETY: forwarded from the caller.
-    unsafe { gil_ffi_support::text(s, what) }
+    unsafe { iyulab_ffi_support::text(s, what) }
 }
 
 /// Text that may be absent: a null pointer is none (with length 0), anything else is text.
 ///
 /// # Safety
-/// As [`gil_ffi_support::text`].
+/// As [`iyulab_ffi_support::text`].
 unsafe fn optional<'a>(s: GilStr, what: &str) -> Result<Option<&'a str>, Failure> {
     if s.ptr.is_null() && s.len == 0 {
         return Ok(None);
@@ -278,7 +278,7 @@ unsafe fn result(value: &Value, result_len: *mut usize) -> Result<(), Failure> {
     let text = value.to_string();
     let len = text.len();
     // SAFETY: forwarded from the caller.
-    unsafe { gil_ffi_support::write(result_len, len, "result_len") }?;
+    unsafe { iyulab_ffi_support::write(result_len, len, "result_len") }?;
     set_result(text);
     Ok(())
 }
@@ -320,7 +320,7 @@ fn answer_json(a: &Answer) -> Value {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn gil_last_error(buffer: *mut u8, capacity: usize) -> usize {
     // SAFETY: forwarded from the caller.
-    unsafe { gil_ffi_support::copy_last_error(buffer, capacity) }
+    unsafe { iyulab_ffi_support::copy_last_error(buffer, capacity) }
 }
 
 /// Copies the text result of the last call on this thread (the length that call wrote to its `result_len`) into
@@ -332,7 +332,7 @@ pub unsafe extern "C" fn gil_last_error(buffer: *mut u8, capacity: usize) -> usi
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn gil_last_result(buffer: *mut u8, capacity: usize) -> usize {
     // SAFETY: forwarded from the caller.
-    unsafe { gil_ffi_support::copy_last_result(buffer, capacity) }
+    unsafe { iyulab_ffi_support::copy_last_result(buffer, capacity) }
 }
 
 /// Reads a schema from JSON in the core's `serde` form — the settings an attribute leaves out take their defaults — and
@@ -366,17 +366,30 @@ pub unsafe extern "C" fn gil_schema_free(schema: *mut GilSchema) {
     unsafe { release(schema) }
 }
 
-/// A decider with empty memories — with the similar record memory unless `similar_records` is false — handed out
-/// through `out`.
+/// A similar record memory whose lookups are split among at most `threads` threads — 0 for the core's default.
+fn record_memory(memory: LexicalMemory, threads: usize) -> LexicalMemory {
+    if threads == 0 {
+        memory
+    } else {
+        memory.with_threads(threads)
+    }
+}
+
+/// A decider with empty memories — with the similar record memory unless `similar_records` is false, its lookups split
+/// among at most `threads` threads (0: the core's default, 1: none) — handed out through `out`.
 ///
 /// # Safety
 /// `out` points to one writable pointer.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gil_decider_new(similar_records: bool, out: *mut *mut GilDecider) -> i32 {
+pub unsafe extern "C" fn gil_decider_new(
+    similar_records: bool,
+    threads: usize,
+    out: *mut *mut GilDecider,
+) -> i32 {
     call(|| {
         let decider = Decider::new(
             KeyMemory::default(),
-            similar_records.then(LexicalMemory::default),
+            similar_records.then(|| record_memory(LexicalMemory::default(), threads)),
         );
         // SAFETY: forwarded from the caller.
         unsafe {
@@ -402,9 +415,9 @@ pub unsafe extern "C" fn gil_decider_free(decider: *mut GilDecider) {
     unsafe { release(decider) }
 }
 
-/// Reads settled records from JSON lines — one record per line in the core's `serde` form (`settled_at` in ticks), in
-/// settlement order; blank lines are skipped — and hands them out through `out`. A line that does not read refuses the
-/// whole text.
+/// Reads settled records from JSON lines — one record per line in the core's `serde` form (`settled_at` in ticks or as a
+/// time), in settlement order; blank lines are skipped — and hands them out through `out`. A line that does not read
+/// refuses the whole text.
 ///
 /// # Safety
 /// `lines` is valid for the call; `out` points to one writable pointer.
@@ -948,6 +961,9 @@ struct Options {
     decisions: bool,
     #[serde(default)]
     typed_longest: usize,
+    /// The most threads a similar-record lookup of the replay is split among; 0 for the core's default.
+    #[serde(default)]
+    threads: usize,
 }
 
 impl Options {
@@ -961,7 +977,7 @@ impl Options {
 }
 
 /// # Safety
-/// As [`gil_ffi_support::text`].
+/// As [`iyulab_ffi_support::text`].
 unsafe fn read_options(json: GilStr) -> Result<Options, Failure> {
     // SAFETY: forwarded from the caller.
     let json = unsafe { text(json, "options") }?;
@@ -1039,15 +1055,17 @@ pub unsafe extern "C" fn gil_select_layers(
         let (schema, attribute, records) = unsafe { selection(schema, attribute, records) }?;
         let options = unsafe { read_options(options) }?;
         let mut decisions = options.decisions.then(Vec::new);
-        let thresholds = select_layers_by_rule_with(
+        let thresholds = select_layers(
             &mut KeyMemory::default(),
-            &mut LexicalMemory::default(),
+            &mut record_memory(LexicalMemory::default(), options.threads),
             schema,
             attribute,
             records,
             options.choice(),
-            options.rule,
-            &mut |r| keep(&mut decisions, r),
+            LayerOptions {
+                rule: options.rule,
+                sink: Some(&mut |r| keep(&mut decisions, r)),
+            },
         );
         unsafe { result(&chosen(&thresholds, decisions), result_len) }
     })
@@ -1078,7 +1096,7 @@ pub unsafe extern "C" fn gil_select_coarse(
         let mut decisions = options.decisions.then(Vec::new);
         let thresholds = select_coarse_with(
             &mut KeyMemory::default(),
-            &mut LexicalMemory::default(),
+            &mut record_memory(LexicalMemory::default(), options.threads),
             schema,
             attribute,
             records,
@@ -1165,7 +1183,71 @@ pub unsafe extern "C" fn gil_schema_json(schema: *const GilSchema, result_len: *
 }
 
 /// # Safety
-/// As [`gil_ffi_support::text`].
+/// As [`iyulab_ffi_support::text`].
+unsafe fn layer_thresholds(json: GilStr) -> Result<LayerThresholds, Failure> {
+    // SAFETY: forwarded from the caller.
+    let json = unsafe { text(json, "thresholds") }?;
+    serde_json::from_str(json).map_err(|e| input(format!("layer thresholds do not read: {e}")))
+}
+
+/// Hands out through `out` a new schema: `schema` with what a layers selection chose — `thresholds`, as
+/// `gil_select_layers` gives them — put on the decided attribute: the key threshold, the memory threshold and its
+/// similarity floor, a layer with none chosen left unset. An attribute the schema does not have or that is not decided,
+/// or a result that breaks a schema rule, is refused as input, and the error says which.
+///
+/// # Safety
+/// `schema` is a live handle; the texts are valid for the call; `out` points to one writable pointer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_schema_with_layers(
+    schema: *const GilSchema,
+    attribute: GilStr,
+    thresholds: GilStr,
+    out: *mut *mut GilSchema,
+) -> i32 {
+    // SAFETY: forwarded from the caller.
+    unsafe { schema_with(schema, attribute, thresholds, out, Schema::with_layers) }
+}
+
+/// As [`gil_schema_with_layers`], for what a coarse selection (`gil_select_coarse`) chose: the thresholds go on the
+/// attribute's coarse level, and an attribute with none is refused as input.
+///
+/// # Safety
+/// As [`gil_schema_with_layers`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_schema_with_coarse(
+    schema: *const GilSchema,
+    attribute: GilStr,
+    thresholds: GilStr,
+    out: *mut *mut GilSchema,
+) -> i32 {
+    // SAFETY: forwarded from the caller.
+    unsafe { schema_with(schema, attribute, thresholds, out, Schema::with_coarse) }
+}
+
+/// # Safety
+/// As [`gil_schema_with_layers`].
+unsafe fn schema_with(
+    schema: *const GilSchema,
+    attribute: GilStr,
+    thresholds: GilStr,
+    out: *mut *mut GilSchema,
+    put: fn(&Schema, &str, &LayerThresholds) -> Result<Schema, String>,
+) -> i32 {
+    call(|| {
+        if out.is_null() {
+            return Err(argument("out is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let schema = unsafe { handle(schema, "schema") }?;
+        let attribute = unsafe { text(attribute, "attribute") }?;
+        let thresholds = unsafe { layer_thresholds(thresholds) }?;
+        let changed = put(&schema.0, attribute, &thresholds).map_err(input)?;
+        unsafe { hand_out(out, GilSchema(changed), "out") }
+    })
+}
+
+/// # Safety
+/// As [`iyulab_ffi_support::text`].
 unsafe fn tuning(json: GilStr) -> Result<Tuning, Failure> {
     // SAFETY: forwarded from the caller.
     let json = unsafe { text(json, "tuning") }?;
@@ -1215,9 +1297,7 @@ pub unsafe extern "C" fn gil_tuning_promise(
         // SAFETY: forwarded from the caller, for every pointer below.
         let mut tuned = unsafe { tuning(tuning_json) }?;
         let attribute = unsafe { text(attribute, "attribute") }?;
-        let thresholds = unsafe { text(thresholds, "thresholds") }?;
-        let thresholds: LayerThresholds = serde_json::from_str(thresholds)
-            .map_err(|e| input(format!("layer thresholds do not read: {e}")))?;
+        let thresholds = unsafe { layer_thresholds(thresholds) }?;
         tuned.promise(attribute, &thresholds);
         let value = serde_json::to_value(tuned).expect("a tuning serializes");
         unsafe { result(&value, result_len) }
@@ -1448,7 +1528,8 @@ pub unsafe extern "C" fn gil_ask_planner_advise(
 }
 
 /// A lexical memory comparing runs of `min_gram` to `max_gram` Unicode scalars (at least 1, and `max_gram` at least
-/// `min_gram` — else `GIL_INVALID_INPUT`), handed out through `out`.
+/// `min_gram` — else `GIL_INVALID_INPUT`), its lookups split among at most `threads` threads (0: the core's default,
+/// 1: none), handed out through `out`.
 ///
 /// # Safety
 /// `out` points to one writable pointer.
@@ -1456,6 +1537,7 @@ pub unsafe extern "C" fn gil_ask_planner_advise(
 pub unsafe extern "C" fn gil_lexical_memory_new(
     min_gram: usize,
     max_gram: usize,
+    threads: usize,
     out: *mut *mut GilLexicalMemory,
 ) -> i32 {
     call(|| {
@@ -1466,7 +1548,7 @@ pub unsafe extern "C" fn gil_lexical_memory_new(
             return Err(input("max_gram must be at least min_gram"));
         }
         let memory = GilLexicalMemory {
-            memory: LexicalMemory::new(min_gram, max_gram),
+            memory: record_memory(LexicalMemory::new(min_gram, max_gram), threads),
             broken: AtomicBool::new(false),
         };
         // SAFETY: forwarded from the caller.
@@ -1601,7 +1683,7 @@ mod tests {
     #[test]
     fn a_panic_in_a_changing_call_breaks_the_handles_it_was_changing() {
         let mut decider = std::ptr::null_mut();
-        assert_eq!(unsafe { gil_decider_new(false, &mut decider) }, GIL_OK);
+        assert_eq!(unsafe { gil_decider_new(false, 0, &mut decider) }, GIL_OK);
 
         // A refusal is not a panic: the handle stays usable.
         unsafe { break_on_panic(GIL_INVALID_INPUT, decider) };

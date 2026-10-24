@@ -4,6 +4,63 @@ The Rust crate (crates.io) and the Python package (PyPI), both published as `iyu
 Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the repository's root `CHANGELOG.md`.
 
+## Unreleased
+
+### Changed
+
+- **Breaking: `replay::select_layers` takes `LayerOptions`, and `select_layers_by_rule`, `select_layers_with` and
+  `select_layers_by_rule_with` are gone.** The four were one choice with the rule and the decision-record sink each
+  optional. Pass `LayerOptions::default()` for what `select_layers` did, `LayerOptions { rule, ..Default::default() }`
+  for `select_layers_by_rule`, `LayerOptions { sink: Some(&mut sink), ..Default::default() }` for
+  `select_layers_with`, and both fields for `select_layers_by_rule_with`. Python's `select_layers` and the C ABI are
+  unchanged.
+- **A record reads `settled_at` as a time as well as in ticks.** With `serde`, `Record` takes `settled_at` as ticks or
+  as text `yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM` (.NET's round-trip format), and an entry given as null as left out; it
+  is written in ticks as before. Python records are read through it, and now refuse a date, time or offset out of
+  range (`2025-02-29`, `24:00`, `+15:00`) that they used to turn into ticks.
+- **A similar-record lookup over a large memory is split among threads.** When a lookup would add more than 2¹⁸
+  products, `LexicalMemory::nearest` splits the rows into up to eight ranges, one a thread, each summed in the same
+  order and ranked on its own — the similarities and the leaders are the same to the bit with any number of threads,
+  and one thread is used where none are available. Replaying 40,000 public food inspection records took 27 s against
+  60 s. The lists keep each row's count of an n-gram rather than its weight, a third less memory.
+  `LexicalMemory::with_threads(n)` caps the threads a lookup is split among — 1 keeps it on the caller's thread — for
+  a host that answers many requests at once or keeps its own budget of threads; Python takes it as `threads=` on
+  `Decider`, `select_layers` and `select_coarse`.
+
+### Added
+
+- **A settled record can say what was in view, how long it took and who settled it.** Seven optional entries of the
+  line format — `suggested` (the value in view when a decided attribute was settled), `sources` (the layer of the
+  answer in view, named as answers name it), `promises` (the precision promised for it then, in [0, 1]), `settle_ms`
+  (per attribute, the milliseconds from reaching it to settling it), `open_ms` (the milliseconds the record was open),
+  `settled_by` (per attribute, an opaque id of who settled it) and `form_version` (the edition of the code lists, new
+  when a value comes to mean something else) — are fields of `Record`, read and written back.
+  Nothing in the replays reads them yet; they are what a host keeps from its first record so that whether promises
+  hold for the answers people saw, what settling costs them and how settlers differ can be measured later. A promise
+  out of [0, 1], a layer other than the three and negative milliseconds are refused. Readers before this version refuse a
+  line that carries them.
+- **A replay's choice goes on the schema in one call, and an answer's promise reads from the tuning by its source.**
+  `Schema::with_layers(attribute, &layers)` puts what `select_layers` chose on a decided attribute — the key threshold,
+  the memory threshold and its similarity floor, a layer with no chosen threshold left unset — and
+  `Schema::with_coarse` does the same on the coarse level for what `select_coarse` chose; both check the result as
+  `Schema::new` does. `Tuning::promise_of(attribute, source)` gives the promise of the layer an answer came from
+  (`Source::KeyMemory` or `Source::SimilarRecord`). Python has them as `Schema.with_layers` / `Schema.with_coarse`
+  (taking what `select_layers` / `select_coarse` returned) and `gil.promise_of(tuning, attribute, answer["source"])`.
+  Setting the three fields by hand and matching the source to `key_promise` / `memory_promise` still work.
+- **What batches do to a promise.** `Record::batch` names the batch a record was settled in — records settled
+  together, several at once from one source. When any of the latest `RECENT_RECORDS` records names one,
+  `LayerThresholds::batches` (`BatchCheck`) gives the precision of thresholds chosen on half of them and counted on
+  the other half, split by batch and split by record, over `BATCH_SPLITS` splits; how many answers a batch holds; how
+  much they are right or wrong together (ICC(1)); and the design effect. Thresholds are chosen as before. Records that
+  name no batch write and read as before, and Python records take a `batch` key. On public records the two counts
+  differed only where batches were large and right or wrong together (device event reports, design effect about 7:
+  1.6 points), not where batches were small (vehicle complaints, 1.5) or not right or wrong together (food
+  inspections, 1.1).
+
+### Breaking
+
+- `Record` has seven more public fields (above). A struct literal that names every field needs `..Record::default()`.
+
 ## 0.8.0
 
 ### Fixed

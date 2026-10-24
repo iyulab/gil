@@ -14,8 +14,8 @@ use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::open_record;
 use gil::replay::{
-    Choice, LayerThresholds, ThresholdRule, select_coarse_with, select_key_concentrations,
-    select_key_fields, select_layers_by_rule_with,
+    Choice, LayerOptions, LayerThresholds, ThresholdRule, select_coarse_with,
+    select_key_concentrations, select_key_fields, select_layers,
 };
 use gil::schema::{Record, Schema, Settlement, SettlementKind};
 use gil::tuning::Tuning;
@@ -38,56 +38,13 @@ fn schema(text: &str) -> Parsed<Schema> {
     serde_json::from_str(text).map_err(|e| format!("a schema does not read: {e}"))
 }
 
-/// `yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM` → 100-nanosecond ticks since the Unix epoch, UTC.
-fn ticks(text: &str) -> Parsed<i64> {
-    let bad = || format!("settled_at '{text}' is not yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM");
-    if text.len() != 33 || !text.is_ascii() {
-        return Err(bad());
-    }
-    let number =
-        |range: std::ops::Range<usize>| -> Parsed<i64> { text[range].parse().map_err(|_| bad()) };
-    let (year, month, day) = (number(0..4)?, number(5..7)?, number(8..10)?);
-    let (hour, minute, second, fraction) = (
-        number(11..13)?,
-        number(14..16)?,
-        number(17..19)?,
-        number(20..27)?,
-    );
-    let sign = match &text[27..28] {
-        "+" => 1,
-        "-" => -1,
-        _ => return Err(bad()),
-    };
-    let offset = sign * (number(28..30)? * 60 + number(31..33)?);
-    // Days from civil (Howard Hinnant).
-    let y = if month <= 2 { year - 1 } else { year };
-    let era = y.div_euclid(400);
-    let yoe = y - era * 400;
-    let mp = (month + 9) % 12;
-    let doy = (153 * mp + 2) / 5 + day - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    let days = era * 146_097 + doe - 719_468;
-    let seconds = days * 86_400 + hour * 3_600 + (minute - offset) * 60 + second;
-    Ok(seconds * 10_000_000 + fraction)
-}
-
 fn settlement(name: &str) -> Parsed<SettlementKind> {
     SettlementKind::parse(name).ok_or_else(|| format!("unknown settlement kind '{name}'"))
 }
 
-/// A record as the core's `serde` form reads it, with `settled_at` given as ticks or as a time and an entry given as null
-/// left out.
-fn record(value: &Value) -> Parsed<Record> {
-    let mut value = value.clone();
-    // An entry given as null is one left out, as Python's None reads.
-    if let Value::Object(entries) = &mut value {
-        entries.retain(|_, v| !v.is_null());
-    }
-    if let Some(Value::String(text)) = value.get("settled_at") {
-        let ticks = ticks(text)?;
-        value["settled_at"] = json!(ticks);
-    }
-    serde_json::from_value(value).map_err(|e| format!("a record does not read: {e}"))
+/// A record as the core's `serde` form reads it — `settled_at` as ticks or as a time, an entry given as null left out.
+fn record(text: &str) -> Parsed<Record> {
+    serde_json::from_str(text).map_err(|e| format!("a record does not read: {e}"))
 }
 
 // ---- writing ----
@@ -125,11 +82,7 @@ impl Records {
             .lines()
             .enumerate()
             .filter(|(_, line)| !line.trim().is_empty())
-            .map(|(i, line)| {
-                let value: Value =
-                    serde_json::from_str(line).map_err(|e| format!("line {}: {e}", i + 1))?;
-                record(&value).map_err(|e| format!("line {}: {e}", i + 1))
-            })
+            .map(|(i, line)| record(line).map_err(|e| format!("line {}: {e}", i + 1)))
             .collect::<Parsed<Vec<_>>>()
             .map_err(invalid)?;
         Ok(Self { records })
@@ -166,10 +119,19 @@ fn selection_input(
     Ok((schema, counting))
 }
 
+/// A similar record memory whose lookups are split among at most `threads` threads, or as many as the core's default.
+fn record_memory(threads: Option<usize>) -> PyResult<LexicalMemory> {
+    match threads {
+        None => Ok(LexicalMemory::default()),
+        Some(0) => Err(invalid("threads must be at least 1".to_owned())),
+        Some(n) => Ok(LexicalMemory::default().with_threads(n)),
+    }
+}
+
 /// Replays the records in order and chooses the attribute's key and memory thresholds, as `select_layers` does. Returns
 /// the thresholds as JSON and, when `decisions` is true, the decision records as JSON lines.
 #[pyfunction]
-#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, decisions=true, rule="every_band"))]
+#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, decisions=true, rule="every_band", threads=None))]
 #[allow(clippy::too_many_arguments)]
 fn select_layers_json(
     schema_json: &str,
@@ -180,6 +142,7 @@ fn select_layers_json(
     counting: Option<Vec<String>>,
     decisions: bool,
     rule: &str,
+    threads: Option<usize>,
 ) -> PyResult<(String, Option<String>)> {
     let rule = match rule {
         "every_band" => ThresholdRule::EveryBand,
@@ -191,6 +154,7 @@ fn select_layers_json(
         }
     };
     let (schema, counting) = selection_input(schema_json, counting)?;
+    let mut memory = record_memory(threads)?;
     let choice = Choice {
         target_precision,
         minimum_answered,
@@ -198,15 +162,17 @@ fn select_layers_json(
     };
     let mut lines = decisions.then(String::new);
     let layers = guarded(|| {
-        select_layers_by_rule_with(
+        select_layers(
             &mut KeyMemory::default(),
-            &mut LexicalMemory::default(),
+            &mut memory,
             &schema,
             attribute,
             &records.records,
             choice,
-            rule,
-            &mut |r| push_record(&mut lines, r),
+            LayerOptions {
+                rule,
+                sink: Some(&mut |r| push_record(&mut lines, r)),
+            },
         )
     })?;
     Ok((to_json(&layers), lines))
@@ -223,7 +189,8 @@ fn push_record(lines: &mut Option<String>, r: &DecisionRecord) {
 /// the lookups the value layers leave at the attribute's thresholds. Returns them as JSON and, when `decisions` is true, the
 /// decision records with what the coarse level made of each lookup as JSON lines.
 #[pyfunction]
-#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, decisions=true))]
+#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, decisions=true, threads=None))]
+#[allow(clippy::too_many_arguments)]
 fn select_coarse_json(
     schema_json: &str,
     attribute: &str,
@@ -232,8 +199,10 @@ fn select_coarse_json(
     minimum_answered: usize,
     counting: Option<Vec<String>>,
     decisions: bool,
+    threads: Option<usize>,
 ) -> PyResult<(String, Option<String>)> {
     let (schema, counting) = selection_input(schema_json, counting)?;
+    let mut memory = record_memory(threads)?;
     let choice = Choice {
         target_precision,
         minimum_answered,
@@ -243,7 +212,7 @@ fn select_coarse_json(
     let layers = guarded(|| {
         select_coarse_with(
             &mut KeyMemory::default(),
-            &mut LexicalMemory::default(),
+            &mut memory,
             &schema,
             attribute,
             &records.records,
@@ -355,15 +324,19 @@ struct Decider {
 #[pymethods]
 impl Decider {
     /// A decider whose memories hold `records` (settled records of the schema, in settlement order), with the similar
-    /// record memory unless `similar_records` is false.
+    /// record memory unless `similar_records` is false, its lookups split among at most `threads` threads.
     #[new]
-    #[pyo3(signature = (schema_json, records=None, similar_records=true))]
-    fn new(schema_json: &str, records: Option<&Records>, similar_records: bool) -> PyResult<Self> {
+    #[pyo3(signature = (schema_json, records=None, similar_records=true, threads=None))]
+    fn new(
+        schema_json: &str,
+        records: Option<&Records>,
+        similar_records: bool,
+        threads: Option<usize>,
+    ) -> PyResult<Self> {
         let schema = schema(schema_json).map_err(invalid)?;
-        let mut inner = gil::decider::Decider::new(
-            KeyMemory::default(),
-            similar_records.then(LexicalMemory::default),
-        );
+        let memory = record_memory(threads)?;
+        let mut inner =
+            gil::decider::Decider::new(KeyMemory::default(), similar_records.then_some(memory));
         if let Some(records) = records {
             placed(&schema, &records.records)?;
             changing(|| inner.rebuild(&schema, &records.records))
@@ -469,8 +442,7 @@ impl AskPlanner {
     /// may hold the record but none settled after it.
     fn learn(&mut self, decider: PyRef<'_, Decider>, record_json: &str) -> PyResult<()> {
         usable(decider.broken, "decider")?;
-        let value: Value = serde_json::from_str(record_json).map_err(|e| invalid(e.to_string()))?;
-        let settled = record(&value).map_err(invalid)?;
+        let settled = record(record_json).map_err(invalid)?;
         let inner = &mut self.inner;
         guarded(|| inner.learn(&decider.inner, &settled))
     }
@@ -522,8 +494,7 @@ impl OpenRecord {
     #[staticmethod]
     fn reopen(schema_json: &str, record_json: &str) -> PyResult<Self> {
         let schema = schema(schema_json).map_err(invalid)?;
-        let value: Value = serde_json::from_str(record_json).map_err(|e| invalid(e.to_string()))?;
-        let saved = record(&value).map_err(invalid)?;
+        let saved = record(record_json).map_err(invalid)?;
         guarded(|| open_record::OpenRecord::reopen(schema, &saved)).map(|inner| Self {
             inner,
             broken: false,
@@ -700,6 +671,27 @@ fn tuning_promise_json(tuning_json: &str, attribute: &str, layers_json: &str) ->
     Ok(to_json(&tuned))
 }
 
+/// The schema with what `attribute`'s layer replay (JSON, as `select_layers_json` gives it) chose put on the attribute —
+/// on its coarse level when `coarse` — as JSON.
+#[pyfunction]
+fn schema_with_layers_json(
+    schema_json: &str,
+    attribute: &str,
+    layers_json: &str,
+    coarse: bool,
+) -> PyResult<String> {
+    let schema = schema(schema_json).map_err(invalid)?;
+    let layers: LayerThresholds = serde_json::from_str(layers_json)
+        .map_err(|e| invalid(format!("a layer replay does not read: {e}")))?;
+    let changed = if coarse {
+        schema.with_coarse(attribute, &layers)
+    } else {
+        schema.with_layers(attribute, &layers)
+    }
+    .map_err(invalid)?;
+    Ok(serde_json::to_string(&changed).expect("a schema serializes"))
+}
+
 /// The schema with the tuning's settings put back on its attributes, as JSON.
 #[pyfunction]
 fn tuning_apply_json(tuning_json: &str, schema_json: &str) -> PyResult<String> {
@@ -783,6 +775,7 @@ fn _gil(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<OpenRecord>()?;
     m.add_class::<AskPlanner>()?;
     m.add_function(wrap_pyfunction!(tuning_capture_json, m)?)?;
+    m.add_function(wrap_pyfunction!(schema_with_layers_json, m)?)?;
     m.add_function(wrap_pyfunction!(tuning_apply_json, m)?)?;
     m.add_function(wrap_pyfunction!(tuning_promise_json, m)?)?;
     m.add_function(wrap_pyfunction!(tuning_stale_json, m)?)?;

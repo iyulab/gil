@@ -1,8 +1,9 @@
 //! The settings the replays chose for a schema, as one record a host keeps between runs — and when they must be chosen
 //! again.
 //!
-//! A host runs the replays ([`crate::replay`]), sets what they chose on the schema's attributes, and captures the result
-//! with [`Tuning::capture`]. It stores the record however it likes (the fields are plain data), puts it back with
+//! A host runs the replays ([`crate::replay`]), puts what they chose on the schema ([`Schema::with_layers`]), and captures
+//! the result with [`Tuning::capture`] — and, with [`Tuning::promise`], what each layer promised, which
+//! [`Tuning::promise_of`] reads back for an answer by its source. It stores the record however it likes (the fields are plain data), puts it back with
 //! [`Tuning::apply`] at start-up, and asks [`Tuning::stale`] whether the choice still stands: it does not once this crate's
 //! version changed (a new version may score differently), once a setting the choice rests on changed (an attribute's
 //! domain, its dependencies, its votes …), or once the settled records grew or shrank by a tenth since the choice — the
@@ -10,6 +11,7 @@
 
 use std::collections::BTreeMap;
 
+use crate::decider::Source;
 use crate::replay::{LayerThresholds, fnv1a};
 use crate::schema::{AttributeRole, Schema};
 
@@ -110,6 +112,20 @@ impl Tuning {
             .unwrap_or_else(|| panic!("the tuning has no attribute '{attribute}'"));
         tuned.key_promise = layers.key.chosen.as_ref().map(|c| c.promise);
         tuned.memory_promise = layers.memory.chosen.as_ref().map(|c| c.promise);
+    }
+
+    /// What the layer an answer came from promised for `attribute`: the key layer's promise for an answer from the key
+    /// memory, the similar record layer's for one from the similar records; `None` for no answer, an outside judgement,
+    /// an attribute the tuning does not name, or a promise it did not record ([`Tuning::promise`]). It reads the value's
+    /// layers only: a coarse class offered instead ([`crate::decider::Answer::coarse`]) names the layer that backs the
+    /// class, and what the value's layer promised is not what the class's does.
+    pub fn promise_of(&self, attribute: &str, source: Source) -> Option<f64> {
+        let tuned = self.attributes.iter().find(|a| a.attribute == attribute)?;
+        match source {
+            Source::KeyMemory => tuned.key_promise,
+            Source::SimilarRecord => tuned.memory_promise,
+            Source::None | Source::External => None,
+        }
     }
 
     /// `schema` with the chosen settings put back on its attributes of the same names; attributes the tuning does not

@@ -3,12 +3,13 @@ name: Publish iyulab-gil
 # Publishes the Rust crate to crates.io and the Python package to PyPI when the core crate's version changes, and the
 # review crate (iyulab-gil-review) to crates.io when its version changes. The Python package takes the bindings
 # crate's version, which follows the core's; a version already on a registry is skipped there, so a rerun finishes
-# what an earlier run left undone. The .NET packages, Gil.Review among them, publish from publish.yml.
+# what an earlier run left undone. The C ABI plumbing (iyulab-ffi-support) has a version line of its own and goes to
+# crates.io the same way. The .NET packages, Gil.Review among them, publish from publish.yml.
 
 on:
   push:
     branches: [main, rust-core]
-    paths: [crates/gil/Cargo.toml, crates/gil-review/Cargo.toml]
+    paths: [crates/gil/Cargo.toml, crates/gil-review/Cargo.toml, crates/ffi-support/Cargo.toml]
   workflow_dispatch:
 
 permissions:
@@ -28,6 +29,7 @@ jobs:
       pypi: ${{ steps.registries.outputs.pypi }}
       review: ${{ steps.read.outputs.review }}
       review-crate: ${{ steps.registries.outputs.review-crate }}
+      ffi-support: ${{ steps.registries.outputs.ffi-support }}
     steps:
       - uses: actions/checkout@v7
 
@@ -48,6 +50,7 @@ jobs:
             exit 1
           fi
           echo "review=$review" >> "$GITHUB_OUTPUT"
+          echo "ffi=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/ffi-support/Cargo.toml)" >> "$GITHUB_OUTPUT"
 
       # 0.0.0 is the unreleased placeholder; anything else is published where the registry does not have it yet.
       - name: Check the registries
@@ -55,8 +58,16 @@ jobs:
         env:
           VERSION: ${{ steps.read.outputs.version }}
           REVIEW: ${{ steps.read.outputs.review }}
+          FFI: ${{ steps.read.outputs.ffi }}
         run: |
           agent="iyulab-gil-release (https://github.com/iyulab/gil)"
+          if [ "$FFI" = "0.0.0" ]; then
+            echo "ffi-support=false" >> "$GITHUB_OUTPUT"
+          else
+            ffi=$(curl -s -o /dev/null -w '%{http_code}' -A "$agent" "https://crates.io/api/v1/crates/iyulab-ffi-support/$FFI")
+            echo "crates.io iyulab-ffi-support $ffi (200 = already published)"
+            echo "ffi-support=$([ "$ffi" = 200 ] && echo false || echo true)" >> "$GITHUB_OUTPUT"
+          fi
           if [ "$REVIEW" = "0.0.0" ]; then
             echo "review-crate=false" >> "$GITHUB_OUTPUT"
           else
@@ -90,6 +101,20 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: cargo publish --locked -p iyulab-gil
+
+  ffi-support:
+    needs: version
+    if: needs.version.outputs.ffi-support == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install stable --profile minimal && rustup default stable
+      - run: cargo test --locked -p iyulab-ffi-support
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked -p iyulab-ffi-support
 
   review-crate:
     needs: version

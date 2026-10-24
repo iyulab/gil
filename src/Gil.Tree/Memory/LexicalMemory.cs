@@ -27,13 +27,21 @@ public sealed class LexicalMemory : IMemory, IDisposable
 
     /// <param name="minGram">The shortest character n-gram.</param>
     /// <param name="maxGram">The longest character n-gram.</param>
-    public unsafe LexicalMemory(int minGram = 2, int maxGram = 3)
+    /// <param name="threads">The most threads one lookup over a large memory is split among; null for as many as the
+    /// machine offers, up to eight; 1 keeps every lookup on the caller's thread. Lookups find the same whatever it
+    /// is.</param>
+    public unsafe LexicalMemory(int minGram = 2, int maxGram = 3, int? threads = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(minGram, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(maxGram, minGram);
+        if (threads is { } most)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(most, 1, nameof(threads));
+        }
+
         Native.EnsureCompatible();
         nint output;
-        Native.Check(Native.LexicalMemoryNew((nuint)minGram, (nuint)maxGram, &output));
+        Native.Check(Native.LexicalMemoryNew((nuint)minGram, (nuint)maxGram, (nuint)(threads ?? 0), &output));
         _handle = LexicalMemoryHandle.Of(output);
     }
 

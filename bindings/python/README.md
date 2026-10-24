@@ -83,6 +83,24 @@ hold.
 thresholds, _ = gil.select_layers(schema, "team", records, target_precision=0.8, rule="pooled")
 ```
 
+Records settled together — several at once from one source — can be right or wrong together, and a promise taken on
+records that batch mates span is then too high. Give each record its `batch` and `select_layers` adds `batches`: the
+precision of thresholds chosen on half of the latest batches and counted on the other half (`across_batches`), the same
+split by record (`across_records`), and how many answers a batch holds and how much they are right or wrong together
+(`batch_size`, `correlation`, `design_effect`). Read `across_batches` as the promise only where `across_records` stands
+above it and the design effect is well above one. The thresholds are chosen as before.
+
+A promise bounds all the answers its thresholds give, not a batch's first record apart. Where a batch comes from one
+source at once and its records show nearly the same things, the first record has nothing in memory to go on: on device
+event reports its answers fell below the promise by 5.0 and 2.6 points in two quarters, while on food inspections and
+vehicle complaints they held it. If a new batch's first record matters, count its answers apart with `usage`.
+
+```python
+records = gil.records({**r, "batch": r["import_id"]} for r in rows)
+thresholds, _ = gil.select_layers(schema, "team", records, target_precision=0.8)
+check = thresholds.get("batches")
+```
+
 ## Answering a record while its values arrive
 
 A decider holds the settled records; an open record asks it each time a value arrives or is settled, and hands back
@@ -129,9 +147,10 @@ for advice in planner.advise(answer, values):  # the open attributes, highest ga
 
 ## Keeping a tuning
 
-How far to trust each layer is chosen by replaying the settled records. Put the choice on the schema — the key layer's
-`threshold` as `key_threshold`, the similar record layer's as `memory_threshold` with its `similarity_floor` as
-`memory_floor` — and keep it as a tuning with what each threshold promised:
+How far to trust each layer is chosen by replaying the settled records. Put the choice on the schema with
+`Schema.with_layers` — the key layer's `threshold` as `key_threshold`, the similar record layer's as `memory_threshold`
+with its `similarity_floor` as `memory_floor` (`with_coarse` for a coarse level's) — and keep it as a tuning with what
+each threshold promised:
 
 ```python
 import json
@@ -141,15 +160,9 @@ TARGET = 0.8
 
 
 def tune(records):
-    layers, _ = gil.select_layers(
-        gil.Schema.from_dict(definition), "team", records, target_precision=TARGET, decisions=False
-    )
-    key, memory = layers["key"]["chosen"], layers["memory"]["chosen"]
-    team = next(a for a in definition["attributes"] if a["name"] == "team")
-    team["key_threshold"] = key["threshold"] if key else None
-    team["memory_threshold"] = memory["threshold"] if memory else None
-    team["memory_floor"] = memory["similarity_floor"] if memory else None
-    tuning = gil.capture_tuning(gil.Schema.from_dict(definition), len(records), TARGET)
+    base = gil.Schema.from_dict(definition)
+    layers, _ = gil.select_layers(base, "team", records, target_precision=TARGET, decisions=False)
+    tuning = gil.capture_tuning(base.with_layers("team", layers), len(records), TARGET)
     return gil.record_promise(tuning, "team", layers)
 
 
@@ -169,13 +182,12 @@ if gil.tuning_stale(tuning, base, len(records)) is not None:
 schema = gil.apply_tuning(tuning, base)
 ```
 
-An answer does not carry its promise; the promise is its layer's, read from the tuning by the answer's `source`.
+An answer does not carry its promise; the promise is its layer's, which `gil.promise_of` reads from the tuning by the
+answer's `source`.
 `gil.usage(decisions)` counts, without content, how the answers shown were settled and the precision they realized —
 `right_weight / judged_weight`, to read against `promise_sum / promised`:
 
 ```python
-team = next(a for a in tuning["attributes"] if a["attribute"] == "team")
-promise = {"KeyMemory": team["key_promise"], "SimilarRecord": team["memory_promise"]}
 decider = gil.Decider(schema, records)
 
 answer = decider.answer(schema, "t9", "team", {"product": "vpn", "summary": "drops again"})
@@ -186,7 +198,7 @@ decisions.append({
     "answer": shown,
     "settled": settled,
     "settlement": "Enter" if shown is None else "Accept" if settled == shown else "Correct",
-    "promise": promise.get(answer["source"]) if shown is not None else None,
+    "promise": gil.promise_of(tuning, "team", answer["source"]) if shown is not None else None,
 })
 
 counts = gil.usage(decisions)["team"]

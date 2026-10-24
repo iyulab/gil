@@ -34,14 +34,21 @@ pub const POOLED_RECENT_ANSWERS: usize = 1_000;
 /// How many key scores [`ThresholdRule::Pooled`] tries as thresholds, at most, besides none.
 const POOLED_KEY_CANDIDATES: usize = 200;
 
-/// How [`select_layers_by_rule`] chooses an attribute's two thresholds.
+/// How many times [`BatchCheck`] splits the latest records in two, each split chosen on one half and counted on the other,
+/// both ways.
+pub const BATCH_SPLITS: usize = 20;
+
+/// The seed of [`BatchCheck`]'s splits, so the same records split the same way on every run.
+const BATCH_SEED: u64 = 0x6769_6c5f_6261_7463;
+
+/// How [`select_layers`] chooses an attribute's two thresholds ([`LayerOptions::rule`]).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum ThresholdRule {
     /// Each layer on its own: the lowest threshold down to which every band of its answers meets the target precision.
     /// No band of weak answers is admitted on the strength of good ones above it, so the attribute answers less than it
-    /// could while keeping its promise. The rule of [`select_layers`].
+    /// could while keeping its promise. The default.
     #[default]
     EveryBand,
     /// The two thresholds together, as the pair that answers the most of the attribute's latest lookups while the
@@ -870,6 +877,60 @@ pub struct LayerThresholds {
     pub key: ThresholdReplay,
     /// For the memory threshold, replayed on the lookups the chosen key threshold would not have answered.
     pub memory: ThresholdReplay,
+    /// How much the batches the latest records were settled in flatter the promise; `None` when none of them names its
+    /// batch ([`Record::batch`]).
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub batches: Option<BatchCheck>,
+}
+
+/// What the batches among the latest [`RECENT_RECORDS`] records do to a promise. Records settled together — several at
+/// once from one source, alike in what they show — can be right or wrong together, and the replay then counts more
+/// independent answers than there are. The latest records are split in two [`BATCH_SPLITS`] times; on each split the
+/// thresholds are chosen on one half, by the same rule, and the answers they give on the other half are counted, both
+/// ways. Split by batch, no batch is on both sides; split by record, batch mates are. Where `across_records` is above
+/// `across_batches` by more than chance, the batches flatter a promise taken on records they span, and `across_batches`
+/// is the closer count of what the next batches will get. Both are counts of the choosing, not of the thresholds chosen
+/// on all the records: on records whose batches are not right or wrong together, they can sit above the precision the
+/// next records get by more than the promise does. A record that names no batch is a batch of its own.
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct BatchCheck {
+    /// The share of the answers counted across halves of the batches that matched, weighted; `None` when no half chose
+    /// thresholds that answered.
+    pub across_batches: Option<f64>,
+    /// How many answers `across_batches` counts, over every split and both ways.
+    pub across_batches_answered: usize,
+    /// The share of the answers counted across halves of the records that matched, weighted; `None` as for
+    /// `across_batches`.
+    pub across_records: Option<f64>,
+    /// How many answers `across_records` counts.
+    pub across_records_answered: usize,
+    /// How many batches the latest records came in, a record that names none counting as one.
+    pub batches: usize,
+    /// How many answers a batch holding more than one holds, in the mean that weighs batch sizes as the correlation does
+    /// (n₀ of a one-way analysis of variance); `None` when fewer than two batches hold more than one answer.
+    pub batch_size: Option<f64>,
+    /// How much the answers of one batch are right or wrong together, under the thresholds chosen on all the records:
+    /// the intraclass correlation ICC(1) of whether an answer matched, over the batches holding more than one answer;
+    /// `None` as for `batch_size`.
+    pub correlation: Option<f64>,
+    /// `1 + (batch_size − 1) × correlation` — how many answers count as one independent answer. Near one, batches flatter
+    /// nothing; well above it (seven on public device event reports that flattered a promise by 1.6 points), they do.
+    pub design_effect: Option<f64>,
+}
+
+/// How [`select_layers`] chooses and what it reports along the way.
+#[derive(Default)]
+pub struct LayerOptions<'a> {
+    /// How the two thresholds are chosen.
+    pub rule: ThresholdRule,
+    /// Handed the decision record of every record the replay asks about, in settlement order: what the key layer and
+    /// the similar record layer made of it whatever the thresholds, and what it was settled as. The thresholds are
+    /// chosen from exactly these records.
+    pub sink: Option<&'a mut dyn FnMut(&DecisionRecord)>,
 }
 
 /// What the similar record layer made of one lookup: the vote's score, whether its value matched, the similarity of
@@ -892,6 +953,8 @@ struct Step {
     vote: Option<Vote>,
     weight: f64,
     order: usize,
+    /// The batch the record was settled in, when it names one.
+    batch: Option<String>,
     /// For a coarse replay: the level as the keys and the vote back it, and whether the attribute's value layers answered.
     coarse: Option<CoarseStep>,
 }
@@ -917,6 +980,15 @@ const FLOOR_SHARE: f64 = 0.01;
 /// threshold is chosen on every lookup; the memory threshold on the lookups the chosen key threshold would not have
 /// answered, and with more than one voter each memory choice carries its similarity floor.
 ///
+/// By [`ThresholdRule::Pooled`] each layer's `chosen` is that layer's half of the pair, `None` when the pair leaves the
+/// layer silent; its precision, answer rate and promise are the layer's own, over the whole replay, and the precision of
+/// the two layers' answers together held the target on the lookups the pair was chosen on. `most_precise` is as under
+/// [`ThresholdRule::EveryBand`]. The attribute's thresholds as they stand in `schema` (`key_threshold`,
+/// `memory_threshold`, `memory_floor`) decide only how far back the rule reaches.
+///
+/// When any of the latest [`RECENT_RECORDS`] records names its batch, `batches` says what the batches do to the promise
+/// ([`BatchCheck`]).
+///
 /// # Panics
 /// When `target_precision` is outside (0, 1], `minimum_answered` is 0, the attribute is not decided, or it takes several
 /// values — the similar record layer does not answer such an attribute.
@@ -927,90 +999,7 @@ pub fn select_layers(
     attribute: &str,
     records: &[Record],
     choice: Choice,
-) -> LayerThresholds {
-    select_layers_by_rule_with(
-        key_memory,
-        memory,
-        schema,
-        attribute,
-        records,
-        choice,
-        ThresholdRule::EveryBand,
-        &mut |_| {},
-    )
-}
-
-/// As [`select_layers`], by the rule given. With [`ThresholdRule::Pooled`] each layer's `chosen` is that layer's half of
-/// the pair, `None` when the pair leaves the layer silent; its precision, answer rate and promise are the layer's own,
-/// over the whole replay, and the precision of the two layers' answers together held the target on the lookups the pair
-/// was chosen on. `most_precise` is as under [`ThresholdRule::EveryBand`]. The attribute's thresholds as they stand in
-/// `schema` (`key_threshold`, `memory_threshold`, `memory_floor`) decide only how far back the rule reaches.
-///
-/// # Panics
-/// As [`select_layers`].
-pub fn select_layers_by_rule(
-    key_memory: &mut KeyMemory,
-    memory: &mut LexicalMemory,
-    schema: &Schema,
-    attribute: &str,
-    records: &[Record],
-    choice: Choice,
-    rule: ThresholdRule,
-) -> LayerThresholds {
-    select_layers_by_rule_with(
-        key_memory,
-        memory,
-        schema,
-        attribute,
-        records,
-        choice,
-        rule,
-        &mut |_| {},
-    )
-}
-
-/// As [`select_layers`], handing `sink` the decision record of every record the replay asks about, in settlement
-/// order: what the key layer and the similar record layer made of it whatever the thresholds, and what it was settled
-/// as. The thresholds are chosen from exactly these records.
-///
-/// # Panics
-/// As [`select_layers`].
-pub fn select_layers_with(
-    key_memory: &mut KeyMemory,
-    memory: &mut LexicalMemory,
-    schema: &Schema,
-    attribute: &str,
-    records: &[Record],
-    choice: Choice,
-    sink: &mut dyn FnMut(&DecisionRecord),
-) -> LayerThresholds {
-    select_layers_by_rule_with(
-        key_memory,
-        memory,
-        schema,
-        attribute,
-        records,
-        choice,
-        ThresholdRule::EveryBand,
-        sink,
-    )
-}
-
-/// As [`select_layers_by_rule`], handing `sink` the decision record of every record the replay asks about, as
-/// [`select_layers_with`] does.
-///
-/// # Panics
-/// As [`select_layers`].
-#[allow(clippy::too_many_arguments)]
-pub fn select_layers_by_rule_with(
-    key_memory: &mut KeyMemory,
-    memory: &mut LexicalMemory,
-    schema: &Schema,
-    attribute: &str,
-    records: &[Record],
-    choice: Choice,
-    rule: ThresholdRule,
-    sink: &mut dyn FnMut(&DecisionRecord),
+    options: LayerOptions,
 ) -> LayerThresholds {
     choice.check();
     let definition = schema.attribute(attribute);
@@ -1023,6 +1012,7 @@ pub fn select_layers_by_rule_with(
         "'{attribute}' takes several values; the similar record layer does not answer it"
     );
 
+    let mut ignore = |_: &DecisionRecord| {};
     let (steps, latest) = replay(
         key_memory,
         memory,
@@ -1030,9 +1020,31 @@ pub fn select_layers_by_rule_with(
         attribute,
         records,
         choice.counting,
-        Replaying::Values(sink),
+        Replaying::Values(options.sink.unwrap_or(&mut ignore)),
     );
+    let thresholds = layers(&steps, latest, definition, choice, options.rule);
+    let batches = batch_check(
+        &steps,
+        latest,
+        definition,
+        choice,
+        options.rule,
+        &thresholds,
+    );
+    LayerThresholds {
+        batches,
+        ..thresholds
+    }
+}
 
+/// The layer thresholds chosen on a layers replay's steps, `batches` left out.
+fn layers(
+    steps: &[Step],
+    latest: usize,
+    definition: &crate::schema::Attribute,
+    choice: Choice,
+    rule: ThresholdRule,
+) -> LayerThresholds {
     let keyed: Vec<&Step> = steps.iter().filter(|s| s.key_looked).collect();
     let answers: Vec<Answer> = keyed
         .iter()
@@ -1059,7 +1071,7 @@ pub fn select_layers_by_rule_with(
     let mut pooled_memory = None;
     if rule == ThresholdRule::Pooled {
         let (key_threshold, similar_threshold) = pooled(
-            &steps,
+            steps,
             definition,
             choice.target_precision,
             choice.minimum_answered,
@@ -1105,7 +1117,11 @@ pub fn select_layers_by_rule_with(
         choice.minimum_answered,
         pooled_memory,
     );
-    LayerThresholds { key, memory }
+    LayerThresholds {
+        key,
+        memory,
+        batches: None,
+    }
 }
 
 /// [`ThresholdRule::Pooled`]: of the attribute's latest lookups, reaching back for answers as the rule says, the key and
@@ -1263,20 +1279,211 @@ fn holds(
 
 /// Whether the attribute's thresholds as they stand would have answered the lookup, as a suggestion does.
 fn answered_as_it_stands(step: &Step, definition: &crate::schema::Attribute) -> bool {
-    step.key_looked
-        && step
-            .key
-            .as_ref()
-            .is_some_and(|k| !k.caught && definition.key_threshold.is_some_and(|t| k.score >= t))
-        || step.looked
-            && !step.key.as_ref().is_some_and(|k| k.caught)
-            && step.vote.is_some_and(|v| {
-                definition.memory_threshold.is_some_and(|t| v.score >= t)
-                    && !(v.voted
-                        && definition
-                            .memory_floor
-                            .is_some_and(|floor| v.nearest < floor))
-            })
+    answer(
+        step,
+        definition.key_threshold,
+        definition.memory_threshold,
+        definition.memory_floor,
+    )
+    .is_some()
+}
+
+/// Whether the lookup's answer at these thresholds matched, as a suggestion would have answered it; `None` when it
+/// would not have been answered — a lookup under a key that settled a value to catch never is.
+fn answer(
+    step: &Step,
+    key_threshold: Option<f64>,
+    memory_threshold: Option<f64>,
+    memory_floor: Option<f64>,
+) -> Option<bool> {
+    if step.key.as_ref().is_some_and(|k| k.caught) {
+        return None;
+    }
+
+    if let (true, Some(k), Some(t)) = (step.key_looked, step.key.as_ref(), key_threshold)
+        && k.score >= t
+    {
+        return Some(k.matches);
+    }
+
+    match (step.vote, memory_threshold) {
+        (Some(v), Some(t))
+            if step.looked
+                && v.score >= t
+                && !(v.voted && memory_floor.is_some_and(|floor| v.nearest < floor)) =>
+        {
+            Some(v.correct)
+        }
+        _ => None,
+    }
+}
+
+/// The thresholds a layers choice answers with: the key threshold, the memory threshold and its floor.
+fn answering(thresholds: &LayerThresholds) -> (Option<f64>, Option<f64>, Option<f64>) {
+    let memory = thresholds.memory.chosen.as_ref();
+    (
+        thresholds.key.chosen.as_ref().map(|c| c.threshold),
+        memory.map(|c| c.threshold),
+        memory.and_then(|c| c.similarity_floor),
+    )
+}
+
+/// [`BatchCheck`] over the steps of the latest [`RECENT_RECORDS`] records; `None` when none of them names its batch.
+fn batch_check(
+    steps: &[Step],
+    latest: usize,
+    definition: &crate::schema::Attribute,
+    choice: Choice,
+    rule: ThresholdRule,
+    thresholds: &LayerThresholds,
+) -> Option<BatchCheck> {
+    let recent: Vec<&Step> = steps
+        .iter()
+        .filter(|s| s.order as i64 > latest as i64 - RECENT_RECORDS as i64)
+        .collect();
+    if !recent.iter().any(|s| s.batch.is_some()) {
+        return None;
+    }
+
+    // Each step's batch as a number, in the order the batches first come; a step that names none is one of its own.
+    let mut numbers: HashMap<&str, usize> = HashMap::new();
+    let mut batch_of = Vec::with_capacity(recent.len());
+    let mut batches = 0_usize;
+    for step in &recent {
+        let number = match step.batch.as_deref() {
+            Some(name) => *numbers.entry(name).or_insert_with(|| {
+                batches += 1;
+                batches - 1
+            }),
+            None => {
+                batches += 1;
+                batches - 1
+            }
+        };
+        batch_of.push(number);
+    }
+
+    let mut random = SplitMix64(BATCH_SEED);
+    let mut across_batches = Tally::default();
+    let mut across_records = Tally::default();
+    for _ in 0..BATCH_SPLITS {
+        let by_batch: Vec<bool> = (0..batches).map(|_| random.coin()).collect();
+        let halves: Vec<bool> = batch_of.iter().map(|&b| by_batch[b]).collect();
+        across_batches.cross(&recent, &halves, latest, definition, choice, rule);
+        let halves: Vec<bool> = recent.iter().map(|_| random.coin()).collect();
+        across_records.cross(&recent, &halves, latest, definition, choice, rule);
+    }
+
+    // Whether each answer under the thresholds chosen on all the records matched, by batch.
+    let (key, similar, floor) = answering(thresholds);
+    let mut by_batch: BTreeMap<usize, (usize, usize)> = BTreeMap::new();
+    for (step, &batch) in recent.iter().zip(&batch_of) {
+        if let Some(correct) = answer(step, key, similar, floor) {
+            let (count, right) = by_batch.entry(batch).or_insert((0, 0));
+            *count += 1;
+            *right += usize::from(correct);
+        }
+    }
+    let (batch_size, correlation) = intraclass(by_batch.values().copied().filter(|(n, _)| *n >= 2));
+
+    Some(BatchCheck {
+        across_batches: across_batches.precision(),
+        across_batches_answered: across_batches.answered,
+        across_records: across_records.precision(),
+        across_records_answered: across_records.answered,
+        batches,
+        batch_size,
+        correlation,
+        design_effect: batch_size
+            .zip(correlation)
+            .map(|(n, icc)| 1.0 + ((n - 1.0) * icc)),
+    })
+}
+
+/// Answers counted across halves: how many, their weight and the weight of those that matched.
+#[derive(Default)]
+struct Tally {
+    answered: usize,
+    weight: f64,
+    correct: f64,
+}
+
+impl Tally {
+    /// Chooses on each half of `steps` (`halves` says which) and counts the other half's answers at its thresholds.
+    fn cross(
+        &mut self,
+        steps: &[&Step],
+        halves: &[bool],
+        latest: usize,
+        definition: &crate::schema::Attribute,
+        choice: Choice,
+        rule: ThresholdRule,
+    ) {
+        for side in [false, true] {
+            let fitted: Vec<Step> = steps
+                .iter()
+                .zip(halves)
+                .filter(|(_, h)| **h == side)
+                .map(|(s, _)| (*s).clone())
+                .collect();
+            let (key, similar, floor) =
+                answering(&layers(&fitted, latest, definition, choice, rule));
+            for (step, _) in steps.iter().zip(halves).filter(|(_, h)| **h != side) {
+                if let Some(correct) = answer(step, key, similar, floor) {
+                    self.answered += 1;
+                    self.weight += step.weight;
+                    self.correct += if correct { step.weight } else { 0.0 };
+                }
+            }
+        }
+    }
+
+    fn precision(&self) -> Option<f64> {
+        (self.weight > 0.0).then(|| self.correct / self.weight)
+    }
+}
+
+/// The n₀-adjusted mean size and the ICC(1) of a one-way analysis of variance over groups given as (answers, matched);
+/// both `None` with fewer than two groups or no answer beyond one per group.
+fn intraclass(groups: impl Iterator<Item = (usize, usize)>) -> (Option<f64>, Option<f64>) {
+    let groups: Vec<(usize, usize)> = groups.collect();
+    let k = groups.len();
+    let n: usize = groups.iter().map(|(count, _)| count).sum();
+    if k < 2 || n <= k {
+        return (None, None);
+    }
+
+    let right: usize = groups.iter().map(|(_, right)| right).sum();
+    let grand = right as f64 / n as f64;
+    let (mut between, mut within, mut squares) = (0.0_f64, 0.0_f64, 0.0_f64);
+    for &(count, right) in &groups {
+        let (count, right) = (count as f64, right as f64);
+        let mean = right / count;
+        between += count * (mean - grand) * (mean - grand);
+        // Of 0/1 values: Σ (y − mean)² = right − count · mean².
+        within += right - (count * mean * mean);
+        squares += count * count;
+    }
+
+    let msb = between / (k - 1) as f64;
+    let msw = within / (n - k) as f64;
+    let n0 = (n as f64 - (squares / n as f64)) / (k - 1) as f64;
+    let denominator = msb + ((n0 - 1.0) * msw);
+    let icc = (denominator > 0.0).then(|| (msb - msw) / denominator);
+    (Some(n0), icc)
+}
+
+/// SplitMix64 — a small generator with a fixed seed, so a split comes out the same on every platform.
+struct SplitMix64(u64);
+
+impl SplitMix64 {
+    fn coin(&mut self) -> bool {
+        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        (z ^ (z >> 31)) & 1 == 1
+    }
 }
 
 /// Chooses the thresholds of `attribute`'s coarse level in the order a suggestion offers it: on the lookups the attribute's
@@ -1400,7 +1607,11 @@ pub fn select_coarse_with(
         choice.minimum_answered,
         None,
     );
-    LayerThresholds { key, memory }
+    LayerThresholds {
+        key,
+        memory,
+        batches: None,
+    }
 }
 
 /// What a replay is for: the value layers or the coarse level as well, handing each lookup's decision record to a sink.
@@ -1420,6 +1631,38 @@ fn replay(
     counting: Option<&[SettlementKind]>,
     replaying: Replaying,
 ) -> (Vec<Step>, usize) {
+    let mut state = ReplayState::default();
+    carry_on(
+        &mut state, key_memory, memory, schema, attribute, records, counting, replaying,
+    );
+    (state.steps, state.order)
+}
+
+/// Where a replay stands: its steps, the records the record memory holds and the case each represents, how many
+/// records it has gone through, and the last of them in settlement order.
+#[derive(Default)]
+struct ReplayState {
+    steps: Vec<Step>,
+    remembered: usize,
+    cases: HashMap<String, String>,
+    case_of: HashMap<String, String>,
+    order: usize,
+    last: Option<(i64, String)>,
+}
+
+/// Carries a replay on through `records`, all settled after those it has gone through, with the memories it left —
+/// the same steps, and the same memories, as replaying them all from the start.
+#[allow(clippy::too_many_arguments)]
+fn carry_on(
+    state: &mut ReplayState,
+    key_memory: &mut KeyMemory,
+    memory: &mut LexicalMemory,
+    schema: &Schema,
+    attribute: &str,
+    records: &[Record],
+    counting: Option<&[SettlementKind]>,
+    replaying: Replaying,
+) {
     let (coarse, sink) = match replaying {
         Replaying::Values(sink) => (false, sink),
         Replaying::Coarse(sink) => (true, sink),
@@ -1434,11 +1677,17 @@ fn replay(
             .then_with(|| a.id.cmp(&b.id))
     });
 
-    let mut steps = Vec::new();
-    let mut remembered = 0_usize;
-    let mut cases: HashMap<String, String> = HashMap::new(); // case → the record representing it
-    let mut case_of: HashMap<String, String> = HashMap::new(); // record → the case it represents
-    let mut order = 0;
+    if let (Some(last), Some(first)) = (&state.last, ordered.first()) {
+        assert!(
+            (first.settled_at, first.id.as_str()) > (last.0, last.1.as_str()),
+            "records carried on with must be settled after those replayed"
+        );
+    }
+    let mut steps = std::mem::take(&mut state.steps);
+    let mut remembered = state.remembered;
+    let mut cases = std::mem::take(&mut state.cases); // case → the record representing it
+    let mut case_of = std::mem::take(&mut state.case_of); // record → the case it represents
+    let mut order = state.order;
     for record in &ordered {
         order += 1;
         let Some(settled) = record.values.get(attribute) else {
@@ -1579,6 +1828,7 @@ fn replay(
             vote,
             weight,
             order,
+            batch: record.batch.clone(),
             coarse: coarse_step,
         });
         key_memory.put(schema, record);
@@ -1596,7 +1846,16 @@ fn replay(
         remembered += 1;
     }
 
-    (steps, order)
+    if let Some(last) = ordered.last() {
+        state.last = Some((last.settled_at, last.id.clone()));
+    }
+    (
+        state.steps,
+        state.remembered,
+        state.cases,
+        state.case_of,
+        state.order,
+    ) = (steps, remembered, cases, case_of, order);
 }
 
 /// The similarity choice over the given lookups: every one counts, answered or not. With more than one voter each
@@ -1944,7 +2203,166 @@ fn likeliest(unseen: u64, totals: &[f64]) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use super::fnv1a;
+    use super::{Choice, ReplayState, Replaying, ThresholdRule, carry_on, layers};
+    use super::{fnv1a, intraclass};
+    use crate::decision_record::DecisionRecord;
+    use crate::key_memory::KeyMemory;
+    use crate::lexical_memory::LexicalMemory;
+    use crate::schema::{Attribute, AttributeRole, Record, Schema};
+    use std::collections::BTreeMap;
+
+    /// Records alike in their products and apart in their summaries, some settled again later under the same id.
+    fn settled(n: usize) -> Vec<Record> {
+        let teams = ["network", "billing", "hardware", "auth"];
+        let words = [
+            "vpn drops",
+            "invoice twice",
+            "screen broken",
+            "password reset",
+            "slow link",
+            "refund",
+        ];
+        (0..n)
+            .map(|i| {
+                let id = if i % 9 == 8 {
+                    format!("t{}", i / 3)
+                } else {
+                    format!("t{i}")
+                };
+                let team = teams[(i * 7 + i / 5) % teams.len()];
+                Record {
+                    id,
+                    values: BTreeMap::from([
+                        ("product".into(), format!("p{}", i % 5)),
+                        (
+                            "summary".into(),
+                            format!("{} {}", words[(i * 3) % words.len()], i % 4),
+                        ),
+                        ("team".into(), team.into()),
+                    ]),
+                    settled_at: 1_000 + i as i64,
+                    ..Record::default()
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_replay_carried_on_is_the_replay_from_the_start() {
+        let schema = Schema::new(
+            "ticket",
+            vec![
+                Attribute::new("product", AttributeRole::Observed),
+                Attribute::new("summary", AttributeRole::Observed),
+                Attribute::new("team", AttributeRole::Decided),
+            ],
+        )
+        .expect("a valid schema");
+        let records = settled(600);
+        let choice = Choice {
+            target_precision: 0.8,
+            minimum_answered: 10,
+            counting: None,
+        };
+        let definition = schema.attribute("team");
+
+        let run = |parts: &[&[Record]]| {
+            let (mut keys, mut memory, mut state) = (
+                KeyMemory::default(),
+                LexicalMemory::default(),
+                ReplayState::default(),
+            );
+            let mut lines: Vec<String> = Vec::new();
+            for part in parts {
+                let mut sink = |r: &DecisionRecord| lines.push(format!("{r:?}"));
+                carry_on(
+                    &mut state,
+                    &mut keys,
+                    &mut memory,
+                    &schema,
+                    "team",
+                    part,
+                    None,
+                    Replaying::Values(&mut sink),
+                );
+            }
+            let chosen = layers(
+                &state.steps,
+                state.order,
+                definition,
+                choice,
+                ThresholdRule::EveryBand,
+            );
+            (format!("{chosen:?}"), lines)
+        };
+        let whole = run(&[&records]);
+        for at in [1, 37, 300, 599] {
+            assert_eq!(
+                run(&[&records[..at], &records[at..]]),
+                whole,
+                "split at {at}"
+            );
+        }
+        assert_eq!(
+            run(&[&records[..100], &records[100..400], &records[400..]]),
+            whole
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "settled after those replayed")]
+    fn a_replay_is_not_carried_on_with_earlier_records() {
+        let schema = Schema::new(
+            "ticket",
+            vec![
+                Attribute::new("summary", AttributeRole::Observed),
+                Attribute::new("team", AttributeRole::Decided),
+            ],
+        )
+        .expect("a valid schema");
+        let records = settled(20);
+        let (mut keys, mut memory, mut state) = (
+            KeyMemory::default(),
+            LexicalMemory::default(),
+            ReplayState::default(),
+        );
+        let mut ignore = |_: &DecisionRecord| {};
+        carry_on(
+            &mut state,
+            &mut keys,
+            &mut memory,
+            &schema,
+            "team",
+            &records[10..],
+            None,
+            Replaying::Values(&mut ignore),
+        );
+        carry_on(
+            &mut state,
+            &mut keys,
+            &mut memory,
+            &schema,
+            "team",
+            &records[..10],
+            None,
+            Replaying::Values(&mut ignore),
+        );
+    }
+
+    #[test]
+    fn intraclass_matches_a_one_way_analysis_of_variance() {
+        // Batches of (answers, matched): 1 1 1 0 · 0 0 1 · 1 1 · 0 1 0 0 0 — the same ICC(1) and n₀ as a one-way ANOVA on
+        // the 0/1 values (the experiments' `batch_icc.icc1` gives 0.215697674… and 3.380952…).
+        let (n0, icc) = intraclass([(4, 3), (3, 1), (2, 2), (5, 1)].into_iter());
+        assert!((n0.unwrap() - 3.380_952_380_952_381).abs() < 1e-12);
+        assert!((icc.unwrap() - 0.215_697_674_418_604_63).abs() < 1e-12);
+        // One batch, or no answer beyond one per batch, says nothing.
+        assert_eq!(intraclass([(5, 2)].into_iter()), (None, None));
+        assert_eq!(intraclass([(1, 1), (1, 0)].into_iter()), (None, None));
+        // Every answer alike: no variance at all, so no correlation, but a size.
+        let (n0, icc) = intraclass([(3, 3), (3, 3)].into_iter());
+        assert_eq!((n0, icc), (Some(3.0), None));
+    }
 
     #[test]
     fn fnv1a_matches_the_published_vectors() {

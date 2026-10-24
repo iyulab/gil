@@ -25,6 +25,10 @@ public static class Replay
     /// reaches back for when its latest lookups hold fewer. The core's <c>POOLED_RECENT_ANSWERS</c>.</summary>
     public const int PooledRecentAnswers = 1_000;
 
+    /// <summary>How many times <see cref="BatchCheck"/> splits the latest records in two. The core's
+    /// <c>BATCH_SPLITS</c>.</summary>
+    public const int BatchSplits = 20;
+
     /// <summary>The key and similar record thresholds for <paramref name="attribute"/>, with the replay's decision
     /// records when <see cref="SelectionOptions.Decisions"/> asks for them.</summary>
     /// <exception cref="ArgumentException">The options are out of range, or the attribute is not decided.</exception>
@@ -132,6 +136,12 @@ public static class Replay
             writer.WriteString("rule", options.Rule == ThresholdRule.Pooled ? "pooled" : "every_band");
             writer.WriteBoolean("decisions", options.Decisions);
             writer.WriteNumber("typed_longest", options.TypedLongest);
+            if (options.Threads is { } threads)
+            {
+                ArgumentOutOfRangeException.ThrowIfLessThan(threads, 1, nameof(options));
+                writer.WriteNumber("threads", threads);
+            }
+
             writer.WriteEndObject();
         }
 

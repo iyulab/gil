@@ -12,6 +12,7 @@ __all__ = [
     "OpenRecord",
     "Records",
     "check_schema",
+    "schema_with_layers_json",
     "select_coarse_json",
     "select_key_concentrations_json",
     "select_key_fields_json",
@@ -54,6 +55,7 @@ def select_layers_json(
     counting: list[str] | None = None,
     decisions: bool = True,
     rule: str = "every_band",
+    threads: int | None = None,
 ) -> tuple[str, str | None]:
     """The attribute's key and memory threshold replays as JSON and, when `decisions` is true, the decision records as JSON lines."""
 
@@ -76,6 +78,7 @@ def select_coarse_json(
     minimum_answered: int,
     counting: list[str] | None = None,
     decisions: bool = True,
+    threads: int | None = None,
 ) -> tuple[str, str | None]:
     """The attribute's coarse level thresholds as JSON and, when `decisions` is true, the decision records as JSON lines."""
 
@@ -93,6 +96,7 @@ class Decider:
         schema_json: str,
         records: Records | None = None,
         similar_records: bool = True,
+        threads: int | None = None,
     ) -> Decider: ...
     def put(self, schema_json: str, records: Records) -> None:
         """Puts `records` (settled records of the schema, in settlement order, later than those it holds) into the memories."""
@@ -171,6 +175,11 @@ def tuning_capture_json(schema_json: str, settled: int, target_precision: float)
 
 def tuning_promise_json(tuning_json: str, attribute: str, layers_json: str) -> str:
     """The tuning with what `attribute`'s layer replay (JSON, as `select_layers_json` gives it) promised, as JSON."""
+
+def schema_with_layers_json(
+    schema_json: str, attribute: str, layers_json: str, coarse: bool
+) -> str:
+    """The schema with what the attribute's layer replay chose put on it — on its coarse level when `coarse` — as JSON."""
 
 def tuning_apply_json(tuning_json: str, schema_json: str) -> str:
     """The schema with the tuning's settings put back on its attributes, as JSON."""

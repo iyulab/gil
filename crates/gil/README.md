@@ -31,17 +31,21 @@ that the .NET library on NuGet, `Gil`, is checked against — `Gil` runs on this
   value.
 - **Threshold choice** — each layer's threshold is chosen by replaying the settled records: the lowest score down to
   which every band of answers met the target precision, with the promise a replay of that many answers can make.
+  `Schema::with_layers` puts the choice on the schema, a `Tuning` keeps it between runs, and `Tuning::promise_of`
+  gives an answer the promise of the layer it came from.
 - **Decision records** — every lookup a replay or an answer makes can be handed to a sink, so a host can recount a
   choice or follow a layer over time without reaching into the replay.
 
 The core does no I/O: records come in as values and decision records go out through a callback. How they are stored
-is the host's business. Text is compared after the normalization specified in
+is the host's business. A similar-record lookup over a large memory is split among up to eight threads, each summing
+its rows in the same order, so the answers do not depend on how many there are; `LexicalMemory::with_threads` caps
+them for a host that keeps its own budget. Text is compared after the normalization specified in
 [docs/text-normalization.md](https://github.com/iyulab/gil/blob/main/docs/text-normalization.md).
 
 With the `serde` feature (`iyulab-gil = { version = "…", features = ["serde"] }`), what a host keeps or sends on —
 schemas, records, settlements, tunings, usage counts — implements `Serialize` and `Deserialize`. Field names are the
 Rust ones; roles and policies are written in snake case (`"decided"`, `"confirm_required"`), settlement kinds by name
-(`"Accept"`), times in ticks; an attribute's settings left out take `Attribute::new`'s defaults, and an unknown one does
+(`"Accept"`), times in ticks (a record's `settled_at` also reads as text, `yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM`); an attribute's settings left out take `Attribute::new`'s defaults, and an unknown one does
 not read. A record in that form, one per line, is the settled-record line all three bindings read —
 [docs/settled-records.md](https://github.com/iyulab/gil/blob/main/docs/settled-records.md) says what each entry is for and what to keep before Gil is in use.
 
@@ -63,18 +67,36 @@ stream of biological sample records with costs counted this way, thresholds chos
 time — a loss once a wrong value costs ten entries; chosen for a target at or above 1 − 1/ρ, they cost less than asking
 at every ρ from 2 to 20. When you do not know ρ, time how long undoing a wrong value takes against entering one.
 
-A target can be read two ways. By default (`replay::ThresholdRule::EveryBand`, the rule of `replay::select_layers`)
-each layer's threshold is the lowest down to which every band of its answers meets the target — a floor under every
-kind of answer. When the target is a share of all the attribute's answers instead, choose with
-`replay::select_layers_by_rule` and `ThresholdRule::Pooled`: the two thresholds together, as the pair that answers the
-most of the attribute's latest `POOLED_RECENT_LOOKUPS` lookups while all those answers hold the target at the bottom of
-their Wilson interval at `POOLED_STANDARD_ERRORS` (1.645) standard errors. The bound is on the answers together, not on
-any group of them. Split by who sent the records in — the recalling firm, the bug's reporter, the maintenance report's
-submitter, the hospital — on four public collections, `Pooled` placed 19–22% of its answers with senders whose own
-precision was below the target beyond doubt (the top of a 95% Wilson interval under 0.8), and `EveryBand` none. `EveryBand`
-does not look at the sender, though: when one sender's own settlements are less reliable than the others', it answers
-below the target for that sender too. If you read a promise per customer or per site, choose `EveryBand`, and count
-`usage` over each sender's decisions to see it hold.
+A target can be read two ways. By default (`replay::ThresholdRule::EveryBand`, the default `rule` of
+`replay::LayerOptions`) each layer's threshold is the lowest down to which every band of its answers meets the target —
+a floor under every kind of answer. When the target is a share of all the attribute's answers instead, choose with
+`replay::select_layers` and `LayerOptions { rule: ThresholdRule::Pooled, .. }`: the two thresholds together, as the pair
+that answers the most of the attribute's latest `POOLED_RECENT_LOOKUPS` lookups while all those answers hold the target
+at the bottom of their Wilson interval at `POOLED_STANDARD_ERRORS` (1.645) standard errors. The bound is on the answers
+together, not on any group of them. Split by who sent the records in — the recalling firm, the bug's reporter, the
+maintenance report's submitter, the hospital — on four public collections, `Pooled` placed 19–22% of its answers with
+senders whose own precision was below the target beyond doubt (the top of a 95% Wilson interval under 0.8), and
+`EveryBand` none. `EveryBand` does not look at the sender, though: when one sender's own settlements are less reliable
+than the others', it answers below the target for that sender too. If you read a promise per customer or per site,
+choose `EveryBand`, and count `usage` over each sender's decisions to see it hold.
+
+Records settled together — several at once from one source, alike in what they show — can be right or wrong together,
+and the replay then counts more independent answers than there are. Name each record's batch in `Record::batch` and
+`select_layers` reports, in `LayerThresholds::batches`, what the batches among the latest `RECENT_RECORDS` records do:
+the precision of thresholds chosen on half of them, counted on the other half, split by batch (`across_batches`) and
+split by record (`across_records`), with how many answers a batch holds, how much they are right or wrong together and
+the design effect of the two. Where `across_records` is above `across_batches` beyond chance, read `across_batches` as
+the closer promise. The check moves no threshold. On public records, batches flattered a promise only where they were
+large and right or wrong together: device event reports sent many at a time by one manufacturer (design effect about 7)
+by 1.6 points; food inspections (1.1) and vehicle complaints, whose small batches were right or wrong together as much
+(1.5), by nothing.
+
+A promise bounds all the answers its thresholds give; it says nothing apart about a batch's first record, answered
+before any of its mates is settled, and the check above does not see it either. Where a batch's records come from one
+source at once and show nearly the same things, the first one has nothing in memory to go on and the rest decide the
+promise: on device event reports the answers to a batch's first report fell below the promise in two quarters, by 5.0
+and 2.6 points (753 and 505 batches), while on food inspections and vehicle complaints they held it. If a new batch's
+first record matters to you, count its answers apart with `usage` over its decisions.
 
 ## License
 

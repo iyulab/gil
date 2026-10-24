@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 
+use gil::decider::Source;
 use gil::replay::{LayerThresholds, ThresholdChoice, ThresholdReplay};
 use gil::schema::{Attribute, AttributeRole, CoarseLevel, Schema};
 use gil::tuning::{Stale, Tuning, VERSION, fingerprint};
@@ -75,6 +76,7 @@ fn a_tuning_puts_back_on_a_fresh_schema_exactly_what_was_chosen() {
         &LayerThresholds {
             key: choice(1.25, 0.86),
             memory: choice(0.6, 0.82),
+            batches: None,
         },
     );
     assert_eq!(tuning.version, VERSION);
@@ -166,4 +168,119 @@ fn a_tuning_that_would_break_the_schema_is_refused() {
         tuning.apply(&elsewhere).map(|_| ()),
         Err("attribute 'team' is keyed by 'product', which is not an attribute it rests on".into())
     );
+}
+
+fn floored(threshold: f64, floor: f64, promise: f64) -> ThresholdReplay {
+    let mut replay = choice(threshold, promise);
+    replay.chosen.as_mut().unwrap().similarity_floor = Some(floor);
+    replay
+}
+
+fn none() -> ThresholdReplay {
+    ThresholdReplay {
+        chosen: None,
+        ..choice(0.0, 0.0)
+    }
+}
+
+#[test]
+fn what_a_layers_replay_chose_goes_on_the_attribute_and_an_unchosen_layer_is_unset() {
+    let layers = LayerThresholds {
+        key: choice(1.25, 0.86),
+        memory: floored(0.6, 0.3, 0.82),
+        batches: None,
+    };
+    let schema = schema().with_layers("team", &layers).unwrap();
+    let team = schema.attribute("team");
+    assert_eq!(
+        (team.key_threshold, team.memory_threshold, team.memory_floor),
+        (Some(1.25), Some(0.6), Some(0.3))
+    );
+
+    let without_memory = schema
+        .with_layers(
+            "team",
+            &LayerThresholds {
+                key: choice(2.0, 0.9),
+                memory: none(),
+                batches: None,
+            },
+        )
+        .unwrap();
+    let team = without_memory.attribute("team");
+    assert_eq!(
+        (team.key_threshold, team.memory_threshold, team.memory_floor),
+        (Some(2.0), None, None)
+    );
+}
+
+#[test]
+fn what_a_coarse_replay_chose_goes_on_the_coarse_level() {
+    let layers = LayerThresholds {
+        key: choice(1.5, 0.9),
+        memory: floored(0.4, 0.2, 0.85),
+        batches: None,
+    };
+    let schema = schema().with_coarse("code", &layers).unwrap();
+    let level = schema.attribute("code").coarse.clone().unwrap();
+    assert_eq!(
+        (
+            level.key_threshold,
+            level.memory_threshold,
+            level.memory_floor
+        ),
+        (Some(1.5), Some(0.4), Some(0.2))
+    );
+    assert_eq!(schema.attribute("code").key_threshold, None);
+}
+
+#[test]
+fn putting_a_choice_on_an_attribute_that_cannot_take_it_is_refused() {
+    let layers = LayerThresholds {
+        key: choice(1.0, 0.9),
+        memory: choice(0.5, 0.9),
+        batches: None,
+    };
+    let schema = schema();
+    assert!(schema.with_layers("nothing", &layers).is_err());
+    assert!(
+        schema
+            .with_layers("product", &layers)
+            .unwrap_err()
+            .contains("not decided")
+    );
+    assert!(
+        schema
+            .with_coarse("team", &layers)
+            .unwrap_err()
+            .contains("no coarse level")
+    );
+
+    let mut tags = Attribute::new("tags", AttributeRole::Decided);
+    tags.multiple = true;
+    let several = Schema::new(
+        "t",
+        vec![Attribute::new("summary", AttributeRole::Observed), tags],
+    )
+    .unwrap();
+    assert!(several.with_layers("tags", &layers).is_err());
+}
+
+#[test]
+fn an_answer_reads_its_promise_from_the_layer_it_came_from() {
+    let mut tuning = Tuning::capture(&schema(), 1_000, 0.8);
+    assert_eq!(tuning.promise_of("team", Source::KeyMemory), None);
+    tuning.promise(
+        "team",
+        &LayerThresholds {
+            key: choice(1.25, 0.86),
+            memory: choice(0.6, 0.82),
+            batches: None,
+        },
+    );
+    assert_eq!(tuning.promise_of("team", Source::KeyMemory), Some(0.86));
+    assert_eq!(tuning.promise_of("team", Source::SimilarRecord), Some(0.82));
+    assert_eq!(tuning.promise_of("team", Source::None), None);
+    assert_eq!(tuning.promise_of("team", Source::External), None);
+    assert_eq!(tuning.promise_of("nothing", Source::KeyMemory), None);
 }

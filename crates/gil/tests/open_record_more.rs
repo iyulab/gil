@@ -20,7 +20,9 @@ use gil::decider::{Answer, Decider, Source};
 use gil::decision_record::DecisionRecord;
 use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
-use gil::replay::{Choice, select_key_threshold, select_layers, select_typed_key_thresholds};
+use gil::replay::{
+    Choice, LayerOptions, select_key_threshold, select_layers, select_typed_key_thresholds,
+};
 use gil::schema::{Attribute, AttributePolicy, AttributeRole, Record, Schema, SettlementKind};
 
 const MINUTE: i64 = 60 * 10_000_000;
@@ -883,6 +885,7 @@ fn counting_only_entered_settlements_replays_every_record_but_asks_only_those() 
             counting: Some(&[Enter, Accept]),
             ..choice(0.5, 1)
         },
+        LayerOptions::default(),
     );
     assert_eq!(layers.key.lookups, 2);
 }
@@ -944,6 +947,7 @@ fn choosing_thresholds_neither_asks_about_nor_remembers_a_filled_value() {
         "team",
         &records,
         choice(1.0, 1),
+        LayerOptions::default(),
     );
     assert_eq!(layers.key.lookups, 1);
     assert_eq!(layers.memory.lookups, 0); // the similar record layer is left only what the key did not answer — nothing
@@ -1007,6 +1011,7 @@ fn counting_nothing_in_particular_replays_as_records_without_their_kinds() {
             "team",
             records,
             choice(0.5, 1),
+            LayerOptions::default(),
         )
     };
 
@@ -1125,6 +1130,7 @@ fn a_key_that_does_not_decide_the_attribute_never_outranks_a_similar_record() {
         "team",
         &history,
         choice(0.8, 10),
+        LayerOptions::default(),
     );
     assert!(layers.key.chosen.is_none()); // the department alone never reaches the target precision
     let similarity = layers.memory.chosen.expect("the request text answers well");
@@ -1363,6 +1369,7 @@ fn the_similarity_threshold_is_chosen_on_the_lookups_no_key_answers() {
         "team",
         &history,
         choice(0.8, 10),
+        LayerOptions::default(),
     );
     let key = layered
         .key
@@ -1417,6 +1424,7 @@ fn a_record_settled_again_is_not_its_own_evidence_in_the_replay() {
         "team",
         &history,
         choice(0.8, 10),
+        LayerOptions::default(),
     );
 
     assert!(layers.key.chosen.is_none()); // no request's summary is seen twice under different ids

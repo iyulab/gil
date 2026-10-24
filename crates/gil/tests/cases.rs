@@ -14,7 +14,7 @@ use gil::decision_record::DecisionRecord;
 use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::open_record::OpenRecord;
-use gil::replay::{Choice, select_layers_with};
+use gil::replay::{Choice, LayerOptions, select_layers};
 use gil::schema::{Attribute, AttributeRole, Record, Schema, Settlement};
 
 const MINUTE: i64 = 60 * 10_000_000;
@@ -185,14 +185,17 @@ fn choosing_thresholds_replays_in_settlement_order_with_one_record_per_case() {
         minimum_answered: 1,
         counting: None,
     };
-    let layers = select_layers_with(
+    let layers = select_layers(
         &mut key_memory,
         &mut memory,
         &schema,
         "team",
         &records,
         choice,
-        &mut |r| asked.push(r.clone()),
+        LayerOptions {
+            sink: Some(&mut |r| asked.push(r.clone())),
+            ..Default::default()
+        },
     );
 
     assert_eq!(

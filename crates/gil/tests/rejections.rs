@@ -16,8 +16,7 @@ use gil::decider::{Decider, ExternalCandidate};
 use gil::key_memory::{KeyMemory, Lookup};
 use gil::lexical_memory::LexicalMemory;
 use gil::replay::{
-    Choice, ThresholdRule, select_coarse, select_layers, select_layers_by_rule,
-    select_typed_key_thresholds,
+    Choice, LayerOptions, ThresholdRule, select_coarse, select_layers, select_typed_key_thresholds,
 };
 use gil::schema::{Attribute, AttributePolicy, AttributeRole, CoarseLevel, Record, Schema};
 
@@ -78,6 +77,7 @@ fn layers(attribute: &str, choice: Choice) {
         attribute,
         &records(),
         choice,
+        LayerOptions::default(),
     );
 }
 
@@ -131,14 +131,17 @@ fn the_layers_are_not_chosen_for_an_attribute_that_takes_several_values() {
     expected = "'topics' takes several values; the similar record layer does not answer it"
 )]
 fn the_pooled_layers_are_not_chosen_for_an_attribute_that_takes_several_values() {
-    select_layers_by_rule(
+    select_layers(
         &mut KeyMemory::default(),
         &mut LexicalMemory::default(),
         &ticket(),
         "topics",
         &records(),
         choice(0.9),
-        ThresholdRule::Pooled,
+        LayerOptions {
+            rule: ThresholdRule::Pooled,
+            ..Default::default()
+        },
     );
 }
 

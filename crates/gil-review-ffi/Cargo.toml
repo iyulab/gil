@@ -14,5 +14,5 @@ name = "gil_review_native"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-gil-ffi-support = { path = "../gil-ffi-support" }
+iyulab-ffi-support = { path = "../ffi-support" }
 gil-review = { package = "iyulab-gil-review", path = "../gil-review", version = "0.1.0" }

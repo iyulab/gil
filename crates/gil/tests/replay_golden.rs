@@ -10,8 +10,7 @@ use common::{CHOSEN, COUNTED, Golden, fixture, lines, replay, schema, to_record}
 use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::replay::{
-    Choice, ThresholdRule, select_coarse, select_key_threshold, select_layers,
-    select_layers_by_rule,
+    Choice, LayerOptions, ThresholdRule, select_coarse, select_key_threshold, select_layers,
 };
 use gil::schema::{Record, Schema};
 use serde_json::{Value, json};
@@ -100,6 +99,7 @@ fn the_layers_replay_reproduces_its_golden() {
                 minimum_answered: 10,
                 counting: Some(&COUNTED),
             },
+            LayerOptions::default(),
         );
         let actual = json!({
             "kind": "layers",
@@ -184,6 +184,7 @@ fn the_layers_replay_with_documents_settled_again_reproduces_its_golden() {
                 minimum_answered: 10,
                 counting: Some(&COUNTED),
             },
+            LayerOptions::default(),
         );
         let actual = json!({
             "kind": "layers_again",
@@ -237,7 +238,7 @@ fn the_pooled_rule_reproduces_its_golden() {
         let chosen = Schema::new(standing.name(), attributes).expect("a valid schema");
 
         for (as_it_stands, schema) in [("none", &standing), ("chosen", &chosen)] {
-            let layers = select_layers_by_rule(
+            let layers = select_layers(
                 &mut KeyMemory::default(),
                 &mut LexicalMemory::default(),
                 schema,
@@ -248,7 +249,10 @@ fn the_pooled_rule_reproduces_its_golden() {
                     minimum_answered: 10,
                     counting: Some(&COUNTED),
                 },
-                ThresholdRule::Pooled,
+                LayerOptions {
+                    rule: ThresholdRule::Pooled,
+                    ..Default::default()
+                },
             );
             let actual = json!({
                 "kind": "layers_pooled",

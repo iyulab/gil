@@ -289,7 +289,9 @@ impl OpenRecord {
     /// The record's values as they stand — observed and settled — which is what the host saves, with the time an
     /// attribute was last settled (or the time the record was opened with, if none was since), the order the values
     /// arrived in, by which choosing thresholds replays the record, and how each decided value was settled — with the
-    /// probability a checked one was drawn with.
+    /// probability a checked one was drawn with. The record names no batch and carries none of what the host saw and
+    /// timed (the suggestions in view, their layers and promises, the milliseconds, who settled it, the form's version);
+    /// a host that keeps those sets them on the record before saving it.
     pub fn snapshot(&self) -> Record {
         Record {
             id: self.id.clone(),
@@ -299,6 +301,7 @@ impl OpenRecord {
             settlements: self.settlements.clone(),
             probabilities: self.probabilities.clone(),
             arrival: Some(self.arrival.clone()),
+            ..Record::default()
         }
     }
 

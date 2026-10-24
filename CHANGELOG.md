@@ -5,6 +5,43 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 [crates/gil/CHANGELOG.md](crates/gil/CHANGELOG.md), and the review statistics (`iyulab-gil-review` and its .NET binding
 `Gil.Review`) theirs in [crates/gil-review/CHANGELOG.md](crates/gil-review/CHANGELOG.md).
 
+## Unreleased
+
+### Added
+
+- **A settled record can say what was in view, how long it took and who settled it.** `Record.Suggested` (the value
+  in view when a decided attribute was settled), `Sources` (the layer of the answer in view), `Promises` (the precision
+  promised for it then, in [0, 1] — `Tuning.PromiseOf`), `SettleMs` (per attribute, the milliseconds from reaching it
+  to settling it), `OpenMs` (the milliseconds the record was open), `SettledBy` (per attribute, an opaque id of who settled it) and
+  `FormVersion` (the edition of the code lists, new when a value comes to mean something else) — the line format's seven new optional entries. Nothing in the replays reads them yet; they are what a
+  host keeps from its first record so that whether promises hold for the answers people saw, what settling costs and
+  how settlers differ can be measured later. A promise out of [0, 1] is refused. Earlier versions refuse a line that
+  carries them.
+- **A selection's choice goes on the schema in one call, and an answer's promise reads from the tuning by its source.**
+  `Schema.WithLayers(attribute, thresholds)` puts what `Replay.SelectLayers` chose on a decided attribute — the key
+  threshold, the memory threshold and its similarity floor, a layer with no chosen threshold left unset — and
+  `Schema.WithCoarse` does the same on the coarse level for `Replay.SelectCoarse`; both refuse a schema that would not
+  check. `Tuning.PromiseOf(attribute, source)` gives the promise of the layer an answer came from, for
+  `UsageDecision.Promise`. Setting the three properties with `with` and matching `KeyPromise` / `MemoryPromise` by hand
+  still work. The native library speaks version 4 of its C interface.
+- **What batches do to a promise.** `Record.Batch` names the batch a record was settled in — records settled together,
+  several at once from one source. When any of the latest `Replay.RecentRecords` records names one,
+  `LayerThresholds.Batches` (`BatchCheck`) gives the precision of thresholds chosen on half of them and counted on the
+  other half, split by batch and split by record, over `Replay.BatchSplits` splits; how many answers a batch holds; how
+  much they are right or wrong together; and the design effect. Thresholds are chosen as before, and records that name
+  no batch read and write as before. On public records the two counts differed only where batches were large and right
+  or wrong together (device event reports, design effect about 7: 1.6 points), not where batches were small (vehicle
+  complaints, 1.5) or not right or wrong together (food inspections, 1.1).
+
+### Changed
+
+- `SettledRecords.FromJsonLines` reads `settled_at` as a time in the round-trip format (`"O"`) as well as in ticks,
+  and an entry given as null as left out — the line Python reads. A date, time or offset out of range does not read.
+- A similar-record lookup over a large memory is split among up to eight threads; answers and replays are the same to
+  the bit. Replaying 40,000 public food inspection records took 27 s against 60 s. `new Decider(threads: n)`,
+  `SelectionOptions.Threads` and `Gil.Tree`'s `new LexicalMemory(threads: n)` cap them — 1 keeps a lookup on the
+  caller's thread — for a host that answers many requests at once or keeps its own budget of threads.
+
 ## 0.26.0
 
 ### Breaking

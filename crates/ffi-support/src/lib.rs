@@ -1,4 +1,4 @@
-//! What the C ABIs of the Gil crates share. Each native library links its own copy, so the last error and the last
+//! The plumbing of a C ABI over Rust, shared by the C ABIs of the Gil crates. Each native library links its own copy, so the last error and the last
 //! result below are per library and per thread.
 //!
 //! The convention: every exported function returns a status — [`OK`], or a code whose message the library's

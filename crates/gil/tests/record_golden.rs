@@ -10,7 +10,7 @@ use common::{CHOSEN, COUNTED, Golden, fixture, lines, schema};
 use gil::decision_record::DecisionRecord;
 use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
-use gil::replay::{Choice, select_coarse, select_coarse_with, select_layers, select_layers_with};
+use gil::replay::{Choice, LayerOptions, select_coarse, select_coarse_with, select_layers};
 use gil::schema::Record;
 use serde_json::{Value, json};
 
@@ -63,14 +63,17 @@ fn the_layers_replay_writes_the_golden_decision_records() {
             l["kind"] == "layers" && l["field"] == attribute
         });
         let mut logs = Vec::new();
-        let layers = select_layers_with(
+        let layers = select_layers(
             &mut KeyMemory::default(),
             &mut LexicalMemory::default(),
             &schema,
             attribute,
             &again,
             choice,
-            &mut |r| logs.push(r.clone()),
+            LayerOptions {
+                sink: Some(&mut |r| logs.push(r.clone())),
+                ..Default::default()
+            },
         );
         // Writing logs changes nothing the choice comes to.
         assert_eq!(
@@ -82,6 +85,7 @@ fn the_layers_replay_writes_the_golden_decision_records() {
                 attribute,
                 &again,
                 choice,
+                LayerOptions::default(),
             ),
             "attribute {attribute}"
         );

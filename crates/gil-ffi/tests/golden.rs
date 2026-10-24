@@ -48,7 +48,7 @@ fn new_schema(json: &str) -> *mut GilSchema {
 
 fn new_decider() -> *mut GilDecider {
     let mut out = ptr::null_mut();
-    ok(unsafe { gil_decider_new(true, &mut out) });
+    ok(unsafe { gil_decider_new(true, 0, &mut out) });
     out
 }
 

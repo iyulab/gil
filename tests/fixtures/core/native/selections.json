@@ -7916,7 +7916,136 @@
       }
     },
     "stale_at": 220,
-    "target_precision": 0.8
+    "target_precision": 0.8,
+    "with_layers": {
+      "attributes": [
+        {
+          "candidates": null,
+          "candidates_from": null,
+          "coarse": null,
+          "depends_on": null,
+          "key_concentrations": {},
+          "key_fields": null,
+          "key_threshold": null,
+          "memory_floor": null,
+          "memory_threshold": null,
+          "multiple": false,
+          "must_catch": null,
+          "name": "channel",
+          "policy": "suggest",
+          "role": "observed",
+          "similar_votes": 10,
+          "typed_key_thresholds": null,
+          "use_as_evidence": true
+        },
+        {
+          "candidates": null,
+          "candidates_from": null,
+          "coarse": null,
+          "depends_on": null,
+          "key_concentrations": {},
+          "key_fields": null,
+          "key_threshold": null,
+          "memory_floor": null,
+          "memory_threshold": null,
+          "multiple": false,
+          "must_catch": null,
+          "name": "product",
+          "policy": "suggest",
+          "role": "observed",
+          "similar_votes": 10,
+          "typed_key_thresholds": null,
+          "use_as_evidence": true
+        },
+        {
+          "candidates": null,
+          "candidates_from": null,
+          "coarse": null,
+          "depends_on": null,
+          "key_concentrations": {},
+          "key_fields": null,
+          "key_threshold": null,
+          "memory_floor": null,
+          "memory_threshold": null,
+          "multiple": false,
+          "must_catch": null,
+          "name": "summary",
+          "policy": "suggest",
+          "role": "observed",
+          "similar_votes": 10,
+          "typed_key_thresholds": null,
+          "use_as_evidence": true
+        },
+        {
+          "candidates": null,
+          "candidates_from": null,
+          "coarse": null,
+          "depends_on": null,
+          "key_concentrations": {
+            "product": 0.5639739377730799
+          },
+          "key_fields": [
+            "product"
+          ],
+          "key_threshold": 0.6421675161542479,
+          "memory_floor": null,
+          "memory_threshold": null,
+          "multiple": false,
+          "must_catch": null,
+          "name": "team",
+          "policy": "suggest",
+          "role": "decided",
+          "similar_votes": 10,
+          "typed_key_thresholds": null,
+          "use_as_evidence": true
+        },
+        {
+          "candidates": null,
+          "candidates_from": null,
+          "coarse": {
+            "classes": null,
+            "key_threshold": 0.8180606243999566,
+            "memory_floor": null,
+            "memory_threshold": null,
+            "prefix": 2
+          },
+          "depends_on": null,
+          "key_concentrations": {},
+          "key_fields": null,
+          "key_threshold": null,
+          "memory_floor": null,
+          "memory_threshold": null,
+          "multiple": false,
+          "must_catch": null,
+          "name": "code",
+          "policy": "suggest",
+          "role": "decided",
+          "similar_votes": 10,
+          "typed_key_thresholds": null,
+          "use_as_evidence": true
+        },
+        {
+          "candidates": null,
+          "candidates_from": null,
+          "coarse": null,
+          "depends_on": null,
+          "key_concentrations": {},
+          "key_fields": null,
+          "key_threshold": 1.8957376148249714,
+          "memory_floor": null,
+          "memory_threshold": null,
+          "multiple": true,
+          "must_catch": null,
+          "name": "tags",
+          "policy": "suggest",
+          "role": "decided",
+          "similar_votes": 10,
+          "typed_key_thresholds": null,
+          "use_as_evidence": true
+        }
+      ],
+      "name": "ticket"
+    }
   },
   {
     "call": "usage",

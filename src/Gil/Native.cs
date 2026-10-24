@@ -56,7 +56,7 @@ internal static unsafe partial class Native
     internal static partial void RecordsFree(nint records);
 
     [LibraryImport(Library, EntryPoint = "gil_decider_new")]
-    internal static partial int DeciderNew(byte similarRecords, nint* output);
+    internal static partial int DeciderNew(byte similarRecords, nuint threads, nint* output);
 
     [LibraryImport(Library, EntryPoint = "gil_decider_free")]
     internal static partial void DeciderFree(nint decider);
@@ -128,6 +128,12 @@ internal static unsafe partial class Native
 
     [LibraryImport(Library, EntryPoint = "gil_tuning_promise")]
     internal static partial int TuningPromise(Str tuning, Str attribute, Str thresholds, nuint* resultLen);
+
+    [LibraryImport(Library, EntryPoint = "gil_schema_with_layers")]
+    internal static partial int SchemaWithLayers(SchemaHandle schema, Str attribute, Str thresholds, nint* output);
+
+    [LibraryImport(Library, EntryPoint = "gil_schema_with_coarse")]
+    internal static partial int SchemaWithCoarse(SchemaHandle schema, Str attribute, Str thresholds, nint* output);
 
     [LibraryImport(Library, EntryPoint = "gil_tuning_apply")]
     internal static partial int TuningApply(Str tuning, SchemaHandle schema, nint* output);
