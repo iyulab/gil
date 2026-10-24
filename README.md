@@ -198,6 +198,12 @@ using var ledger = SettledRecords.From([ticket.Snapshot()]);
 var counts = Usage.Count(ledger);
 ```
 
+In the words operations reports use, for an attribute's `AttributeUsage`: the automation rate is `AnswerRate`
+(`Answered` ÷ `Decisions`); the error rate of the answers is 1 − `Realized`; the acceptance rate is `Accepted` ÷
+`Answered` and the override rate (`Corrected` + `Rejected`) ÷ `Answered`. Acceptance and overrides are read off answers
+people saw, which they lean toward; a check counts answers no one saw at their weight, so `Realized` is the one to put
+beside `Promise`.
+
 While records keep arriving, a `Keeper` keeps that loop in one object. `Settle` puts records into the decider and into
 the next choice, `Stale` says when the choice no longer stands, and `Rechoose` replays only the records settled since the
 last choice — the same thresholds as `SelectLayers` on all of them, without replaying them all again:
@@ -251,7 +257,8 @@ latest `Replay.RecentRecords` (5,000) records (the whole replay's when those are
 bottom of its Wilson score interval at one standard error for the answers it rests on, which `PromiseAnswered` reports.
 On many answers the two hardly differ; on a few dozen the promise sits several points below. Show it as the promise —
 it is what `Tuning.Promise` records. When `PromiseAnswered` is small, say so beside it: the number is a floor, not a
-forecast.
+forecast. One standard error leaves about one chance in six that the precision the threshold holds is below it — a
+one-sided 84% bound; `Pooled` holds its pair at 1.645, one-sided 95%.
 
 Replaying three small public forms of about 670 records each, with thresholds chosen again whenever the records grew by
 a tenth, the similar record layer's promise without that lowering ran 9.1 points above what its answers then

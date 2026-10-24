@@ -101,6 +101,9 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Documentation
 
+- **What a promise means in operations terms.** The README says how sure a promise is (one standard error — a
+  one-sided 84% bound; `Pooled`, 95%) and reads `AttributeUsage` as an automation rate, an error rate, an acceptance
+  rate and an override rate, with `Realized` the one to put beside `Promise`.
 - **How low `MinimumAnswered` may go.** Replaying 26 public coding tasks from their first records, 30 kept every task
   that answered more than once at its target over the first 500 decisions and 20 did not; 50 held one more edge case
   for 0.73 times the answers. The README now says not to set it below 30.

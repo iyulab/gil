@@ -253,6 +253,13 @@ counts = gil.usage(gil.records(saved))["team"]
 print(counts["right_weight"] / counts["judged_weight"], "against", counts["promise_sum"] / counts["promised"])
 ```
 
+In operations terms: the automation rate is `answered / decisions`, the error rate of the answers one minus the
+realized precision above, the acceptance rate `accepted / answered` and the override rate `(corrected + rejected) /
+answered`. Acceptance and overrides are read off answers people saw; put the realized precision, which counts unseen
+checks at their weight, beside the promise. A promise is the bottom of a Wilson interval at one standard error — about
+one chance in six that the precision it holds is below it (one-sided 84%); `rule="pooled"` holds its pair at 1.645,
+one-sided 95%.
+
 **Status: early.** The API may change within 0.x — each change is listed in
 [CHANGELOG.md](https://github.com/iyulab/gil/blob/main/crates/gil/CHANGELOG.md) with what to do about it.
 

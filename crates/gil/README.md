@@ -33,6 +33,12 @@ that the .NET library on NuGet, `Gil`, is checked against — `Gil` runs on this
   which every band of answers met the target precision, with the promise a replay of that many answers can make.
   `Schema::with_layers` puts the choice on the schema, a `Tuning` keeps it between runs, and `Tuning::promise_of`
   gives an answer the promise of the layer it came from (`coarse_promise_of` a coarse class the promise of its level).
+  A promise is the bottom of a Wilson interval at one standard error — about one chance in six that the precision it
+  holds is below it (one-sided 84%); `ThresholdRule::Pooled` holds its pair at 1.645, one-sided 95%.
+- **Usage** — `usage::usage` counts, over the saved records, what the answers came to. In operations terms: the
+  automation rate is `answer_rate()`, the error rate 1 − `realized()`, the acceptance rate `accepted ÷ answered` and the
+  override rate `(corrected + rejected) ÷ answered`. Acceptance and overrides are read off answers people saw; put
+  `realized()`, which counts unseen checks at their weight, beside `promise()`.
 - **Keeper** — `keeper::Keeper` keeps the loop as records arrive: `settle` puts them into the decider and into the
   next choice, `stale` says when the choice no longer stands, and `rechoose` replays only the records settled since the
   last choice — the same thresholds as `select_layers` on all of them, and a coarse level's as `select_coarse` with

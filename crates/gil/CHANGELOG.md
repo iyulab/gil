@@ -119,6 +119,12 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 - `schema::Attribute` has one more public field, `first_of_batch`, and `tuning::AttributeTuning` six (below); a struct
   literal that names every field names them too (`None`, `false`).
 
+### Documentation
+
+- **What a promise means in operations terms.** The README says how sure a promise is (one standard error — a
+  one-sided 84% bound; `Pooled`, 95%) and reads the usage counts as an automation rate, an error rate, an acceptance
+  rate and an override rate; the Python README too.
+
 ## 0.8.0
 
 ### Fixed
