@@ -579,5 +579,5 @@ fn refused_settlements_and_contract_violations_come_back_as_statuses() {
 #[test]
 fn the_library_says_which_interface_it_speaks() {
     assert_eq!(gil_abi_version(), GIL_ABI_VERSION);
-    assert_eq!(GIL_ABI_VERSION, 5);
+    assert_eq!(GIL_ABI_VERSION, 4);
 }

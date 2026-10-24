@@ -32,7 +32,7 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   the answer was in view and nothing was settled; a check is judged against the suggestion kept. A host no longer
   keeps a second list beside the records it saves: put the answer in view on the record, and pass the records —
   `usage(&records)` in Rust, `gil.usage(gil.records(saved))` in Python. The C ABI's `gil_usage` takes a records
-  handle; it speaks version 5.
+  handle.
 - **A reopened record keeps what the host kept on it.** `OpenRecord::reopen` used to drop the batch, the suggestions in
   view, their layers and promises, the milliseconds, who settled it and the form's version, so a record reopened to
   settle another attribute lost them from its next snapshot. They come back in each snapshot now, less an attribute's

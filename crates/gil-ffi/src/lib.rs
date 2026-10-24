@@ -59,7 +59,7 @@ pub const GIL_BROKEN: i32 = iyulab_ffi_support::BROKEN;
 
 /// The version of this interface — its functions, structures and statuses. It changes whenever a binding built for one
 /// version would misread the library of another.
-pub const GIL_ABI_VERSION: u32 = 5;
+pub const GIL_ABI_VERSION: u32 = 4;
 
 /// [`GilCandidate::source`]: no layer.
 pub const GIL_SOURCE_NONE: u8 = 0;

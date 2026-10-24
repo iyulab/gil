@@ -18,7 +18,7 @@ internal static unsafe partial class Native
     internal const int Broken = 5;
 
     /// <summary>The version of the C ABI this binding was built for (<c>GIL_ABI_VERSION</c>).</summary>
-    internal const uint AbiVersion = 5;
+    internal const uint AbiVersion = 4;
 
     private static volatile bool _compatible;
 

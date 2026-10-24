@@ -28,7 +28,7 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   `Schema.WithCoarse` does the same on the coarse level for `Replay.SelectCoarse`; both refuse a schema that would not
   check. `Tuning.PromiseOf(attribute, source)` gives the promise of the layer an answer came from, for
   `Record.Promises`. Setting the three properties with `with` and matching `KeyPromise` / `MemoryPromise` by hand
-  still work.
+  still work. The native library speaks version 4 of its C interface.
 - **What batches do to a promise.** `Record.Batch` names the batch a record was settled in — records settled together,
   several at once from one source. When any of the latest `Replay.RecentRecords` records names one,
   `LayerThresholds.Batches` (`BatchCheck`) gives the precision of thresholds chosen on half of them and counted on the
@@ -60,8 +60,7 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   answered when the record names the layer the answer came from, or it was accepted or corrected; turned down when the
   answer was in view and nothing was settled; a check is judged against the suggestion kept. Put the answer in view on
   the record you save (`snapshot with { Suggested = …, Sources = …, Promises = … }`) and pass the saved records:
-  `Usage.Count(SettledRecords.From(saved))` in place of `Usage.Count(decisions)`. The native library speaks version 5
-  of its C interface.
+  `Usage.Count(SettledRecords.From(saved))` in place of `Usage.Count(decisions)`.
 
 ### Fixed
 
