@@ -76,7 +76,7 @@ the bug's reporter, the maintenance report's submitter, the hospital — on four
 19–22% of its answers with senders whose own precision was below the target beyond doubt (the top of a 95% Wilson
 interval under 0.8), and the default `"every_band"` none. `"every_band"` does not look at the sender, though: when one sender's own
 settlements are less reliable than the others', it answers below the target for that sender too. If you read a
-promise per customer or per site, keep `"every_band"`, and count `gil.usage` over each sender's decisions to see it
+promise per customer or per site, keep `"every_band"`, and count `gil.usage` over each sender's records to see it
 hold.
 
 ```python
@@ -184,24 +184,31 @@ schema = gil.apply_tuning(tuning, base)
 
 An answer does not carry its promise; the promise is its layer's, which `gil.promise_of` reads from the tuning by the
 answer's `source`.
-`gil.usage(decisions)` counts, without content, how the answers shown were settled and the precision they realized —
-`right_weight / judged_weight`, to read against `promise_sum / promised`:
+Keep what was in view on the record you save — the value suggested, its layer and its promise. `gil.usage(records)`
+counts, without content, how the answers shown were settled and the precision they realized — `right_weight /
+judged_weight`, to read against `promise_sum / promised` — and a reopened record carries them back until the attribute
+is settled again:
 
 ```python
 decider = gil.Decider(schema, records)
 
-answer = decider.answer(schema, "t9", "team", {"product": "vpn", "summary": "drops again"})
+values = {"product": "vpn", "summary": "drops again"}
+answer = decider.answer(schema, "t9", "team", values)
 shown = answer["candidates"][0]["value"] if answer["answered"] else None
 # ... the person settles `settled` ...
-decisions.append({
-    "attribute": "team",
-    "answer": shown,
-    "settled": settled,
-    "settlement": "Enter" if shown is None else "Accept" if settled == shown else "Correct",
-    "promise": gil.promise_of(tuning, "team", answer["source"]) if shown is not None else None,
-})
+record = {
+    "id": "t9",
+    "settled_at": now,
+    "values": {**values, "team": settled},
+    "settlements": {"team": "Enter" if shown is None else "Accept" if settled == shown else "Correct"},
+}
+if shown is not None:
+    record |= {"suggested": {"team": shown}, "sources": {"team": answer["source"]}}
+    if (promise := gil.promise_of(tuning, "team", answer["source"])) is not None:
+        record["promises"] = {"team": promise}
+saved.append(record)
 
-counts = gil.usage(decisions)["team"]
+counts = gil.usage(gil.records(saved))["team"]
 print(counts["right_weight"] / counts["judged_weight"], "against", counts["promise_sum"] / counts["promised"])
 ```
 

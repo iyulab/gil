@@ -141,19 +141,8 @@ internal static unsafe partial class Native
     [LibraryImport(Library, EntryPoint = "gil_tuning_stale")]
     internal static partial int TuningStale(Str tuning, SchemaHandle schema, nuint settled, nuint* resultLen);
 
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct Decision
-    {
-        public Str Attribute;
-        public Str Answer;
-        public Str Settled;
-        public Str Settlement;
-        public double Probability;
-        public double Promise;
-    }
-
     [LibraryImport(Library, EntryPoint = "gil_usage")]
-    internal static partial int Usage(Decision* decisions, nuint decisionsLen, nuint* resultLen);
+    internal static partial int Usage(RecordsHandle records, nuint* resultLen);
 
     [LibraryImport(Library, EntryPoint = "gil_ask_planner_new")]
     internal static partial int AskPlannerNew(

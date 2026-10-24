@@ -8049,54 +8049,106 @@
   },
   {
     "call": "usage",
-    "decisions": [
+    "records": [
       {
-        "answer": "network",
-        "attribute": "team",
-        "probability": 1.0,
-        "promise": 0.85,
-        "settled": "network",
-        "settlement": "Accept"
+        "id": "u1",
+        "promises": {
+          "team": 0.85
+        },
+        "settled_at": 1,
+        "settlements": {
+          "team": "Accept"
+        },
+        "sources": {
+          "team": "KeyMemory"
+        },
+        "suggested": {
+          "team": "network"
+        },
+        "values": {
+          "team": "network"
+        }
       },
       {
-        "answer": "network",
-        "attribute": "team",
-        "probability": 1.0,
-        "promise": 0.85,
-        "settled": "security",
-        "settlement": "Correct"
+        "id": "u2",
+        "promises": {
+          "team": 0.85
+        },
+        "settled_at": 2,
+        "settlements": {
+          "team": "Correct"
+        },
+        "sources": {
+          "team": "KeyMemory"
+        },
+        "suggested": {
+          "team": "network"
+        },
+        "values": {
+          "team": "security"
+        }
       },
       {
-        "answer": "network",
-        "attribute": "team",
-        "probability": 0.25,
-        "promise": null,
-        "settled": "network",
-        "settlement": "Check"
+        "id": "u3",
+        "probabilities": {
+          "team": 0.25
+        },
+        "settled_at": 3,
+        "settlements": {
+          "team": "Check"
+        },
+        "sources": {
+          "team": "SimilarRecord"
+        },
+        "suggested": {
+          "team": "network"
+        },
+        "values": {
+          "team": "network"
+        }
       },
       {
-        "answer": null,
-        "attribute": "team",
-        "probability": 1.0,
-        "promise": null,
-        "settled": "facilities",
-        "settlement": "Enter"
+        "id": "u4",
+        "settled_at": 4,
+        "settlements": {
+          "team": "Enter"
+        },
+        "values": {
+          "team": "facilities"
+        }
       },
       {
-        "answer": "network",
-        "attribute": "team",
-        "probability": 1.0,
-        "promise": 0.85,
-        "settled": null,
-        "settlement": null
+        "id": "u5",
+        "promises": {
+          "team": 0.85
+        },
+        "settled_at": 5,
+        "sources": {
+          "team": "KeyMemory"
+        },
+        "suggested": {
+          "team": "network"
+        },
+        "values": {}
       },
       {
-        "answer": "network",
-        "attribute": "team",
-        "probability": 1.0,
-        "promise": 0.85,
-        "settled": "x",
-        "settlement": "AcceptOther"
+        "id": "u6",
+        "promises": {
+          "team": 0.85
+        },
+        "settled_at": 6,
+        "settlements": {
+          "team": "AcceptOther"
+        },
+        "sources": {
+          "team": "KeyMemory"
+        },
+        "suggested": {
+          "team": "x"
+        },
+        "values": {
+          "team": "x"
+        }
       }
     ],
     "result": {
@@ -8115,7 +8167,7 @@
         "judged_weight": 6.0,
         "promise_sum": 3.4,
         "promised": 4,
-        "rejected": 0,
+        "rejected": 1,
         "right_weight": 5.0
       }
     }

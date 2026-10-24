@@ -782,12 +782,10 @@ class AttributeUsage(TypedDict):
     judged_weight: float
 
 
-def usage(decisions: Iterable[dict[str, Any]]) -> dict[str, AttributeUsage]:
-    """The usage counts of ``decisions``, by attribute. Each decision is ``{"attribute", "answer", "settled",
-    "settlement", "probability", "promise"}`` — the trusted answer shown (``None`` when it abstained), the value settled,
-    how (by name), a check's draw probability and the promise the answer was made under. The realized precision is
-    ``right_weight / judged_weight``; it should be read against ``promise_sum / promised``."""
-    return cast(
-        dict[str, AttributeUsage],
-        json.loads(usage_json(json.dumps(list(decisions), ensure_ascii=False))),
-    )
+def usage(records: Records) -> dict[str, AttributeUsage]:
+    """The usage counts of the decisions ``records`` settled, by attribute. A record keeps what was in view when it was
+    settled — ``suggested``, ``sources`` and ``promises`` — beside how each attribute was settled; an attribute counts as
+    answered when its record names the layer the answer came from, or was accepted or corrected, and as turned down when
+    the answer was in view and nothing was settled. The realized precision is ``right_weight / judged_weight``; it
+    should be read against ``promise_sum / promised``."""
+    return cast(dict[str, AttributeUsage], json.loads(usage_json(records)))

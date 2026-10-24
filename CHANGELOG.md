@@ -18,7 +18,7 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   in view when a decided attribute was settled), `Sources` (the layer of the answer in view), `Promises` (the precision
   promised for it then, in [0, 1] — `Tuning.PromiseOf`), `SettleMs` (per attribute, the milliseconds from reaching it
   to settling it), `OpenMs` (the milliseconds the record was open), `SettledBy` (per attribute, an opaque id of who settled it) and
-  `FormVersion` (the edition of the code lists, new when a value comes to mean something else) — the line format's seven new optional entries. Nothing in the replays reads them yet; they are what a
+  `FormVersion` (the edition of the code lists, new when a value comes to mean something else) — the line format's seven new optional entries. The replays do not read them, and `Usage.Count` reads the first three; they are what a
   host keeps from its first record so that whether promises hold for the answers people saw, what settling costs and
   how settlers differ can be measured later. A promise out of [0, 1] is refused. Earlier versions refuse a line that
   carries them.
@@ -27,8 +27,8 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   threshold, the memory threshold and its similarity floor, a layer with no chosen threshold left unset — and
   `Schema.WithCoarse` does the same on the coarse level for `Replay.SelectCoarse`; both refuse a schema that would not
   check. `Tuning.PromiseOf(attribute, source)` gives the promise of the layer an answer came from, for
-  `UsageDecision.Promise`. Setting the three properties with `with` and matching `KeyPromise` / `MemoryPromise` by hand
-  still work. The native library speaks version 4 of its C interface.
+  `Record.Promises`. Setting the three properties with `with` and matching `KeyPromise` / `MemoryPromise` by hand
+  still work.
 - **What batches do to a promise.** `Record.Batch` names the batch a record was settled in — records settled together,
   several at once from one source. When any of the latest `Replay.RecentRecords` records names one,
   `LayerThresholds.Batches` (`BatchCheck`) gives the precision of thresholds chosen on half of them and counted on the
@@ -49,8 +49,22 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   the bit. Replaying 40,000 public food inspection records took 27 s against 60 s. `new Decider(threads: n)`,
   `SelectionOptions.Threads` and `Gil.Tree`'s `new LexicalMemory(threads: n)` cap them — 1 keeps a lookup on the
   caller's thread — for a host that answers many requests at once or keeps its own budget of threads.
-- `ReviewSampler.MinimumDesignDeviation` is computed in managed code: reading it no longer loads the native library, so
-  a host that keeps it in a static field does not fail at type initialization where the library cannot load.
+### Breaking
+
+- **`Usage.Count` counts the settled records, and `UsageDecision` is gone.** The counts read what a record keeps of
+  what was in view — `Suggested`, `Sources`, `Promises` — beside how each decided attribute was settled: it was
+  answered when the record names the layer the answer came from, or it was accepted or corrected; turned down when the
+  answer was in view and nothing was settled; a check is judged against the suggestion kept. Put the answer in view on
+  the record you save (`snapshot with { Suggested = …, Sources = …, Promises = … }`) and pass the saved records:
+  `Usage.Count(SettledRecords.From(saved))` in place of `Usage.Count(decisions)`. The native library speaks version 5
+  of its C interface.
+
+### Fixed
+
+- **A reopened record keeps what the host kept on it.** `OpenRecord.Reopen` used to drop `Batch`, `Suggested`,
+  `Sources`, `Promises`, `SettleMs`, `OpenMs`, `SettledBy` and `FormVersion`, so a record reopened to settle another
+  attribute lost them from its next snapshot. They come back in each snapshot now, less an attribute's entries once
+  that attribute is settled again.
 
 ### Documentation
 

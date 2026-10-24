@@ -1232,3 +1232,51 @@ fn an_observed_attribute_is_not_asked_about() {
     let decider = Decider::new(KeyMemory::default(), None);
     OpenRecord::new(typed_ticket(), "d9", 0).answer_partial(&decider, "channel", Some("ph"));
 }
+
+#[test]
+fn reopening_a_saved_record_keeps_what_the_host_kept_until_an_attribute_is_settled_again() {
+    let saved = Record {
+        id: "d1".into(),
+        values: BTreeMap::from([
+            ("summary".to_owned(), "vpn drops".to_owned()),
+            ("team".to_owned(), "network".to_owned()),
+        ]),
+        settlements: BTreeMap::from([("team".to_owned(), SettlementKind::Accept)]),
+        batch: Some("import-7".into()),
+        suggested: BTreeMap::from([("team".to_owned(), "network".to_owned())]),
+        sources: BTreeMap::from([("team".to_owned(), Source::KeyMemory)]),
+        promises: BTreeMap::from([("team".to_owned(), 0.9)]),
+        settle_ms: BTreeMap::from([("team".to_owned(), 1_200)]),
+        open_ms: Some(5_000),
+        settled_by: BTreeMap::from([("team".to_owned(), "p7".to_owned())]),
+        form_version: Some("2026".into()),
+        ..Record::default()
+    };
+    let mut decider = Decider::new(KeyMemory::default(), None);
+    let mut open = OpenRecord::reopen(settled_ticket(), &saved);
+
+    let again = open.snapshot();
+    assert_eq!(
+        (
+            again.batch.as_deref(),
+            again.open_ms,
+            again.form_version.as_deref()
+        ),
+        (Some("import-7"), Some(5_000), Some("2026"))
+    );
+    assert_eq!(again.suggested, saved.suggested);
+    assert_eq!(again.sources, saved.sources);
+    assert_eq!(again.promises, saved.promises);
+    assert_eq!(again.settle_ms, saved.settle_ms);
+    assert_eq!(again.settled_by, saved.settled_by);
+
+    // Settled again, the attribute's entries described the settlement this one replaced; the record's stay.
+    open.settle(&mut decider, "team", &Settlement::correct("security"), DAY);
+    let after = open.snapshot();
+    assert!(after.suggested.is_empty() && after.sources.is_empty() && after.promises.is_empty());
+    assert!(after.settle_ms.is_empty() && after.settled_by.is_empty());
+    assert_eq!(
+        (after.batch.as_deref(), after.open_ms),
+        (Some("import-7"), Some(5_000))
+    );
+}

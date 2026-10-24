@@ -62,7 +62,15 @@ internal static class ReadmeExample
 
         var shown = team.Answered ? team.Candidates[0].Value : null;
         var promise = team.Answered ? tuning.PromiseOf("team", team.Source) : null;
-        var counts = Usage.Count([new UsageDecision("team", shown, "network", SettlementKind.Accept, Promise: promise)]);
+        // What was in view goes on the record it was settled on; the saved records are what the counts read.
+        var settledRecord = snapshot with
+        {
+            Suggested = shown is null ? null : new Dictionary<string, string> { ["team"] = shown },
+            Sources = shown is null ? null : new Dictionary<string, Source> { ["team"] = team.Source },
+            Promises = promise is { } p ? new Dictionary<string, double> { ["team"] = p } : null,
+        };
+        using var ledger = SettledRecords.From([settledRecord]);
+        var counts = Usage.Count(ledger);
 
         var pooled = Replay.SelectLayers(schema, "team", saved, options with { TargetPrecision = 0.8, Rule = ThresholdRule.Pooled });
         var unprompted = Replay.SelectLayers(schema, "team", saved, options with { Counting = [SettlementKind.Enter] });

@@ -78,7 +78,7 @@ maintenance report's submitter, the hospital — on four public collections, `Po
 senders whose own precision was below the target beyond doubt (the top of a 95% Wilson interval under 0.8), and
 `EveryBand` none. `EveryBand` does not look at the sender, though: when one sender's own settlements are less reliable
 than the others', it answers below the target for that sender too. If you read a promise per customer or per site,
-choose `EveryBand`, and count `usage` over each sender's decisions to see it hold.
+choose `EveryBand`, and count `usage` over each sender's records to see it hold.
 
 Records settled together — several at once from one source, alike in what they show — can be right or wrong together,
 and the replay then counts more independent answers than there are. Name each record's batch in `Record::batch` and
@@ -96,7 +96,7 @@ before any of its mates is settled, and the check above does not see it either. 
 source at once and show nearly the same things, the first one has nothing in memory to go on and the rest decide the
 promise: on device event reports the answers to a batch's first report fell below the promise in two quarters, by 5.0
 and 2.6 points (753 and 505 batches), while on food inspections and vehicle complaints they held it. If a new batch's
-first record matters to you, count its answers apart with `usage` over its decisions.
+first record matters to you, count its answers apart with `usage` over its records.
 
 ## License
 

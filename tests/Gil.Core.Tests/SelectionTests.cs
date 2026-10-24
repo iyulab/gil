@@ -266,20 +266,16 @@ public sealed class SelectionTests
     public void The_usage_counts_give_what_the_C_ABI_gave()
     {
         var call = Of("usage").Single();
-        var decisions = call["decisions"]!.AsArray().Select(d => new UsageDecision(
-            (string)d!["attribute"]!,
-            (string?)d["answer"],
-            (string?)d["settled"],
-            d["settlement"] is { } kind ? Enum.Parse<SettlementKind>((string)kind!) : null,
-            (double)d["probability"]!,
-            (double?)d["promise"])).ToArray();
-        Same(Usage.CountJson(decisions), call["result"], "usage");
-        var counted = Usage.Count(decisions);
+        using var records = SettledRecords.FromJsonLines(
+            string.Join("\n", call["records"]!.AsArray().Select(r => r!.ToJsonString())));
+        Same(Usage.CountJson(records), call["result"], "usage");
+        var counted = Usage.Count(records);
         Same(JsonSerializer.Serialize(counted, CoreJson.Default.IReadOnlyDictionaryStringAttributeUsage), call["result"], "typed usage");
         var team = counted["team"];
         team.Abstained.Should().Be(team.Decisions - team.Answered);
         team.Realized.Should().Be(team.RightWeight / team.JudgedWeight);
-        Usage.Count([]).Should().BeEmpty();
+        using var none = SettledRecords.From([]);
+        Usage.Count(none).Should().BeEmpty();
     }
 
     [Fact]

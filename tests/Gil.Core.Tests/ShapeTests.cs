@@ -95,6 +95,33 @@ public sealed class ShapeTests
     }
 
     [Fact]
+    public void A_reopened_record_carries_back_what_the_host_kept_on_it()
+    {
+        using var schema = Ticket();
+        var saved = new Record("t-1", DateTimeOffset.UnixEpoch)
+        {
+            Values = new Dictionary<string, string> { ["summary"] = "card charged twice", ["team"] = "billing" },
+            Settlements = new Dictionary<string, SettlementKind> { ["team"] = SettlementKind.Accept },
+            Batch = "import-7",
+            Suggested = new Dictionary<string, string> { ["team"] = "billing" },
+            Sources = new Dictionary<string, Source> { ["team"] = Source.KeyMemory },
+            Promises = new Dictionary<string, double> { ["team"] = 0.9 },
+            SettledBy = new Dictionary<string, string> { ["team"] = "p7" },
+            FormVersion = "2026",
+        };
+
+        using var record = OpenRecord.Reopen(schema, saved);
+        var back = record.Snapshot();
+        (back.Batch, back.FormVersion).Should().Be(("import-7", "2026"));
+        back.Suggested.Should().Equal(saved.Suggested);
+        back.Sources.Should().Equal(saved.Sources);
+        back.Promises.Should().Equal(saved.Promises);
+        back.SettledBy.Should().Equal(saved.SettledBy);
+        using var ledger = SettledRecords.From([back]);
+        Usage.Count(ledger)["team"].Accepted.Should().Be(1);
+    }
+
+    [Fact]
     public void A_coarse_level_is_made_from_a_prefix_or_a_table_and_names_a_value_s_class_as_the_core_does()
     {
         new CoarseLevel(2) { KeyThreshold = 0.9 }.Should().Be(new CoarseLevel { Prefix = 2, KeyThreshold = 0.9 });

@@ -187,5 +187,5 @@ def tuning_apply_json(tuning_json: str, schema_json: str) -> str:
 def tuning_stale_json(tuning_json: str, schema_json: str, settled: int) -> str | None:
     """Why the tuning no longer stands for the schema with `settled` records, as JSON — `None` while it does."""
 
-def usage_json(decisions_json: str) -> str:
-    """The usage counts of the decisions (a JSON list of `{"attribute", "answer", "settled", "settlement", "probability", "promise"}`), by attribute, as JSON."""
+def usage_json(records: Records) -> str:
+    """The usage counts of the decisions the records settled, by attribute, as JSON."""

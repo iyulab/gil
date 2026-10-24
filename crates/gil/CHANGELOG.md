@@ -26,6 +26,17 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   `LexicalMemory::with_threads(n)` caps the threads a lookup is split among — 1 keeps it on the caller's thread — for
   a host that answers many requests at once or keeps its own budget of threads; Python takes it as `threads=` on
   `Decider`, `select_layers` and `select_coarse`.
+- **Breaking: `usage::usage` counts the settled records, and `usage::Decision` is gone.** The counts read what a record
+  keeps of what was in view — `suggested`, `sources`, `promises` — beside how each decided attribute was settled: it
+  was answered when the record names the layer the answer came from, or it was accepted or corrected; turned down when
+  the answer was in view and nothing was settled; a check is judged against the suggestion kept. A host no longer
+  keeps a second list beside the records it saves: put the answer in view on the record, and pass the records —
+  `usage(&records)` in Rust, `gil.usage(gil.records(saved))` in Python. The C ABI's `gil_usage` takes a records
+  handle; it speaks version 5.
+- **A reopened record keeps what the host kept on it.** `OpenRecord::reopen` used to drop the batch, the suggestions in
+  view, their layers and promises, the milliseconds, who settled it and the form's version, so a record reopened to
+  settle another attribute lost them from its next snapshot. They come back in each snapshot now, less an attribute's
+  entries once that attribute is settled again.
 
 ### Added
 
@@ -36,7 +47,7 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   (per attribute, the milliseconds from reaching it to settling it), `open_ms` (the milliseconds the record was open),
   `settled_by` (per attribute, an opaque id of who settled it) and `form_version` (the edition of the code lists, new
   when a value comes to mean something else) — are fields of `Record`, read and written back.
-  Nothing in the replays reads them yet; they are what a host keeps from its first record so that whether promises
+  The replays do not read them, and `usage` reads the first three; they are what a host keeps from its first record so that whether promises
   hold for the answers people saw, what settling costs them and how settlers differ can be measured later. A promise
   out of [0, 1], a layer other than the three and negative milliseconds are refused. Readers before this version refuse a
   line that carries them.

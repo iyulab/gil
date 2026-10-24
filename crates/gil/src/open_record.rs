@@ -47,6 +47,9 @@ pub struct OpenRecord {
     settlements: BTreeMap<String, SettlementKind>,
     probabilities: BTreeMap<String, f64>,
     settled_at: i64,
+    /// What the host kept on the saved record — its batch, what was in view and how long it took, who settled it, the
+    /// form's version — carried back into each snapshot.
+    kept: Record,
 }
 
 impl OpenRecord {
@@ -68,6 +71,7 @@ impl OpenRecord {
             settlements: BTreeMap::new(),
             probabilities: BTreeMap::new(),
             settled_at,
+            kept: Record::default(),
         }
     }
 
@@ -123,6 +127,18 @@ impl OpenRecord {
         before.dedup();
         open.arrival.extend(before);
         open.arrival.extend(present);
+
+        open.kept = Record {
+            batch: saved.batch.clone(),
+            suggested: saved.suggested.clone(),
+            sources: saved.sources.clone(),
+            promises: saved.promises.clone(),
+            settle_ms: saved.settle_ms.clone(),
+            open_ms: saved.open_ms,
+            settled_by: saved.settled_by.clone(),
+            form_version: saved.form_version.clone(),
+            ..Record::default()
+        };
 
         for (attribute, kind) in &saved.settlements {
             let decided = open
@@ -215,6 +231,12 @@ impl OpenRecord {
         }
 
         self.probabilities.remove(attribute);
+        // What was kept about the attribute described the settlement this one replaces.
+        self.kept.suggested.remove(attribute);
+        self.kept.sources.remove(attribute);
+        self.kept.promises.remove(attribute);
+        self.kept.settle_ms.remove(attribute);
+        self.kept.settled_by.remove(attribute);
         if clears || settlement.kind == SettlementKind::Restore || !self.has(attribute) {
             self.settlements.remove(attribute); // nothing settled it, or nothing known did
         } else {
@@ -289,9 +311,10 @@ impl OpenRecord {
     /// The record's values as they stand — observed and settled — which is what the host saves, with the time an
     /// attribute was last settled (or the time the record was opened with, if none was since), the order the values
     /// arrived in, by which choosing thresholds replays the record, and how each decided value was settled — with the
-    /// probability a checked one was drawn with. The record names no batch and carries none of what the host saw and
-    /// timed (the suggestions in view, their layers and promises, the milliseconds, who settled it, the form's version);
-    /// a host that keeps those sets them on the record before saving it.
+    /// probability a checked one was drawn with. What the host keeps besides — the batch, the suggestions in view, their
+    /// layers and promises, the milliseconds, who settled it, the form's version — it sets on the record before saving
+    /// it; a reopened record carries back what was saved, less an attribute's entries once that attribute is settled
+    /// again.
     pub fn snapshot(&self) -> Record {
         Record {
             id: self.id.clone(),
@@ -301,7 +324,7 @@ impl OpenRecord {
             settlements: self.settlements.clone(),
             probabilities: self.probabilities.clone(),
             arrival: Some(self.arrival.clone()),
-            ..Record::default()
+            ..self.kept.clone()
         }
     }
 

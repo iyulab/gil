@@ -11,6 +11,11 @@ with what to do.
   `linux-musl-arm64` (musl 1.2 or later, such as Alpine 3.17 or later), in place of the glibc build the .NET host
   fell back to there — which stopped at the first call on x64. The crate is unchanged.
 
+### Fixed
+
+- **`ReviewSampler.MinimumDesignDeviation` no longer loads the native library.** It is computed in managed code, so a
+  host that keeps it in a static field does not fail at type initialization where the library cannot load.
+
 ## 0.1.0
 
 ### Added
