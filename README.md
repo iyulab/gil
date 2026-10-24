@@ -205,6 +205,12 @@ on those lookups alone. A layer without a `Chosen` threshold should not answer t
 `MostPrecise` still says how close it came — the best precision it reached on at least `MinimumAnswered` answers — so
 the application can say by how much the attribute falls short.
 
+`MinimumAnswered`, the fewest answers a threshold may be chosen on, is what keeps an early choice from resting on a
+handful of lucky answers. Replaying 26 public coding tasks from their first records at a target of 0.8, 30 (the value
+in these examples) kept every task that answered more than once at or above the target over its first 500 decisions,
+where 20 let two fall below it; 50 also kept the one task that answered only once (and wrongly) from answering, at
+about a quarter fewer answers overall (0.73 times as many). Do not set it below 30.
+
 
 A replay's precision runs over every record it saw, so a layer that did better long ago keeps it high after the layer
 has changed, and the threshold was chosen on those very answers, so their precision flatters it — most of all when they

@@ -6,10 +6,6 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ## Unreleased
 
-### Added
-
-- **A Python wheel for musl-based Linux on arm64** (`musllinux_1_2_aarch64`), beside the x86_64 one.
-
 ### Changed
 
 - **Breaking: `replay::select_layers` takes `LayerOptions`, and `select_layers_by_rule`, `select_layers_with` and
@@ -33,6 +29,7 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Added
 
+- **A Python wheel for musl-based Linux on arm64** (`musllinux_1_2_aarch64`), beside the x86_64 one.
 - **A settled record can say what was in view, how long it took and who settled it.** Seven optional entries of the
   line format — `suggested` (the value in view when a decided attribute was settled), `sources` (the layer of the
   answer in view, named as answers name it), `promises` (the precision promised for it then, in [0, 1]), `settle_ms`

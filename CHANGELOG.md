@@ -47,6 +47,12 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   `SelectionOptions.Threads` and `Gil.Tree`'s `new LexicalMemory(threads: n)` cap them — 1 keeps a lookup on the
   caller's thread — for a host that answers many requests at once or keeps its own budget of threads.
 
+### Documentation
+
+- **How low `MinimumAnswered` may go.** Replaying 26 public coding tasks from their first records, 30 kept every task
+  that answered more than once at its target over the first 500 decisions and 20 did not; 50 held one more edge case
+  for 0.73 times the answers. The README now says not to set it below 30.
+
 ## 0.26.0
 
 ### Breaking
