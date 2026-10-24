@@ -140,7 +140,7 @@ pub unsafe fn slice<'a, T>(ptr: *const T, len: usize, what: &str) -> Result<&'a 
 }
 
 /// # Safety
-/// As [`slice`], writable and aliased by nothing else.
+/// As [`slice()`], writable and aliased by nothing else.
 pub unsafe fn slice_mut<'a, T>(
     ptr: *mut T,
     len: usize,
@@ -157,7 +157,7 @@ pub unsafe fn slice_mut<'a, T>(
 }
 
 /// # Safety
-/// As [`slice`], for the text's bytes.
+/// As [`slice()`], for the text's bytes.
 pub unsafe fn text<'a>(s: Utf8, what: &str) -> Result<&'a str, Failure> {
     // SAFETY: forwarded from the caller.
     let bytes = unsafe { slice(s.ptr, s.len, what) }?;
