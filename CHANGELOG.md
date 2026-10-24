@@ -159,6 +159,9 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 - `docs/settled-records.md` specifies the settled-record line every binding reads — its entries, why the time and
   the kind of settlement matter, and what an application should keep before it uses Gil — and the READMEs point to
   it.
+- **When to ask a `Keeper` for `Pooled`.** At a 0.9 target on two public streams, a keeper choosing under
+  `EveryBand` answered 0.98 right; under `Pooled` it answered 1.25 and 1.65 times as often, 0.92 right. The README
+  gives the numbers beside the two ways to read a target.
 
 ### Dependencies
 

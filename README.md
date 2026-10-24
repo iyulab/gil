@@ -282,9 +282,11 @@ reaches further back. In eight forward replays on seven public collections — m
 components, aircraft fault codes, patent groups and the attributes of three kinds of biological samples — each on
 records the rule was not tuned on, it kept a 0.8 target every time and answered 0.92–1.80 times as often as
 `EveryBand` (1.52 in the middle); holding the bound at one standard error instead broke the target on an attribute
-answered a few hundred times. Each layer's `Chosen` still reports that layer's own precision and `Promise` (one
-standard error, its own answers); the bound the pair was chosen under is on the answers together, and is the one to
-show:
+answered a few hundred times. Re-chosen by a `Keeper` as records arrived on two public streams at a 0.9 target,
+`EveryBand`'s answers were 0.98 right — a floor under every band leaves the whole well above the target — and
+`Pooled` answered 1.25 and 1.65 times as often, 0.92 right. Each layer's `Chosen` still reports that layer's own
+precision and `Promise` (one standard error, its own answers); the bound the pair was chosen under is on the answers
+together, and is the one to show:
 
 ```csharp
 var pooled = Replay.SelectLayers(schema, "team", saved, options with { TargetPrecision = 0.8, Rule = ThresholdRule.Pooled });
