@@ -434,8 +434,8 @@ struct Keeper {
 }
 
 /// A keeper's choice as JSON: `{"tuning": …, "chosen": {attribute: thresholds, …}, "coarse": {attribute: thresholds, …},
-/// "first_of_batch": {attribute: thresholds, …}}` — `coarse` for the attributes with a coarse level, `first_of_batch`
-/// when the keeper chooses the first records of batches apart.
+/// "first_of_batch": {attribute: thresholds, …}, "form_version": …}` — `coarse` for the attributes with a coarse level,
+/// `first_of_batch` when the keeper chooses the first records of batches apart, `form_version` the edition it keeps.
 fn keeper_json(keeper: &gil::keeper::Keeper) -> String {
     let chosen: serde_json::Map<String, Value> = keeper
         .attributes()
@@ -475,6 +475,7 @@ fn keeper_json(keeper: &gil::keeper::Keeper) -> String {
         "chosen": chosen,
         "coarse": coarse,
         "first_of_batch": first,
+        "form_version": keeper.form_version(),
     })
     .to_string()
 }
@@ -483,7 +484,7 @@ fn keeper_json(keeper: &gil::keeper::Keeper) -> String {
 impl Keeper {
     /// A keeper of the schema with nothing settled, choosing for every decided attribute that takes one value.
     #[new]
-    #[pyo3(signature = (schema_json, target_precision, minimum_answered, counting=None, rule="every_band", threads=None, first_of_batch=false))]
+    #[pyo3(signature = (schema_json, target_precision, minimum_answered, counting=None, rule="every_band", threads=None, first_of_batch=false, restart_on_form_version=false))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         schema_json: &str,
@@ -493,6 +494,7 @@ impl Keeper {
         rule: &str,
         threads: Option<usize>,
         first_of_batch: bool,
+        restart_on_form_version: bool,
     ) -> PyResult<Self> {
         let rule = threshold_rule(rule)?;
         let (schema, counting) = selection_input(schema_json, counting)?;
@@ -505,6 +507,7 @@ impl Keeper {
             counting,
             rule,
             first_of_batch,
+            restart_on_form_version,
         };
         let inner = guarded(|| {
             let keeper = gil::keeper::Keeper::new(schema, keep);
@@ -553,6 +556,11 @@ impl Keeper {
     /// How many records were settled, a record settled again counting again.
     fn settled(&self) -> usize {
         self.inner.settled()
+    }
+
+    /// The edition of the code lists the keeper keeps records of, or `None`. Experimental.
+    fn form_version(&self) -> Option<String> {
+        self.inner.form_version().map(str::to_owned)
     }
 
     /// Chooses again; returns the choice as JSON and, when `decisions` is true, the decision records of the records

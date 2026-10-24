@@ -60,7 +60,7 @@ pub const GIL_BROKEN: i32 = iyulab_ffi_support::BROKEN;
 
 /// The version of this interface — its functions, structures and statuses. It changes whenever a binding built for one
 /// version would misread the library of another.
-pub const GIL_ABI_VERSION: u32 = 6;
+pub const GIL_ABI_VERSION: u32 = 7;
 
 /// [`GilCandidate::source`]: no layer.
 pub const GIL_SOURCE_NONE: u8 = 0;
@@ -1011,8 +1011,9 @@ pub unsafe extern "C" fn gil_decider_is_first_of_batch(
 /// `minimum_answered` at least 1, and optionally `counting` (the settlement kinds whose lookups count, by name; all when
 /// left out), `rule` (`every_band`, the default, or `pooled` — the layers' selection only), `decisions` (whether to keep
 /// the decision records of the replay — the layers' and the coarse level's selections), `typed_longest` (the key
-/// attributes' selection: count typing up to that many characters) and, experimental, `first_of_batch` (the keeper's
-/// only: choose and promise the first records of batches apart).
+/// attributes' selection: count typing up to that many characters) and, experimental and the keeper's only,
+/// `first_of_batch` (choose and promise the first records of batches apart) and `restart_on_form_version` (start again
+/// from nothing when a record arrives under a new edition of the code lists).
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Options {
@@ -1031,6 +1032,8 @@ struct Options {
     threads: usize,
     #[serde(default)]
     first_of_batch: bool,
+    #[serde(default)]
+    restart_on_form_version: bool,
 }
 
 impl Options {
@@ -1533,7 +1536,7 @@ pub unsafe extern "C" fn gil_tuning_stale(
 
 /// A keeper of `schema` with nothing settled, choosing for every decided attribute that takes one value as `options`
 /// says (JSON — `target_precision`, `minimum_answered`, `counting`, `rule`, and `threads` for its replays, as for
-/// `gil_select_layers`), handed out through `out`. Options out of range are contract violations (`GIL_PANIC`).
+/// `gil_select_layers`, and the experimental `first_of_batch` and `restart_on_form_version`), handed out through `out`. Options out of range are contract violations (`GIL_PANIC`).
 ///
 /// # Safety
 /// `schema` is a live handle; `options` is valid for the call; `out` points to one writable pointer.
@@ -1556,6 +1559,7 @@ pub unsafe extern "C" fn gil_keeper_new(
             counting: options.counting.clone(),
             rule: options.rule,
             first_of_batch: options.first_of_batch,
+            restart_on_form_version: options.restart_on_form_version,
         };
         let mut keeper = Keeper::new(schema.0.clone(), keep);
         if options.threads > 0 {
@@ -1669,8 +1673,9 @@ pub unsafe extern "C" fn gil_keeper_settled(keeper: *const GilKeeper) -> usize {
 }
 
 /// The keeper's choice as it stands: `{"tuning": …, "chosen": {attribute: thresholds, …}, "coarse": {attribute:
-/// thresholds, …}}` in the core's `serde` form — `chosen` empty before the first choice, `coarse` for the attributes
-/// with a coarse level.
+/// thresholds, …}, "first_of_batch": {…}, "form_version": …}` in the core's `serde` form — `chosen` empty before the
+/// first choice, `coarse` for the attributes with a coarse level, `form_version` the edition the keeper keeps records of
+/// (null when none).
 fn keeper_state(keeper: &Keeper, decisions: Option<Vec<Value>>) -> Value {
     let chosen: serde_json::Map<String, Value> = keeper
         .attributes()
@@ -1710,6 +1715,7 @@ fn keeper_state(keeper: &Keeper, decisions: Option<Vec<Value>>) -> Value {
         "chosen": chosen,
         "coarse": coarse,
         "first_of_batch": first,
+        "form_version": keeper.form_version(),
     });
     if let Some(decisions) = decisions {
         value["decisions"] = Value::Array(decisions);

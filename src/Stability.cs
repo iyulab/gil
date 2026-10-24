@@ -37,6 +37,12 @@ internal static class Stability
     /// </summary>
     public const string FirstOfBatch = "GIL0006";
 
+    /// <summary>
+    /// A new edition of the code lists (package <c>Gil</c>): a keeper that starts again from nothing when a record arrives
+    /// under a new <c>Record.FormVersion</c>.
+    /// </summary>
+    public const string FormVersion = "GIL0007";
+
     /// <summary>Where the stability of each surface is described.</summary>
     public const string Url = "https://github.com/iyulab/gil/blob/main/README.md#stability";
 }

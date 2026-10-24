@@ -136,6 +136,7 @@ class Keeper:
         rule: str = "every_band",
         threads: int | None = None,
         first_of_batch: bool = False,
+        restart_on_form_version: bool = False,
     ) -> Keeper: ...
     def settle(self, decider: Decider, records: Records) -> None:
         """Puts `records` into `decider` and into the next choice."""
@@ -148,6 +149,9 @@ class Keeper:
 
     def settled(self) -> int:
         """How many records were settled, a record settled again counting again."""
+
+    def form_version(self) -> str | None:
+        """The edition of the code lists the keeper keeps records of, or `None`. Experimental."""
 
     def rechoose(self, decisions: bool = False) -> tuple[str, str | None]:
         """Chooses again; returns the choice as JSON and, when `decisions` is true, the decision records of the records

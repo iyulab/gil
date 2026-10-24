@@ -141,6 +141,11 @@ public static class Replay
                 writer.WriteBoolean("first_of_batch", true);
             }
 
+            if (options.RestartOnFormVersion)
+            {
+                writer.WriteBoolean("restart_on_form_version", true);
+            }
+
             if (options.Threads is { } threads)
             {
                 ArgumentOutOfRangeException.ThrowIfLessThan(threads, 1, nameof(options));

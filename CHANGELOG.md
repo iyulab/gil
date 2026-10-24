@@ -9,6 +9,12 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Added
 
+- **Experimental (`GIL0007`): a keeper that starts again under a new edition of the code lists.**
+  `SelectionOptions.RestartOnFormVersion` has the `Keeper` start from nothing when a record arrives under a new
+  `Record.FormVersion`: the records settled before it leave the decider and the replays, the thresholds chosen on them
+  leave the schema, records still arriving under an edition left behind are not taken, and `KeeperChoice.FormVersion`
+  gives the edition kept. A record that names no edition is taken as of the current one, and the first edition named
+  starts nothing. The native interface is version 7.
 - **Experimental (`GIL0006`): the first record of a batch, chosen and promised apart.** A promise taken on every
   answer holds for the records after a batch's first and can flatter the first, where a source sends records in
   batches that are right or wrong together. `SelectionOptions.FirstOfBatch` has the `Keeper` choose the value layers'

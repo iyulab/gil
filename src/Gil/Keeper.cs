@@ -17,7 +17,8 @@ public sealed class Keeper : IDisposable
     private readonly Lock sync = new();
 
     /// <summary>A keeper of <paramref name="schema"/> with nothing settled, choosing as <paramref name="options"/>
-    /// says (its target, fewest answers, counted kinds, rule and threads; <see cref="SelectionOptions.Decisions"/> and
+    /// says (its target, fewest answers, counted kinds, rule, threads and the experimental
+    /// <see cref="SelectionOptions.FirstOfBatch"/> and <see cref="SelectionOptions.RestartOnFormVersion"/>; <see cref="SelectionOptions.Decisions"/> and
     /// <see cref="SelectionOptions.TypedLongest"/> are not used). The thresholds <paramref name="schema"/> holds stand
     /// until the first <see cref="Rechoose"/>.</summary>
     /// <exception cref="ArgumentException">The options are out of range.</exception>
@@ -71,7 +72,9 @@ public sealed class Keeper : IDisposable
     public Tuning Tuning => State().Tuning;
 
     /// <summary>Puts settled records into <paramref name="decider"/> and into the next choice. Records may come in any
-    /// order; one settled before the last a replay has gone through has the next choice replay from the start.</summary>
+    /// order; one settled before the last a replay has gone through has the next choice replay from the start. With
+    /// <see cref="SelectionOptions.RestartOnFormVersion"/>, a record under a new edition starts the keeper again from
+    /// nothing before it is taken.</summary>
     /// <exception cref="ArgumentException">A record keeps an attribute where its kind does not belong.</exception>
     public void Settle(Decider decider, SettledRecords records)
     {
@@ -163,4 +166,10 @@ public sealed record KeeperChoice(
     [Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
     public IReadOnlyDictionary<string, LayerThresholds> FirstOfBatch { get; init; } =
         System.Collections.ObjectModel.ReadOnlyDictionary<string, LayerThresholds>.Empty;
+
+    /// <summary>The edition of the code lists the keeper keeps records of, when it restarts on a new one
+    /// (<see cref="SelectionOptions.RestartOnFormVersion"/>) — the last one a record named; null until a record names
+    /// one, and always otherwise.</summary>
+    [Experimental(Stability.FormVersion, UrlFormat = Stability.Url)]
+    public string? FormVersion { get; init; }
 }

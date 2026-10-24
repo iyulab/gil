@@ -29,6 +29,11 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Added
 
+- **Experimental: a keeper that starts again under a new edition of the code lists.** `Keep { restart_on_form_version:
+  true, .. }` has the keeper start from nothing when a record arrives under a new `Record::form_version`: the records
+  before it leave the decider and the replays, the thresholds chosen on them leave the schema, records of an edition
+  left behind are not taken, and `Keeper::form_version` gives the edition kept. Python:
+  `Keeper(restart_on_form_version=True)`, `Keeper.form_version`.
 - **Experimental: the first record of a batch, chosen and promised apart.** A promise taken on every answer holds for
   the records after a batch's first and can flatter the first, where a source sends records in batches that are right
   or wrong together. `Keep { first_of_batch: true, .. }` has the keeper choose the value layers' thresholds for the first

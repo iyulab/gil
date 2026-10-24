@@ -91,6 +91,7 @@ type may change shape or be removed in any release without a migration note.
 | `GIL0004` | The memory of confirmed answers: `IMemory`, `MemoryMatch`, `LexicalMemory`, `EmbeddingMemory`, `CircuitBreakingMemory` |
 | `GIL0005` | Asking advice in the decision core: `AskPlanner`, `AskAdvice` |
 | `GIL0006` | The first record of a batch in the decision core: thresholds and promises chosen apart for a record whose batch has no settled record yet, and answering it at them |
+| `GIL0007` | A new edition of the code lists in the decision core: a `Keeper` that starts again from nothing when a record arrives under a new `Record.FormVersion` |
 
 Suppress the ids of what you use, in the project file or around the code:
 
@@ -399,6 +400,17 @@ keeper chooses the first records' thresholds on their own lookups and the rest o
 (`AttributeDefinition.FirstOfBatch`), and an open record whose batch has no other settled record in the decider
 (`IsFirstOfBatch`) is answered at them, its promise `Tuning.FirstOfBatchPromiseOf`. A record that names no batch always
 counts as a first record, so with no batches named it answers as before.
+
+When a form's code lists change meaning — a code renumbered, two merged, one split — a memory carried across answers
+with codes whose meaning changed, and a promise chosen on the old edition does not hold on the new. Name the edition in
+`Record.FormVersion` and set `SelectionOptions.RestartOnFormVersion` for the `Keeper` (experimental, `GIL0007`): a
+record under a new edition starts the keeper again from nothing — the records before it leave the decider and the
+replays, the thresholds chosen on them leave the schema, records still arriving under an edition left behind are not
+taken, and `KeeperChoice.FormVersion` says which edition is kept. On public food inspections across a revision that
+renumbered the violation codes, a memory carried over promised 0.94 for the first thousand records after it and was 0.44
+right, and 120,000 records later still answered 0.52 of lookups against 0.81 for one started anew; on public injury
+reports across an edition that changed no code, starting anew answered 0.63 times as many over the first five thousand.
+Name a new edition only when a value comes to mean something else.
 
 Settle a record that arrives again — a retransmission, a re-save — under the same record id. The memories keep one
 version per id, and the replay asks a record settled again without its earlier version. Under a new id the copy is new

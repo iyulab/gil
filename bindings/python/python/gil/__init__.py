@@ -761,6 +761,7 @@ class KeeperChoice(TypedDict, total=False):
     chosen: dict[str, LayerThresholds]
     coarse: dict[str, LayerThresholds]
     first_of_batch: dict[str, LayerThresholds]
+    form_version: str | None
     decisions: list[DecisionRecord]
 
 
@@ -781,6 +782,12 @@ class Keeper:
     were answered — have the value layers' thresholds chosen and promised apart from the rest, each on its own lookups
     and resting on ``minimum_answered``; the choice's ``first_of_batch`` holds theirs, :attr:`schema` carries them, and
     a first record's promise is ``first_of_batch_promise_of(keeper.tuning, attribute, answer["source"])``.
+
+    Experimental: with ``restart_on_form_version``, a record under a new edition of the code lists (its
+    ``form_version`` — new only when a value comes to mean something else) starts the keeper again from nothing: the
+    records settled before it leave the decider and the replays, the thresholds chosen on them leave :attr:`schema`,
+    and records still arriving under an edition left behind are not taken. A record that names no edition is taken as
+    of the current one; the first edition named starts nothing. :attr:`form_version` is the edition kept.
     """
 
     __slots__ = ("_inner",)
@@ -794,6 +801,7 @@ class Keeper:
         rule: Literal["every_band", "pooled"] = "every_band",
         threads: int | None = None,
         first_of_batch: bool = False,
+        restart_on_form_version: bool = False,
     ) -> None:
         self._inner = _Keeper(
             schema.json,
@@ -803,6 +811,7 @@ class Keeper:
             rule,
             threads,
             first_of_batch,
+            restart_on_form_version,
         )
 
     def settle(self, decider: Decider, records: Records) -> None:
@@ -825,6 +834,12 @@ class Keeper:
     def settled(self) -> int:
         """How many records were settled, a record settled again counting again."""
         return self._inner.settled()
+
+    @property
+    def form_version(self) -> str | None:
+        """The edition of the code lists the keeper keeps records of — the last one a record named — or ``None`` until
+        one does, and always when the keeper does not restart. Experimental."""
+        return self._inner.form_version()
 
     def rechoose(self, decisions: bool = False) -> KeeperChoice:
         """Chooses every attribute's thresholds again on all the records settled — replaying only those settled since

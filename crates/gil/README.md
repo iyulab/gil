@@ -112,6 +112,15 @@ that names no batch always is, so with no batches named it answers as before. On
 of a quarter, the first records' own lookups held no threshold to the target, so they went unanswered, while the later
 records were answered at thresholds chosen on theirs.
 
+When a form's code lists change meaning, give the keeper `Keep { restart_on_form_version: true, .. }` (experimental) and
+name each record's edition in `Record::form_version`: a record under a new edition starts the keeper again from nothing
+— the records before it leave the decider and the replays, the thresholds chosen on them leave the schema, records of an
+edition left behind are not taken, and `Keeper::form_version` says which edition is kept. On public food inspections
+across a revision that renumbered the violation codes, a memory carried over promised 0.94 for the first thousand
+records after it and was 0.44 right, and 120,000 records later still answered 0.52 of lookups against 0.81 for one
+started anew; on public injury reports across an edition that changed no code, starting anew answered 0.63 times as many
+over the first five thousand. Name a new edition only when a value comes to mean something else.
+
 ## License
 
 Apache-2.0 — see `LICENSE`.

@@ -14,11 +14,15 @@
 //! The decider stays the host's, so that records being filled in ([`crate::open_record::OpenRecord`]) use it as before;
 //! give the keeper the same decider every time.
 //!
+//! Experimental: a keeper told to ([`Keep::restart_on_form_version`]) starts again from nothing when a record arrives
+//! under a new edition of the code lists ([`Record::form_version`]) — the records before it leave the decider and the
+//! replays, and the thresholds chosen on them leave the schema.
+//!
 //! What it keeps is the choosing and the promise. Whether to check answers again, how often and where to send them stay
 //! with the host. Nothing is stored outside the process: a keeper made at start-up replays the saved records once, from
 //! the start.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::decider::Decider;
 use crate::decision_record::DecisionRecord;
@@ -50,6 +54,14 @@ pub struct Keep {
     /// held to the target on their own. False chooses one set of thresholds for every record, and leaves none for the
     /// first records on the schema.
     pub first_of_batch: bool,
+    /// Experimental. Whether a record under a new edition of the code lists ([`Record::form_version`] — new only when a
+    /// value comes to mean something else) starts the keeper again from nothing: the records settled before it leave
+    /// the decider and the replays, the thresholds chosen on them leave the schema, and records still arriving under an
+    /// edition left behind are not taken. Carried across a renumbering, a memory answers with codes whose meaning
+    /// changed, and a promise chosen on the old edition does not hold on the new. A record that names no edition is
+    /// taken as of the current one; the first edition named starts nothing. False keeps every record whatever its
+    /// edition.
+    pub restart_on_form_version: bool,
 }
 
 impl Keep {
@@ -62,6 +74,7 @@ impl Keep {
             counting: None,
             rule: ThresholdRule::EveryBand,
             first_of_batch: false,
+            restart_on_form_version: false,
         }
     }
 
@@ -95,6 +108,8 @@ pub struct Keeper {
     first: BTreeMap<String, LayerThresholds>,
     coarse: BTreeMap<String, LayerThresholds>,
     tuning: Tuning,
+    form_version: Option<String>,
+    left: BTreeSet<String>,
 }
 
 impl Keeper {
@@ -117,6 +132,8 @@ impl Keeper {
             first: BTreeMap::new(),
             coarse: BTreeMap::new(),
             tuning,
+            form_version: None,
+            left: BTreeSet::new(),
         };
         keeper.restart();
         keeper
@@ -172,6 +189,12 @@ impl Keeper {
         self.replays.keys().map(String::as_str)
     }
 
+    /// Experimental. The edition of the code lists the keeper keeps records of ([`Keep::restart_on_form_version`]) — the
+    /// last one a record named; `None` until a record names one, and always when the keeper does not restart.
+    pub fn form_version(&self) -> Option<&str> {
+        self.form_version.as_deref()
+    }
+
     /// How many records were settled, a record settled again counting again — what staleness is counted on.
     pub fn settled(&self) -> usize {
         self.records.len()
@@ -179,10 +202,63 @@ impl Keeper {
 
     /// Takes settled records: `decider` learns them ([`Decider::rebuild`]) and the next choice replays them. Records may
     /// come in any order; one settled before the last a replay has gone through has the next choice replay everything
-    /// from the start.
+    /// from the start. With [`Keep::restart_on_form_version`], a record under a new edition starts the keeper again
+    /// from nothing before it is taken — what came before it, in this call or earlier, is forgotten.
     pub fn settle(&mut self, decider: &mut Decider, records: &[Record]) {
-        decider.rebuild(&self.schema, records);
-        self.records.extend_from_slice(records);
+        if !self.keep.restart_on_form_version {
+            decider.rebuild(&self.schema, records);
+            self.records.extend_from_slice(records);
+            return;
+        }
+        let mut taken: Vec<Record> = Vec::with_capacity(records.len());
+        for record in records {
+            match record.form_version.as_deref() {
+                Some(edition) if self.left.contains(edition) => continue,
+                Some(edition) if self.form_version.as_deref().is_some_and(|e| e != edition) => {
+                    taken.clear();
+                    self.begin(decider, edition);
+                }
+                Some(edition) if self.form_version.is_none() => {
+                    self.form_version = Some(edition.to_owned());
+                }
+                _ => {}
+            }
+            taken.push(record.clone());
+        }
+        decider.rebuild(&self.schema, &taken);
+        self.records.extend(taken);
+    }
+
+    /// Starts again from nothing under `edition`: the records settled so far leave `decider` and the replays, their
+    /// edition is left behind, and the thresholds chosen on them leave the schema.
+    fn begin(&mut self, decider: &mut Decider, edition: &str) {
+        let ids: BTreeSet<String> = self.records.drain(..).map(|r| r.id).collect();
+        for id in &ids {
+            decider.remove(&self.schema, id);
+        }
+        if let Some(previous) = self.form_version.replace(edition.to_owned()) {
+            self.left.insert(previous);
+        }
+        let mut schema = self.schema.clone();
+        for attribute in self.replays.keys() {
+            schema = schema.derived(attribute, |a| {
+                a.key_threshold = None;
+                a.memory_threshold = None;
+                a.memory_floor = None;
+                a.first_of_batch = None;
+                if let Some(level) = a.coarse.as_mut() {
+                    level.key_threshold = None;
+                    level.memory_threshold = None;
+                    level.memory_floor = None;
+                }
+            });
+        }
+        self.schema = schema;
+        self.chosen.clear();
+        self.first.clear();
+        self.coarse.clear();
+        self.tuning = Tuning::capture(&self.schema, 0, self.keep.target_precision);
+        self.restart();
     }
 
     /// Takes a record the host deleted out of `decider` ([`Decider::remove`]) and out of the records; the next choice
@@ -866,5 +942,102 @@ mod tests {
             Keep::new(0.8),
         );
         assert_eq!(keeper.attributes().collect::<Vec<_>>(), ["queue", "team"]);
+    }
+
+    /// `records` under the edition `edition`, the second edition renumbering the teams.
+    fn under(records: &[Record], edition: &str) -> Vec<Record> {
+        records
+            .iter()
+            .map(|r| {
+                let mut r = r.clone();
+                if edition == "2" {
+                    let team = r.values["team"].clone();
+                    r.values.insert("team".into(), format!("{team}-2"));
+                }
+                r.id = format!("{}@{edition}", r.id);
+                r.form_version = Some(edition.into());
+                r
+            })
+            .collect()
+    }
+
+    fn answers(decider: &Decider, schema: &Schema, record: &Record) -> String {
+        format!(
+            "{:?}",
+            decider.answer(schema, "probe", &record.values, &BTreeMap::new())
+        )
+    }
+
+    #[test]
+    fn a_new_edition_starts_the_keeper_again_from_its_first_record() {
+        let keep = Keep {
+            restart_on_form_version: true,
+            ..Keep::new(0.8)
+        };
+        let records = settled(600);
+        let old = under(&records[..300], "1");
+        let new = under(&records[300..], "2");
+        let mut keeper = Keeper::new(schema(), keep.clone());
+        let mut decider = decider();
+        keeper.settle(&mut decider, &old[..200]);
+        keeper.rechoose();
+        assert_eq!(keeper.form_version(), Some("1"));
+        assert!(keeper.schema().attribute("team").key_threshold.is_some());
+
+        // The rest of the old edition and the first of the new in one call: the new starts from its first record.
+        let mut batch = old[200..].to_vec();
+        batch.extend_from_slice(&new[..1]);
+        keeper.settle(&mut decider, &batch);
+        assert_eq!(keeper.form_version(), Some("2"));
+        assert_eq!(keeper.settled(), 1);
+        let team = keeper.schema().attribute("team");
+        assert_eq!(
+            (team.key_threshold, team.memory_threshold, team.memory_floor),
+            (None, None, None)
+        );
+        assert!(keeper.chosen("team").is_none());
+        assert_eq!(keeper.stale(), Some(Stale::Settled { chosen: 0, now: 1 }));
+
+        // A record still arriving under the edition left behind is not taken.
+        keeper.settle(&mut decider, &new[1..]);
+        keeper.settle(&mut decider, &old[..5]);
+        keeper.rechoose();
+        assert_eq!(keeper.settled(), new.len());
+        assert_eq!(of(&keeper), from_the_start(&keep, &new));
+
+        // The decider holds the new edition alone.
+        let mut alone = self::decider();
+        alone.rebuild(&schema(), &new);
+        for probe in [&new[0], &new[150], &old[10]] {
+            assert_eq!(
+                answers(&decider, keeper.schema(), probe),
+                answers(&alone, keeper.schema(), probe)
+            );
+        }
+    }
+
+    #[test]
+    fn records_naming_no_edition_or_the_first_one_start_nothing() {
+        let keep = Keep {
+            restart_on_form_version: true,
+            ..Keep::new(0.8)
+        };
+        let records = settled(300);
+        let mut keeper = Keeper::new(schema(), keep.clone());
+        let mut decider = decider();
+        keeper.settle(&mut decider, &records[..100]);
+        keeper.settle(&mut decider, &under(&records[100..200], "1"));
+        keeper.settle(&mut decider, &records[200..]);
+        keeper.rechoose();
+        assert_eq!(keeper.form_version(), Some("1"));
+        assert_eq!(keeper.settled(), 300);
+
+        // Without restarting, editions are kept whatever they say.
+        let mut keeper = Keeper::new(schema(), Keep::new(0.8));
+        let mut decider = self::decider();
+        keeper.settle(&mut decider, &under(&records[..150], "1"));
+        keeper.settle(&mut decider, &under(&records[150..], "2"));
+        assert_eq!(keeper.settled(), 300);
+        assert_eq!(keeper.form_version(), None);
     }
 }

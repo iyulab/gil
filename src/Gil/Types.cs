@@ -124,6 +124,15 @@ public sealed record SelectionOptions(double TargetPrecision, int MinimumAnswere
     /// first.</summary>
     [Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
     public bool FirstOfBatch { get; init; }
+
+    /// <summary>The keeper's only: whether a record under a new edition of the code lists (<see cref="Record.FormVersion"/>
+    /// — new only when a value comes to mean something else) starts the keeper again from nothing: the records settled
+    /// before it leave the decider and the replays, the thresholds chosen on them leave the schema, and records still
+    /// arriving under an edition left behind are not taken. Carried across a renumbering, a memory answers with codes
+    /// whose meaning changed, and a promise chosen on the old edition does not hold on the new. A record that names no
+    /// edition is taken as of the current one; the first edition named starts nothing.</summary>
+    [Experimental(Stability.FormVersion, UrlFormat = Stability.Url)]
+    public bool RestartOnFormVersion { get; init; }
 }
 
 /// <summary>One decision for the usage counts: the attribute, the value answered (null: none), the value settled (null:
