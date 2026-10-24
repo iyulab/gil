@@ -1,15 +1,16 @@
 name: Publish iyulab-gil
 
-# Publishes the Rust crate to crates.io and the Python package to PyPI when the core crate's version changes, and the
-# review crate (iyulab-gil-review) to crates.io when its version changes. The Python package takes the bindings
-# crate's version, which follows the core's; a version already on a registry is skipped there, so a rerun finishes
-# what an earlier run left undone. The C ABI plumbing (iyulab-ffi-support) has a version line of its own and goes to
-# crates.io the same way. The .NET packages, Gil.Review among them, publish from publish.yml.
+# Publishes the Rust crate to crates.io and the Python package to PyPI when the workspace's version line (the root
+# Cargo.toml, which the core crate and the bindings inherit) changes, and the review crate (iyulab-gil-review) to
+# crates.io when its version changes. The Python package takes the bindings crate's version; a version already on a
+# registry is skipped there, so a rerun finishes what an earlier run left undone. The C ABI plumbing
+# (iyulab-ffi-support) has a version line of its own and goes to crates.io the same way. The .NET packages,
+# Gil.Review among them, publish from publish.yml.
 
 on:
   push:
     branches: [main, rust-core]
-    paths: [crates/gil/Cargo.toml, crates/gil-review/Cargo.toml, crates/ffi-support/Cargo.toml]
+    paths: [Cargo.toml, crates/gil-review/Cargo.toml, crates/ffi-support/Cargo.toml]
   workflow_dispatch:
 
 permissions:
@@ -36,13 +37,8 @@ jobs:
       - name: Read the version
         id: read
         run: |
-          core=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/gil/Cargo.toml)
-          bindings=$(sed -n 's/^version = "\(.*\)"/\1/p' bindings/python/Cargo.toml)
-          if [ "$core" != "$bindings" ]; then
-            echo "::error::crates/gil is $core but bindings/python is $bindings; they share one version line."
-            exit 1
-          fi
-          echo "version=$core" >> "$GITHUB_OUTPUT"
+          # The core crate and the bindings inherit the workspace's version line (Cargo.toml [workspace.package]).
+          echo "version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
           review=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/gil-review/Cargo.toml)
           binding=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' bindings/csharp/Gil.Review/Gil.Review.csproj)
           if [ "$review" != "$binding" ]; then

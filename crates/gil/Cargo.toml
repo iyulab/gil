@@ -1,6 +1,6 @@
 [package]
 name = "iyulab-gil"
-version = "0.8.0"
+version.workspace = true
 description = "Answers the decided attributes of a record from the records people already settled, with the precision each answer layer promises - the decision core, with no I/O."
 edition.workspace = true
 license.workspace = true

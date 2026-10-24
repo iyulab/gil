@@ -14,6 +14,16 @@ use common::{CHOSEN, fixture, lines, schema, to_record};
 use gil_native::*;
 use serde_json::{Value, json};
 
+/// A tuning with its version (the crate's, `gil::tuning::VERSION`) replaced by `VERSION_PLACEHOLDER`, so the fixture
+/// does not change with every release; .NET puts its own back before comparing.
+fn versionless(mut tuning: Value) -> Value {
+    assert_eq!(tuning["version"], gil::tuning::VERSION);
+    tuning["version"] = Value::from(VERSION_PLACEHOLDER);
+    tuning
+}
+
+const VERSION_PLACEHOLDER: &str = "{version}";
+
 fn check_or_write(name: &str, expected: &str) {
     let path = format!(
         "{}/../../tests/fixtures/core/native/{name}",
@@ -185,8 +195,8 @@ fn the_selections_fixture_is_up_to_date() {
         "attribute": "team",
         "settled": CHOSEN,
         "target_precision": 0.8,
-        "captured": captured,
-        "promised": promised,
+        "captured": versionless(captured),
+        "promised": versionless(promised),
         "applied": applied_json,
         "with_layers": with_layers_json,
         "stale_at": CHOSEN * 11 / 10,

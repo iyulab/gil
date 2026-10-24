@@ -8,7 +8,7 @@ description = "Answers the decided attributes of a record from the records peopl
 requires-python = ">=3.11"
 license = "Apache-2.0"
 readme = "README.md"
-# The version is the bindings crate's (bindings/python/Cargo.toml), which follows the core crate's.
+# The version is the bindings crate's, which inherits the workspace's version line (the root Cargo.toml).
 dynamic = ["version"]
 keywords = ["forms", "suggestion", "precision", "replay", "classification"]
 classifiers = [
