@@ -52,8 +52,10 @@ public sealed class RefusalTests
     }
 
     [Fact]
-    public void The_design_floor_is_the_square_root_of_its_formula()
+    public void The_design_floor_is_the_square_root_of_its_formula_and_the_one_the_library_plans_against()
     {
         ReviewSampler.MinimumDesignDeviation.Should().Be(Math.Sqrt(0.05 * 0.95));
+        Native.EnsureCompatible();
+        ReviewSampler.MinimumDesignDeviation.Should().Be(Native.MinimumDesignDeviation());
     }
 }

@@ -43,13 +43,14 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 - **`Gil.IronHive` and `Gil.Sqlite` are no longer published.** 0.26.0 is the last package of each; it depends on
   `Gil.Abstractions` / `Gil.Tree` 0.26.0 or later, so it keeps working beside this release. Nothing used either outside
   the experimental tree path; their source stays in the repository with that path, which is frozen.
-
 - `SettledRecords.FromJsonLines` reads `settled_at` as a time in the round-trip format (`"O"`) as well as in ticks,
   and an entry given as null as left out — the line Python reads. A date, time or offset out of range does not read.
 - A similar-record lookup over a large memory is split among up to eight threads; answers and replays are the same to
   the bit. Replaying 40,000 public food inspection records took 27 s against 60 s. `new Decider(threads: n)`,
   `SelectionOptions.Threads` and `Gil.Tree`'s `new LexicalMemory(threads: n)` cap them — 1 keeps a lookup on the
   caller's thread — for a host that answers many requests at once or keeps its own budget of threads.
+- `ReviewSampler.MinimumDesignDeviation` is computed in managed code: reading it no longer loads the native library, so
+  a host that keeps it in a static field does not fail at type initialization where the library cannot load.
 
 ### Documentation
 

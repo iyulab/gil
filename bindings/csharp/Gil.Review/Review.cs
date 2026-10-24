@@ -7,15 +7,9 @@ public static class ReviewSampler
     /// <summary>Records drawn from each stratum in a pilot, before there is a variance to allocate against.</summary>
     public const int PilotRecordsPerStratum = 30;
 
-    /// <summary>The floor on a stratum's deviation that allocation plans against: √(0.05 · 0.95).</summary>
-    public static double MinimumDesignDeviation
-    {
-        get
-        {
-            Native.EnsureCompatible();
-            return Native.MinimumDesignDeviation();
-        }
-    }
+    /// <summary>The floor on a stratum's deviation that allocation plans against: √(0.05 · 0.95). A defined value,
+    /// computed here without the native library, so reading it works where the library cannot load.</summary>
+    public static double MinimumDesignDeviation => Math.Sqrt(0.05 * 0.95);
 
     /// <summary>A pilot draw: <paramref name="perStratum"/> records from every stratum. Within a stratum the ids are
     /// put in ordinal order of their UTF-8 bytes and a partial Fisher–Yates shuffle takes the sample; a stratum with no
