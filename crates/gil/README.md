@@ -131,8 +131,11 @@ name each record's edition in `Record::form_version`: a record under a new editi
 edition left behind are not taken, and `Keeper::form_version` says which edition is kept. On public food inspections
 across a revision that renumbered the violation codes, a memory carried over promised 0.94 for the first thousand
 records after it and was 0.44 right, and 120,000 records later still answered 0.52 of lookups against 0.81 for one
-started anew; on public injury reports across an edition that changed no code, starting anew answered 0.63 times as many
-over the first five thousand. Name a new edition only when a value comes to mean something else.
+started anew; on public workplace injury reports across a classification edition that replaced the injury codes, a
+memory carried over promised 0.87 for the first thousand records and was 0.01 right, and 23 months later still answered
+0.005 of lookups against 0.08 for one started anew; on public injury reports across an edition that changed no code,
+starting anew answered 0.63 times as many over the first five thousand. Name a new edition only when a value comes to
+mean something else.
 
 A promise is an average over an attribute's values, and a value the layers keep taking for another can sit far below
 it while the average holds. Ask `select_layers` for `LayerOptions { value_tails: true, .. }`, or the keeper for
