@@ -203,7 +203,9 @@ records have grown or shrunk by a tenth — by replaying the saved records. `Sel
 the order the decider consults the layers: a similar record answers only where no key did, so its threshold is chosen
 on those lookups alone. A layer without a `Chosen` threshold should not answer the attribute on its own; its
 `MostPrecise` still says how close it came — the best precision it reached on at least `MinimumAnswered` answers — so
-the application can say by how much the attribute falls short.
+the application can say by how much the attribute falls short. Leaving an attribute unanswered is not a failure: it
+records that what has been settled does not yet decide that attribute, so the person keeps deciding it. A layer starts
+answering an attribute once a threshold is chosen for it, and not before.
 
 `MinimumAnswered`, the fewest answers a threshold may be chosen on, is what keeps an early choice from resting on a
 handful of lucky answers. Replaying 26 public coding tasks from their first records at a target of 0.8, 30 (the value

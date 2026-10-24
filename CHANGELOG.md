@@ -56,6 +56,9 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   Replaying two public streams with one wrong answer in three kept, at a target of 0.9 and counting every settlement,
   the promise ended 0.3 and 0.8 points above what was right and about one remembered value in 200 was wrong. The
   README says so beside how kept answers inflate a promise.
+- **An unanswered attribute is a record, not a failure.** The README says, beside `MostPrecise`, that an attribute no
+  layer answers is one the settled records do not yet decide, and that a layer answers an attribute only once a
+  threshold is chosen for it.
 
 ## 0.26.0
 
