@@ -3,6 +3,14 @@
 The Rust crate and its .NET binding share this version line; 0.1.0 is the first release of both. Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do.
 
+## Unreleased
+
+### Added
+
+- **musl-based Linux.** The `Gil.Review` package also carries the native library for `linux-musl-x64` and
+  `linux-musl-arm64` (musl 1.2 or later, such as Alpine 3.17 or later), in place of the glibc build the .NET host
+  fell back to there — which stopped at the first call on x64. The crate is unchanged.
+
 ## 0.1.0
 
 ### Added

@@ -9,6 +9,11 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Added
 
+- **musl-based Linux.** The `Gil` package also carries the native library for `linux-musl-x64` and
+  `linux-musl-arm64` (musl 1.2 or later, such as Alpine 3.17 or later). There the .NET host used to fall back to the
+  glibc build: on x64 that stopped at the first call with a `DllNotFoundException` (it needs `ld-linux-x86-64.so.2`),
+  and on arm64 it loaded only because musl happens to provide what that build links against. `Gil.Tree`'s lexical
+  memory runs on musl through the same library.
 - **A settled record can say what was in view, how long it took and who settled it.** `Record.Suggested` (the value
   in view when a decided attribute was settled), `Sources` (the layer of the answer in view), `Promises` (the precision
   promised for it then, in [0, 1] — `Tuning.PromiseOf`), `SettleMs` (per attribute, the milliseconds from reaching it

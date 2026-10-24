@@ -15,7 +15,7 @@ public sealed class LoadTests
         var error = Native.NotFound(inner);
 
         error.Message.Should().Contain("gil_native").And.Contain(RuntimeInformation.RuntimeIdentifier)
-            .And.Contain("linux-x64, linux-arm64, osx-x64, osx-arm64, win-x64, win-arm64")
+            .And.Contain("linux-x64, linux-arm64, linux-musl-x64, linux-musl-arm64, osx-x64, osx-arm64, win-x64, win-arm64")
             .And.Contain("cargo build --release -p gil-ffi");
         error.InnerException.Should().BeSameAs(inner);
     }

@@ -51,16 +51,17 @@ nobody settles (memory then stays empty), or for choosing between models (a rout
 | `Gil.Core.Tests` | Tests of the decision core through its .NET API, reproducing the Rust core's goldens |
 | `Gil.Tests` | Unit tests of the experimental tracks and the compatibility fixture writer |
 
-The `Gil` package carries the decision core's native library for six runtimes, and the .NET host loads the one for
+The `Gil` package carries the decision core's native library for eight runtimes, and the .NET host loads the one for
 the platform it runs on:
 
 | Runtime | Built for |
 |---|---|
 | `linux-x64`, `linux-arm64` | glibc 2.28 or later (the manylinux 2.28 baseline) |
+| `linux-musl-x64`, `linux-musl-arm64` | musl 1.2 or later, such as Alpine 3.17 or later, with `libgcc` (which .NET needs there too) |
 | `osx-x64`, `osx-arm64` | macOS 11 or later |
 | `win-x64`, `win-arm64` | Windows, with the C runtime linked in (no Visual C++ redistributable needed) |
 
-On any other runtime — musl-based Linux such as Alpine, 32-bit platforms — the first call throws a
+On any other runtime — 32-bit platforms, for one — the first call throws a
 `DllNotFoundException` that names the runtime; build the library from this repository
 (`cargo build --release -p gil-ffi`) and put it next to the application.
 
@@ -818,7 +819,7 @@ dotnet test --solution Gil.slnx
 
 `Gil` is packed only when given a folder with each runtime's library — `<folder>/<rid>/libgil_native.so`,
 `libgil_native.dylib` or `gil_native.dll` — and packing fails when one is missing; the native workflow
-(`.github/workflows/native.yml`) builds all six and packs with them:
+(`.github/workflows/native.yml`) builds all eight and packs with them:
 
 ```
 dotnet pack src/Gil/Gil.csproj -p:GilNativeRoot=<folder>

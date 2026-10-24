@@ -27,6 +27,8 @@
   <ItemGroup Condition="'$(GilNativeRoot)' != ''">
     <GilNativeLibrary Include="$(GilNativeRoot)/linux-x64/libgil_native.so" Rid="linux-x64" />
     <GilNativeLibrary Include="$(GilNativeRoot)/linux-arm64/libgil_native.so" Rid="linux-arm64" />
+    <GilNativeLibrary Include="$(GilNativeRoot)/linux-musl-x64/libgil_native.so" Rid="linux-musl-x64" />
+    <GilNativeLibrary Include="$(GilNativeRoot)/linux-musl-arm64/libgil_native.so" Rid="linux-musl-arm64" />
     <GilNativeLibrary Include="$(GilNativeRoot)/osx-x64/libgil_native.dylib" Rid="osx-x64" />
     <GilNativeLibrary Include="$(GilNativeRoot)/osx-arm64/libgil_native.dylib" Rid="osx-arm64" />
     <GilNativeLibrary Include="$(GilNativeRoot)/win-x64/gil_native.dll" Rid="win-x64" />

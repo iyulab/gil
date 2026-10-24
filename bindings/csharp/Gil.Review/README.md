@@ -26,7 +26,7 @@ var sample = ReviewSampler.DrawPilot(
 Console.WriteLine(sample.SelectedCount); // 5
 ```
 
-The package carries the native library for linux-x64, linux-arm64, osx-x64, osx-arm64, win-x64 and win-arm64. A Native
-AOT application publishes it next to the executable.
+The package carries the native library for linux-x64, linux-arm64, linux-musl-x64, linux-musl-arm64, osx-x64,
+osx-arm64, win-x64 and win-arm64. A Native AOT application publishes it next to the executable.
 
 Licensed under Apache-2.0.

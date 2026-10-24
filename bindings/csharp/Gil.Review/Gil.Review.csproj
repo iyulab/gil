@@ -32,6 +32,8 @@
   <ItemGroup Condition="'$(GilReviewNativeRoot)' != ''">
     <GilReviewNativeLibrary Include="$(GilReviewNativeRoot)/linux-x64/libgil_review_native.so" Rid="linux-x64" />
     <GilReviewNativeLibrary Include="$(GilReviewNativeRoot)/linux-arm64/libgil_review_native.so" Rid="linux-arm64" />
+    <GilReviewNativeLibrary Include="$(GilReviewNativeRoot)/linux-musl-x64/libgil_review_native.so" Rid="linux-musl-x64" />
+    <GilReviewNativeLibrary Include="$(GilReviewNativeRoot)/linux-musl-arm64/libgil_review_native.so" Rid="linux-musl-arm64" />
     <GilReviewNativeLibrary Include="$(GilReviewNativeRoot)/osx-x64/libgil_review_native.dylib" Rid="osx-x64" />
     <GilReviewNativeLibrary Include="$(GilReviewNativeRoot)/osx-arm64/libgil_review_native.dylib" Rid="osx-arm64" />
     <GilReviewNativeLibrary Include="$(GilReviewNativeRoot)/win-x64/gil_review_native.dll" Rid="win-x64" />
