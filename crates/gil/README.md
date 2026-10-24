@@ -137,6 +137,15 @@ memory carried over promised 0.87 for the first thousand records and was 0.01 ri
 starting anew answered 0.63 times as many over the first five thousand. Name a new edition only when a value comes to
 mean something else.
 
+When nobody names the edition, the settlements still show it: the memory answers with codes whose meaning changed, and
+the answers come back corrected. Give the keeper `Keep { watch_realized: true, .. }` (experimental) and `Keeper::stale`
+says so before any other reason — `Stale::Realized` names the attribute when, of its last `REALIZED_WINDOW` (100)
+answers whose rightness came back (accepted, corrected, or checked against the answer in view), fewer were right than
+the target less `REALIZED_MARGIN` (0.15). It needs the settlement kinds; records settled with none, or filled by the
+host, leave it silent. Choosing again does not mend a revision: name the new edition. On public food inspections and
+public workplace injury reports, a window of 100 at a target of 0.9 fell under 0.75 within 54 and 163 records of the
+revision, with no edition named; on thirteen public streams with no revision it never did.
+
 A promise is an average over an attribute's values, and a value the layers keep taking for another can sit far below
 it while the average holds. Ask `select_layers` for `LayerOptions { value_tails: true, .. }`, or the keeper for
 `Keep { value_tails: true, .. }` (experimental), and the thresholds chosen carry `LayerThresholds::value_tails`: for

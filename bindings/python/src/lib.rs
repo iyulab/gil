@@ -488,7 +488,7 @@ fn keeper_json(keeper: &gil::keeper::Keeper) -> String {
 impl Keeper {
     /// A keeper of the schema with nothing settled, choosing for every decided attribute that takes one value.
     #[new]
-    #[pyo3(signature = (schema_json, target_precision, minimum_answered, counting=None, rule="every_band", threads=None, first_of_batch=false, restart_on_form_version=false, value_tails=false))]
+    #[pyo3(signature = (schema_json, target_precision, minimum_answered, counting=None, rule="every_band", threads=None, first_of_batch=false, restart_on_form_version=false, value_tails=false, watch_realized=false))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         schema_json: &str,
@@ -500,6 +500,7 @@ impl Keeper {
         first_of_batch: bool,
         restart_on_form_version: bool,
         value_tails: bool,
+        watch_realized: bool,
     ) -> PyResult<Self> {
         let rule = threshold_rule(rule)?;
         let (schema, counting) = selection_input(schema_json, counting)?;
@@ -514,6 +515,7 @@ impl Keeper {
             first_of_batch,
             restart_on_form_version,
             value_tails,
+            watch_realized,
         };
         let inner = guarded(|| {
             let keeper = gil::keeper::Keeper::new(schema, keep);

@@ -847,6 +847,13 @@ class Keeper:
 
     Experimental: with ``value_tails``, each attribute's thresholds carry ``value_tails`` as :func:`select_layers`'
     do — counted on the records its value thresholds were chosen on.
+
+    Experimental: with ``watch_realized``, :meth:`stale` also says when the answers stopped keeping the promise —
+    ``{"realized": {"attribute": ..., "right": ..., "judged": 100}}`` once fewer of an attribute's last 100 answers
+    whose rightness came back (accepted, corrected, or checked against the answer in view) were right than the target
+    less 0.15. It needs the settlement kinds; records settled with none, or filled by the host, leave it silent.
+    Choosing again does not mend a revision of the code lists; naming the new edition (``restart_on_form_version``)
+    does.
     """
 
     __slots__ = ("_inner",)
@@ -862,6 +869,7 @@ class Keeper:
         first_of_batch: bool = False,
         restart_on_form_version: bool = False,
         value_tails: bool = False,
+        watch_realized: bool = False,
     ) -> None:
         self._inner = _Keeper(
             schema.json,
@@ -873,6 +881,7 @@ class Keeper:
             first_of_batch,
             restart_on_form_version,
             value_tails,
+            watch_realized,
         )
 
     def settle(self, decider: Decider, records: Records) -> None:
@@ -887,7 +896,8 @@ class Keeper:
 
     def stale(self) -> dict[str, Any] | str | None:
         """Why the last choice no longer stands — ``{"settled": {"chosen": ..., "now": ...}}`` once a tenth more or fewer
-        records are settled — or ``None`` while it does."""
+        records are settled, and before it, with ``watch_realized``, ``{"realized": ...}`` for the first attribute whose
+        answers stopped keeping the promise — or ``None`` while it does."""
         text = self._inner.stale()
         return None if text is None else cast(dict[str, Any] | str, json.loads(text))
 

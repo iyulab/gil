@@ -18,6 +18,11 @@
 //! under a new edition of the code lists ([`Record::form_version`]) — the records before it leave the decider and the
 //! replays, and the thresholds chosen on them leave the schema.
 //!
+//! Experimental: a keeper told to ([`Keep::watch_realized`]) says when the answers stopped keeping the promise
+//! ([`Stale::Realized`]) — of the last [`REALIZED_WINDOW`] answers whose rightness came back, fewer right than the
+//! target less [`REALIZED_MARGIN`]. It is what a revision nobody named looks like from inside: the memory answers with
+//! codes whose meaning changed, and the settlements say so. Choosing again does not mend it; naming the new edition does.
+//!
 //! What it keeps is the choosing and the promise. Whether to check answers again, how often and where to send them stay
 //! with the host. Nothing is stored outside the process: a keeper made at start-up replays the saved records once, from
 //! the start.
@@ -65,7 +70,21 @@ pub struct Keep {
     /// Experimental. Whether each choice reports, value by settled value, how its thresholds answered
     /// ([`LayerThresholds::value_tails`]) — on the records the value thresholds were chosen on.
     pub value_tails: bool,
+    /// Experimental. Whether [`Keeper::stale`] also says when the answers stopped keeping the promise
+    /// ([`Stale::Realized`]): of the last [`REALIZED_WINDOW`] answers of an attribute whose rightness came back —
+    /// accepted (right), corrected (wrong), checked (right when the check agrees with the answer in view) — fewer than
+    /// the target less [`REALIZED_MARGIN`] were right. It needs the settlement kinds: records settled with none, or
+    /// filled by the host, leave it silent. The reason stands while the window stays below; choosing again does not mend
+    /// a revision of the code lists, naming the new edition ([`Keep::restart_on_form_version`]) does. False never says
+    /// it.
+    pub watch_realized: bool,
 }
+
+/// Experimental. How many of an attribute's last answers whose rightness came back [`Keep::watch_realized`] judges.
+pub const REALIZED_WINDOW: usize = 100;
+
+/// Experimental. How far under the target the answers in the window may fall before [`Keep::watch_realized`] says so.
+pub const REALIZED_MARGIN: f64 = 0.15;
 
 impl Keep {
     /// Thresholds for `target_precision`, resting on at least ten answers, counting every settlement, by
@@ -79,6 +98,7 @@ impl Keep {
             first_of_batch: false,
             restart_on_form_version: false,
             value_tails: false,
+            watch_realized: false,
         }
     }
 
@@ -273,9 +293,50 @@ impl Keeper {
         self.restart();
     }
 
-    /// Why the last choice no longer stands, or `None` while it does — [`Tuning::stale`] on the records settled.
+    /// Why the last choice no longer stands, or `None` while it does — [`Tuning::stale`] on the records settled, and
+    /// before it, with [`Keep::watch_realized`], the first attribute whose answers stopped keeping the promise.
     pub fn stale(&self) -> Option<Stale> {
+        if self.keep.watch_realized
+            && let Some(reason) = self.replays.keys().find_map(|a| self.realized(a))
+        {
+            return Some(reason);
+        }
         self.tuning.stale(&self.schema, self.records.len())
+    }
+
+    /// [`Stale::Realized`] for `attribute` when its last [`REALIZED_WINDOW`] judged answers fall under the target less
+    /// [`REALIZED_MARGIN`]; `None` while they do not, or are fewer.
+    fn realized(&self, attribute: &str) -> Option<Stale> {
+        let mut right = 0;
+        let mut judged = 0;
+        for record in self.records.iter().rev() {
+            let correct = match record.settlements.get(attribute) {
+                Some(SettlementKind::Accept) => true,
+                Some(SettlementKind::Correct) => false,
+                Some(SettlementKind::Check) => match record.suggested.get(attribute) {
+                    Some(shown)
+                        if record.probabilities.get(attribute).copied().unwrap_or(1.0) > 0.0 =>
+                    {
+                        record.values.get(attribute) == Some(shown)
+                    }
+                    _ => continue,
+                },
+                _ => continue,
+            };
+            judged += 1;
+            right += usize::from(correct);
+            if judged == REALIZED_WINDOW {
+                break;
+            }
+        }
+        let floor = self.keep.target_precision - REALIZED_MARGIN;
+        (judged == REALIZED_WINDOW && (right as f64) < floor * judged as f64).then(|| {
+            Stale::Realized {
+                attribute: attribute.to_owned(),
+                right,
+                judged,
+            }
+        })
     }
 
     /// Chooses every attribute's thresholds again on all the records settled — replaying only those settled since the
@@ -453,7 +514,7 @@ impl Keeper {
 
 #[cfg(test)]
 mod tests {
-    use super::{Keep, Keeper};
+    use super::{Keep, Keeper, REALIZED_WINDOW};
     use crate::decider::{Decider, Source};
     use crate::key_memory::KeyMemory;
     use crate::lexical_memory::LexicalMemory;
@@ -1060,5 +1121,162 @@ mod tests {
         keeper.settle(&mut decider, &under(&records[150..], "2"));
         assert_eq!(keeper.settled(), 300);
         assert_eq!(keeper.form_version(), None);
+    }
+
+    /// Records whose team answer came back as `kinds` says, in order: `true` accepted, `false` corrected.
+    fn judged(from: usize, kinds: &[bool]) -> Vec<Record> {
+        kinds
+            .iter()
+            .enumerate()
+            .map(|(i, &right)| {
+                let at = from + i;
+                Record {
+                    id: format!("j{at}"),
+                    values: BTreeMap::from([
+                        ("product".into(), format!("p{}", at % 5)),
+                        ("team".into(), "network".into()),
+                    ]),
+                    settlements: BTreeMap::from([(
+                        "team".into(),
+                        if right {
+                            SettlementKind::Accept
+                        } else {
+                            SettlementKind::Correct
+                        },
+                    )]),
+                    settled_at: 1_000 + at as i64,
+                    ..Record::default()
+                }
+            })
+            .collect()
+    }
+
+    fn watching() -> Keep {
+        Keep {
+            watch_realized: true,
+            ..Keep::new(0.8)
+        }
+    }
+
+    /// `right` of `REALIZED_WINDOW`, the wrong ones first.
+    fn window(right: usize) -> Vec<bool> {
+        (0..REALIZED_WINDOW)
+            .map(|i| i >= REALIZED_WINDOW - right)
+            .collect()
+    }
+
+    #[test]
+    fn a_window_under_the_target_less_the_margin_is_stale() {
+        // 0.8 − 0.15 = 0.65: 64 of 100 is under, 65 is not.
+        let mut keeper = Keeper::new(schema(), watching());
+        let mut decider = decider();
+        keeper.settle(&mut decider, &judged(0, &window(64)));
+        assert_eq!(
+            keeper.stale(),
+            Some(Stale::Realized {
+                attribute: "team".into(),
+                right: 64,
+                judged: 100
+            })
+        );
+
+        let mut keeper = Keeper::new(schema(), watching());
+        let mut decider = self::decider();
+        keeper.settle(&mut decider, &judged(0, &window(65)));
+        assert_eq!(
+            keeper.stale(),
+            Some(Stale::Settled {
+                chosen: 0,
+                now: 100
+            })
+        );
+    }
+
+    #[test]
+    fn the_watch_is_silent_when_off_or_before_the_window_fills() {
+        let wrong = vec![false; REALIZED_WINDOW];
+        let mut keeper = Keeper::new(schema(), Keep::new(0.8));
+        let mut decider = decider();
+        keeper.settle(&mut decider, &judged(0, &wrong));
+        keeper.rechoose();
+        assert_eq!(keeper.stale(), None);
+
+        let mut keeper = Keeper::new(schema(), watching());
+        let mut decider = self::decider();
+        keeper.settle(&mut decider, &judged(0, &wrong[1..]));
+        keeper.rechoose();
+        assert_eq!(keeper.stale(), None);
+
+        // Settlements that say nothing about the answer leave the window as it was.
+        let mut silent = judged(REALIZED_WINDOW, &wrong[..20]);
+        for (i, record) in silent.iter_mut().enumerate() {
+            let kind = [
+                SettlementKind::Fill,
+                SettlementKind::Enter,
+                SettlementKind::AcceptOther,
+            ][i % 3];
+            record.settlements.insert("team".into(), kind);
+        }
+        keeper.settle(&mut decider, &silent);
+        assert!(!matches!(keeper.stale(), Some(Stale::Realized { .. })));
+    }
+
+    #[test]
+    fn checks_count_against_the_answer_in_view() {
+        let mut keeper = Keeper::new(schema(), watching());
+        let mut decider = decider();
+        keeper.settle(
+            &mut decider,
+            &judged(0, &window(70)[..REALIZED_WINDOW - 10]),
+        );
+        // Ten checks that disagree with the answer shown: the window is 60 of 100.
+        let mut checks = judged(REALIZED_WINDOW, &[true; 10]);
+        for record in &mut checks {
+            record
+                .settlements
+                .insert("team".into(), SettlementKind::Check);
+            record.probabilities.insert("team".into(), 0.1);
+            record.suggested.insert("team".into(), "billing".into());
+        }
+        keeper.settle(&mut decider, &checks);
+        assert_eq!(
+            keeper.stale(),
+            Some(Stale::Realized {
+                attribute: "team".into(),
+                right: 60,
+                judged: 100
+            })
+        );
+    }
+
+    #[test]
+    fn choosing_again_does_not_mend_it_and_a_new_edition_does() {
+        let keep = Keep {
+            restart_on_form_version: true,
+            ..watching()
+        };
+        let mut keeper = Keeper::new(schema(), keep);
+        let mut decider = decider();
+        keeper.settle(&mut decider, &under(&judged(0, &window(40)), "1"));
+        keeper.rechoose();
+        assert!(matches!(
+            keeper.stale(),
+            Some(Stale::Realized { right: 40, .. })
+        ));
+
+        // Right answers coming back mend the window as they push the wrong ones out.
+        let mut mended = Keeper::new(schema(), watching());
+        let mut decider_mended = self::decider();
+        mended.settle(&mut decider_mended, &judged(0, &window(40)));
+        mended.settle(&mut decider_mended, &judged(REALIZED_WINDOW, &[true; 60]));
+        mended.rechoose();
+        assert_eq!(mended.stale(), None);
+
+        // Naming the new edition starts the keeper again, and the window with it.
+        keeper.settle(
+            &mut decider,
+            &under(&judged(REALIZED_WINDOW, &[true; 5]), "2"),
+        );
+        assert_eq!(keeper.stale(), Some(Stale::Settled { chosen: 0, now: 5 }));
     }
 }

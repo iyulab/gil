@@ -95,6 +95,7 @@ type may change shape or be removed in any release without a migration note.
 | `GIL0007` | A new edition of the code lists in the decision core: a `Keeper` that starts again from nothing when a record arrives under a new `Record.FormVersion` |
 | `GIL0008` | The least-cost rule in the decision core: `ThresholdRule.LeastCost`, the layers' `Calibration` it chooses with (`LayerThresholds.Calibration`, `AttributeDefinition.Calibration`), and answering by it |
 | `GIL0009` | Value tails in the decision core: a layers selection's report, value by settled value, of how the chosen thresholds answered (`SelectionOptions.ValueTails`, `LayerThresholds.ValueTails`, `ValueTail`) |
+| `GIL0010` | Watching the realized precision in the decision core: a `Keeper` that says, as a stale reason, when the answers stopped keeping the promise (`SelectionOptions.WatchRealized`, `Stale.Realized`) |
 
 Suppress the ids of what you use, in the project file or around the code:
 
@@ -450,6 +451,15 @@ injury reports across a classification edition that replaced the injury codes, a
 the first thousand records and was 0.01 right, and 23 months later still answered 0.005 of lookups against 0.08 for one
 started anew; on public injury reports across an edition that changed no code, starting anew answered 0.63 times as many
 over the first five thousand. Name a new edition only when a value comes to mean something else.
+
+When nobody names the edition, the settlements still show it: the memory answers with codes whose meaning changed, and
+the answers come back corrected. Set `SelectionOptions.WatchRealized` for the `Keeper` (experimental, `GIL0010`) and
+`Keeper.Stale()` says so before any other reason — `Stale.Realized` names the attribute when, of its last 100 answers
+whose rightness came back (accepted, corrected, or checked against the answer in view), fewer were right than the target
+less 0.15. It needs the settlement kinds; records settled with none, or filled by the host, leave it silent. Choosing
+again does not mend a revision: name the new edition. On public food inspections and public workplace injury reports, a
+window of 100 at a target of 0.9 fell under 0.75 within 54 and 163 records of the revision, with no edition named; on
+thirteen public streams with no revision it never did.
 
 A promise is an average over an attribute's values, and a value the layers keep taking for another can sit far below
 it while the average holds. Set `SelectionOptions.ValueTails` (experimental, `GIL0009`) for `Replay.SelectLayers` or the

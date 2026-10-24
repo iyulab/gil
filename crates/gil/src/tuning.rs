@@ -82,6 +82,14 @@ pub enum Stale {
     Schema,
     /// The settled records grew or shrank by a tenth or more since the choice.
     Settled { chosen: usize, now: usize },
+    /// Experimental. Of `attribute`'s last `judged` answers whose rightness came back, only `right` were — under the
+    /// target less [`crate::keeper::REALIZED_MARGIN`]. A keeper says it ([`crate::keeper::Keep::watch_realized`]); a
+    /// tuning alone never does.
+    Realized {
+        attribute: String,
+        right: usize,
+        judged: usize,
+    },
 }
 
 impl Tuning {

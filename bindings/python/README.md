@@ -119,6 +119,15 @@ workplace injury reports across a classification edition that replaced the injur
 for one started anew; on public injury reports across an edition that changed no code, starting anew answered 0.63 times
 as many over the first five thousand. Name a new edition only when a value comes to mean something else.
 
+When nobody names the edition, the settlements still show it: the memory answers with codes whose meaning changed, and
+the answers come back corrected. Make the keeper with `watch_realized=True` (experimental) and `keeper.stale()` says so
+before any other reason — `{"realized": {"attribute": ..., "right": ..., "judged": 100}}` when, of an attribute's last
+100 answers whose rightness came back (accepted, corrected, or checked against the answer in view), fewer were right
+than the target less 0.15. It needs the settlement kinds; records settled with none, or filled by the host, leave it
+silent. Choosing again does not mend a revision: name the new edition. On public food inspections and public workplace
+injury reports, a window of 100 at a target of 0.9 fell under 0.75 within 54 and 163 records of the revision, with no
+edition named; on thirteen public streams with no revision it never did.
+
 A promise is an average over an attribute's values, and a value the layers keep taking for another can sit far below
 it while the average holds. Pass `value_tails=True` to `gil.select_layers` or `gil.Keeper` (experimental), and the
 thresholds chosen carry `value_tails`: for each value settled on at least 30 of the latest records asked about, how

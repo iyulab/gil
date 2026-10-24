@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
     Compiles a consumer's use of the supported surface with no experimental diagnostic suppressed: if a supported type
-    starts to require an experimental one (GIL0001-GIL0009), this project stops building.
+    starts to require an experimental one (GIL0001-GIL0009;GIL0010), this project stops building.
   -->
   <PropertyGroup>
     <IsPackable>false</IsPackable>

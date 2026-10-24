@@ -9,6 +9,11 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Added
 
+- **Experimental (`GIL0010`): a keeper that says when the answers stopped keeping the promise.**
+  `SelectionOptions.WatchRealized` has `Keeper.Stale()` give `Stale.Realized` before any other reason when, of an
+  attribute's last 100 answers whose rightness came back — accepted, corrected, or checked against the answer in view —
+  fewer were right than the target less 0.15: what a revision of the code lists nobody named looks like. Choosing again
+  does not mend it; naming the edition (`GIL0007`) does.
 - **Experimental (`GIL0008`): thresholds at least cost per decision.** `ThresholdRule.LeastCost` reads the target as
   where answering pays — a wrong answer costs 1 / (1 − target) entries — fits each layer's best value a calibrated
   chance of being right on the latest records' lookups, lets the more likely layer answer, and chooses the one chance

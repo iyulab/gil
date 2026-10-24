@@ -148,5 +148,13 @@ public sealed record SelectionOptions(double TargetPrecision, int MinimumAnswere
     /// thresholds were chosen on. It moves no threshold.</summary>
     [Experimental(Stability.ValueTails, UrlFormat = Stability.Url)]
     public bool ValueTails { get; init; }
+
+    /// <summary>The keeper's only: whether <see cref="Keeper.Stale"/> also says when the answers stopped keeping the
+    /// promise (<see cref="Gil.Stale.Realized"/>) — of an attribute's last 100 answers whose rightness came back
+    /// (accepted, corrected, or checked against the answer in view), fewer right than the target less 0.15. It needs the
+    /// settlement kinds; records settled with none, or filled by the host, leave it silent. Choosing again does not mend
+    /// a revision of the code lists; naming the new edition (<see cref="RestartOnFormVersion"/>) does.</summary>
+    [Experimental(Stability.WatchRealized, UrlFormat = Stability.Url)]
+    public bool WatchRealized { get; init; }
 }
 

@@ -104,8 +104,9 @@ public sealed class Keeper : IDisposable
         }
     }
 
-    /// <summary>Why the last choice no longer stands — a tenth more or fewer records than it was chosen on — or null
-    /// while it does.</summary>
+    /// <summary>Why the last choice no longer stands — a tenth more or fewer records than it was chosen on, and before
+    /// it, with <see cref="SelectionOptions.WatchRealized"/>, the first attribute whose answers stopped keeping the
+    /// promise — or null while it does.</summary>
     public unsafe Stale? Stale()
     {
         string found;

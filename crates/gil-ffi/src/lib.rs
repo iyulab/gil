@@ -1033,9 +1033,10 @@ pub unsafe extern "C" fn gil_decider_is_first_of_batch(
 /// left out), `rule` (`every_band`, the default, or `pooled` — the layers' selection only), `decisions` (whether to keep
 /// the decision records of the replay — the layers' and the coarse level's selections), `typed_longest` (the key
 /// attributes' selection: count typing up to that many characters), experimental and the keeper's only,
-/// `first_of_batch` (choose and promise the first records of batches apart) and `restart_on_form_version` (start again
-/// from nothing when a record arrives under a new edition of the code lists), and experimental, the layers' selection's
-/// and the keeper's, `value_tails` (report, value by settled value, how the chosen thresholds answered).
+/// `first_of_batch` (choose and promise the first records of batches apart), `restart_on_form_version` (start again
+/// from nothing when a record arrives under a new edition of the code lists) and `watch_realized` (say, as a stale
+/// reason, when the answers stopped keeping the promise), and experimental, the layers' selection's and the keeper's,
+/// `value_tails` (report, value by settled value, how the chosen thresholds answered).
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Options {
@@ -1058,6 +1059,8 @@ struct Options {
     restart_on_form_version: bool,
     #[serde(default)]
     value_tails: bool,
+    #[serde(default)]
+    watch_realized: bool,
 }
 
 impl Options {
@@ -1561,7 +1564,8 @@ pub unsafe extern "C" fn gil_tuning_stale(
 
 /// A keeper of `schema` with nothing settled, choosing for every decided attribute that takes one value as `options`
 /// says (JSON — `target_precision`, `minimum_answered`, `counting`, `rule`, and `threads` for its replays, as for
-/// `gil_select_layers`, and the experimental `first_of_batch`, `restart_on_form_version` and `value_tails`), handed out
+/// `gil_select_layers`, and the experimental `first_of_batch`, `restart_on_form_version`, `value_tails` and
+/// `watch_realized`), handed out
 /// through `out`. Options out of range are contract violations (`GIL_PANIC`).
 ///
 /// # Safety
@@ -1587,6 +1591,7 @@ pub unsafe extern "C" fn gil_keeper_new(
             first_of_batch: options.first_of_batch,
             restart_on_form_version: options.restart_on_form_version,
             value_tails: options.value_tails,
+            watch_realized: options.watch_realized,
         };
         let mut keeper = Keeper::new(schema.0.clone(), keep);
         if options.threads > 0 {

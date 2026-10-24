@@ -55,6 +55,12 @@ internal static class Stability
     /// </summary>
     public const string ValueTails = "GIL0009";
 
+    /// <summary>
+    /// Watching the realized precision (package <c>Gil</c>): a keeper that says, as a stale reason, when the answers whose
+    /// rightness came back stopped keeping the promise.
+    /// </summary>
+    public const string WatchRealized = "GIL0010";
+
     /// <summary>Where the stability of each surface is described.</summary>
     public const string Url = "https://github.com/iyulab/gil/blob/main/README.md#stability";
 }

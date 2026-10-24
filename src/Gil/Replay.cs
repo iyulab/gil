@@ -161,6 +161,11 @@ public static class Replay
                 writer.WriteBoolean("value_tails", true);
             }
 
+            if (options.WatchRealized)
+            {
+                writer.WriteBoolean("watch_realized", true);
+            }
+
             if (options.Threads is { } threads)
             {
                 ArgumentOutOfRangeException.ThrowIfLessThan(threads, 1, nameof(options));

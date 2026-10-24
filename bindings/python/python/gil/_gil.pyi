@@ -139,6 +139,7 @@ class Keeper:
         first_of_batch: bool = False,
         restart_on_form_version: bool = False,
         value_tails: bool = False,
+        watch_realized: bool = False,
     ) -> Keeper: ...
     def settle(self, decider: Decider, records: Records) -> None:
         """Puts `records` into `decider` and into the next choice."""

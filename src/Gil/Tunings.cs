@@ -232,6 +232,15 @@ public abstract record Stale
     /// <param name="Chosen">How many were settled when it was chosen.</param>
     /// <param name="Now">How many are settled now.</param>
     public sealed record Settled(int Chosen, int Now) : Stale;
+
+    /// <summary>Of <paramref name="Attribute"/>'s last <paramref name="Judged"/> answers whose rightness came back, only
+    /// <paramref name="Right"/> were — under the target less 0.15. A keeper watching says it
+    /// (<see cref="SelectionOptions.WatchRealized"/>); a tuning alone never does.</summary>
+    /// <param name="Attribute">The attribute whose answers fell short.</param>
+    /// <param name="Right">How many of the window were right.</param>
+    /// <param name="Judged">How many the window holds.</param>
+    [Experimental(Stability.WatchRealized, UrlFormat = Stability.Url)]
+    public sealed record Realized(string Attribute, int Right, int Judged) : Stale;
 }
 
 /// <summary>One attribute's counts of how its answers fared.</summary>
@@ -300,7 +309,7 @@ internal sealed class StaleConverter : JsonConverter<Stale>
         {
             return reader.GetString() == "schema"
                 ? new Stale.Schema()
-                : throw new JsonException($"a stale reason is version, schema or settled, not {reader.GetString()}");
+                : throw new JsonException($"a stale reason is version, schema, settled or realized, not {reader.GetString()}");
         }
 
         using var document = JsonDocument.ParseValue(ref reader);
@@ -310,7 +319,11 @@ internal sealed class StaleConverter : JsonConverter<Stale>
             "version" => new Stale.Version(reason.Value.GetProperty("chosen").GetString()!),
             "settled" => new Stale.Settled(
                 reason.Value.GetProperty("chosen").GetInt32(), reason.Value.GetProperty("now").GetInt32()),
-            _ => throw new JsonException($"a stale reason is version, schema or settled, not {reason.Name}"),
+            "realized" => new Stale.Realized(
+                reason.Value.GetProperty("attribute").GetString()!,
+                reason.Value.GetProperty("right").GetInt32(),
+                reason.Value.GetProperty("judged").GetInt32()),
+            _ => throw new JsonException($"a stale reason is version, schema, settled or realized, not {reason.Name}"),
         };
     }
 
@@ -333,6 +346,15 @@ internal sealed class StaleConverter : JsonConverter<Stale>
                 writer.WriteStartObject("settled");
                 writer.WriteNumber("chosen", settled.Chosen);
                 writer.WriteNumber("now", settled.Now);
+                writer.WriteEndObject();
+                writer.WriteEndObject();
+                break;
+            case Stale.Realized realized:
+                writer.WriteStartObject();
+                writer.WriteStartObject("realized");
+                writer.WriteString("attribute", realized.Attribute);
+                writer.WriteNumber("right", realized.Right);
+                writer.WriteNumber("judged", realized.Judged);
                 writer.WriteEndObject();
                 writer.WriteEndObject();
                 break;
