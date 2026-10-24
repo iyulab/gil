@@ -183,21 +183,16 @@ using var current = kept.Stale(schema, saved.Count) is null ? kept.Apply(schema)
 `WithLayers` puts the key threshold, the memory threshold and its similarity floor on the attribute, leaving a layer
 with no chosen threshold unset (`WithCoarse` does the same for a coarse level). `Promise` records the precision each
 chosen threshold promises for the next answers, and `PromiseOf` reads back the one an answer was made under, by the
-layer it came from. Keep what was in view — the value suggested, its layer and its promise — on the record it was
-settled on: `Usage.Count` over the saved records reports how each attribute's answers fared against the promise, and a
-reopened record carries them back until the attribute is settled again:
+layer it came from. Settle with the answer that was in view and its promise, and the record keeps them — the value
+suggested, its layer, its promise (`suggested:` for a value that was not the decider's): `Usage.Count` over the saved
+records reports how each attribute's answers fared against the promise, and a reopened record carries them back until
+the attribute is settled again:
 
 ```csharp
-var shown = team.Answered ? team.Candidates[0].Value : null;
 var promise = team.Answered ? tuning.PromiseOf("team", team.Source) : null;
-// What was in view goes on the record it was settled on; the saved records are what the counts read.
-var settledRecord = snapshot with
-{
-    Suggested = shown is null ? null : new Dictionary<string, string> { ["team"] = shown },
-    Sources = shown is null ? null : new Dictionary<string, Source> { ["team"] = team.Source },
-    Promises = promise is { } p ? new Dictionary<string, double> { ["team"] = p } : null,
-};
-using var ledger = SettledRecords.From([settledRecord]);
+// What was in view goes on the record it is settled on; the saved records are what the counts read.
+ticket.Settle(decider, "team", SettlementKind.Accept, DateTimeOffset.UtcNow, value: "network", shown: team, promise: promise);
+using var ledger = SettledRecords.From([ticket.Snapshot()]);
 var counts = Usage.Count(ledger);
 ```
 

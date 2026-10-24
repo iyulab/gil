@@ -60,16 +60,10 @@ internal static class ReadmeExample
         var kept = Tuning.FromJson(File.ReadAllText("ticket.tuning.json"));
         using var current = kept.Stale(schema, saved.Count) is null ? kept.Apply(schema) : null;
 
-        var shown = team.Answered ? team.Candidates[0].Value : null;
         var promise = team.Answered ? tuning.PromiseOf("team", team.Source) : null;
-        // What was in view goes on the record it was settled on; the saved records are what the counts read.
-        var settledRecord = snapshot with
-        {
-            Suggested = shown is null ? null : new Dictionary<string, string> { ["team"] = shown },
-            Sources = shown is null ? null : new Dictionary<string, Source> { ["team"] = team.Source },
-            Promises = promise is { } p ? new Dictionary<string, double> { ["team"] = p } : null,
-        };
-        using var ledger = SettledRecords.From([settledRecord]);
+        // What was in view goes on the record it is settled on; the saved records are what the counts read.
+        ticket.Settle(decider, "team", SettlementKind.Accept, DateTimeOffset.UtcNow, value: "network", shown: team, promise: promise);
+        using var ledger = SettledRecords.From([ticket.Snapshot()]);
         var counts = Usage.Count(ledger);
 
         var pooled = Replay.SelectLayers(schema, "team", saved, options with { TargetPrecision = 0.8, Rule = ThresholdRule.Pooled });

@@ -88,7 +88,7 @@ internal static unsafe partial class Native
     [LibraryImport(Library, EntryPoint = "gil_open_record_settle")]
     internal static partial int OpenRecordSettle(
         OpenRecordHandle record, DeciderHandle decider, Str attribute, Str kind, long now, Str value, Str* values,
-        nuint valuesLen, double probability, nuint* resultLen);
+        nuint valuesLen, double probability, Str inView, Str inViewSource, double inViewPromise, nuint* resultLen);
 
     [LibraryImport(Library, EntryPoint = "gil_open_record_answer")]
     internal static partial int OpenRecordAnswer(

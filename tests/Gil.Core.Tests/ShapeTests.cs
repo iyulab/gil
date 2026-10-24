@@ -95,6 +95,38 @@ public sealed class ShapeTests
     }
 
     [Fact]
+    public void Settling_with_the_answer_in_view_keeps_it_on_the_record()
+    {
+        using var schema = new Schema("ticket",
+        [
+            new AttributeDefinition("channel", AttributeRole.Observed),
+            new AttributeDefinition("team", AttributeRole.Decided) { KeyThreshold = 0.5 },
+        ]);
+        using var decider = new Decider();
+        using (var history = SettledRecords.From(Enumerable.Range(1, 4).Select(i => new Record($"h{i}", DateTimeOffset.UnixEpoch)
+        {
+            Values = new Dictionary<string, string> { ["channel"] = "phone", ["team"] = "network" },
+        })))
+        {
+            decider.Put(schema, history);
+        }
+
+        using var ticket = OpenRecord.Open(schema, "t-1", DateTimeOffset.UnixEpoch);
+        var team = ticket.Observe(decider, "channel", "phone").Single();
+        team.Answered.Should().BeTrue();
+        ticket.Settle(decider, "team", SettlementKind.Accept, DateTimeOffset.UnixEpoch, value: "network", shown: team, promise: 0.9);
+        var saved = ticket.Snapshot();
+        saved.Suggested.Should().Equal(new Dictionary<string, string> { ["team"] = "network" });
+        saved.Sources.Should().Equal(new Dictionary<string, Source> { ["team"] = team.Source });
+        saved.Promises.Should().Equal(new Dictionary<string, double> { ["team"] = 0.9 });
+
+        ticket.Settle(decider, "team", SettlementKind.CorrectOther, DateTimeOffset.UnixEpoch, value: "it", suggested: "facilities");
+        ticket.Snapshot().Suggested.Should().Equal(new Dictionary<string, string> { ["team"] = "facilities" });
+        ticket.Invoking(t => t.Settle(decider, "team", SettlementKind.Accept, DateTimeOffset.UnixEpoch, value: "network", shown: team, promise: 1.5))
+            .Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
     public void A_reopened_record_carries_back_what_the_host_kept_on_it()
     {
         using var schema = Ticket();

@@ -650,8 +650,20 @@ class OpenRecord:
         value: str | None = None,
         values: Iterable[str] | None = None,
         probability: float | None = None,
+        shown: Answer | None = None,
+        promise: float | None = None,
+        suggested: str | None = None,
     ) -> list[Answer]:
-        """Settles a decided attribute at ``now``."""
+        """Settles a decided attribute at ``now``. What was in view goes on the record: ``shown``, the decider's answer,
+        when it answered — its first candidate and its ``source`` — with ``promise``, the precision promised for its
+        layer (:func:`promise_of`); or ``suggested``, a value that was not the decider's."""
+        in_view: dict[str, Any] | None = None
+        if shown is not None and shown["answered"]:
+            in_view = {"value": shown["candidates"][0]["value"], "source": shown["source"]}
+            if promise is not None:
+                in_view["promise"] = promise
+        elif suggested is not None:
+            in_view = {"value": suggested}
         return cast(
             list[Answer],
             json.loads(
@@ -663,6 +675,7 @@ class OpenRecord:
                     value,
                     None if values is None else list(values),
                     probability,
+                    None if in_view is None else json.dumps(in_view, ensure_ascii=False),
                 )
             ),
         )

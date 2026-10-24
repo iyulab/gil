@@ -1280,3 +1280,72 @@ fn reopening_a_saved_record_keeps_what_the_host_kept_until_an_attribute_is_settl
         (Some("import-7"), Some(5_000))
     );
 }
+
+#[test]
+fn what_was_in_view_at_settling_goes_on_the_record_and_the_counts_read_it() {
+    let mut team = attribute("team", AttributeRole::Decided);
+    team.key_threshold = Some(0.5);
+    let schema = Schema::new(
+        "ticket",
+        vec![attribute("channel", AttributeRole::Observed), team],
+    )
+    .expect("a valid schema");
+    let history: Vec<Record> = (1..=4)
+        .map(|i| {
+            record(
+                &format!("h{i}"),
+                &[("channel", "phone"), ("team", "network")],
+            )
+        })
+        .collect();
+    let mut decider = Decider::new(KeyMemory::default(), None);
+    decider.rebuild(&schema, &history);
+
+    let mut open = OpenRecord::new(schema, "d2", DAY);
+    let shown = open
+        .observe(&mut decider, "channel", Some("phone"))
+        .remove(0);
+    assert!(shown.answered());
+    open.settle(
+        &mut decider,
+        "team",
+        &Settlement::accept("network").with_answer(&shown, Some(0.9)),
+        2 * DAY,
+    );
+    let saved = open.snapshot();
+    assert_eq!(saved.suggested["team"], "network");
+    assert_eq!(saved.sources["team"], shown.source);
+    assert_eq!(saved.promises["team"], 0.9);
+    let counts = gil::usage::usage([&saved]);
+    assert_eq!((counts["team"].accepted, counts["team"].promised), (1, 1));
+
+    // Another's suggestion keeps the value, no layer; an abstention keeps nothing.
+    open.settle(
+        &mut decider,
+        "team",
+        &Settlement::correct_other("security").with_suggestion("facilities"),
+        3 * DAY,
+    );
+    let other = open.snapshot();
+    assert_eq!(other.suggested["team"], "facilities");
+    assert!(other.sources.is_empty() && other.promises.is_empty());
+    let mut abstained = shown.clone();
+    abstained.candidates.clear();
+    assert_eq!(
+        Settlement::enter("x")
+            .with_answer(&abstained, Some(0.9))
+            .in_view,
+        None
+    );
+}
+
+#[test]
+fn a_suggestion_in_view_with_a_promise_out_of_range_or_from_no_layer_is_refused() {
+    let open = OpenRecord::new(settled_ticket(), "d1", 0);
+    let mut bad = Settlement::accept("network").with_suggestion("network");
+    bad.in_view.as_mut().unwrap().promise = Some(1.5);
+    assert!(open.check_settle("team", &bad).is_err());
+    let mut none = Settlement::accept("network").with_suggestion("network");
+    none.in_view.as_mut().unwrap().source = Some(Source::None);
+    assert!(open.check_settle("team", &none).is_err());
+}

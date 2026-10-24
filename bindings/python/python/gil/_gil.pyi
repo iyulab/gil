@@ -152,8 +152,10 @@ class OpenRecord:
         value: str | None = None,
         values: list[str] | None = None,
         probability: float | None = None,
+        in_view: str | None = None,
     ) -> str:
-        """Settles a decided attribute at `now` (ticks) — `kind` by name, with the value, values or probability it needs; the answers it changes, as JSON."""
+        """Settles a decided attribute at `now` (ticks) — `kind` by name, with the value, values or probability it needs, and
+        what was in view (JSON `{"value", "source", "promise"}`) for the record to keep; the answers it changes, as JSON."""
 
     def answer(self, decider: Decider, decisions: bool = False) -> str:
         """Answers for every open decided attribute, as JSON — each with ``decision``, its lookup's decision record,

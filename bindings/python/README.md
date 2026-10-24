@@ -119,7 +119,9 @@ saved = record.snapshot()  # save it; gil.OpenRecord.reopen(schema, saved) picks
 
 Settle with the kind that says what the person saw: `Accept` / `Correct` for the answer shown, `Enter` with nothing
 shown, `AcceptOther` / `CorrectOther` when the suggestion shown was not the decider's (your own model's, a default),
-`Fill` when the application settled it with no person. Choosing thresholds and `gil.usage` read the kinds.
+`Fill` when the application settled it with no person. Choosing thresholds and `gil.usage` read the kinds. Pass the
+answer that was in view as `shown=` (with `promise=`, its layer's promise from the tuning) — or `suggested=` for a value
+that was not the decider's — and the snapshot keeps them for `gil.usage`.
 
 When an answer carries `needs_external`, no memory had evidence: ask your model about those (attribute, value) pairs
 and pass its ranked values back with `record.offer_external(decider, "team", [{"value": ..., "probability": ...,

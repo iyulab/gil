@@ -237,6 +237,19 @@ impl OpenRecord {
         self.kept.promises.remove(attribute);
         self.kept.settle_ms.remove(attribute);
         self.kept.settled_by.remove(attribute);
+        if let Some(in_view) = settlement.in_view.as_ref().filter(|_| {
+            settlement.kind != SettlementKind::Revert && settlement.kind != SettlementKind::Restore
+        }) {
+            self.kept
+                .suggested
+                .insert(attribute.to_owned(), in_view.value.clone());
+            if let Some(source) = in_view.source {
+                self.kept.sources.insert(attribute.to_owned(), source);
+            }
+            if let Some(promise) = in_view.promise {
+                self.kept.promises.insert(attribute.to_owned(), promise);
+            }
+        }
         if clears || settlement.kind == SettlementKind::Restore || !self.has(attribute) {
             self.settlements.remove(attribute); // nothing settled it, or nothing known did
         } else {
@@ -365,6 +378,19 @@ impl OpenRecord {
             settlement.kind,
             SettlementKind::Reject | SettlementKind::Revert
         );
+        if let Some(in_view) = &settlement.in_view {
+            if in_view.source == Some(crate::decider::Source::None) {
+                return Err(ContractViolation(
+                    "a suggestion in view comes from a layer, or from none of this decider's"
+                        .to_owned(),
+                ));
+            }
+            if in_view.promise.is_some_and(|p| !(0.0..=1.0).contains(&p)) {
+                return Err(ContractViolation(
+                    "a promise in view is a precision in [0, 1]".to_owned(),
+                ));
+            }
+        }
         if !clears && settlement.is_set() != definition.multiple {
             return Err(ContractViolation(if definition.multiple {
                 format!("'{attribute}' takes several values; settle it with Settlement::set")

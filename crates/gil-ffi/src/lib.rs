@@ -34,7 +34,7 @@ use gil::replay::{
     Choice, LayerOptions, LayerThresholds, ThresholdRule, select_coarse_with,
     select_key_concentrations, select_key_fields, select_layers,
 };
-use gil::schema::{AttributePolicy, Record, Schema, Settlement, SettlementKind};
+use gil::schema::{AttributePolicy, InView, Record, Schema, Settlement, SettlementKind};
 use gil::tuning::Tuning;
 use gil::usage::usage;
 use iyulab_ffi_support::{
@@ -707,7 +707,10 @@ pub unsafe extern "C" fn gil_open_record_observe(
 /// Settles a decided attribute at `now` (ticks): `kind` by name (`Accept`, `Correct`, `Reject`, `Revert`, `Restore`,
 /// `Set`, `Enter`, `Fill`, `Check`, `AcceptOther`, `CorrectOther`), with the parts it needs — `value` for the kinds that
 /// settle one (null text when none), `values` for `Set` (and for `Restore` of an attribute that takes several, chosen by
-/// giving `values` non-null), and `probability` for `Check` (any other kind ignores it). Puts the record into
+/// giving `values` non-null), and `probability` for `Check` (any other kind ignores it). `in_view` is the value
+/// suggested when it was settled (null text when nothing was in view), `in_view_source` the layer of this decider's
+/// answer it was, by name (`KeyMemory`, `SimilarRecord`, `Model`; null text for a suggestion that was not this
+/// decider's) and `in_view_promise` the precision promised for it (NaN when none) — what the record keeps. Puts the record into
 /// `decider`'s memory again and keeps as the result the fresh answers it causes (a JSON array). A kind or part that
 /// does not fit, an attribute that is not decided, and a settlement of the other kind of attribute are refused
 /// (`GIL_INVALID_INPUT`) before anything changes.
@@ -727,6 +730,9 @@ pub unsafe extern "C" fn gil_open_record_settle(
     values: *const GilStr,
     values_len: usize,
     probability: f64,
+    in_view: GilStr,
+    in_view_source: GilStr,
+    in_view_promise: f64,
     result_len: *mut usize,
 ) -> i32 {
     let status = call(|| {
@@ -752,8 +758,23 @@ pub unsafe extern "C" fn gil_open_record_settle(
                     .collect::<Result<_, _>>()?,
             )
         };
-        let settlement =
+        let mut settlement =
             Settlement::new(kind, value, values.as_deref(), Some(probability)).map_err(input)?;
+        if let Some(suggested) = unsafe { optional(in_view, "in_view") }? {
+            let source = unsafe { optional(in_view_source, "in_view_source") }?
+                .map(|name| {
+                    [Source::KeyMemory, Source::SimilarRecord, Source::External]
+                        .into_iter()
+                        .find(|s| s.name() == name)
+                        .ok_or_else(|| input(format!("unknown layer '{name}'")))
+                })
+                .transpose()?;
+            settlement.in_view = Some(InView {
+                value: suggested.to_owned(),
+                source,
+                promise: (!in_view_promise.is_nan()).then_some(in_view_promise),
+            });
+        }
         open.check_settle(attribute, &settlement)?;
         let found = open.settle(memories, attribute, &settlement, now);
         unsafe { answers(&found, result_len) }

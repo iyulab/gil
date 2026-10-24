@@ -38,6 +38,10 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   or wrong together (device event reports, design effect about 7: 1.6 points), not where batches were small (vehicle
   complaints, 1.5) or not right or wrong together (food inspections, 1.1).
 
+- **What was in view goes on the record when it is settled.** `OpenRecord.Settle(…, shown: answer, promise: p)` keeps
+  the answer's first candidate, its layer and `p` as the record's `Suggested`, `Sources` and `Promises`;
+  `suggested: value` keeps a suggestion that was not the decider's. A promise out of [0, 1] is refused.
+
 ### Changed
 
 - **`Gil.IronHive` and `Gil.Sqlite` are no longer published.** 0.26.0 is the last package of each; it depends on

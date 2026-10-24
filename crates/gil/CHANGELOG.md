@@ -40,6 +40,11 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Added
 
+- **What was in view goes on the record when it is settled.** `Settlement::with_answer(&answer, promise)` and
+  `Settlement::with_suggestion(value)` set `Settlement::in_view` (`InView` — value, layer, promise); an open record keeps
+  it as the attribute's `suggested`, `sources` and `promises`. A promise out of [0, 1], or a layer of `Source::None`, is
+  refused. Python's `OpenRecord.settle` takes `shown=`, `promise=` and `suggested=`; the C ABI's
+  `gil_open_record_settle` takes the value, the layer by name and the promise.
 - **A Python wheel for musl-based Linux on arm64** (`musllinux_1_2_aarch64`), beside the x86_64 one.
 - **A settled record can say what was in view, how long it took and who settled it.** Seven optional entries of the
   line format — `suggested` (the value in view when a decided attribute was settled), `sources` (the layer of the

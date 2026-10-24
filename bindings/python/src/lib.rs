@@ -530,9 +530,9 @@ impl OpenRecord {
         }
     }
 
-    /// Settles a decided attribute at `now` (ticks) — `kind` by name, with the value, values or probability it needs;
-    /// the answers it changes, as JSON.
-    #[pyo3(signature = (decider, attribute, kind, now, value=None, values=None, probability=None))]
+    /// Settles a decided attribute at `now` (ticks) — `kind` by name, with the value, values or probability it needs, and
+    /// what was in view (JSON `{"value", "source", "promise"}`) for the record to keep; the answers it changes, as JSON.
+    #[pyo3(signature = (decider, attribute, kind, now, value=None, values=None, probability=None, in_view=None))]
     #[allow(clippy::too_many_arguments)]
     fn settle(
         &mut self,
@@ -543,10 +543,17 @@ impl OpenRecord {
         value: Option<&str>,
         values: Option<Vec<String>>,
         probability: Option<f64>,
+        in_view: Option<&str>,
     ) -> PyResult<String> {
         usable(self.broken, "record")?;
         usable(decider.broken, "decider")?;
-        let settlement = settlement_of(kind, value, values, probability).map_err(invalid)?;
+        let mut settlement = settlement_of(kind, value, values, probability).map_err(invalid)?;
+        settlement.in_view = in_view
+            .map(|text| {
+                serde_json::from_str(text)
+                    .map_err(|e| invalid(format!("what was in view does not read: {e}")))
+            })
+            .transpose()?;
         self.inner
             .check_settle(attribute, &settlement)
             .map_err(|e| invalid(e.to_string()))?;

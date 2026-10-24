@@ -254,12 +254,23 @@ def test_a_reopened_record_keeps_what_was_in_view_for_usage() -> None:
     decider = gil.Decider(SCHEMA, settled())
     record = gil.OpenRecord(SCHEMA, "t9", 9 * MINUTE)
     (team,) = record.observe(decider, "component", "vpn")
-    record.settle(decider, "team", "Accept", 9 * MINUTE, value=team["candidates"][0]["value"])
+    value = team["candidates"][0]["value"]
+    record.settle(decider, "team", "Accept", 9 * MINUTE, value=value, shown=team, promise=0.9)
     saved = record.snapshot()
-    saved.update(suggested={"team": team["candidates"][0]["value"]}, sources={"team": team["source"]})
+    assert (saved["suggested"], saved["sources"], saved["promises"]) == (
+        {"team": value},
+        {"team": team["source"]},
+        {"team": 0.9},
+    )
     again = gil.OpenRecord.reopen(SCHEMA, saved).snapshot()
     assert (again["suggested"], again["sources"]) == (saved["suggested"], saved["sources"])
     assert gil.usage(gil.records([again]))["team"]["accepted"] == 1
+
+    record.settle(decider, "team", "CorrectOther", 10 * MINUTE, value="it", suggested="facilities")
+    other = record.snapshot()
+    assert other["suggested"] == {"team": "facilities"} and "sources" not in other
+    with pytest.raises(ValueError, match="promise in view"):
+        record.settle(decider, "team", "Accept", 11 * MINUTE, value=value, shown=team, promise=1.5)
 
 
 def test_answers_and_counts_carry_exactly_the_typed_keys() -> None:
