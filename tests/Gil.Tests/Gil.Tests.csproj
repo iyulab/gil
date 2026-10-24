@@ -2,7 +2,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <!-- The tests exercise the experimental surface too; tests/SupportedSurface compiles without these. -->
-    <NoWarn>$(NoWarn);GIL0001;GIL0002;GIL0003;GIL0004;GIL0005;GIL0006;GIL0007;GIL0009</NoWarn>
+    <NoWarn>$(NoWarn);GIL0001;GIL0002;GIL0003;GIL0004;GIL0005;GIL0006;GIL0007;GIL0008;GIL0009</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Gil.Tree\Gil.Tree.csproj" />

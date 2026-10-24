@@ -12,6 +12,7 @@ use crate::coarse_groups;
 use crate::decision_record::{Answered, CoarseLook, DecisionRecord, KeyLook, SimilarLook};
 use crate::key_memory::{self, Key, KeyMemory, Lookup};
 use crate::lexical_memory::{LexicalMemory, Match};
+use crate::replay::Calibration;
 use crate::schema::{Attribute, AttributePolicy, AttributeRole, CoarseLevel, Record, Schema};
 use crate::{similar_vote, text};
 
@@ -560,11 +561,28 @@ impl Decider {
         });
 
         let mut candidates: Vec<Candidate> = Vec::new();
-        let ordered = keyed
-            .iter()
-            .copied()
-            .filter(|c| c.trusted)
-            .chain(similar.iter().filter(|c| c.trusted))
+        // With a calibration, where both layers' best values are trusted the one more likely to be right comes first.
+        let similar_first = attribute.calibration.as_ref().is_some_and(|calibration| {
+            match (
+                keyed.iter().find(|c| c.trusted),
+                similar.iter().find(|c| c.trusted),
+            ) {
+                (Some(k), Some(m)) => {
+                    Calibration::chance(&calibration.memory, m.score)
+                        > Calibration::chance(&calibration.key, k.score)
+                }
+                _ => false,
+            }
+        });
+        let trusted_keyed = keyed.iter().copied().filter(|c| c.trusted);
+        let trusted_similar = similar.iter().filter(|c| c.trusted);
+        let trusted: Vec<&Candidate> = if similar_first {
+            trusted_similar.chain(trusted_keyed).collect()
+        } else {
+            trusted_keyed.chain(trusted_similar).collect()
+        };
+        let ordered = trusted
+            .into_iter()
             .chain(offered.iter())
             .chain(keyed.iter().copied().filter(|c| !c.trusted))
             .chain(frequent.iter().copied().take(1))

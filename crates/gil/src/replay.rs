@@ -65,6 +65,19 @@ pub enum ThresholdRule {
     /// of its answers fall below the target where others are above it: choose it when the target is a share of all
     /// answers, not a floor under each kind of answer.
     Pooled,
+    /// Experimental. The answers that cost least per decision, reading the target as where answering pays: a wrong
+    /// answer costs ρ = 1 / (1 − target) values entered with no suggestion — the `Choice` reading of the target, turned
+    /// around — so an answer pays when the chance it is right is above the target. Each layer's best value gets a
+    /// calibrated chance of being right, fitted on the latest [`RECENT_RECORDS`] records' lookups by isotonic regression
+    /// of whether it matched on its score, layer by layer; of the two layers the more likely answers, and one chance
+    /// threshold is chosen where answering at or above it costs least over those lookups, resting on at least the
+    /// minimum number of answers. The answers it chooses are right at least the target's share of the time on the
+    /// lookups it was chosen on, on average — not in every band. The schema then needs the calibration to answer as the
+    /// rule chose ([`LayerThresholds::calibration`]). In replays on public recall records and public device event reports
+    /// at targets of 0.5 and 0.75 — a wrong answer costing two and four entries — it cost 0.7–15.2 points less per
+    /// decision than thresholds chosen layer by layer for the same cost; at other targets, and on the other collections
+    /// tried, it was never dearer beyond chance.
+    LeastCost,
 }
 
 /// What a threshold is chosen for — the target precision, the fewest answers it may rest on, and which settlements count.
@@ -784,18 +797,10 @@ fn with_keys(replay: ThresholdReplay, answers: &[Answer]) -> ThresholdReplay {
     }
 }
 
-/// Fits precision as a non-decreasing function of the score (isotonic regression by pooling adjacent violators), then
-/// walks the fitted blocks from the highest score down while each block's own precision meets the target. The threshold
-/// is the lowest score of the last such block; the most precise is the first block, from the top, whose answers above it
-/// are worth `minimum_answered`.
-fn fit(
-    matches: &[Answer],
-    lookups: usize,
-    lookup_weight: f64,
-    target_precision: f64,
-    minimum_answered: usize,
-) -> ThresholdReplay {
-    // Answers of one score schema a group, in replay order; groups go from the lowest score up.
+/// Precision as a non-decreasing function of the score: isotonic regression of whether each answer matched on its score,
+/// by pooling adjacent violators. The blocks go from the lowest score up; a block's precision is above the one below it.
+fn pool(matches: &[Answer]) -> Vec<Block> {
+    // Answers of one score form a group, in replay order; groups go from the lowest score up.
     let mut sorted: Vec<&Answer> = matches.iter().collect();
     sorted.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap_or(Ordering::Equal));
 
@@ -826,7 +831,20 @@ fn fit(
 
         blocks.push(block);
     }
+    blocks
+}
 
+/// Fits precision as a non-decreasing function of the score ([`pool`]), then walks the fitted blocks from the highest score down while each block's own precision meets the target. The threshold
+/// is the lowest score of the last such block; the most precise is the first block, from the top, whose answers above it
+/// are worth `minimum_answered`.
+fn fit(
+    matches: &[Answer],
+    lookups: usize,
+    lookup_weight: f64,
+    target_precision: f64,
+    minimum_answered: usize,
+) -> ThresholdReplay {
+    let blocks = pool(matches);
     let mut chosen: Option<ThresholdChoice> = None;
     let mut most_precise: Option<ThresholdChoice> = None;
     let mut meets = true;
@@ -895,6 +913,58 @@ pub struct LayerThresholds {
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub value_tails: Option<Vec<ValueTail>>,
+    /// Experimental. The calibration [`ThresholdRule::LeastCost`] chose with; `None` under the other rules.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub calibration: Option<Calibration>,
+}
+
+/// Experimental. What [`ThresholdRule::LeastCost`] answers with: each layer's best value's calibrated chance of being
+/// right, as a step function of its score, and the chance at or above which the more likely of the two layers answers.
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Calibration {
+    /// The key layer's steps, by rising score; empty when it had no best value to fit.
+    pub key: Vec<CalibrationStep>,
+    /// The similar record layer's steps, by rising score; empty when it had no vote to fit.
+    pub memory: Vec<CalibrationStep>,
+    /// The chance at or above which an answer is given; `None` when no chance paid on enough answers.
+    pub threshold: Option<f64>,
+}
+
+/// One step of a calibration: from `score` up to the next step's, the chance of being right is `chance`. Below the
+/// first step's score, the first step's chance holds.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct CalibrationStep {
+    pub score: f64,
+    pub chance: f64,
+}
+
+impl Calibration {
+    /// The chance a layer's best value at `score` is right, by `steps`; `None` with no steps.
+    pub fn chance(steps: &[CalibrationStep], score: f64) -> Option<f64> {
+        let first = steps.first()?;
+        Some(
+            steps
+                .iter()
+                .take_while(|s| s.score <= score)
+                .last()
+                .unwrap_or(first)
+                .chance,
+        )
+    }
+
+    /// The lowest score at which `steps` reach `threshold` — where the layer can answer at all; `None` when they never
+    /// do.
+    fn reach(steps: &[CalibrationStep], threshold: f64) -> Option<f64> {
+        steps
+            .iter()
+            .find(|s| s.chance >= threshold)
+            .map(|s| s.score)
+    }
 }
 
 /// Experimental. How the chosen thresholds of both layers together answered the latest [`RECENT_RECORDS`] records
@@ -1239,11 +1309,158 @@ pub(crate) fn layers(
         choice.minimum_answered,
         pooled_memory,
     );
+    if rule == ThresholdRule::LeastCost {
+        return least_cost(steps, latest, choice, key, memory);
+    }
     LayerThresholds {
         key,
         memory,
         batches: None,
         value_tails: None,
+        calibration: None,
+    }
+}
+
+/// [`ThresholdRule::LeastCost`] over the latest [`RECENT_RECORDS`] records' lookups: `key` and `memory` are the layers'
+/// replays by [`ThresholdRule::EveryBand`], whose `chosen` it replaces with each layer's share of the answers the rule
+/// gives — the lowest score at which the layer's chance reaches the threshold, with the precision, answer rate and
+/// promise of the answers it gave. Neither layer answers under a key that settled a value to catch.
+fn least_cost(
+    steps: &[Step],
+    latest: usize,
+    choice: Choice,
+    key: ThresholdReplay,
+    memory: ThresholdReplay,
+) -> LayerThresholds {
+    let recent: Vec<&Step> = steps
+        .iter()
+        .filter(|s| s.order as i64 > latest as i64 - RECENT_RECORDS as i64)
+        .collect();
+    let caught = |s: &Step| s.key.as_ref().is_some_and(|first| first.caught);
+    let by_key = |s: &Step| {
+        s.key
+            .as_ref()
+            .filter(|first| s.key_looked && !first.caught)
+            .map(|first| (first.score, first.matches))
+    };
+    let by_vote = |s: &Step| {
+        s.vote
+            .filter(|_| s.looked && !caught(s))
+            .map(|v| (v.score, v.correct))
+    };
+    let fitted = |of: &dyn Fn(&Step) -> Option<(f64, bool)>| -> Vec<CalibrationStep> {
+        let answers: Vec<Answer> = recent
+            .iter()
+            .filter_map(|s| {
+                of(s).map(|(score, correct)| Answer {
+                    score,
+                    correct,
+                    weight: s.weight,
+                    order: s.order,
+                    key: None,
+                    caught: false,
+                })
+            })
+            .collect();
+        pool(&answers)
+            .iter()
+            .map(|b| CalibrationStep {
+                score: b.lowest,
+                chance: b.precision(),
+            })
+            .collect()
+    };
+    let key_steps = fitted(&by_key);
+    let memory_steps = fitted(&by_vote);
+
+    // Each lookup's answer: the more likely layer, the key layer on a tie — its chance, whether it matched, whether it
+    // is the key layer's, and the lookup's weight.
+    let candidates: Vec<(f64, bool, bool, f64)> = recent
+        .iter()
+        .filter_map(|s| {
+            let k = by_key(s)
+                .and_then(|(score, ok)| Calibration::chance(&key_steps, score).map(|c| (c, ok)));
+            let m = by_vote(s)
+                .and_then(|(score, ok)| Calibration::chance(&memory_steps, score).map(|c| (c, ok)));
+            match (k, m) {
+                (Some(k), Some(m)) if m.0 > k.0 => Some((m.0, m.1, false, s.weight)),
+                (Some(k), _) => Some((k.0, k.1, true, s.weight)),
+                (None, Some(m)) => Some((m.0, m.1, false, s.weight)),
+                (None, None) => None,
+            }
+        })
+        .collect();
+
+    // Answering at or above a chance gains one entry saved when right and 1 − ρ when wrong; the threshold gains most,
+    // the higher on a tie, among those resting on the minimum number of answers.
+    let rho = 1.0 / (1.0 - choice.target_precision);
+    let mut order: Vec<&(f64, bool, bool, f64)> = candidates.iter().collect();
+    order.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(Ordering::Equal));
+    let (mut gain, mut weight, mut squares) = (0.0_f64, 0.0_f64, 0.0_f64);
+    let (mut best, mut threshold) = (0.0_f64, None);
+    for group in order.chunk_by(|a, b| a.0 == b.0) {
+        for (_, ok, _, w) in group {
+            gain += if *ok { *w } else { (1.0 - rho) * *w };
+            weight += *w;
+            squares += *w * *w;
+        }
+        if weight > 0.0
+            && weight * weight / squares >= choice.minimum_answered as f64
+            && gain > best + 1e-12
+        {
+            best = gain;
+            threshold = Some(group[0].0);
+        }
+    }
+
+    // Each layer's share of the answers given.
+    let share = |of_key: bool, steps: &[CalibrationStep], replay: ThresholdReplay| {
+        let chosen = threshold.and_then(|t| {
+            let reach = Calibration::reach(steps, t)?;
+            let looked = recent
+                .iter()
+                .filter(|s| if of_key { s.key_looked } else { s.looked });
+            let lookups = looked.clone().count();
+            let lookup_weight = looked.fold(0.0, |sum, s| sum + s.weight);
+            let given: Vec<&(f64, bool, bool, f64)> = candidates
+                .iter()
+                .filter(|c| c.2 == of_key && c.0 >= t)
+                .collect();
+            let answered_weight = given.iter().fold(0.0, |sum, c| sum + c.3);
+            if answered_weight <= 0.0 {
+                return None;
+            }
+            let correct = given.iter().filter(|c| c.1).fold(0.0, |sum, c| sum + c.3);
+            let effective = answered_weight * answered_weight
+                / given.iter().fold(0.0, |sum, c| sum + c.3 * c.3);
+            let precision = correct / answered_weight;
+            Some(ThresholdChoice {
+                threshold: reach,
+                precision,
+                answer_rate: answered_weight / lookup_weight,
+                answered: given.len(),
+                lookups,
+                answered_weight,
+                effective_answered: effective,
+                similarity_floor: None,
+                promise: lower(precision, effective),
+                promise_answered: effective,
+            })
+        });
+        ThresholdReplay { chosen, ..replay }
+    };
+    let key = share(true, &key_steps, key);
+    let memory = share(false, &memory_steps, memory);
+    LayerThresholds {
+        key,
+        memory,
+        batches: None,
+        value_tails: None,
+        calibration: Some(Calibration {
+            key: key_steps,
+            memory: memory_steps,
+            threshold,
+        }),
     }
 }
 
@@ -1766,6 +1983,7 @@ pub(crate) fn coarse_layers(
         memory,
         batches: None,
         value_tails: None,
+        calibration: None,
     }
 }
 

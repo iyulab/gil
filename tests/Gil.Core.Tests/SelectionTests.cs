@@ -154,6 +154,34 @@ public sealed class SelectionTests
         JsonNode.Parse(JsonSerializer.Serialize(record with { Batch = null }, CoreJson.Default.Record))!.AsObject().ContainsKey("batch").Should().BeFalse();
     }
 
+    /// <summary>The least-cost rule's thresholds carry the calibration, which crosses back to the core intact and goes on
+    /// the schema with them; another rule's leave none there.</summary>
+    [Fact]
+    public void LeastCostCarriesACalibrationTheSchemaAnswersBy()
+    {
+        using var schema = Schema.FromJson(Fixture("schema.json"));
+        using var records = SettledRecords.FromJsonLines(Fixture("records.jsonl"));
+        var options = new SelectionOptions(0.8, 10);
+
+        var plain = Replay.SelectLayers(schema, "team", records, options).Thresholds;
+        var least = Replay.SelectLayers(schema, "team", records, options with { Rule = ThresholdRule.LeastCost }).Thresholds;
+
+        plain.Calibration.Should().BeNull();
+        least.Calibration.Should().NotBeNull();
+        foreach (var steps in new[] { least.Calibration!.Key, least.Calibration.Memory })
+        {
+            steps.Zip(steps.Skip(1)).Should().OnlyContain(p => p.First.Score < p.Second.Score && p.First.Chance < p.Second.Chance);
+        }
+
+        var text = JsonSerializer.Serialize(least, CoreJson.Default.LayerThresholds);
+        JsonSerializer.Serialize(JsonSerializer.Deserialize(text, CoreJson.Default.LayerThresholds)!, CoreJson.Default.LayerThresholds)
+            .Should().Be(text);
+        using var withLeast = schema.WithLayers("team", least);
+        withLeast.Attributes.Single(a => a.Name == "team").Calibration.Should().BeEquivalentTo(least.Calibration);
+        using var withPlain = withLeast.WithLayers("team", plain);
+        withPlain.Attributes.Single(a => a.Name == "team").Calibration.Should().BeNull();
+    }
+
     /// <summary>Asked for, the thresholds carry value by settled value how they answered — values settled often enough,
     /// in value order — and the same thresholds; the keeper's report is the selection's.</summary>
     [Fact]

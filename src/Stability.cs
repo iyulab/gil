@@ -44,6 +44,12 @@ internal static class Stability
     public const string FormVersion = "GIL0007";
 
     /// <summary>
+    /// The least-cost rule (package <c>Gil</c>): thresholds chosen where answering costs least when a wrong answer costs
+    /// 1 / (1 − target) entries, the layers' calibration that comes with them, and answering by it.
+    /// </summary>
+    public const string LeastCost = "GIL0008";
+
+    /// <summary>
     /// Value tails (package <c>Gil</c>): a layers selection's report, value by settled value, of how the chosen thresholds
     /// answered.
     /// </summary>

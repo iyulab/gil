@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::replay::LayerThresholds;
+use crate::replay::{Calibration, LayerThresholds};
 
 /// Whether an attribute is read (observed) or decided (decided).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -70,6 +70,14 @@ pub struct Attribute {
     /// every record at the thresholds above. [`Schema::for_first_of_batch`] puts them in place.
     #[cfg_attr(feature = "serde", serde(default))]
     pub first_of_batch: Option<FirstOfBatch>,
+    /// Experimental. The value layers' calibration a least-cost choice made
+    /// ([`crate::replay::ThresholdRule::LeastCost`]): where both layers reach their thresholds, the one whose best value
+    /// is the more likely to be right answers, rather than the key layer. `None` answers in layer order.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub calibration: Option<Calibration>,
     /// The values the attribute may take; `None` is any. A value settled outside them is remembered but never offered.
     #[cfg_attr(feature = "serde", serde(default))]
     pub candidates: Option<Vec<String>>,
@@ -118,6 +126,7 @@ impl Attribute {
             memory_floor: None,
             coarse: None,
             first_of_batch: None,
+            calibration: None,
             candidates: None,
             candidates_from: None,
             must_catch: None,
@@ -298,6 +307,7 @@ impl Schema {
             a.key_threshold = key;
             a.memory_threshold = memory;
             a.memory_floor = floor;
+            a.calibration = layers.calibration.clone();
             Ok(())
         })
     }
@@ -352,6 +362,8 @@ impl Schema {
                 a.key_threshold = first.key_threshold;
                 a.memory_threshold = first.memory_threshold;
                 a.memory_floor = first.memory_floor;
+                // The calibration was fitted on the other records; the first records answer in layer order.
+                a.calibration = None;
             }
         }
         debug_assert_eq!(schema.check(), Ok(()), "a derived schema stays valid");
@@ -461,6 +473,27 @@ impl Schema {
                 return Err(format!(
                     "attribute '{n}' takes thresholds for the first record of a batch, which only a decided attribute with a single value has"
                 ));
+            }
+            if let Some(calibration) = &a.calibration {
+                if !decided_one {
+                    return Err(format!(
+                        "attribute '{n}' takes a calibration, which only a decided attribute with a single value has"
+                    ));
+                }
+                let rising = |steps: &[crate::replay::CalibrationStep]| {
+                    steps.iter().all(|s| (0.0..=1.0).contains(&s.chance))
+                        && steps.windows(2).all(|w| w[0].score < w[1].score)
+                };
+                if !rising(&calibration.key)
+                    || !rising(&calibration.memory)
+                    || calibration
+                        .threshold
+                        .is_some_and(|t| !(0.0..=1.0).contains(&t))
+                {
+                    return Err(format!(
+                        "attribute '{n}' takes a calibration whose steps do not rise by score or whose chances are outside [0, 1]"
+                    ));
+                }
             }
             if a.must_catch.as_ref().is_some_and(|m| !m.is_empty()) && !decided_one {
                 return Err(format!(

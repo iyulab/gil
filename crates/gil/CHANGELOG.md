@@ -40,6 +40,13 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Added
 
+- **Experimental: thresholds at least cost per decision.** `ThresholdRule::LeastCost` reads the target as where
+  answering pays — a wrong answer costs 1 / (1 − target) entries — fits each layer's best value a calibrated chance of
+  being right on the latest records' lookups, lets the more likely layer answer, and chooses the one chance threshold
+  where answering costs least. The thresholds carry the `Calibration` (`LayerThresholds::calibration`),
+  `Schema::with_layers` puts it on the attribute (`Attribute::calibration`), and the decider then answers with the more
+  likely layer where both reach their thresholds; a calibration whose steps do not rise is refused. The isotonic fit is
+  shared with the precision fit, which chooses as before. Python: `rule="least_cost"`, `Calibration`.
 - **Experimental: how the chosen thresholds answered, value by settled value.** A promise is an average over an
   attribute's values; a value the layers keep taking for another can sit far below it while the average holds.
   `LayerOptions { value_tails: true, .. }` and `Keep { value_tails: true, .. }` have the thresholds chosen carry

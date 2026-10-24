@@ -93,6 +93,7 @@ type may change shape or be removed in any release without a migration note.
 | `GIL0005` | Asking advice in the decision core: `AskPlanner`, `AskAdvice` |
 | `GIL0006` | The first record of a batch in the decision core: thresholds and promises chosen apart for a record whose batch has no settled record yet, and answering it at them |
 | `GIL0007` | A new edition of the code lists in the decision core: a `Keeper` that starts again from nothing when a record arrives under a new `Record.FormVersion` |
+| `GIL0008` | The least-cost rule in the decision core: `ThresholdRule.LeastCost`, the layers' `Calibration` it chooses with (`LayerThresholds.Calibration`, `AttributeDefinition.Calibration`), and answering by it |
 | `GIL0009` | Value tails in the decision core: a layers selection's report, value by settled value, of how the chosen thresholds answered (`SelectionOptions.ValueTails`, `LayerThresholds.ValueTails`, `ValueTail`) |
 
 Suppress the ids of what you use, in the project file or around the code:
@@ -312,6 +313,15 @@ together, and is the one to show:
 ```csharp
 var pooled = Replay.SelectLayers(schema, "team", saved, options with { TargetPrecision = 0.8, Rule = ThresholdRule.Pooled });
 ```
+
+When what you know is the cost of a wrong answer rather than a precision to keep, set the target where answering pays
+— a wrong answer that costs ρ entries makes it `1 − 1/ρ` — and ask for `ThresholdRule.LeastCost` (experimental,
+`GIL0008`). Each layer's best value gets a calibrated chance of being right, fitted on the latest `Replay.RecentRecords`
+records' lookups; of the two layers the more likely answers, at or above the one chance threshold where answering costs
+least, so the answers are right at least the target's share of the time on average. The thresholds come with that
+calibration (`LayerThresholds.Calibration`); `Schema.WithLayers` puts it on the attribute, and the decider then lets
+the more likely layer answer where both reach their thresholds. In replays on public recall records and public device event reports at targets of 0.5 and 0.75 — a wrong answer costing two and four entries — it cost 0.7–15.2 points less per decision than thresholds chosen layer by layer for the same cost; at other targets, and on the other collections tried, it was never dearer beyond chance. The first records of batches, chosen
+apart, still answer in layer order.
 
 The bound is on the answers together, not on any group of them. In a public bug tracker, on the bugs a deployed
 component classifier had moved out of triage — harder than the rest — `Pooled` answered a quarter at 0.77 and

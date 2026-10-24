@@ -157,6 +157,12 @@ public sealed record AttributeDefinition(string Name, AttributeRole Role)
     [Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
     public FirstOfBatch? FirstOfBatch { get; init; }
 
+    /// <summary>The value layers' calibration a least-cost choice made (<see cref="ThresholdRule.LeastCost"/>): where both
+    /// layers reach their thresholds, the one more likely to be right answers, rather than the key layer. Null answers in
+    /// layer order.</summary>
+    [Experimental(Stability.LeastCost, UrlFormat = Stability.Url)]
+    public Calibration? Calibration { get; init; }
+
     /// <summary>The values it may take; null is any. A value settled outside them is remembered but never offered.
     /// </summary>
     public IReadOnlyList<string>? Candidates { get; init; }

@@ -20,7 +20,28 @@ public sealed record LayerThresholds(ThresholdReplay Key, ThresholdReplay Memory
     /// unless asked for (<see cref="SelectionOptions.ValueTails"/>).</summary>
     [Experimental(Stability.ValueTails, UrlFormat = Stability.Url)]
     public IReadOnlyList<ValueTail>? ValueTails { get; init; }
+
+    /// <summary>The calibration <see cref="ThresholdRule.LeastCost"/> chose with; null under the other rules. Put on the
+    /// schema with the thresholds (<see cref="Schema.WithLayers"/>), it has the more likely layer answer.</summary>
+    [Experimental(Stability.LeastCost, UrlFormat = Stability.Url)]
+    public Calibration? Calibration { get; init; }
 }
+
+/// <summary>What <see cref="ThresholdRule.LeastCost"/> answers with: each layer's best value's calibrated chance of being
+/// right, as a step function of its score, and the chance at or above which the more likely of the two layers
+/// answers.</summary>
+/// <param name="Key">The key layer's steps, by rising score; empty when it had no best value to fit.</param>
+/// <param name="Memory">The similar record layer's steps, by rising score; empty when it had no vote to fit.</param>
+/// <param name="Threshold">The chance at or above which an answer is given; null when no chance paid on enough
+/// answers.</param>
+[Experimental(Stability.LeastCost, UrlFormat = Stability.Url)]
+public sealed record Calibration(
+    IReadOnlyList<CalibrationStep> Key, IReadOnlyList<CalibrationStep> Memory, double? Threshold);
+
+/// <summary>One step of a calibration: from <paramref name="Score"/> up to the next step's, the chance of being right is
+/// <paramref name="Chance"/>; below the first step's score, the first step's chance holds.</summary>
+[Experimental(Stability.LeastCost, UrlFormat = Stability.Url)]
+public readonly record struct CalibrationStep(double Score, double Chance);
 
 /// <summary>How the chosen thresholds of both layers together answered the latest <see cref="Replay.RecentRecords"/>
 /// records settled as one value. A precision promised over the whole attribute is an average over its values, and a

@@ -736,6 +736,10 @@ mod tests {
                 value_tails: true,
                 ..Keep::new(0.8)
             },
+            Keep {
+                rule: ThresholdRule::LeastCost,
+                ..Keep::new(0.8)
+            },
         ] {
             let mut keeper = Keeper::new(schema(), keep.clone());
             let mut decider = decider();

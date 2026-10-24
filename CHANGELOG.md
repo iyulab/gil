@@ -9,6 +9,12 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Added
 
+- **Experimental (`GIL0008`): thresholds at least cost per decision.** `ThresholdRule.LeastCost` reads the target as
+  where answering pays — a wrong answer costs 1 / (1 − target) entries — fits each layer's best value a calibrated
+  chance of being right on the latest records' lookups, lets the more likely layer answer, and chooses the one chance
+  threshold where answering costs least. The thresholds carry the `Calibration` (`LayerThresholds.Calibration`),
+  `Schema.WithLayers` puts it on the attribute (`AttributeDefinition.Calibration`), and the decider then answers with
+  the more likely layer where both reach their thresholds. The other rules answer as before.
 - **Experimental (`GIL0009`): how the chosen thresholds answered, value by settled value.** A promise is an average
   over an attribute's values; a value the layers keep taking for another can sit far below it while the average holds.
   `SelectionOptions.ValueTails` has `Replay.SelectLayers` and the `Keeper` report `LayerThresholds.ValueTails`: for each

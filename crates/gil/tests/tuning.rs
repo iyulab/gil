@@ -78,6 +78,7 @@ fn a_tuning_puts_back_on_a_fresh_schema_exactly_what_was_chosen() {
             memory: choice(0.6, 0.82),
             batches: None,
             value_tails: None,
+            calibration: None,
         },
     );
     assert_eq!(tuning.version, VERSION);
@@ -191,6 +192,7 @@ fn what_a_layers_replay_chose_goes_on_the_attribute_and_an_unchosen_layer_is_uns
         memory: floored(0.6, 0.3, 0.82),
         batches: None,
         value_tails: None,
+        calibration: None,
     };
     let schema = schema().with_layers("team", &layers).unwrap();
     let team = schema.attribute("team");
@@ -207,6 +209,7 @@ fn what_a_layers_replay_chose_goes_on_the_attribute_and_an_unchosen_layer_is_uns
                 memory: none(),
                 batches: None,
                 value_tails: None,
+                calibration: None,
             },
         )
         .unwrap();
@@ -224,6 +227,7 @@ fn what_a_coarse_replay_chose_goes_on_the_coarse_level() {
         memory: floored(0.4, 0.2, 0.85),
         batches: None,
         value_tails: None,
+        calibration: None,
     };
     let schema = schema().with_coarse("code", &layers).unwrap();
     let level = schema.attribute("code").coarse.clone().unwrap();
@@ -245,6 +249,7 @@ fn putting_a_choice_on_an_attribute_that_cannot_take_it_is_refused() {
         memory: choice(0.5, 0.9),
         batches: None,
         value_tails: None,
+        calibration: None,
     };
     let schema = schema();
     assert!(schema.with_layers("nothing", &layers).is_err());
@@ -282,6 +287,7 @@ fn an_answer_reads_its_promise_from_the_layer_it_came_from() {
             memory: choice(0.6, 0.82),
             batches: None,
             value_tails: None,
+            calibration: None,
         },
     );
     assert_eq!(tuning.promise_of("team", Source::KeyMemory), Some(0.86));
@@ -301,6 +307,7 @@ fn a_coarse_class_reads_its_promise_from_the_level_not_the_value() {
             memory: choice(0.6, 0.82),
             batches: None,
             value_tails: None,
+            calibration: None,
         },
     );
     assert_eq!(tuning.coarse_promise_of("team", Source::KeyMemory), None);
@@ -311,6 +318,7 @@ fn a_coarse_class_reads_its_promise_from_the_level_not_the_value() {
             memory: choice(0.4, 0.9),
             batches: None,
             value_tails: None,
+            calibration: None,
         },
     );
     assert_eq!(

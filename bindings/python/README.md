@@ -83,6 +83,12 @@ hold.
 thresholds, _ = gil.select_layers(schema, "team", records, target_precision=0.8, rule="pooled")
 ```
 
+When what you know is the cost of a wrong answer rather than a precision to keep, set the target where answering pays
+— a wrong answer that costs ρ entries makes it `1 - 1/ρ` — and pass `rule="least_cost"` (experimental): each layer's
+best value gets a calibrated chance of being right, the more likely layer answers at or above the one chance threshold
+where answering costs least, and the thresholds carry that `calibration`, which `schema.with_layers` puts on the
+attribute so the decider answers by it. In replays on public recall records and public device event reports at targets of 0.5 and 0.75 — a wrong answer costing two and four entries — it cost 0.7–15.2 points less per decision than thresholds chosen layer by layer for the same cost; at other targets, and on the other collections tried, it was never dearer beyond chance.
+
 Records settled together — several at once from one source — can be right or wrong together, and a promise taken on
 records that batch mates span is then too high. Give each record its `batch` and `select_layers` adds `batches`: the
 precision of thresholds chosen on half of the latest batches and counted on the other half (`across_batches`), the same

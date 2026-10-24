@@ -61,6 +61,8 @@ __all__ = [
     "AskPlanner",
     "AttributeUsage",
     "BatchCheck",
+    "Calibration",
+    "CalibrationStep",
     "Candidate",
     "CoarseLook",
     "Decider",
@@ -170,15 +172,32 @@ class ValueTail(TypedDict, total=False):
     given_instead: str
 
 
+class CalibrationStep(TypedDict):
+    """Experimental. One step of a calibration: from ``score`` up to the next step's, the chance of being right."""
+
+    score: float
+    chance: float
+
+
+class Calibration(TypedDict):
+    """Experimental. What the ``"least_cost"`` rule answers with — see the crate's ``Calibration``: each layer's steps by
+    rising score, and the chance at or above which the more likely layer answers (``None`` when none paid)."""
+
+    key: list[CalibrationStep]
+    memory: list[CalibrationStep]
+    threshold: float | None
+
+
 class LayerThresholds(_Layers, total=False):
     """The key layer's replay and the memory layer's, chosen on what the key threshold would not have answered.
 
     ``batches`` is there only when some of the latest records name their ``batch``; ``value_tails`` only when asked
-    for.
+    for; ``calibration`` only under the ``"least_cost"`` rule.
     """
 
     batches: BatchCheck
     value_tails: list[ValueTail]
+    calibration: Calibration
 
 
 class TypedKeyThresholds(TypedDict):
@@ -357,7 +376,7 @@ def select_layers(
     minimum_answered: int = 10,
     counting: Iterable[str] | None = None,
     decisions: bool = True,
-    rule: Literal["every_band", "pooled"] = "every_band",
+    rule: Literal["every_band", "pooled", "least_cost"] = "every_band",
     threads: int | None = None,
     value_tails: bool = False,
 ) -> tuple[LayerThresholds, list[DecisionRecord] | None]:
@@ -370,7 +389,10 @@ def select_layers(
     ``rule`` is how the two thresholds are chosen: ``"every_band"`` (each layer on its own, every band of its answers
     at the target) or ``"pooled"`` (the pair answering the most of the attribute's latest lookups while all their
     answers together hold the target at the bottom of their Wilson interval at 1.645 standard errors — see the crate's
-    ``ThresholdRule::Pooled``).
+    ``ThresholdRule::Pooled``). Experimental: ``"least_cost"`` reads the target as where answering pays — a wrong answer
+    costs ``1 / (1 - target_precision)`` entries — and chooses one chance threshold on each layer's calibrated chance of
+    being right, the more likely layer answering; the thresholds carry the ``calibration``, which
+    :meth:`Schema.with_layers` puts on the schema so the decider answers by it.
 
     When some of the latest records name their ``batch``, the thresholds carry ``batches`` (``BatchCheck``): the
     precision of thresholds chosen on half of those records and counted on the other half, split by batch and by
@@ -835,7 +857,7 @@ class Keeper:
         target_precision: float = 0.8,
         minimum_answered: int = 10,
         counting: Iterable[str] | None = None,
-        rule: Literal["every_band", "pooled"] = "every_band",
+        rule: Literal["every_band", "pooled", "least_cost"] = "every_band",
         threads: int | None = None,
         first_of_batch: bool = False,
         restart_on_form_version: bool = False,

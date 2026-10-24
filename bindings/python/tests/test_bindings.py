@@ -239,7 +239,7 @@ def test_results_carry_exactly_the_typed_keys() -> None:
     )
     # `batches` is there only when records name their batch, `value_tails` only when asked for.
     assert set(thresholds) == gil.LayerThresholds.__required_keys__
-    assert gil.LayerThresholds.__optional_keys__ == {"batches", "value_tails"}
+    assert gil.LayerThresholds.__optional_keys__ == {"batches", "value_tails", "calibration"}
     for layer in thresholds.values():
         assert set(layer) == set(gil.ThresholdReplay.__annotations__)
         for choice in (layer["chosen"], layer["most_precise"]):
@@ -535,6 +535,26 @@ def test_value_tails_report_each_value_and_move_no_threshold() -> None:
     keeper = gil.Keeper(schema, value_tails=True)
     keeper.settle(gil.Decider(schema), gil.records(items))
     assert keeper.rechoose()["chosen"]["team"] == told
+
+
+def test_least_cost_carries_a_calibration_the_schema_answers_by() -> None:
+    items = lines("records.jsonl")
+    schema = gil.Schema.from_dict(golden_form("team"))
+    plain, _ = gil.select_layers(schema, "team", gil.records(items), decisions=False)
+    least, _ = gil.select_layers(schema, "team", gil.records(items), decisions=False, rule="least_cost")
+
+    assert "calibration" not in plain
+    calibration = least["calibration"]
+    assert set(calibration) == set(gil.Calibration.__annotations__)
+    for steps in (calibration["key"], calibration["memory"]):
+        assert all(a["score"] < b["score"] and a["chance"] < b["chance"] for a, b in zip(steps, steps[1:]))
+    # The schema carries the calibration with the thresholds, and drops it under another rule.
+    team = next(a for a in json.loads(schema.with_layers("team", least).json)["attributes"] if a["name"] == "team")
+    assert team["calibration"] == calibration
+    team = next(a for a in json.loads(schema.with_layers("team", plain).json)["attributes"] if a["name"] == "team")
+    assert "calibration" not in team
+    with pytest.raises(ValueError, match="unknown threshold rule"):
+        gil.select_layers(schema, "team", gil.records(items), rule="cheapest")
 
 
 def test_records_carry_what_was_in_view_how_long_it_took_and_who_settled_it() -> None:

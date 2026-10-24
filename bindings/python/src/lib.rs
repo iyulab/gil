@@ -124,8 +124,9 @@ fn threshold_rule(name: &str) -> PyResult<ThresholdRule> {
     match name {
         "every_band" => Ok(ThresholdRule::EveryBand),
         "pooled" => Ok(ThresholdRule::Pooled),
+        "least_cost" => Ok(ThresholdRule::LeastCost),
         other => Err(invalid(format!(
-            "unknown threshold rule '{other}' (every_band or pooled)"
+            "unknown threshold rule '{other}' (every_band, pooled or least_cost)"
         ))),
     }
 }

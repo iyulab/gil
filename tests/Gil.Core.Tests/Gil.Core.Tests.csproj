@@ -2,7 +2,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <!-- The tests exercise the experimental asking advice too; tests/SupportedSurface compiles without it. -->
-    <NoWarn>$(NoWarn);GIL0005;GIL0006;GIL0007;GIL0009</NoWarn>
+    <NoWarn>$(NoWarn);GIL0005;GIL0006;GIL0007;GIL0008;GIL0009</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Gil\Gil.csproj" />

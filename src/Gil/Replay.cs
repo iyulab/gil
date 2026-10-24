@@ -138,7 +138,12 @@ public static class Replay
                 writer.WriteEndArray();
             }
 
-            writer.WriteString("rule", options.Rule == ThresholdRule.Pooled ? "pooled" : "every_band");
+            writer.WriteString("rule", options.Rule switch
+            {
+                ThresholdRule.Pooled => "pooled",
+                ThresholdRule.LeastCost => "least_cost",
+                _ => "every_band",
+            });
             writer.WriteBoolean("decisions", options.Decisions);
             writer.WriteNumber("typed_longest", options.TypedLongest);
             if (options.FirstOfBatch)

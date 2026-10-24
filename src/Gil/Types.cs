@@ -93,6 +93,15 @@ public enum ThresholdRule
     /// <summary>The two thresholds together, as the pair that answers the most while the precision of all those answers
     /// taken together stays at or above the target at the low end of its interval.</summary>
     Pooled,
+
+    /// <summary>The answers that cost least per decision, reading the target as where answering pays: a wrong answer
+    /// costs 1 / (1 − target) values entered with no suggestion. Each layer's best value gets a calibrated chance of
+    /// being right, fitted on the latest records' lookups; the more likely layer answers, at or above one chance
+    /// threshold. The answers are right at least the target's share of the time on average, not in every band. The
+    /// schema answers by the calibration that comes with the thresholds (<see cref="LayerThresholds.Calibration"/>).
+    /// </summary>
+    [Experimental(Stability.LeastCost, UrlFormat = Stability.Url)]
+    LeastCost,
 }
 
 /// <summary>What a threshold is chosen for: the precision to keep (in (0, 1]), the fewest answers a threshold needs,

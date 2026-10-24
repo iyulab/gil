@@ -91,6 +91,13 @@ senders whose own precision was below the target beyond doubt (the top of a 95% 
 than the others', it answers below the target for that sender too. If you read a promise per customer or per site,
 choose `EveryBand`, and count `usage` over each sender's records to see it hold.
 
+When what you know is the cost of a wrong answer rather than a precision to keep, set the target where answering pays
+— a wrong answer that costs ρ entries makes it `1 − 1/ρ` — and ask for `ThresholdRule::LeastCost` (experimental): each
+layer's best value gets a calibrated chance of being right, fitted on the latest `RECENT_RECORDS` records' lookups, the
+more likely layer answers at or above the one chance threshold where answering costs least, and the thresholds come
+with that `Calibration` (`LayerThresholds::calibration`). `Schema::with_layers` puts it on the attribute, and the decider
+then lets the more likely layer answer where both reach their thresholds. In replays on public recall records and public device event reports at targets of 0.5 and 0.75 — a wrong answer costing two and four entries — it cost 0.7–15.2 points less per decision than thresholds chosen layer by layer for the same cost; at other targets, and on the other collections tried, it was never dearer beyond chance.
+
 Records settled together — several at once from one source, alike in what they show — can be right or wrong together,
 and the replay then counts more independent answers than there are. Name each record's batch in `Record::batch` and
 `select_layers` reports, in `LayerThresholds::batches`, what the batches among the latest `RECENT_RECORDS` records do:
