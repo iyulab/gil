@@ -52,6 +52,10 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 - **How low `MinimumAnswered` may go.** Replaying 26 public coding tasks from their first records, 30 kept every task
   that answered more than once at its target over the first 500 decisions and 20 did not; 50 held one more edge case
   for 0.73 times the answers. The README now says not to set it below 30.
+- **What a kept wrong answer does to memory.** Wrong answers people keep are remembered and can be answered again.
+  Replaying two public streams with one wrong answer in three kept, at a target of 0.9 and counting every settlement,
+  the promise ended 0.3 and 0.8 points above what was right and about one remembered value in 200 was wrong. The
+  README says so beside how kept answers inflate a promise.
 
 ## 0.26.0
 

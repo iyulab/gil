@@ -295,7 +295,11 @@ thresholds. Replaying two public streams that way, the thresholds stayed close t
 them, but on one stream the promise fell from 0.98 to 0.90 while the answers were 0.98 right; on the other it moved
 less than a point. To know how right the answers themselves are, have a few drawn at random settled again without the
 answer in view (`SettlementKind.Check`, below). Counting the settlements that saw an answer leans the other way: if
-people keep a wrong answer they see one time in three, a layer that is 0.90 right reads 0.93.
+people keep a wrong answer they see one time in three, a layer that is 0.90 right reads 0.93. What people keep is also
+remembered, so a wrong value kept can come back as the next answer. Replaying two public streams with people keeping a
+wrong answer one time in three, at a target of 0.9 and counting every settlement, the promise ended 0.3 and 0.8 points
+above what was right, and about one remembered value in 200 was wrong: thresholds that keep the answers right
+leave little that is wrong for people to keep.
 
 A value settled as `Fill` stays in the record, but memory does not learn it and choosing thresholds does not ask about
 it. Remembered, an answer's own value would come back as evidence for itself. Replaying a public stream with nine in ten
