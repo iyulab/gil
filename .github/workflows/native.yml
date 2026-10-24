@@ -37,9 +37,7 @@ env:
   CARGO_PROFILE_RELEASE_STRIP: symbols
 
 jobs:
-  # Linux in the manylinux 2.28 images, so that the libraries need no newer glibc than the Python wheels do, and in the
-  # musllinux 1.2 images for musl-based Linux such as Alpine. Rust links the C runtime statically on musl by default,
-  # which leaves it no shared library to build: there it is linked dynamically, as the .NET host itself is.
+  # Linux in the manylinux 2.28 images, so that the libraries need no newer glibc than the Python wheels do.
   linux:
     strategy:
       fail-fast: false
@@ -47,13 +45,9 @@ jobs:
         include:
           - { rid: linux-x64, runner: ubuntu-latest, image: quay.io/pypa/manylinux_2_28_x86_64 }
           - { rid: linux-arm64, runner: ubuntu-24.04-arm, image: quay.io/pypa/manylinux_2_28_aarch64 }
-          - { rid: linux-musl-x64, runner: ubuntu-latest, image: quay.io/pypa/musllinux_1_2_x86_64, rustflags: -C target-feature=-crt-static }
-          - { rid: linux-musl-arm64, runner: ubuntu-24.04-arm, image: quay.io/pypa/musllinux_1_2_aarch64, rustflags: -C target-feature=-crt-static }
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.image }}
     timeout-minutes: 30
-    env:
-      RUSTFLAGS: ${{ matrix.rustflags }}
     steps:
       - uses: actions/checkout@v7
       - run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
@@ -61,6 +55,34 @@ jobs:
       - run: |
           mkdir -p "out/${{ matrix.rid }}"
           cp target/release/libgil_native.so target/release/libgil_review_native.so "out/${{ matrix.rid }}/"
+          ls -l "out/${{ matrix.rid }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-${{ matrix.rid }}
+          path: out/
+          retention-days: 1
+
+  # musl-based Linux such as Alpine, in the musllinux 1.2 images. Those are Alpine images, where actions do not run on
+  # arm64, so the build runs in the image started from the runner. Rust links the C runtime statically on musl by
+  # default, which leaves it no shared library to build: there it is linked dynamically, as the .NET host itself is.
+  linux-musl:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: linux-musl-x64, runner: ubuntu-latest, image: quay.io/pypa/musllinux_1_2_x86_64 }
+          - { rid: linux-musl-arm64, runner: ubuntu-24.04-arm, image: quay.io/pypa/musllinux_1_2_aarch64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - run: |
+          docker run --rm -v "$PWD:/w" -w /w -e CARGO_PROFILE_RELEASE_STRIP -e RUSTFLAGS="-C target-feature=-crt-static" \
+            ${{ matrix.image }} sh -c '
+              curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal &&
+              ~/.cargo/bin/cargo build --release --locked -p gil-ffi -p gil-review-ffi &&
+              mkdir -p "out/${{ matrix.rid }}" &&
+              cp target/release/libgil_native.so target/release/libgil_review_native.so "out/${{ matrix.rid }}/"'
           ls -l "out/${{ matrix.rid }}"
       - uses: actions/upload-artifact@v7
         with:
@@ -108,7 +130,7 @@ jobs:
   # runtimes/<rid>/native/. Gil.Tree (and the Gil.Abstractions it needs) too: its lexical memory calls the library Gil
   # carries.
   pack:
-    needs: [linux, desktop]
+    needs: [linux, linux-musl, desktop]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
