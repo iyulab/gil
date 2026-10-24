@@ -9,7 +9,7 @@ of an LLM from confirmed answers and one-token judgments; see [Stability](#stabi
 **Status: early.** The library is being built from a specification whose behaviour was measured first in a
 research harness. Published on NuGet as `Gil`, the decision core — native (Rust) inside, the package carrying its
 library for each supported runtime — and, for the experimental path in front of an LLM, `Gil.Tree` with
-`Gil.Abstractions`, `Gil.IronHive` and `Gil.Sqlite`; the API may still change within 0.x —
+`Gil.Abstractions` (`Gil.IronHive` and `Gil.Sqlite` stopped at 0.26.0); the API may still change within 0.x —
 [CHANGELOG.md](https://github.com/iyulab/gil/blob/main/CHANGELOG.md) lists each change and what to do about it.
 
 ## When to use it
@@ -46,8 +46,8 @@ nobody settles (memory then stays empty), or for choosing between models (a rout
 | `Gil` | The decision core, native (Rust) behind its C ABI: schemas, settled records, deciders, open records and their typed answers, threshold replay and tuning, usage counts, asking advice (`GIL0005`). It needs no other package |
 | `Gil.Review` | Review statistics for checking automated decisions by hand: stratified samples, Neyman allocation, weighted estimates with intervals, agreement between reviewers — native (Rust) behind its C ABI. It needs no other package |
 | `Gil.Tree` | Everything experimental (`GIL0001`–`GIL0004`): the tree judgment path — the tree YAML reader/writer, the single-token judge, the greedy traverser, output contracts, the fallback generator, slot filling, the resolver (memory → tree → narrowed fallback → full fallback), habits and their promotion, deactivation and differentiation, shadows — and what it is built on: the memories of confirmed answers, the call recorders and energy model, the telemetry contracts |
-| `Gil.IronHive` | Chat and embedding models through any IronHive generator, with ready-made ones for OpenAI-compatible servers (retry rules for busy shared servers, the response kept as received). Optional: implement `IChatModel` and `IEmbeddingModel` yourself and `Gil` needs nothing else |
-| `Gil.Sqlite` | The telemetry store: every trace and model call, habit statistics, promotion and review logs in one SQLite file whose layout is the contract below. Optional: `Gil.Tree` takes any `ITelemetrySink`, and a consumer that keeps no telemetry ships no SQLite native library |
+| `Gil.IronHive` | Chat and embedding models through any IronHive generator, with ready-made ones for OpenAI-compatible servers (retry rules for busy shared servers, the response kept as received). Optional: implement `IChatModel` and `IEmbeddingModel` yourself and `Gil` needs nothing else. No longer published: 0.26.0 is its last package, and the source stays here with the tree track |
+| `Gil.Sqlite` | The telemetry store: every trace and model call, habit statistics, promotion and review logs in one SQLite file whose layout is the contract below. Optional: `Gil.Tree` takes any `ITelemetrySink`, and a consumer that keeps no telemetry ships no SQLite native library. No longer published: 0.26.0 is its last package, and the source stays here with the tree track |
 | `Gil.Core.Tests` | Tests of the decision core through its .NET API, reproducing the Rust core's goldens |
 | `Gil.Tests` | Unit tests of the experimental tracks and the compatibility fixture writer |
 
@@ -612,8 +612,8 @@ This walkthrough is the tree judgment path, which is experimental — see [Stabi
 
 ```sh
 dotnet add package Gil.Tree       # the tree judgment path this walkthrough uses, its memories and recorders
-dotnet add package Gil.IronHive   # the models below; skip it if you bring your own IChatModel
-dotnet add package Gil.Sqlite     # the telemetry store below; skip it if you keep no telemetry
+dotnet add package Gil.IronHive --version 0.26.0   # the models below (its last package); skip it if you bring your own IChatModel
+dotnet add package Gil.Sqlite --version 0.26.0     # the telemetry store below (its last package); skip it if you keep no telemetry
 ```
 
 A request goes through memory first, then the tree of one-token judgments, then a fallback narrowed to the
