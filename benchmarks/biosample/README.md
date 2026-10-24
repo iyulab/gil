@@ -72,9 +72,9 @@ Python 3.11 or later; `prepare.py` needs only the standard library, `compare.py`
 ```
 curl -O https://ftp.ncbi.nlm.nih.gov/biosample/biosample_set.xml.gz
 uv run python benchmarks/biosample/prepare.py biosample_set.xml.gz --out human.jsonl.gz
-uv run --with numpy --with iyulab-gil==0.7.0 python benchmarks/biosample/compare.py human.jsonl.gz --out results-0.9.json
-uv run --with numpy --with iyulab-gil==0.7.0 python benchmarks/biosample/compare.py human.jsonl.gz --target 0.8 --out results-0.8.json
-uv run --with numpy --with iyulab-gil==0.7.0 python benchmarks/biosample/compare.py human.jsonl.gz --target 0.95 --out results-0.95.json
+uv run --with numpy --with iyulab-gil==0.8.0 python benchmarks/biosample/compare.py human.jsonl.gz --out results-0.9.json
+uv run --with numpy --with iyulab-gil==0.8.0 python benchmarks/biosample/compare.py human.jsonl.gz --target 0.8 --out results-0.8.json
+uv run --with numpy --with iyulab-gil==0.8.0 python benchmarks/biosample/compare.py human.jsonl.gz --target 0.95 --out results-0.95.json
 ```
 
 `prepare.py` reads the 4.9 GB dump once (about 12 minutes on a recent laptop); `compare.py` takes a few minutes per target. The
@@ -83,7 +83,7 @@ field.
 
 ## Results
 
-Measured with `iyulab-gil` 0.7.0 on the 2026-09-27 dump.
+Measured with `iyulab-gil` 0.8.0 on the 2026-09-27 dump (0.7.0 gave the same numbers).
 
 **Ranking (MRR).** The recommender's MRR on the test lookups, with the context the record's other filled fields:
 

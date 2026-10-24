@@ -1,7 +1,7 @@
 """Compares an association-rule value recommender with Gil on the same BioSample stream.
 
-    uv run --with numpy --with iyulab-gil==0.7.0 python benchmarks/biosample/compare.py human.jsonl.gz --out results.json
-    uv run --with numpy --with iyulab-gil==0.7.0 python benchmarks/biosample/compare.py human.jsonl.gz --target 0.8 --out results-0.8.json
+    uv run --with numpy --with iyulab-gil==0.8.0 python benchmarks/biosample/compare.py human.jsonl.gz --out results.json
+    uv run --with numpy --with iyulab-gil==0.8.0 python benchmarks/biosample/compare.py human.jsonl.gz --target 0.8 --out results-0.8.json
 
 The stream is the one ``prepare.py`` writes. Records with at least three of the six fields filled are kept; the first
 85% in submission order train and the last 15% test. Each test lookup asks for one filled field, given the other filled
