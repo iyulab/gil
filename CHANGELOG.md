@@ -9,6 +9,12 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Added
 
+- **Experimental (`GIL0009`): how the chosen thresholds answered, value by settled value.** A promise is an average
+  over an attribute's values; a value the layers keep taking for another can sit far below it while the average holds.
+  `SelectionOptions.ValueTails` has `Replay.SelectLayers` and the `Keeper` report `LayerThresholds.ValueTails`: for each
+  value settled on at least `Replay.ValueTailDecisions` (30) of the latest records asked about, how many there were,
+  the share the chosen thresholds answered with another value and the value given in its place most often
+  (`ValueTail`). It moves no threshold.
 - **Experimental (`GIL0007`): a keeper that starts again under a new edition of the code lists.**
   `SelectionOptions.RestartOnFormVersion` has the `Keeper` start from nothing when a record arrives under a new
   `Record.FormVersion`: the records settled before it leave the decider and the replays, the thresholds chosen on them

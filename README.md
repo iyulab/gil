@@ -93,6 +93,7 @@ type may change shape or be removed in any release without a migration note.
 | `GIL0005` | Asking advice in the decision core: `AskPlanner`, `AskAdvice` |
 | `GIL0006` | The first record of a batch in the decision core: thresholds and promises chosen apart for a record whose batch has no settled record yet, and answering it at them |
 | `GIL0007` | A new edition of the code lists in the decision core: a `Keeper` that starts again from nothing when a record arrives under a new `Record.FormVersion` |
+| `GIL0009` | Value tails in the decision core: a layers selection's report, value by settled value, of how the chosen thresholds answered (`SelectionOptions.ValueTails`, `LayerThresholds.ValueTails`, `ValueTail`) |
 
 Suppress the ids of what you use, in the project file or around the code:
 
@@ -437,6 +438,13 @@ renumbered the violation codes, a memory carried over promised 0.94 for the firs
 right, and 120,000 records later still answered 0.52 of lookups against 0.81 for one started anew; on public injury
 reports across an edition that changed no code, starting anew answered 0.63 times as many over the first five thousand.
 Name a new edition only when a value comes to mean something else.
+
+A promise is an average over an attribute's values, and a value the layers keep taking for another can sit far below
+it while the average holds. Set `SelectionOptions.ValueTails` (experimental, `GIL0009`) for `Replay.SelectLayers` or the
+`Keeper`, and the thresholds chosen carry `LayerThresholds.ValueTails`: for each value settled on at least
+`Replay.ValueTailDecisions` of the latest records asked about, how many there were, the share the chosen thresholds
+answered with another value (`AnsweredOtherwise`) and the value given in its place most often (`GivenInstead`). On public food inspections and public device event reports, the values whose share was 0.20 or more on the first half of the records were mostly still at 0.10 or more on the second (1.00 and 0.88 of them, against 0.10 and 0.06 of the other values).
+A value with a large share is a candidate for `AttributeDefinition.MustCatch`. The report moves no threshold.
 
 Settle a record that arrives again — a retransmission, a re-save — under the same record id. The memories keep one
 version per id, and the replay asks a record settled again without its earlier version. Under a new id the copy is new

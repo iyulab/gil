@@ -41,6 +41,10 @@ pub const BATCH_SPLITS: usize = 20;
 /// The seed of [`BatchCheck`]'s splits, so the same records split the same way on every run.
 const BATCH_SEED: u64 = 0x6769_6c5f_6261_7463;
 
+/// The fewest of the latest decisions a settled value needs before [`ValueTail`] reports it — below that, a share of a
+/// few decisions says nothing about the next.
+pub const VALUE_TAIL_DECISIONS: usize = 30;
+
 /// How [`select_layers`] chooses an attribute's two thresholds ([`LayerOptions::rule`]).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -884,6 +888,37 @@ pub struct LayerThresholds {
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub batches: Option<BatchCheck>,
+    /// Experimental. Value by settled value, how the chosen thresholds answered the latest records settled as it
+    /// ([`ValueTail`]); `None` unless asked for ([`LayerOptions::value_tails`]).
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub value_tails: Option<Vec<ValueTail>>,
+}
+
+/// Experimental. How the chosen thresholds of both layers together answered the latest [`RECENT_RECORDS`] records
+/// settled as one value. A precision promised over the whole attribute is an average over its values, and a value the
+/// layers keep taking for another can sit far below it while the average holds: `answered_otherwise` is that value's
+/// own share. In two forward replays on public collections, the values whose share was 0.20 or more on the first half
+/// of the records were mostly still at 0.10 or more on the second (1.00 and 0.88 of them, against 0.10 and 0.06 of the
+/// other values) — candidates for a value the attribute must not miss. Reported only for values settled on at least
+/// [`VALUE_TAIL_DECISIONS`] of those records, in value order.
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct ValueTail {
+    /// The settled value.
+    pub value: String,
+    /// How many of the latest records the replay asked about were settled as it.
+    pub decisions: usize,
+    /// The share of those the thresholds answered with another value.
+    pub answered_otherwise: f64,
+    /// The value given in its place most often; `None` when none was. Ties go to the first in value order.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub given_instead: Option<String>,
 }
 
 /// What the batches among the latest [`RECENT_RECORDS`] records do to a promise. Records settled together — several at
@@ -931,6 +966,9 @@ pub struct LayerOptions<'a> {
     /// the similar record layer made of it whatever the thresholds, and what it was settled as. The thresholds are
     /// chosen from exactly these records.
     pub sink: Option<&'a mut dyn FnMut(&DecisionRecord)>,
+    /// Experimental. Whether to report, value by settled value, how the chosen thresholds answered
+    /// ([`LayerThresholds::value_tails`]).
+    pub value_tails: bool,
 }
 
 /// What the similar record layer made of one lookup: the vote's score, whether its value matched, the similarity of
@@ -953,6 +991,10 @@ pub(crate) struct Step {
     vote: Option<Vote>,
     weight: f64,
     order: usize,
+    /// The value the record was settled as.
+    settled: String,
+    /// The value the similar record layer voted for, when it voted.
+    voted_for: Option<String>,
     /// The batch the record was settled in, when it names one.
     batch: Option<String>,
     /// Whether no other record settled before it named its batch — the first of its batch, as one that names none is.
@@ -1032,10 +1074,68 @@ pub fn select_layers(
         options.rule,
         &thresholds,
     );
+    let value_tails = options
+        .value_tails
+        .then(|| value_tails(&steps, latest, &thresholds));
     LayerThresholds {
         batches,
+        value_tails,
         ..thresholds
     }
+}
+
+/// [`ValueTail`] for each value settled on at least [`VALUE_TAIL_DECISIONS`] of the latest [`RECENT_RECORDS`] records
+/// the replay asked about, under `thresholds` as a decider answers with them: the key layer at its threshold, then,
+/// where it does not answer, the similar record layer at its threshold and floor — and neither under a key that settled
+/// a value to catch.
+pub(crate) fn value_tails(
+    steps: &[Step],
+    latest: usize,
+    thresholds: &LayerThresholds,
+) -> Vec<ValueTail> {
+    let key = thresholds.key.chosen.as_ref().map(|c| c.threshold);
+    let memory = thresholds.memory.chosen.as_ref();
+    let mut tally: BTreeMap<&str, (usize, usize, BTreeMap<&str, usize>)> = BTreeMap::new();
+    for s in steps.iter().filter(|s| {
+        (s.key_looked || s.looked) && s.order as i64 > latest as i64 - RECENT_RECORDS as i64
+    }) {
+        let caught = s.key.as_ref().is_some_and(|first| first.caught);
+        let by_key = s
+            .key
+            .as_ref()
+            .filter(|first| s.key_looked && !first.caught && key.is_some_and(|t| first.score >= t))
+            .map(|first| first.value.as_str());
+        let answer = by_key.or_else(|| {
+            let v = s.vote.filter(|_| s.looked && !caught)?;
+            let m = memory?;
+            let answers = v.score >= m.threshold
+                && !(v.voted && m.similarity_floor.is_some_and(|floor| v.nearest < floor));
+            s.voted_for.as_deref().filter(|_| answers)
+        });
+        let (decisions, otherwise, given) = tally.entry(s.settled.as_str()).or_default();
+        *decisions += 1;
+        if let Some(a) = answer.filter(|a| *a != s.settled) {
+            *otherwise += 1;
+            *given.entry(a).or_default() += 1;
+        }
+    }
+    tally
+        .into_iter()
+        .filter(|(_, (decisions, _, _))| *decisions >= VALUE_TAIL_DECISIONS)
+        .map(|(value, (decisions, otherwise, given))| ValueTail {
+            value: value.to_owned(),
+            decisions,
+            answered_otherwise: otherwise as f64 / decisions as f64,
+            // The most given, the first in value order among ties.
+            given_instead: given
+                .iter()
+                .fold(None::<(&str, usize)>, |best, (v, n)| match best {
+                    Some((_, m)) if m >= *n => best,
+                    _ => Some((v, *n)),
+                })
+                .map(|(v, _)| v.to_owned()),
+        })
+        .collect()
 }
 
 /// A layers replay's steps with the lookups of records in the other situation — first of their batch when `first` is
@@ -1143,6 +1243,7 @@ pub(crate) fn layers(
         key,
         memory,
         batches: None,
+        value_tails: None,
     }
 }
 
@@ -1664,6 +1765,7 @@ pub(crate) fn coarse_layers(
         key,
         memory,
         batches: None,
+        value_tails: None,
     }
 }
 
@@ -1882,6 +1984,8 @@ pub(crate) fn carry_on(
             vote,
             weight,
             order,
+            settled: settled.clone(),
+            voted_for: decided.as_ref().map(|(winner, _)| winner.answer.clone()),
             batch: record.batch.clone(),
             first: first_of_batch,
             coarse: coarse_step,

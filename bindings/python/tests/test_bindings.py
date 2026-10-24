@@ -237,9 +237,9 @@ def test_results_carry_exactly_the_typed_keys() -> None:
     thresholds, records = gil.select_layers(
         schema, "team", gil.records(settled_again()), 0.8, 10, counting=COUNTED
     )
-    # `batches` is there only when records name their batch.
+    # `batches` is there only when records name their batch, `value_tails` only when asked for.
     assert set(thresholds) == gil.LayerThresholds.__required_keys__
-    assert gil.LayerThresholds.__optional_keys__ == {"batches"}
+    assert gil.LayerThresholds.__optional_keys__ == {"batches", "value_tails"}
     for layer in thresholds.values():
         assert set(layer) == set(gil.ThresholdReplay.__annotations__)
         for choice in (layer["chosen"], layer["most_precise"]):
@@ -513,6 +513,28 @@ def test_records_that_name_their_batch_get_a_batch_check() -> None:
     assert check["across_batches_answered"] > 0 and check["across_records_answered"] > 0
     # The check moves no threshold.
     assert named["key"] == plain["key"] and named["memory"] == plain["memory"]
+
+
+def test_value_tails_report_each_value_and_move_no_threshold() -> None:
+    items = lines("records.jsonl")
+    schema = gil.Schema.from_dict(golden_form("team"))
+    plain, _ = gil.select_layers(schema, "team", gil.records(items), decisions=False)
+    told, _ = gil.select_layers(schema, "team", gil.records(items), decisions=False, value_tails=True)
+
+    assert "value_tails" not in plain
+    tails = told["value_tails"]
+    assert tails and [t["value"] for t in tails] == sorted(t["value"] for t in tails)
+    for tail in tails:
+        assert set(tail) <= set(gil.ValueTail.__annotations__)
+        assert tail["decisions"] >= 30 and 0.0 <= tail["answered_otherwise"] <= 1.0
+        assert tail.get("given_instead") != tail["value"]
+        assert ("given_instead" in tail) == (tail["answered_otherwise"] > 0)
+    # The report moves no threshold.
+    assert told["key"] == plain["key"] and told["memory"] == plain["memory"]
+
+    keeper = gil.Keeper(schema, value_tails=True)
+    keeper.settle(gil.Decider(schema), gil.records(items))
+    assert keeper.rechoose()["chosen"]["team"] == told
 
 
 def test_records_carry_what_was_in_view_how_long_it_took_and_who_settled_it() -> None:

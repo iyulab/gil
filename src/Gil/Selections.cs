@@ -14,7 +14,29 @@ public sealed record LayerSelection(LayerThresholds Thresholds, IReadOnlyList<De
 /// answered.</param>
 /// <param name="Batches">How much the batches the latest records were settled in flatter the promise; null when none of
 /// them names its <see cref="Record.Batch"/>.</param>
-public sealed record LayerThresholds(ThresholdReplay Key, ThresholdReplay Memory, BatchCheck? Batches = null);
+public sealed record LayerThresholds(ThresholdReplay Key, ThresholdReplay Memory, BatchCheck? Batches = null)
+{
+    /// <summary>Value by settled value, how the chosen thresholds answered the latest records settled as it; null
+    /// unless asked for (<see cref="SelectionOptions.ValueTails"/>).</summary>
+    [Experimental(Stability.ValueTails, UrlFormat = Stability.Url)]
+    public IReadOnlyList<ValueTail>? ValueTails { get; init; }
+}
+
+/// <summary>How the chosen thresholds of both layers together answered the latest <see cref="Replay.RecentRecords"/>
+/// records settled as one value. A precision promised over the whole attribute is an average over its values, and a
+/// value the layers keep taking for another can sit far below it while the average holds:
+/// <see cref="AnsweredOtherwise"/> is that value's own share. In two forward replays on public collections, the values
+/// whose share was 0.20 or more on the first half of the records were mostly still at 0.10 or more on the second (1.00
+/// and 0.88 of them, against 0.10 and 0.06 of the other values) — candidates for a value the attribute must not miss.
+/// Reported only for values settled on at least <see cref="Replay.ValueTailDecisions"/> of those records, in value
+/// order.</summary>
+/// <param name="Value">The settled value.</param>
+/// <param name="Decisions">How many of the latest records the replay asked about were settled as it.</param>
+/// <param name="AnsweredOtherwise">The share of those the thresholds answered with another value.</param>
+/// <param name="GivenInstead">The value given in its place most often; null when none was. Ties go to the first in
+/// value order.</param>
+[Experimental(Stability.ValueTails, UrlFormat = Stability.Url)]
+public sealed record ValueTail(string Value, int Decisions, double AnsweredOtherwise, string? GivenInstead = null);
 
 /// <summary>What the batches among the latest <see cref="Replay.RecentRecords"/> records do to a promise. Records
 /// settled together — several at once from one source, alike in what they show — can be right or wrong together, and

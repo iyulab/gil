@@ -29,6 +29,11 @@ public static class Replay
     /// <c>BATCH_SPLITS</c>.</summary>
     public const int BatchSplits = 20;
 
+    /// <summary>The fewest of the latest decisions a settled value needs before <see cref="ValueTail"/> reports it. The
+    /// core's <c>VALUE_TAIL_DECISIONS</c>.</summary>
+    [Experimental(Stability.ValueTails, UrlFormat = Stability.Url)]
+    public const int ValueTailDecisions = 30;
+
     /// <summary>The key and similar record thresholds for <paramref name="attribute"/>, with the replay's decision
     /// records when <see cref="SelectionOptions.Decisions"/> asks for them.</summary>
     /// <exception cref="ArgumentException">The options are out of range, or the attribute is not decided.</exception>
@@ -144,6 +149,11 @@ public static class Replay
             if (options.RestartOnFormVersion)
             {
                 writer.WriteBoolean("restart_on_form_version", true);
+            }
+
+            if (options.ValueTails)
+            {
+                writer.WriteBoolean("value_tails", true);
             }
 
             if (options.Threads is { } threads)

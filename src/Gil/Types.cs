@@ -133,5 +133,11 @@ public sealed record SelectionOptions(double TargetPrecision, int MinimumAnswere
     /// edition is taken as of the current one; the first edition named starts nothing.</summary>
     [Experimental(Stability.FormVersion, UrlFormat = Stability.Url)]
     public bool RestartOnFormVersion { get; init; }
+
+    /// <summary>The layers' selection and the keeper: whether the thresholds chosen carry, value by settled value, how
+    /// they answered (<see cref="LayerThresholds.ValueTails"/>) — the keeper's counted on the records its value
+    /// thresholds were chosen on. It moves no threshold.</summary>
+    [Experimental(Stability.ValueTails, UrlFormat = Stability.Url)]
+    public bool ValueTails { get; init; }
 }
 

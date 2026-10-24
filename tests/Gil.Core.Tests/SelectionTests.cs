@@ -154,6 +154,42 @@ public sealed class SelectionTests
         JsonNode.Parse(JsonSerializer.Serialize(record with { Batch = null }, CoreJson.Default.Record))!.AsObject().ContainsKey("batch").Should().BeFalse();
     }
 
+    /// <summary>Asked for, the thresholds carry value by settled value how they answered — values settled often enough,
+    /// in value order — and the same thresholds; the keeper's report is the selection's.</summary>
+    [Fact]
+    public void ValueTailsReportEachValueAndMoveNoThreshold()
+    {
+        using var schema = Schema.FromJson(Fixture("schema.json"));
+        using var records = SettledRecords.FromJsonLines(Fixture("records.jsonl"));
+        var options = new SelectionOptions(0.8, 10);
+
+        var plain = Replay.SelectLayers(schema, "team", records, options).Thresholds;
+        var told = Replay.SelectLayers(schema, "team", records, options with { ValueTails = true }).Thresholds;
+
+        plain.ValueTails.Should().BeNull();
+        told.ValueTails.Should().NotBeNullOrEmpty();
+        told.ValueTails!.Select(t => t.Value).Should().BeInAscendingOrder(StringComparer.Ordinal);
+        foreach (var tail in told.ValueTails)
+        {
+            tail.Decisions.Should().BeGreaterThanOrEqualTo(Replay.ValueTailDecisions);
+            tail.AnsweredOtherwise.Should().BeInRange(0.0, 1.0);
+            tail.GivenInstead.Should().NotBe(tail.Value);
+            (tail.GivenInstead is not null).Should().Be(tail.AnsweredOtherwise > 0);
+        }
+
+        // The report moves no threshold, and crosses back to the core unchanged.
+        told.Key.Should().BeEquivalentTo(plain.Key);
+        told.Memory.Should().BeEquivalentTo(plain.Memory);
+        var text = JsonSerializer.Serialize(told, CoreJson.Default.LayerThresholds);
+        JsonSerializer.Serialize(JsonSerializer.Deserialize(text, CoreJson.Default.LayerThresholds)!, CoreJson.Default.LayerThresholds)
+            .Should().Be(text);
+
+        using var keeper = new Keeper(schema, options with { ValueTails = true });
+        using var decider = new Decider();
+        keeper.Settle(decider, records);
+        JsonSerializer.Serialize(keeper.Rechoose().Chosen["team"], CoreJson.Default.LayerThresholds).Should().Be(text);
+    }
+
     /// <summary>What was in view, how long it took and who settled it cross to the core under the names the line format
     /// gives them; one it cannot take — a promise out of [0, 1] — is refused as input.</summary>
     [Fact]

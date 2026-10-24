@@ -40,6 +40,13 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Added
 
+- **Experimental: how the chosen thresholds answered, value by settled value.** A promise is an average over an
+  attribute's values; a value the layers keep taking for another can sit far below it while the average holds.
+  `LayerOptions { value_tails: true, .. }` and `Keep { value_tails: true, .. }` have the thresholds chosen carry
+  `LayerThresholds::value_tails`: for each value settled on at least `VALUE_TAIL_DECISIONS` (30) of the latest records
+  asked about, how many there were, the share the chosen thresholds answered with another value and the value given in
+  its place most often (`ValueTail`). It moves no threshold. Python: `select_layers(value_tails=True)`,
+  `Keeper(value_tails=True)`, `ValueTail`.
 - **Experimental: a keeper that starts again under a new edition of the code lists.** `Keep { restart_on_form_version:
   true, .. }` has the keeper start from nothing when a record arrives under a new `Record::form_version`: the records
   before it leave the decider and the replays, the thresholds chosen on them leave the schema, records of an edition

@@ -140,9 +140,10 @@ fn record_memory(threads: Option<usize>) -> PyResult<LexicalMemory> {
 }
 
 /// Replays the records in order and chooses the attribute's key and memory thresholds, as `select_layers` does. Returns
-/// the thresholds as JSON and, when `decisions` is true, the decision records as JSON lines.
+/// the thresholds as JSON and, when `decisions` is true, the decision records as JSON lines. Experimental:
+/// `value_tails` reports, value by settled value, how the chosen thresholds answered.
 #[pyfunction]
-#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, decisions=true, rule="every_band", threads=None))]
+#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, decisions=true, rule="every_band", threads=None, value_tails=false))]
 #[allow(clippy::too_many_arguments)]
 fn select_layers_json(
     schema_json: &str,
@@ -154,6 +155,7 @@ fn select_layers_json(
     decisions: bool,
     rule: &str,
     threads: Option<usize>,
+    value_tails: bool,
 ) -> PyResult<(String, Option<String>)> {
     let rule = threshold_rule(rule)?;
     let (schema, counting) = selection_input(schema_json, counting)?;
@@ -175,6 +177,7 @@ fn select_layers_json(
             LayerOptions {
                 rule,
                 sink: Some(&mut |r| push_record(&mut lines, r)),
+                value_tails,
             },
         )
     })?;
@@ -484,7 +487,7 @@ fn keeper_json(keeper: &gil::keeper::Keeper) -> String {
 impl Keeper {
     /// A keeper of the schema with nothing settled, choosing for every decided attribute that takes one value.
     #[new]
-    #[pyo3(signature = (schema_json, target_precision, minimum_answered, counting=None, rule="every_band", threads=None, first_of_batch=false, restart_on_form_version=false))]
+    #[pyo3(signature = (schema_json, target_precision, minimum_answered, counting=None, rule="every_band", threads=None, first_of_batch=false, restart_on_form_version=false, value_tails=false))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         schema_json: &str,
@@ -495,6 +498,7 @@ impl Keeper {
         threads: Option<usize>,
         first_of_batch: bool,
         restart_on_form_version: bool,
+        value_tails: bool,
     ) -> PyResult<Self> {
         let rule = threshold_rule(rule)?;
         let (schema, counting) = selection_input(schema_json, counting)?;
@@ -508,6 +512,7 @@ impl Keeper {
             rule,
             first_of_batch,
             restart_on_form_version,
+            value_tails,
         };
         let inner = guarded(|| {
             let keeper = gil::keeper::Keeper::new(schema, keep);

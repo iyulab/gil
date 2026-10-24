@@ -81,6 +81,7 @@ __all__ = [
     "ThresholdReplay",
     "TypedKeyThresholds",
     "TypedLook",
+    "ValueTail",
     "apply_tuning",
     "capture_tuning",
     "coarse_promise_of",
@@ -159,13 +160,25 @@ class _Layers(TypedDict):
     memory: ThresholdReplay
 
 
+class ValueTail(TypedDict, total=False):
+    """Experimental. How the chosen thresholds answered the latest records settled as one value — see the crate's
+    ``ValueTail``. ``given_instead`` is left out when no other value was given."""
+
+    value: str
+    decisions: int
+    answered_otherwise: float
+    given_instead: str
+
+
 class LayerThresholds(_Layers, total=False):
     """The key layer's replay and the memory layer's, chosen on what the key threshold would not have answered.
 
-    ``batches`` is there only when some of the latest records name their ``batch``.
+    ``batches`` is there only when some of the latest records name their ``batch``; ``value_tails`` only when asked
+    for.
     """
 
     batches: BatchCheck
+    value_tails: list[ValueTail]
 
 
 class TypedKeyThresholds(TypedDict):
@@ -346,6 +359,7 @@ def select_layers(
     decisions: bool = True,
     rule: Literal["every_band", "pooled"] = "every_band",
     threads: int | None = None,
+    value_tails: bool = False,
 ) -> tuple[LayerThresholds, list[DecisionRecord] | None]:
     """Replays ``records`` and chooses ``attribute``'s key and memory thresholds.
 
@@ -362,6 +376,12 @@ def select_layers(
     precision of thresholds chosen on half of those records and counted on the other half, split by batch and by
     record, with the batches' size, correlation and design effect. It moves no threshold.
 
+    Experimental: with ``value_tails``, the thresholds carry ``value_tails`` — for each value settled on at least 30 of
+    the latest records asked about, how many there were, the share the chosen thresholds answered with another value
+    (``answered_otherwise``) and the value given in its place most often. A promise over the attribute is an average
+    over its values; a value with a large share is a candidate for one the attribute must not miss. It moves no
+    threshold.
+
     ``threads`` caps the threads a similar-record lookup over many records is split among (``None``: as many as the
     machine offers, up to eight; ``1``: none). The choice is the same whatever it is.
     """
@@ -375,6 +395,7 @@ def select_layers(
         decisions,
         rule,
         threads,
+        value_tails,
     )
     out = (
         None
@@ -801,6 +822,9 @@ class Keeper:
     records settled before it leave the decider and the replays, the thresholds chosen on them leave :attr:`schema`,
     and records still arriving under an edition left behind are not taken. A record that names no edition is taken as
     of the current one; the first edition named starts nothing. :attr:`form_version` is the edition kept.
+
+    Experimental: with ``value_tails``, each attribute's thresholds carry ``value_tails`` as :func:`select_layers`'
+    do — counted on the records its value thresholds were chosen on.
     """
 
     __slots__ = ("_inner",)
@@ -815,6 +839,7 @@ class Keeper:
         threads: int | None = None,
         first_of_batch: bool = False,
         restart_on_form_version: bool = False,
+        value_tails: bool = False,
     ) -> None:
         self._inner = _Keeper(
             schema.json,
@@ -825,6 +850,7 @@ class Keeper:
             threads,
             first_of_batch,
             restart_on_form_version,
+            value_tails,
         )
 
     def settle(self, decider: Decider, records: Records) -> None:

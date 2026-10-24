@@ -59,6 +59,7 @@ def select_layers_json(
     decisions: bool = True,
     rule: str = "every_band",
     threads: int | None = None,
+    value_tails: bool = False,
 ) -> tuple[str, str | None]:
     """The attribute's key and memory threshold replays as JSON and, when `decisions` is true, the decision records as JSON lines."""
 
@@ -137,6 +138,7 @@ class Keeper:
         threads: int | None = None,
         first_of_batch: bool = False,
         restart_on_form_version: bool = False,
+        value_tails: bool = False,
     ) -> Keeper: ...
     def settle(self, decider: Decider, records: Records) -> None:
         """Puts `records` into `decider` and into the next choice."""

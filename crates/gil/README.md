@@ -127,6 +127,14 @@ records after it and was 0.44 right, and 120,000 records later still answered 0.
 started anew; on public injury reports across an edition that changed no code, starting anew answered 0.63 times as many
 over the first five thousand. Name a new edition only when a value comes to mean something else.
 
+A promise is an average over an attribute's values, and a value the layers keep taking for another can sit far below
+it while the average holds. Ask `select_layers` for `LayerOptions { value_tails: true, .. }`, or the keeper for
+`Keep { value_tails: true, .. }` (experimental), and the thresholds chosen carry `LayerThresholds::value_tails`: for
+each value settled on at least `VALUE_TAIL_DECISIONS` of the latest records asked about, how many there were, the share
+the chosen thresholds answered with another value (`answered_otherwise`) and the value given in its place most often
+(`given_instead`). On public food inspections and public device event reports, the values whose share was 0.20 or more on the first half of the records were mostly still at 0.10 or more on the second (1.00 and 0.88 of them, against 0.10 and 0.06 of the other values). A value with a large share is a candidate for
+`Attribute::must_catch`. The report moves no threshold.
+
 ## License
 
 Apache-2.0 — see `LICENSE`.

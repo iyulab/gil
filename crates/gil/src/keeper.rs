@@ -30,7 +30,7 @@ use crate::key_memory::KeyMemory;
 use crate::lexical_memory::LexicalMemory;
 use crate::replay::{
     Choice, LayerThresholds, ReplayState, Replaying, ThresholdRule, batch_check, carry_on,
-    coarse_layers, in_situation, layers,
+    coarse_layers, in_situation, layers, value_tails,
 };
 use crate::schema::{AttributeRole, Record, Schema, SettlementKind};
 use crate::tuning::{Stale, Tuning};
@@ -62,6 +62,9 @@ pub struct Keep {
     /// taken as of the current one; the first edition named starts nothing. False keeps every record whatever its
     /// edition.
     pub restart_on_form_version: bool,
+    /// Experimental. Whether each choice reports, value by settled value, how its thresholds answered
+    /// ([`LayerThresholds::value_tails`]) — on the records the value thresholds were chosen on.
+    pub value_tails: bool,
 }
 
 impl Keep {
@@ -75,6 +78,7 @@ impl Keep {
             rule: ThresholdRule::EveryBand,
             first_of_batch: false,
             restart_on_form_version: false,
+            value_tails: false,
         }
     }
 
@@ -317,8 +321,9 @@ impl Keeper {
                 .keep
                 .first_of_batch
                 .then(|| in_situation(&replay.state.steps, false));
+            let steps = later.as_deref().unwrap_or(&replay.state.steps);
             let thresholds = layers(
-                later.as_deref().unwrap_or(&replay.state.steps),
+                steps,
                 replay.state.order,
                 definition,
                 choice,
@@ -332,8 +337,13 @@ impl Keeper {
                 self.keep.rule,
                 &thresholds,
             );
+            let value_tails = self
+                .keep
+                .value_tails
+                .then(|| value_tails(steps, replay.state.order, &thresholds));
             let thresholds = LayerThresholds {
                 batches,
+                value_tails,
                 ..thresholds
             };
             schema = schema
@@ -530,6 +540,7 @@ mod tests {
                     LayerOptions {
                         rule: keep.rule,
                         sink: None,
+                        value_tails: keep.value_tails,
                     },
                 );
                 format!("{chosen:?}")
@@ -635,6 +646,7 @@ mod tests {
                 LayerOptions {
                     rule: counted.rule,
                     sink: None,
+                    value_tails: counted.value_tails,
                 },
             );
             assert_eq!(
@@ -719,6 +731,10 @@ mod tests {
                 counting: Some(vec![SettlementKind::Enter, SettlementKind::Check]),
                 rule: ThresholdRule::Pooled,
                 ..Keep::new(0.75)
+            },
+            Keep {
+                value_tails: true,
+                ..Keep::new(0.8)
             },
         ] {
             let mut keeper = Keeper::new(schema(), keep.clone());
@@ -811,6 +827,7 @@ mod tests {
                 LayerOptions {
                     rule: keep.rule,
                     sink: None,
+                    value_tails: keep.value_tails,
                 },
             );
             let with_values = coarse_schema().with_layers("team", &values).unwrap();

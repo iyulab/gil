@@ -43,6 +43,12 @@ internal static class Stability
     /// </summary>
     public const string FormVersion = "GIL0007";
 
+    /// <summary>
+    /// Value tails (package <c>Gil</c>): a layers selection's report, value by settled value, of how the chosen thresholds
+    /// answered.
+    /// </summary>
+    public const string ValueTails = "GIL0009";
+
     /// <summary>Where the stability of each surface is described.</summary>
     public const string Url = "https://github.com/iyulab/gil/blob/main/README.md#stability";
 }

@@ -1032,9 +1032,10 @@ pub unsafe extern "C" fn gil_decider_is_first_of_batch(
 /// `minimum_answered` at least 1, and optionally `counting` (the settlement kinds whose lookups count, by name; all when
 /// left out), `rule` (`every_band`, the default, or `pooled` — the layers' selection only), `decisions` (whether to keep
 /// the decision records of the replay — the layers' and the coarse level's selections), `typed_longest` (the key
-/// attributes' selection: count typing up to that many characters) and, experimental and the keeper's only,
+/// attributes' selection: count typing up to that many characters), experimental and the keeper's only,
 /// `first_of_batch` (choose and promise the first records of batches apart) and `restart_on_form_version` (start again
-/// from nothing when a record arrives under a new edition of the code lists).
+/// from nothing when a record arrives under a new edition of the code lists), and experimental, the layers' selection's
+/// and the keeper's, `value_tails` (report, value by settled value, how the chosen thresholds answered).
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Options {
@@ -1055,6 +1056,8 @@ struct Options {
     first_of_batch: bool,
     #[serde(default)]
     restart_on_form_version: bool,
+    #[serde(default)]
+    value_tails: bool,
 }
 
 impl Options {
@@ -1156,6 +1159,7 @@ pub unsafe extern "C" fn gil_select_layers(
             LayerOptions {
                 rule: options.rule,
                 sink: Some(&mut |r| keep(&mut decisions, r)),
+                value_tails: options.value_tails,
             },
         );
         unsafe { result(&chosen(&thresholds, decisions), result_len) }
@@ -1557,7 +1561,8 @@ pub unsafe extern "C" fn gil_tuning_stale(
 
 /// A keeper of `schema` with nothing settled, choosing for every decided attribute that takes one value as `options`
 /// says (JSON — `target_precision`, `minimum_answered`, `counting`, `rule`, and `threads` for its replays, as for
-/// `gil_select_layers`, and the experimental `first_of_batch` and `restart_on_form_version`), handed out through `out`. Options out of range are contract violations (`GIL_PANIC`).
+/// `gil_select_layers`, and the experimental `first_of_batch`, `restart_on_form_version` and `value_tails`), handed out
+/// through `out`. Options out of range are contract violations (`GIL_PANIC`).
 ///
 /// # Safety
 /// `schema` is a live handle; `options` is valid for the call; `out` points to one writable pointer.
@@ -1581,6 +1586,7 @@ pub unsafe extern "C" fn gil_keeper_new(
             rule: options.rule,
             first_of_batch: options.first_of_batch,
             restart_on_form_version: options.restart_on_form_version,
+            value_tails: options.value_tails,
         };
         let mut keeper = Keeper::new(schema.0.clone(), keep);
         if options.threads > 0 {
