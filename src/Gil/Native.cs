@@ -94,7 +94,7 @@ internal static unsafe partial class Native
     [LibraryImport(Library, EntryPoint = "gil_open_record_settle")]
     internal static partial int OpenRecordSettle(
         OpenRecordHandle record, DeciderHandle decider, Str attribute, Str kind, long now, Str value, Str* values,
-        nuint valuesLen, double probability, nuint* resultLen);
+        nuint valuesLen, double probability, Str inView, Str inViewSource, double inViewPromise, nuint* resultLen);
 
     [LibraryImport(Library, EntryPoint = "gil_open_record_answer")]
     internal static partial int OpenRecordAnswer(
@@ -186,19 +186,8 @@ internal static unsafe partial class Native
     [LibraryImport(Library, EntryPoint = "gil_keeper_schema")]
     internal static partial int KeeperSchema(KeeperHandle keeper, nint* output);
 
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct Decision
-    {
-        public Str Attribute;
-        public Str Answer;
-        public Str Settled;
-        public Str Settlement;
-        public double Probability;
-        public double Promise;
-    }
-
     [LibraryImport(Library, EntryPoint = "gil_usage")]
-    internal static partial int Usage(Decision* decisions, nuint decisionsLen, nuint* resultLen);
+    internal static partial int Usage(RecordsHandle records, nuint* resultLen);
 
     [LibraryImport(Library, EntryPoint = "gil_ask_planner_new")]
     internal static partial int AskPlannerNew(

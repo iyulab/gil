@@ -237,61 +237,20 @@ internal static class TuningJson
 /// <summary>Counts of how a decided attribute's answers fared — content-free, for a host to report.</summary>
 public static class Usage
 {
-    /// <summary>The counts over <paramref name="decisions"/>, per attribute.</summary>
-    public static IReadOnlyDictionary<string, AttributeUsage> Count(IReadOnlyList<UsageDecision> decisions) =>
-        JsonSerializer.Deserialize(CountJson(decisions), CoreJson.Default.IReadOnlyDictionaryStringAttributeUsage)!;
+    /// <summary>The counts over the decisions <paramref name="records"/> settled, per attribute. A record keeps what was
+    /// in view when it was settled (<see cref="Record.Suggested"/>, <see cref="Record.Sources"/>,
+    /// <see cref="Record.Promises"/>) beside how each attribute was settled: an attribute counts as answered when its
+    /// record names the layer the answer came from, or was accepted or corrected, and as turned down when the answer was
+    /// in view and nothing was settled.</summary>
+    public static IReadOnlyDictionary<string, AttributeUsage> Count(SettledRecords records) =>
+        JsonSerializer.Deserialize(CountJson(records), CoreJson.Default.IReadOnlyDictionaryStringAttributeUsage)!;
 
     /// <summary><see cref="Count"/> as JSON in the core's form.</summary>
-    internal static unsafe string CountJson(IReadOnlyList<UsageDecision> decisions)
+    internal static unsafe string CountJson(SettledRecords records)
     {
-        ArgumentNullException.ThrowIfNull(decisions);
+        ArgumentNullException.ThrowIfNull(records);
         Native.EnsureCompatible();
-        var texts = new List<string?>(decisions.Count * 4);
-        foreach (var d in decisions)
-        {
-            ArgumentNullException.ThrowIfNull(d);
-            texts.Add(d.Attribute);
-            texts.Add(d.Answer);
-            texts.Add(d.Settled);
-            texts.Add(d.Settlement?.ToString());
-        }
-
-        var block = Encoding.UTF8.GetBytes(string.Concat(texts));
-        var flat = new Native.Decision[Math.Max(decisions.Count, 1)];
         nuint length;
-        fixed (byte* b = block)
-        fixed (Native.Decision* f = flat)
-        {
-            var at = b;
-            for (var i = 0; i < decisions.Count; i++)
-            {
-                var d = decisions[i];
-                flat[i] = new()
-                {
-                    Attribute = Next(texts[i * 4], ref at),
-                    Answer = Next(texts[(i * 4) + 1], ref at),
-                    Settled = Next(texts[(i * 4) + 2], ref at),
-                    Settlement = Next(texts[(i * 4) + 3], ref at),
-                    Probability = d.Probability,
-                    Promise = d.Promise ?? double.NaN,
-                };
-            }
-
-            return Native.Result(Native.Usage(f, (nuint)decisions.Count, &length));
-        }
-    }
-
-    /// <summary>The next text of the block <paramref name="at"/> points into, moving past it; null is null text.</summary>
-    private static unsafe Native.Str Next(string? text, ref byte* at)
-    {
-        if (text is null)
-        {
-            return default;
-        }
-
-        var count = Encoding.UTF8.GetByteCount(text);
-        var str = new Native.Str { Ptr = at, Len = (nuint)count };
-        at += count;
-        return str;
+        return Native.Result(Native.Usage(records.Handle, &length));
     }
 }

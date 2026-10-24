@@ -18,7 +18,16 @@ default-members = [
 resolver = "3"
 
 [workspace.package]
+# The version line of iyulab-gil, its C ABI and its Python package. The review crate and the C ABI plumbing keep their own.
+version = "0.8.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/iyulab/gil"
 rust-version = "1.90"
+
+# Path dependencies between the workspace's crates. None of the crates that use them is published to crates.io, so
+# they carry no version requirement to keep in step.
+[workspace.dependencies]
+gil = { package = "iyulab-gil", path = "crates/gil" }
+gil-review = { package = "iyulab-gil-review", path = "crates/gil-review" }
+iyulab-ffi-support = { path = "crates/ffi-support" }

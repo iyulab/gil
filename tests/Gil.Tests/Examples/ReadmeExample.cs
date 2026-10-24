@@ -60,9 +60,11 @@ internal static class ReadmeExample
         var kept = Tuning.FromJson(File.ReadAllText("ticket.tuning.json"));
         using var current = kept.Stale(schema, saved.Count) is null ? kept.Apply(schema) : null;
 
-        var shown = team.Answered ? team.Candidates[0].Value : null;
         var promise = team.Answered ? tuning.PromiseOf("team", team.Source) : null;
-        var counts = Usage.Count([new UsageDecision("team", shown, "network", SettlementKind.Accept, Promise: promise)]);
+        // What was in view goes on the record it is settled on; the saved records are what the counts read.
+        ticket.Settle(decider, "team", SettlementKind.Accept, DateTimeOffset.UtcNow, value: "network", shown: team, promise: promise);
+        using var ledger = SettledRecords.From([ticket.Snapshot()]);
+        var counts = Usage.Count(ledger);
 
         using var keeper = new Keeper(keyed, options);
         keeper.Settle(decider, saved);

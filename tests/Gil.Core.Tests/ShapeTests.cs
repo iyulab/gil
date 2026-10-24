@@ -95,6 +95,65 @@ public sealed class ShapeTests
     }
 
     [Fact]
+    public void Settling_with_the_answer_in_view_keeps_it_on_the_record()
+    {
+        using var schema = new Schema("ticket",
+        [
+            new AttributeDefinition("channel", AttributeRole.Observed),
+            new AttributeDefinition("team", AttributeRole.Decided) { KeyThreshold = 0.5 },
+        ]);
+        using var decider = new Decider();
+        using (var history = SettledRecords.From(Enumerable.Range(1, 4).Select(i => new Record($"h{i}", DateTimeOffset.UnixEpoch)
+        {
+            Values = new Dictionary<string, string> { ["channel"] = "phone", ["team"] = "network" },
+        })))
+        {
+            decider.Put(schema, history);
+        }
+
+        using var ticket = OpenRecord.Open(schema, "t-1", DateTimeOffset.UnixEpoch);
+        var team = ticket.Observe(decider, "channel", "phone").Single();
+        team.Answered.Should().BeTrue();
+        ticket.Settle(decider, "team", SettlementKind.Accept, DateTimeOffset.UnixEpoch, value: "network", shown: team, promise: 0.9);
+        var saved = ticket.Snapshot();
+        saved.Suggested.Should().Equal(new Dictionary<string, string> { ["team"] = "network" });
+        saved.Sources.Should().Equal(new Dictionary<string, Source> { ["team"] = team.Source });
+        saved.Promises.Should().Equal(new Dictionary<string, double> { ["team"] = 0.9 });
+
+        ticket.Settle(decider, "team", SettlementKind.CorrectOther, DateTimeOffset.UnixEpoch, value: "it", suggested: "facilities");
+        ticket.Snapshot().Suggested.Should().Equal(new Dictionary<string, string> { ["team"] = "facilities" });
+        ticket.Invoking(t => t.Settle(decider, "team", SettlementKind.Accept, DateTimeOffset.UnixEpoch, value: "network", shown: team, promise: 1.5))
+            .Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void A_reopened_record_carries_back_what_the_host_kept_on_it()
+    {
+        using var schema = Ticket();
+        var saved = new Record("t-1", DateTimeOffset.UnixEpoch)
+        {
+            Values = new Dictionary<string, string> { ["summary"] = "card charged twice", ["team"] = "billing" },
+            Settlements = new Dictionary<string, SettlementKind> { ["team"] = SettlementKind.Accept },
+            Batch = "import-7",
+            Suggested = new Dictionary<string, string> { ["team"] = "billing" },
+            Sources = new Dictionary<string, Source> { ["team"] = Source.KeyMemory },
+            Promises = new Dictionary<string, double> { ["team"] = 0.9 },
+            SettledBy = new Dictionary<string, string> { ["team"] = "p7" },
+            FormVersion = "2026",
+        };
+
+        using var record = OpenRecord.Reopen(schema, saved);
+        var back = record.Snapshot();
+        (back.Batch, back.FormVersion).Should().Be(("import-7", "2026"));
+        back.Suggested.Should().Equal(saved.Suggested);
+        back.Sources.Should().Equal(saved.Sources);
+        back.Promises.Should().Equal(saved.Promises);
+        back.SettledBy.Should().Equal(saved.SettledBy);
+        using var ledger = SettledRecords.From([back]);
+        Usage.Count(ledger)["team"].Accepted.Should().Be(1);
+    }
+
+    [Fact]
     public void A_coarse_level_is_made_from_a_prefix_or_a_table_and_names_a_value_s_class_as_the_core_does()
     {
         new CoarseLevel(2) { KeyThreshold = 0.9 }.Should().Be(new CoarseLevel { Prefix = 2, KeyThreshold = 0.9 });

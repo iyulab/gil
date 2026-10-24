@@ -696,15 +696,68 @@ pub struct Settlement {
     pub values: Option<Vec<String>>,
     /// For a check, the probability the decision was drawn to be checked with, fixed before the draw; 1 otherwise.
     pub probability: f64,
+    /// What was in view when the attribute was settled, which the record keeps; `None` when the host does not say.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub in_view: Option<InView>,
+}
+
+/// What was in view when a decided attribute was settled: the value suggested, the layer of this decider's answer it
+/// was (`None` for a suggestion that was not this decider's — the host's own, a default) and the precision promised for
+/// it when it was shown. An open record keeps them on the attribute as [`Record::suggested`], [`Record::sources`] and
+/// [`Record::promises`], which the usage counts read.
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+pub struct InView {
+    pub value: String,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub source: Option<crate::decider::Source>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub promise: Option<f64>,
 }
 
 impl Settlement {
+    /// The settlement with `answer` in view when it answered — its first candidate, the layer it came from and
+    /// `promise`, the precision promised for that layer ([`crate::tuning::Tuning::promise_of`]); unchanged when it
+    /// abstained.
+    pub fn with_answer(mut self, answer: &crate::decider::Answer, promise: Option<f64>) -> Self {
+        if answer.answered() {
+            self.in_view = Some(InView {
+                value: answer.candidates[0].value.clone(),
+                source: Some(answer.source),
+                promise,
+            });
+        }
+        self
+    }
+
+    /// The settlement with a suggestion in view that was not this decider's — what [`SettlementKind::AcceptOther`] and
+    /// [`SettlementKind::CorrectOther`] settle over.
+    pub fn with_suggestion(mut self, value: &str) -> Self {
+        self.in_view = Some(InView {
+            value: value.to_owned(),
+            source: None,
+            promise: None,
+        });
+        self
+    }
+
     fn one(kind: SettlementKind, value: &str) -> Self {
         Self {
             kind,
             value: Some(value.to_owned()),
             values: None,
             probability: 1.0,
+            in_view: None,
         }
     }
 
@@ -717,6 +770,7 @@ impl Settlement {
             value: None,
             values: Some(values),
             probability: 1.0,
+            in_view: None,
         }
     }
 
@@ -726,6 +780,7 @@ impl Settlement {
             value: None,
             values: None,
             probability: 1.0,
+            in_view: None,
         }
     }
 

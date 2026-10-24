@@ -14,7 +14,7 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   `Record.FormVersion`: the records settled before it leave the decider and the replays, the thresholds chosen on them
   leave the schema, records still arriving under an edition left behind are not taken, and `KeeperChoice.FormVersion`
   gives the edition kept. A record that names no edition is taken as of the current one, and the first edition named
-  starts nothing. The native interface is version 7.
+  starts nothing.
 - **Experimental (`GIL0006`): the first record of a batch, chosen and promised apart.** A promise taken on every
   answer holds for the records after a batch's first and can flatter the first, where a source sends records in
   batches that are right or wrong together. `SelectionOptions.FirstOfBatch` has the `Keeper` choose the value layers'
@@ -25,7 +25,7 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   `OpenRecord.Open(schema, id, at, batch)` names a record's batch, its snapshot carries it, and a record that is the
   first of its batch (`OpenRecord.IsFirstOfBatch`, `Decider.IsFirstOfBatch`) is answered at the first records'
   thresholds (`Schema.ForFirstOfBatch`). A record that names no batch always counts as a first record, so with no
-  batches named a keeper choosing apart chooses as before for every record. The native interface is version 6.
+  batches named a keeper choosing apart chooses as before for every record.
 - **`Keeper`: the promise-keeping loop as one object.** `new Keeper(schema, options)` holds the records settled and,
   for each decided attribute that takes one value, the replay as it stands. `Settle(decider, records)` puts records
   into the decider and into the next choice; `Stale()` says when the choice no longer stands (a tenth more or fewer
@@ -34,16 +34,21 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   the records, and for an attribute with a coarse level the level's thresholds as `Replay.SelectCoarse` would with the
   value thresholds just chosen (`KeeperChoice.Coarse`), on the same replay. A record settled out of order, or
   `Remove(decider, id)`, has the next choice replay from the start. The native library speaks version 5 of its C
-  interface.
+  interface (this and the two above).
 - **A coarse class has a promise of its own.** `Tuning.PromiseCoarse(attribute, thresholds)` records what a coarse
   selection's chosen thresholds promised (`AttributeTuning.CoarseKeyPromise` · `CoarseMemoryPromise`), and
   `CoarsePromiseOf(attribute, source)` reads it back by the coarse candidate's source; `PromiseOf` reads the value's
   layers only. A keeper records both.
+- **musl-based Linux.** The `Gil` package also carries the native library for `linux-musl-x64` and
+  `linux-musl-arm64` (musl 1.2 or later, such as Alpine 3.17 or later). There the .NET host used to fall back to the
+  glibc build: on x64 that stopped at the first call with a `DllNotFoundException` (it needs `ld-linux-x86-64.so.2`),
+  and on arm64 it loaded only because musl happens to provide what that build links against. `Gil.Tree`'s lexical
+  memory runs on musl through the same library.
 - **A settled record can say what was in view, how long it took and who settled it.** `Record.Suggested` (the value
   in view when a decided attribute was settled), `Sources` (the layer of the answer in view), `Promises` (the precision
   promised for it then, in [0, 1] — `Tuning.PromiseOf`), `SettleMs` (per attribute, the milliseconds from reaching it
   to settling it), `OpenMs` (the milliseconds the record was open), `SettledBy` (per attribute, an opaque id of who settled it) and
-  `FormVersion` (the edition of the code lists, new when a value comes to mean something else) — the line format's seven new optional entries. Nothing in the replays reads them yet; they are what a
+  `FormVersion` (the edition of the code lists, new when a value comes to mean something else) — the line format's seven new optional entries. The replays do not read them, and `Usage.Count` reads the first three; they are what a
   host keeps from its first record so that whether promises hold for the answers people saw, what settling costs and
   how settlers differ can be measured later. A promise out of [0, 1] is refused. Earlier versions refuse a line that
   carries them.
@@ -52,7 +57,7 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   threshold, the memory threshold and its similarity floor, a layer with no chosen threshold left unset — and
   `Schema.WithCoarse` does the same on the coarse level for `Replay.SelectCoarse`; both refuse a schema that would not
   check. `Tuning.PromiseOf(attribute, source)` gives the promise of the layer an answer came from, for
-  `UsageDecision.Promise`. Setting the three properties with `with` and matching `KeyPromise` / `MemoryPromise` by hand
+  `Record.Promises`. Setting the three properties with `with` and matching `KeyPromise` / `MemoryPromise` by hand
   still work. The native library speaks version 4 of its C interface.
 - **What batches do to a promise.** `Record.Batch` names the batch a record was settled in — records settled together,
   several at once from one source. When any of the latest `Replay.RecentRecords` records names one,
@@ -63,14 +68,51 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   or wrong together (device event reports, design effect about 7: 1.6 points), not where batches were small (vehicle
   complaints, 1.5) or not right or wrong together (food inspections, 1.1).
 
+- **What was in view goes on the record when it is settled.** `OpenRecord.Settle(…, shown: answer, promise: p)` keeps
+  the answer's first candidate, its layer and `p` as the record's `Suggested`, `Sources` and `Promises`;
+  `suggested: value` keeps a suggestion that was not the decider's. A promise out of [0, 1] is refused.
+
 ### Changed
 
+- **`Gil.IronHive` and `Gil.Sqlite` are no longer published.** 0.26.0 is the last package of each; it depends on
+  `Gil.Abstractions` / `Gil.Tree` 0.26.0 or later, so it keeps working beside this release. Nothing used either outside
+  the experimental tree path; their source stays in the repository with that path, which is frozen.
 - `SettledRecords.FromJsonLines` reads `settled_at` as a time in the round-trip format (`"O"`) as well as in ticks,
   and an entry given as null as left out — the line Python reads. A date, time or offset out of range does not read.
 - A similar-record lookup over a large memory is split among up to eight threads; answers and replays are the same to
   the bit. Replaying 40,000 public food inspection records took 27 s against 60 s. `new Decider(threads: n)`,
   `SelectionOptions.Threads` and `Gil.Tree`'s `new LexicalMemory(threads: n)` cap them — 1 keeps a lookup on the
   caller's thread — for a host that answers many requests at once or keeps its own budget of threads.
+### Breaking
+
+- **`Usage.Count` counts the settled records, and `UsageDecision` is gone.** The counts read what a record keeps of
+  what was in view — `Suggested`, `Sources`, `Promises` — beside how each decided attribute was settled: it was
+  answered when the record names the layer the answer came from, or it was accepted or corrected; turned down when the
+  answer was in view and nothing was settled; a check is judged against the suggestion kept. Put the answer in view on
+  the record you save (`snapshot with { Suggested = …, Sources = …, Promises = … }`) and pass the saved records:
+  `Usage.Count(SettledRecords.From(saved))` in place of `Usage.Count(decisions)`.
+
+### Fixed
+
+- **A reopened record keeps what the host kept on it.** `OpenRecord.Reopen` used to drop `Batch`, `Suggested`,
+  `Sources`, `Promises`, `SettleMs`, `OpenMs`, `SettledBy` and `FormVersion`, so a record reopened to settle another
+  attribute lost them from its next snapshot. They come back in each snapshot now, less an attribute's entries once
+  that attribute is settled again.
+
+### Documentation
+
+- **How low `MinimumAnswered` may go.** Replaying 26 public coding tasks from their first records, 30 kept every task
+  that answered more than once at its target over the first 500 decisions and 20 did not; 50 held one more edge case
+  for 0.73 times the answers. The README now says not to set it below 30.
+- **What a kept wrong answer does to memory.** Wrong answers people keep are remembered and can be answered again.
+  Replaying two public streams with one wrong answer in three kept, at a target of 0.9 and counting every settlement,
+  the promise ended 0.3 and 0.8 points above what was right and about one remembered value in 200 was wrong. The
+  README says so beside how kept answers inflate a promise.
+- **An unanswered attribute is a record, not a failure.** The README says, beside `MostPrecise`, that an attribute no
+  layer answers is one the settled records do not yet decide, and that a layer answers an attribute only once a
+  threshold is chosen for it.
+
+## 0.26.0
 
 ### Breaking
 
@@ -136,6 +178,11 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Documentation
 
+- The figures for `Pooled` (eight forward replays, 0.8 target) are now those of the rule as published, which reaches
+  back while the thresholds as they stand answer too few lookups: 1.10–1.80 times as many answers as `EveryBand`, 1.55
+  in the middle. The figures given before, 0.92–1.80 and 1.52, were of a near variant that counted the answers each
+  earlier choice had actually given, which differs only where answers are few; the target held and no attribute broke
+  under either.
 - The README's measured guidance on choosing a target and what to trust — choosing again as memory grows, the cost of
   a wrong answer, "A target can be read two ways", counting unprompted settlements and checks, batches and forward
   checking, repeated records, values that must not be missed, the promise's recent window, the similar record vote and

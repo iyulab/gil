@@ -286,6 +286,9 @@ fn open_records_through_the_c_abi_answer_as_the_core_does() {
                     ptr::null(),
                     0,
                     1.0,
+                    NONE,
+                    NONE,
+                    f64::NAN,
                     &mut len,
                 )
             };
@@ -490,6 +493,9 @@ fn refused_settlements_and_contract_violations_come_back_as_statuses() {
             ptr::null(),
             0,
             probability,
+            NONE,
+            NONE,
+            f64::NAN,
             len,
         )
     };
@@ -524,6 +530,9 @@ fn refused_settlements_and_contract_violations_come_back_as_statuses() {
             ptr::null(),
             0,
             1.0,
+            NONE,
+            NONE,
+            f64::NAN,
             &mut len,
         )
     };
@@ -570,5 +579,5 @@ fn refused_settlements_and_contract_violations_come_back_as_statuses() {
 #[test]
 fn the_library_says_which_interface_it_speaks() {
     assert_eq!(gil_abi_version(), GIL_ABI_VERSION);
-    assert_eq!(GIL_ABI_VERSION, 7);
+    assert_eq!(GIL_ABI_VERSION, 5);
 }

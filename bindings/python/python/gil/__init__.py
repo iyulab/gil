@@ -694,8 +694,20 @@ class OpenRecord:
         value: str | None = None,
         values: Iterable[str] | None = None,
         probability: float | None = None,
+        shown: Answer | None = None,
+        promise: float | None = None,
+        suggested: str | None = None,
     ) -> list[Answer]:
-        """Settles a decided attribute at ``now``."""
+        """Settles a decided attribute at ``now``. What was in view goes on the record: ``shown``, the decider's answer,
+        when it answered — its first candidate and its ``source`` — with ``promise``, the precision promised for its
+        layer (:func:`promise_of`); or ``suggested``, a value that was not the decider's."""
+        in_view: dict[str, Any] | None = None
+        if shown is not None and shown["answered"]:
+            in_view = {"value": shown["candidates"][0]["value"], "source": shown["source"]}
+            if promise is not None:
+                in_view["promise"] = promise
+        elif suggested is not None:
+            in_view = {"value": suggested}
         return cast(
             list[Answer],
             json.loads(
@@ -707,6 +719,7 @@ class OpenRecord:
                     value,
                     None if values is None else list(values),
                     probability,
+                    None if in_view is None else json.dumps(in_view, ensure_ascii=False),
                 )
             ),
         )
@@ -1000,12 +1013,10 @@ class AttributeUsage(TypedDict):
     judged_weight: float
 
 
-def usage(decisions: Iterable[dict[str, Any]]) -> dict[str, AttributeUsage]:
-    """The usage counts of ``decisions``, by attribute. Each decision is ``{"attribute", "answer", "settled",
-    "settlement", "probability", "promise"}`` — the trusted answer shown (``None`` when it abstained), the value settled,
-    how (by name), a check's draw probability and the promise the answer was made under. The realized precision is
-    ``right_weight / judged_weight``; it should be read against ``promise_sum / promised``."""
-    return cast(
-        dict[str, AttributeUsage],
-        json.loads(usage_json(json.dumps(list(decisions), ensure_ascii=False))),
-    )
+def usage(records: Records) -> dict[str, AttributeUsage]:
+    """The usage counts of the decisions ``records`` settled, by attribute. A record keeps what was in view when it was
+    settled — ``suggested``, ``sources`` and ``promises`` — beside how each attribute was settled; an attribute counts as
+    answered when its record names the layer the answer came from, or was accepted or corrected, and as turned down when
+    the answer was in view and nothing was settled. The realized precision is ``right_weight / judged_weight``; it
+    should be read against ``promise_sum / promised``."""
+    return cast(dict[str, AttributeUsage], json.loads(usage_json(records)))

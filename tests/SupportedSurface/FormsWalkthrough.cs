@@ -88,7 +88,15 @@ public static class FormsWalkthrough
         ]);
         var coarse = Replay.SelectCoarse(coded, "team", replayed, options);
 
-        var usage = Usage.Count([new UsageDecision("team", team.Answered ? team.Candidates[0].Value : null, "network", answeredByKey ? SettlementKind.Fill : SettlementKind.Enter)]);
+        var counted = new Record("t-usage", DateTimeOffset.UnixEpoch)
+        {
+            Values = new Dictionary<string, string> { ["team"] = "network" },
+            Settlements = new Dictionary<string, SettlementKind> { ["team"] = answeredByKey ? SettlementKind.Fill : SettlementKind.Enter },
+            Suggested = team.Answered ? new Dictionary<string, string> { ["team"] = team.Candidates[0].Value } : null,
+            Sources = team.Answered ? new Dictionary<string, Source> { ["team"] = team.Source } : null,
+        };
+        using var ledger = SettledRecords.From([counted]);
+        var usage = Usage.Count(ledger);
 
         return saved.Count + judged.Count + onScreen.Count + (whileTyping is null ? 0 : 1) + (applied is null ? 0 : 1)
             + (coarse.Thresholds.Memory.Chosen is null ? 0 : 1) + usage.Count;

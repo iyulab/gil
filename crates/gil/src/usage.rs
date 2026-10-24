@@ -1,41 +1,25 @@
 //! What the answers came to, counted without content: per attribute, how often an answer was offered, how people
 //! settled it, and how the precision the answers realized compares with what was promised.
 //!
-//! A host keeps, for each decision it asked about, the trusted answer it showed (if any), how the attribute was settled
-//! and the promise the answer was made under. [`usage`] turns those into counts — no values, no text — that a host can
-//! send on. The counting follows the settlement kinds' meaning: an accepted answer was right and a corrected one wrong; a
-//! check — settled again by someone who did not see the answer, drawn with a known probability — was right when it agrees
-//! with the answer, and counts as one ÷ that probability decisions; a fill (settled by the host without a person) and a
-//! reject (turned down, no value) say nothing about whether the answer was right and are left out of the precision, as
-//! is a value settled over a suggestion that was not this decider's (kept or changed — counted on their own, answered or
+//! The settled records are the ledger: a host that keeps, on each record it saves, the suggestion in view, the layer it
+//! came from and the promise it was made under ([`Record::suggested`], [`Record::sources`], [`Record::promises`]) has
+//! what [`usage`] counts — no values, no text — and can send the counts on. The counting follows the settlement kinds'
+//! meaning: an accepted answer was right and a corrected one wrong; a check — settled again by someone who did not see
+//! the answer, drawn with a known probability — was right when it agrees with the answer, and counts as one ÷ that
+//! probability decisions; a fill (settled by the host without a person) and a reject (turned down — the record keeps the
+//! answer in view and no value) say nothing about whether the answer was right and are left out of the precision, as is
+//! a value settled over a suggestion that was not this decider's (kept or changed — counted on their own, answered or
 //! not, so a host sees how its other suggestions fare in the same form).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use crate::schema::SettlementKind;
-
-/// One decision as a host saw it.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Decision<'a> {
-    /// The decided attribute.
-    pub attribute: &'a str,
-    /// The trusted answer shown; `None` when the answer abstained (guesses shown or not).
-    pub answer: Option<&'a str>,
-    /// The value it was settled as; `None` when it was not (yet), or rejected.
-    pub settled: Option<&'a str>,
-    /// How it was settled; `None` when it was not (yet).
-    pub settlement: Option<SettlementKind>,
-    /// For a check, the probability it was drawn with; ignored otherwise.
-    pub probability: f64,
-    /// The promise the answer was made under; `None` when none was known or nothing was answered.
-    pub promise: Option<f64>,
-}
+use crate::schema::{Record, SettlementKind};
 
 /// One attribute's counts.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct AttributeUsage {
-    /// Decisions asked about.
+    /// Decisions settled, or turned down with an answer in view.
     pub decisions: usize,
     /// Of them, answered (a trusted answer shown).
     pub answered: usize,
@@ -95,55 +79,71 @@ impl AttributeUsage {
     }
 }
 
-/// The counts of `decisions`, by attribute.
+/// The counts of the decisions `records` settled, by attribute. A decided attribute counts once per record: settled,
+/// or turned down with this decider's answer in view. It was answered when its record names the layer the answer came
+/// from, or was settled as accepted or corrected; a check is judged against the suggestion the record keeps.
 pub fn usage<'a>(
-    decisions: impl IntoIterator<Item = Decision<'a>>,
+    records: impl IntoIterator<Item = &'a Record>,
 ) -> BTreeMap<String, AttributeUsage> {
     let mut out: BTreeMap<String, AttributeUsage> = BTreeMap::new();
-    for d in decisions {
-        let u = out.entry(d.attribute.to_owned()).or_default();
-        u.decisions += 1;
-        match d.settlement {
-            Some(SettlementKind::AcceptOther) => u.accepted_other += 1,
-            Some(SettlementKind::CorrectOther) => u.corrected_other += 1,
-            _ => {}
-        }
-        let Some(answer) = d.answer else {
-            if d.settlement == Some(SettlementKind::Enter) {
-                u.entered += 1;
+    for record in records {
+        let attributes: BTreeSet<&String> = record
+            .settlements
+            .keys()
+            .chain(record.sources.keys())
+            .collect();
+        for attribute in attributes {
+            let kind = record.settlements.get(attribute).copied();
+            let u = out.entry(attribute.clone()).or_default();
+            u.decisions += 1;
+            match kind {
+                Some(SettlementKind::AcceptOther) => u.accepted_other += 1,
+                Some(SettlementKind::CorrectOther) => u.corrected_other += 1,
+                _ => {}
             }
-            continue;
-        };
-
-        u.answered += 1;
-        if let Some(p) = d.promise {
-            u.promised += 1;
-            u.promise_sum += p;
-        }
-
-        match d.settlement {
-            Some(SettlementKind::Accept) => {
-                u.accepted += 1;
-                u.right_weight += 1.0;
-                u.judged_weight += 1.0;
-            }
-            Some(SettlementKind::Correct) => {
-                u.corrected += 1;
-                u.judged_weight += 1.0;
-            }
-            Some(SettlementKind::Check) if d.probability > 0.0 => {
-                let weight = 1.0 / d.probability;
-                u.checked += 1;
-                u.judged_weight += weight;
-                if d.settled == Some(answer) {
-                    u.checked_right += 1;
-                    u.right_weight += weight;
+            let answered = record.sources.contains_key(attribute)
+                || matches!(kind, Some(SettlementKind::Accept | SettlementKind::Correct));
+            if !answered {
+                if kind == Some(SettlementKind::Enter) {
+                    u.entered += 1;
                 }
+                continue;
             }
-            Some(SettlementKind::Reject) => u.rejected += 1,
-            Some(SettlementKind::Fill) => u.filled += 1,
-            Some(SettlementKind::Enter) => u.entered_over_answer += 1,
-            _ => {}
+
+            u.answered += 1;
+            if let Some(p) = record.promises.get(attribute) {
+                u.promised += 1;
+                u.promise_sum += p;
+            }
+
+            match kind {
+                Some(SettlementKind::Accept) => {
+                    u.accepted += 1;
+                    u.right_weight += 1.0;
+                    u.judged_weight += 1.0;
+                }
+                Some(SettlementKind::Correct) => {
+                    u.corrected += 1;
+                    u.judged_weight += 1.0;
+                }
+                Some(SettlementKind::Check) => {
+                    let probability = record.probabilities.get(attribute).copied().unwrap_or(1.0);
+                    let suggested = record.suggested.get(attribute);
+                    if probability > 0.0 && suggested.is_some() {
+                        let weight = 1.0 / probability;
+                        u.checked += 1;
+                        u.judged_weight += weight;
+                        if record.values.get(attribute) == suggested {
+                            u.checked_right += 1;
+                            u.right_weight += weight;
+                        }
+                    }
+                }
+                None => u.rejected += 1,
+                Some(SettlementKind::Fill) => u.filled += 1,
+                Some(SettlementKind::Enter) => u.entered_over_answer += 1,
+                _ => {}
+            }
         }
     }
 

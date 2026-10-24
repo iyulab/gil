@@ -35,9 +35,9 @@ use gil::replay::{
     Choice, LayerOptions, LayerThresholds, ThresholdRule, select_coarse_with,
     select_key_concentrations, select_key_fields, select_layers,
 };
-use gil::schema::{AttributePolicy, Record, Schema, Settlement, SettlementKind};
+use gil::schema::{AttributePolicy, InView, Record, Schema, Settlement, SettlementKind};
 use gil::tuning::Tuning;
-use gil::usage::{Decision, usage};
+use gil::usage::usage;
 use iyulab_ffi_support::{
     BUFFER_TOO_SMALL, Failure, Utf8, argument, call, hand_out, handle, handle_mut, input, release,
     set_result, slice, slice_mut, write,
@@ -60,7 +60,7 @@ pub const GIL_BROKEN: i32 = iyulab_ffi_support::BROKEN;
 
 /// The version of this interface — its functions, structures and statuses. It changes whenever a binding built for one
 /// version would misread the library of another.
-pub const GIL_ABI_VERSION: u32 = 7;
+pub const GIL_ABI_VERSION: u32 = 5;
 
 /// [`GilCandidate::source`]: no layer.
 pub const GIL_SOURCE_NONE: u8 = 0;
@@ -728,7 +728,10 @@ pub unsafe extern "C" fn gil_open_record_observe(
 /// Settles a decided attribute at `now` (ticks): `kind` by name (`Accept`, `Correct`, `Reject`, `Revert`, `Restore`,
 /// `Set`, `Enter`, `Fill`, `Check`, `AcceptOther`, `CorrectOther`), with the parts it needs — `value` for the kinds that
 /// settle one (null text when none), `values` for `Set` (and for `Restore` of an attribute that takes several, chosen by
-/// giving `values` non-null), and `probability` for `Check` (any other kind ignores it). Puts the record into
+/// giving `values` non-null), and `probability` for `Check` (any other kind ignores it). `in_view` is the value
+/// suggested when it was settled (null text when nothing was in view), `in_view_source` the layer of this decider's
+/// answer it was, by name (`KeyMemory`, `SimilarRecord`, `Model`; null text for a suggestion that was not this
+/// decider's) and `in_view_promise` the precision promised for it (NaN when none) — what the record keeps. Puts the record into
 /// `decider`'s memory again and keeps as the result the fresh answers it causes (a JSON array). A kind or part that
 /// does not fit, an attribute that is not decided, and a settlement of the other kind of attribute are refused
 /// (`GIL_INVALID_INPUT`) before anything changes.
@@ -748,6 +751,9 @@ pub unsafe extern "C" fn gil_open_record_settle(
     values: *const GilStr,
     values_len: usize,
     probability: f64,
+    in_view: GilStr,
+    in_view_source: GilStr,
+    in_view_promise: f64,
     result_len: *mut usize,
 ) -> i32 {
     let status = call(|| {
@@ -773,8 +779,23 @@ pub unsafe extern "C" fn gil_open_record_settle(
                     .collect::<Result<_, _>>()?,
             )
         };
-        let settlement =
+        let mut settlement =
             Settlement::new(kind, value, values.as_deref(), Some(probability)).map_err(input)?;
+        if let Some(suggested) = unsafe { optional(in_view, "in_view") }? {
+            let source = unsafe { optional(in_view_source, "in_view_source") }?
+                .map(|name| {
+                    [Source::KeyMemory, Source::SimilarRecord, Source::External]
+                        .into_iter()
+                        .find(|s| s.name() == name)
+                        .ok_or_else(|| input(format!("unknown layer '{name}'")))
+                })
+                .transpose()?;
+            settlement.in_view = Some(InView {
+                value: suggested.to_owned(),
+                source,
+                promise: (!in_view_promise.is_nan()).then_some(in_view_promise),
+            });
+        }
         open.check_settle(attribute, &settlement)?;
         let found = open.settle(memories, attribute, &settlement, now);
         unsafe { answers(&found, result_len) }
@@ -1785,59 +1806,20 @@ pub unsafe extern "C" fn gil_keeper_schema(
     })
 }
 
-/// One decision as a host saw it, for `gil_usage`: the decided attribute; the trusted answer shown (null text when the
-/// answer abstained); the value it was settled as (null text when it was not, or was rejected); how it was settled, by
-/// name (null text when it was not yet); for a check, the probability it was drawn with; and the promise the answer was
-/// made under (NaN when none was known).
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct GilDecision {
-    pub attribute: GilStr,
-    pub answer: GilStr,
-    pub settled: GilStr,
-    pub settlement: GilStr,
-    pub probability: f64,
-    pub promise: f64,
-}
-
-/// Keeps as the result the usage counts of `decisions`, by attribute — a JSON object of attribute to counts in the core's
-/// `serde` form.
+/// Keeps as the result the usage counts of the decisions `records` settled, by attribute — a JSON object of attribute to
+/// counts in the core's `serde` form.
 ///
 /// # Safety
-/// `decisions` holds `decisions_len` values whose texts are valid for the call, or is null with length 0;
-/// `result_len` points to one writable `usize`.
+/// `records` is a live records handle; `result_len` points to one writable `usize`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gil_usage(
-    decisions: *const GilDecision,
-    decisions_len: usize,
-    result_len: *mut usize,
-) -> i32 {
+pub unsafe extern "C" fn gil_usage(records: *const GilRecords, result_len: *mut usize) -> i32 {
     call(|| {
         if result_len.is_null() {
             return Err(argument("result_len is null"));
         }
         // SAFETY: forwarded from the caller, for every pointer below.
-        let given = unsafe { slice(decisions, decisions_len, "decisions") }?;
-        let decisions = given
-            .iter()
-            .map(|d| {
-                let settlement = unsafe { optional(d.settlement, "a decision's settlement") }?
-                    .map(|name| {
-                        SettlementKind::parse(name)
-                            .ok_or_else(|| input(format!("unknown settlement kind '{name}'")))
-                    })
-                    .transpose()?;
-                Ok(Decision {
-                    attribute: unsafe { text(d.attribute, "a decision's attribute") }?,
-                    answer: unsafe { optional(d.answer, "a decision's answer") }?,
-                    settled: unsafe { optional(d.settled, "a decision's settled value") }?,
-                    settlement,
-                    probability: d.probability,
-                    promise: (!d.promise.is_nan()).then_some(d.promise),
-                })
-            })
-            .collect::<Result<Vec<_>, Failure>>()?;
-        unsafe { result(&json!(usage(decisions)), result_len) }
+        let records = &unsafe { handle(records, "records") }?.0;
+        unsafe { result(&json!(usage(records)), result_len) }
     })
 }
 

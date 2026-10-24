@@ -222,30 +222,20 @@ def test_a_replay_or_a_decider_kept_on_one_thread_gives_the_same() -> None:
 
 
 def test_usage_counts_each_settlement_by_its_meaning() -> None:
+    kept = {"sources": {"team": "KeyMemory"}, "promises": {"team": 0.9}}
     counts = gil.usage(
-        [
-            {
-                "attribute": "team",
-                "answer": "network",
-                "settled": "network",
-                "settlement": "Accept",
-                "promise": 0.9,
-            },
-            {
-                "attribute": "team",
-                "answer": "network",
-                "settled": "security",
-                "settlement": "Correct",
-                "promise": 0.9,
-            },
-            {
-                "attribute": "team",
-                "answer": None,
-                "settled": "facilities",
-                "settlement": "CorrectOther",
-            },
-            {"attribute": "team", "answer": None, "settled": None, "settlement": None},
-        ]
+        gil.records(
+            [
+                {"id": "u1", "settled_at": 1, "values": {"team": "network"},
+                 "settlements": {"team": "Accept"}, "suggested": {"team": "network"}, **kept},
+                {"id": "u2", "settled_at": 2, "values": {"team": "security"},
+                 "settlements": {"team": "Correct"}, "suggested": {"team": "network"}, **kept},
+                {"id": "u3", "settled_at": 3, "values": {"team": "facilities"},
+                 "settlements": {"team": "CorrectOther"}, "suggested": {"team": "it"}},
+                # turned down: the answer in view, nothing settled
+                {"id": "u4", "settled_at": 4, "values": {}, "suggested": {"team": "network"}, **kept},
+            ]
+        )
     )
     team = counts["team"]
     assert (
@@ -253,10 +243,34 @@ def test_usage_counts_each_settlement_by_its_meaning() -> None:
         team["answered"],
         team["accepted"],
         team["corrected"],
-    ) == (4, 2, 1, 1)
+        team["rejected"],
+    ) == (4, 3, 1, 1, 1)
     assert team["corrected_other"] == 1
     assert team["right_weight"] / team["judged_weight"] == 0.5
     assert team["promise_sum"] / team["promised"] == pytest.approx(0.9)
+
+
+def test_a_reopened_record_keeps_what_was_in_view_for_usage() -> None:
+    decider = gil.Decider(SCHEMA, settled())
+    record = gil.OpenRecord(SCHEMA, "t9", 9 * MINUTE)
+    (team,) = record.observe(decider, "component", "vpn")
+    value = team["candidates"][0]["value"]
+    record.settle(decider, "team", "Accept", 9 * MINUTE, value=value, shown=team, promise=0.9)
+    saved = record.snapshot()
+    assert (saved["suggested"], saved["sources"], saved["promises"]) == (
+        {"team": value},
+        {"team": team["source"]},
+        {"team": 0.9},
+    )
+    again = gil.OpenRecord.reopen(SCHEMA, saved).snapshot()
+    assert (again["suggested"], again["sources"]) == (saved["suggested"], saved["sources"])
+    assert gil.usage(gil.records([again]))["team"]["accepted"] == 1
+
+    record.settle(decider, "team", "CorrectOther", 10 * MINUTE, value="it", suggested="facilities")
+    other = record.snapshot()
+    assert other["suggested"] == {"team": "facilities"} and "sources" not in other
+    with pytest.raises(ValueError, match="promise in view"):
+        record.settle(decider, "team", "Accept", 11 * MINUTE, value=value, shown=team, promise=1.5)
 
 
 def test_answers_and_counts_carry_exactly_the_typed_keys() -> None:
@@ -265,7 +279,5 @@ def test_answers_and_counts_carry_exactly_the_typed_keys() -> None:
     (team,) = record.observe(decider, "component", "vpn")
     assert set(team) == set(gil.Answer.__annotations__)
     assert set(team["candidates"][0]) == set(gil.Candidate.__annotations__)
-    counts = gil.usage(
-        [{"attribute": "team", "answer": None, "settled": None, "settlement": None}]
-    )
+    counts = gil.usage(gil.records([record.snapshot() | {"suggested": {"team": "x"}, "sources": {"team": "KeyMemory"}}]))
     assert set(counts["team"]) == set(gil.AttributeUsage.__annotations__)

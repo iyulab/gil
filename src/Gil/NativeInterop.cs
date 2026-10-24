@@ -18,7 +18,7 @@ internal static unsafe partial class Native
     internal const int Broken = 5;
 
     /// <summary>The version of the C ABI this binding was built for (<c>GIL_ABI_VERSION</c>).</summary>
-    internal const uint AbiVersion = 7;
+    internal const uint AbiVersion = 5;
 
     private static volatile bool _compatible;
 
@@ -71,7 +71,7 @@ internal static unsafe partial class Native
 
     /// <summary>The runtimes whose native library the Gil package carries.</summary>
     internal static readonly string[] SupportedRuntimes =
-        ["linux-x64", "linux-arm64", "osx-x64", "osx-arm64", "win-x64", "win-arm64"];
+        ["linux-x64", "linux-arm64", "linux-musl-x64", "linux-musl-arm64", "osx-x64", "osx-arm64", "win-x64", "win-arm64"];
 
     /// <summary>The library was not found: says which platform asked and which ones the package carries it for.</summary>
     internal static DllNotFoundException NotFound(DllNotFoundException inner) =>

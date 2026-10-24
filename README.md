@@ -9,7 +9,7 @@ of an LLM from confirmed answers and one-token judgments; see [Stability](#stabi
 **Status: early.** The library is being built from a specification whose behaviour was measured first in a
 research harness. Published on NuGet as `Gil`, the decision core — native (Rust) inside, the package carrying its
 library for each supported runtime — and, for the experimental path in front of an LLM, `Gil.Tree` with
-`Gil.Abstractions`, `Gil.IronHive` and `Gil.Sqlite`; the API may still change within 0.x —
+`Gil.Abstractions` (`Gil.IronHive` and `Gil.Sqlite` stopped at 0.26.0); the API may still change within 0.x —
 [CHANGELOG.md](https://github.com/iyulab/gil/blob/main/CHANGELOG.md) lists each change and what to do about it.
 
 ## When to use it
@@ -46,21 +46,22 @@ nobody settles (memory then stays empty), or for choosing between models (a rout
 | `Gil` | The decision core, native (Rust) behind its C ABI: schemas, settled records, deciders, open records and their typed answers, threshold replay and tuning, usage counts, asking advice (`GIL0005`). It needs no other package |
 | `Gil.Review` | Review statistics for checking automated decisions by hand: stratified samples, Neyman allocation, weighted estimates with intervals, agreement between reviewers — native (Rust) behind its C ABI. It needs no other package |
 | `Gil.Tree` | Everything experimental (`GIL0001`–`GIL0004`): the tree judgment path — the tree YAML reader/writer, the single-token judge, the greedy traverser, output contracts, the fallback generator, slot filling, the resolver (memory → tree → narrowed fallback → full fallback), habits and their promotion, deactivation and differentiation, shadows — and what it is built on: the memories of confirmed answers, the call recorders and energy model, the telemetry contracts |
-| `Gil.IronHive` | Chat and embedding models through any IronHive generator, with ready-made ones for OpenAI-compatible servers (retry rules for busy shared servers, the response kept as received). Optional: implement `IChatModel` and `IEmbeddingModel` yourself and `Gil` needs nothing else |
-| `Gil.Sqlite` | The telemetry store: every trace and model call, habit statistics, promotion and review logs in one SQLite file whose layout is the contract below. Optional: `Gil.Tree` takes any `ITelemetrySink`, and a consumer that keeps no telemetry ships no SQLite native library |
+| `Gil.IronHive` | Chat and embedding models through any IronHive generator, with ready-made ones for OpenAI-compatible servers (retry rules for busy shared servers, the response kept as received). Optional: implement `IChatModel` and `IEmbeddingModel` yourself and `Gil` needs nothing else. No longer published: 0.26.0 is its last package, and the source stays here with the tree track |
+| `Gil.Sqlite` | The telemetry store: every trace and model call, habit statistics, promotion and review logs in one SQLite file whose layout is the contract below. Optional: `Gil.Tree` takes any `ITelemetrySink`, and a consumer that keeps no telemetry ships no SQLite native library. No longer published: 0.26.0 is its last package, and the source stays here with the tree track |
 | `Gil.Core.Tests` | Tests of the decision core through its .NET API, reproducing the Rust core's goldens |
 | `Gil.Tests` | Unit tests of the experimental tracks and the compatibility fixture writer |
 
-The `Gil` package carries the decision core's native library for six runtimes, and the .NET host loads the one for
+The `Gil` package carries the decision core's native library for eight runtimes, and the .NET host loads the one for
 the platform it runs on:
 
 | Runtime | Built for |
 |---|---|
 | `linux-x64`, `linux-arm64` | glibc 2.28 or later (the manylinux 2.28 baseline) |
+| `linux-musl-x64`, `linux-musl-arm64` | musl 1.2 or later, such as Alpine 3.17 or later, with `libgcc` (which .NET needs there too) |
 | `osx-x64`, `osx-arm64` | macOS 11 or later |
 | `win-x64`, `win-arm64` | Windows, with the C runtime linked in (no Visual C++ redistributable needed) |
 
-On any other runtime — musl-based Linux such as Alpine, 32-bit platforms — the first call throws a
+On any other runtime — 32-bit platforms, for one — the first call throws a
 `DllNotFoundException` that names the runtime; build the library from this repository
 (`cargo build --release -p gil-ffi`) and put it next to the application.
 
@@ -184,13 +185,17 @@ using var current = kept.Stale(schema, saved.Count) is null ? kept.Apply(schema)
 `WithLayers` puts the key threshold, the memory threshold and its similarity floor on the attribute, leaving a layer
 with no chosen threshold unset (`WithCoarse` does the same for a coarse level). `Promise` records the precision each
 chosen threshold promises for the next answers, and `PromiseOf` reads back the one an answer was made under, by the
-layer it came from (a coarse class's is `CoarsePromiseOf`, recorded with `PromiseCoarse`); `Usage.Count` over what was answered and settled since reports how each attribute's answers fared
-against it:
+layer it came from (a coarse class's is `CoarsePromiseOf`, recorded with `PromiseCoarse`). Settle with the answer that was in view and its promise, and the record keeps them — the value
+suggested, its layer, its promise (`suggested:` for a value that was not the decider's): `Usage.Count` over the saved
+records reports how each attribute's answers fared against the promise, and a reopened record carries them back until
+the attribute is settled again:
 
 ```csharp
-var shown = team.Answered ? team.Candidates[0].Value : null;
 var promise = team.Answered ? tuning.PromiseOf("team", team.Source) : null;
-var counts = Usage.Count([new UsageDecision("team", shown, "network", SettlementKind.Accept, Promise: promise)]);
+// What was in view goes on the record it is settled on; the saved records are what the counts read.
+ticket.Settle(decider, "team", SettlementKind.Accept, DateTimeOffset.UtcNow, value: "network", shown: team, promise: promise);
+using var ledger = SettledRecords.From([ticket.Snapshot()]);
+var counts = Usage.Count(ledger);
 ```
 
 While records keep arriving, a `Keeper` keeps that loop in one object. `Settle` puts records into the decider and into
@@ -228,7 +233,15 @@ records have grown or shrunk by a tenth — by replaying the saved records. `Sel
 the order the decider consults the layers: a similar record answers only where no key did, so its threshold is chosen
 on those lookups alone. A layer without a `Chosen` threshold should not answer the attribute on its own; its
 `MostPrecise` still says how close it came — the best precision it reached on at least `MinimumAnswered` answers — so
-the application can say by how much the attribute falls short.
+the application can say by how much the attribute falls short. Leaving an attribute unanswered is not a failure: it
+records that what has been settled does not yet decide that attribute, so the person keeps deciding it. A layer starts
+answering an attribute once a threshold is chosen for it, and not before.
+
+`MinimumAnswered`, the fewest answers a threshold may be chosen on, is what keeps an early choice from resting on a
+handful of lucky answers. Replaying 26 public coding tasks from their first records at a target of 0.8, 30 (the value
+in these examples) kept every task that answered more than once at or above the target over its first 500 decisions,
+where 20 let two fall below it; 50 also kept the one task that answered only once (and wrongly) from answering, at
+about a quarter fewer answers overall (0.73 times as many). Do not set it below 30.
 
 
 A replay's precision runs over every record it saw, so a layer that did better long ago keeps it high after the layer
@@ -280,8 +293,8 @@ the target at the bottom of its Wilson interval at `Replay.PooledStandardErrors`
 attribute's thresholds as they stand would have answered fewer than `Replay.PooledRecentAnswers` of those lookups, it
 reaches further back. In eight forward replays on seven public collections — medical device product codes, bug
 components, aircraft fault codes, patent groups and the attributes of three kinds of biological samples — each on
-records the rule was not tuned on, it kept a 0.8 target every time and answered 0.92–1.80 times as often as
-`EveryBand` (1.52 in the middle); holding the bound at one standard error instead broke the target on an attribute
+records the rule was not tuned on, it kept a 0.8 target every time and answered 1.10–1.80 times as often as
+`EveryBand` (1.55 in the middle); holding the bound at one standard error instead broke the target on an attribute
 answered a few hundred times. Re-chosen by a `Keeper` as records arrived on two public streams at a 0.9 target,
 `EveryBand`'s answers were 0.98 right — a floor under every band leaves the whole well above the target — and
 `Pooled` answered 1.25 and 1.65 times as often, 0.92 right. Each layer's `Chosen` still reports that layer's own
@@ -299,7 +312,7 @@ bug's reporter, the maintenance report's submitter, the hospital — on four pub
 of its answers with senders whose own precision was below the target beyond doubt (the top of a 95% Wilson interval
 under 0.8), and `EveryBand` none. `EveryBand` does not look at the sender, though: when one sender's own settlements are less
 reliable than the others', it answers below the target for that sender too. If you read a promise per customer or per
-site, choose `EveryBand`, and count `Usage.Count` over each sender's answers to see it hold.
+site, choose `EveryBand`, and count `Usage.Count` over each sender's records to see it hold.
 
 A value a person accepted with the answer in view may be right because it was answered. A value the application filled
 was never checked. To know how right a layer is on its own, count only the settlements that saw no answer. Every record
@@ -316,7 +329,11 @@ thresholds. Replaying two public streams that way, the thresholds stayed close t
 them, but on one stream the promise fell from 0.98 to 0.90 while the answers were 0.98 right; on the other it moved
 less than a point. To know how right the answers themselves are, have a few drawn at random settled again without the
 answer in view (`SettlementKind.Check`, below). Counting the settlements that saw an answer leans the other way: if
-people keep a wrong answer they see one time in three, a layer that is 0.90 right reads 0.93.
+people keep a wrong answer they see one time in three, a layer that is 0.90 right reads 0.93. What people keep is also
+remembered, so a wrong value kept can come back as the next answer. Replaying two public streams with people keeping a
+wrong answer one time in three, at a target of 0.9 and counting every settlement, the promise ended 0.3 and 0.8 points
+above what was right, and about one remembered value in 200 was wrong: thresholds that keep the answers right
+leave little that is wrong for people to keep.
 
 A value settled as `Fill` stays in the record, but memory does not learn it and choosing thresholds does not ask about
 it. Remembered, an answer's own value would come back as evidence for itself. Replaying a public stream with nine in ten
@@ -650,8 +667,8 @@ This walkthrough is the tree judgment path, which is experimental — see [Stabi
 
 ```sh
 dotnet add package Gil.Tree       # the tree judgment path this walkthrough uses, its memories and recorders
-dotnet add package Gil.IronHive   # the models below; skip it if you bring your own IChatModel
-dotnet add package Gil.Sqlite     # the telemetry store below; skip it if you keep no telemetry
+dotnet add package Gil.IronHive --version 0.26.0   # the models below (its last package); skip it if you bring your own IChatModel
+dotnet add package Gil.Sqlite --version 0.26.0     # the telemetry store below (its last package); skip it if you keep no telemetry
 ```
 
 A request goes through memory first, then the tree of one-token judgments, then a fallback narrowed to the
@@ -869,7 +886,7 @@ dotnet test --solution Gil.slnx
 
 `Gil` is packed only when given a folder with each runtime's library — `<folder>/<rid>/libgil_native.so`,
 `libgil_native.dylib` or `gil_native.dll` — and packing fails when one is missing; the native workflow
-(`.github/workflows/native.yml`) builds all six and packs with them:
+(`.github/workflows/native.yml`) builds all eight and packs with them:
 
 ```
 dotnet pack src/Gil/Gil.csproj -p:GilNativeRoot=<folder>
@@ -891,12 +908,12 @@ to a directory to write the files afresh) and check them, and is published as
 cargo test
 ```
 
-`cargo test` also checks `crates/gil-review` (`iyulab-gil-review`, imported as `gil_review`; not yet published): the
+`cargo test` also checks `crates/gil-review` (`iyulab-gil-review`, imported as `gil_review`): the
 statistics for checking decisions by hand — a seeded stratified sample, Neyman allocation, a stratified weighted
 estimate with normal and bootstrap intervals, agreement between two reviewers. It depends on nothing, the decision core
 included, and its golden is `tests/fixtures/review/golden.jsonl`, for a binding to reproduce.
 
-Its .NET binding, `bindings/csharp/Gil.Review` (not yet published), calls the crate through a flat C ABI
+Its .NET binding, `bindings/csharp/Gil.Review`, calls the crate through a flat C ABI
 (`crates/gil-review-ffi`) and reproduces that golden bit for bit. Packing it takes the native library of each runtime
 (`-p:GilReviewNativeRoot=<folder>`, one `<rid>/` subfolder per runtime), which the package carries under
 `runtimes/<rid>/native/`. The workflow `.github/workflows/native.yml` builds both native libraries (this one and the

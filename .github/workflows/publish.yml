@@ -4,7 +4,7 @@ name: Publish
 # version changes (it shares a version line with the iyulab-gil-review crate, published from publish-gil.yml;
 # 0.0.0 is the unreleased placeholder and publishes nothing). Packing is switched on in Directory.Build.props
 # (IsPackable); while it is off this workflow builds and tests, finds no packages, and ends without publishing.
-# Gil and Gil.Review carry their native libraries for six runtimes: the native workflow builds them first, and
+# Gil and Gil.Review carry their native libraries for eight runtimes: the native workflow builds them first, and
 # its consumers must pass before anything is published. A version already on NuGet.org is skipped.
 
 on:

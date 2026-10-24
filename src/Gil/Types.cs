@@ -135,13 +135,3 @@ public sealed record SelectionOptions(double TargetPrecision, int MinimumAnswere
     public bool RestartOnFormVersion { get; init; }
 }
 
-/// <summary>One decision for the usage counts: the attribute, the value answered (null: none), the value settled (null:
-/// not yet), how it was settled, the probability a check was drawn with, and the promise the answer was made under
-/// (null: none).</summary>
-public sealed record UsageDecision(
-    string Attribute,
-    string? Answer,
-    string? Settled,
-    SettlementKind? Settlement,
-    double Probability = 1.0,
-    double? Promise = null);

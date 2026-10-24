@@ -82,8 +82,9 @@ The replays choose thresholds from `settled_at`, the values and the kinds; nothi
 yet. They are kept because a record cannot be given them afterwards, and each answers a question the others cannot:
 
 - **`suggested`, `sources` and `promises`** — whether the promise held for the answers people actually saw, answer by
-  answer and layer by layer, rather than for the answers a replay would have given. With `Check` settlements they also
-  say how far a suggestion in view moves what people settle.
+  answer and layer by layer, rather than for the answers a replay would have given; the usage counts (`Usage.Count`,
+  `gil.usage`, `usage`) read them from the saved records. With `Check` settlements they also say how far a suggestion
+  in view moves what people settle.
 - **`settle_ms` and `open_ms`** — what settling costs a person, and whether it falls as settled records accumulate and
   more is left to Gil. A monotonic clock's difference is enough; the wall clock is `settled_at`.
 - **`settled_by`** — whether settlers differ in how often they are right, which a promise counted over everyone hides.

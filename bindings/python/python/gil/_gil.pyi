@@ -208,8 +208,10 @@ class OpenRecord:
         value: str | None = None,
         values: list[str] | None = None,
         probability: float | None = None,
+        in_view: str | None = None,
     ) -> str:
-        """Settles a decided attribute at `now` (ticks) — `kind` by name, with the value, values or probability it needs; the answers it changes, as JSON."""
+        """Settles a decided attribute at `now` (ticks) — `kind` by name, with the value, values or probability it needs, and
+        what was in view (JSON `{"value", "source", "promise"}`) for the record to keep; the answers it changes, as JSON."""
 
     def answer(self, decider: Decider, decisions: bool = False) -> str:
         """Answers for every open decided attribute, as JSON — each with ``decision``, its lookup's decision record,
@@ -257,5 +259,5 @@ def tuning_apply_json(tuning_json: str, schema_json: str) -> str:
 def tuning_stale_json(tuning_json: str, schema_json: str, settled: int) -> str | None:
     """Why the tuning no longer stands for the schema with `settled` records, as JSON — `None` while it does."""
 
-def usage_json(decisions_json: str) -> str:
-    """The usage counts of the decisions (a JSON list of `{"attribute", "answer", "settled", "settlement", "probability", "promise"}`), by attribute, as JSON."""
+def usage_json(records: Records) -> str:
+    """The usage counts of the decisions the records settled, by attribute, as JSON."""

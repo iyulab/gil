@@ -26,6 +26,17 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   `LexicalMemory::with_threads(n)` caps the threads a lookup is split among — 1 keeps it on the caller's thread — for
   a host that answers many requests at once or keeps its own budget of threads; Python takes it as `threads=` on
   `Decider`, `select_layers` and `select_coarse`.
+- **Breaking: `usage::usage` counts the settled records, and `usage::Decision` is gone.** The counts read what a record
+  keeps of what was in view — `suggested`, `sources`, `promises` — beside how each decided attribute was settled: it
+  was answered when the record names the layer the answer came from, or it was accepted or corrected; turned down when
+  the answer was in view and nothing was settled; a check is judged against the suggestion kept. A host no longer
+  keeps a second list beside the records it saves: put the answer in view on the record, and pass the records —
+  `usage(&records)` in Rust, `gil.usage(gil.records(saved))` in Python. The C ABI's `gil_usage` takes a records
+  handle.
+- **A reopened record keeps what the host kept on it.** `OpenRecord::reopen` used to drop the batch, the suggestions in
+  view, their layers and promises, the milliseconds, who settled it and the form's version, so a record reopened to
+  settle another attribute lost them from its next snapshot. They come back in each snapshot now, less an attribute's
+  entries once that attribute is settled again.
 
 ### Added
 
@@ -68,13 +79,19 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 - **Python `gil.Keeper`**, the same loop: `Keeper(schema, target_precision, minimum_answered, counting, rule, threads)`
   · `settle(decider, records)` · `remove(decider, id)` · `stale()` · `settled` · `rechoose(decisions=False)` → `{"tuning",
   "chosen", "coarse", "decisions"?}` · `state()` · `schema` · `tuning`.
+- **What was in view goes on the record when it is settled.** `Settlement::with_answer(&answer, promise)` and
+  `Settlement::with_suggestion(value)` set `Settlement::in_view` (`InView` — value, layer, promise); an open record keeps
+  it as the attribute's `suggested`, `sources` and `promises`. A promise out of [0, 1], or a layer of `Source::None`, is
+  refused. Python's `OpenRecord.settle` takes `shown=`, `promise=` and `suggested=`; the C ABI's
+  `gil_open_record_settle` takes the value, the layer by name and the promise.
+- **A Python wheel for musl-based Linux on arm64** (`musllinux_1_2_aarch64`), beside the x86_64 one.
 - **A settled record can say what was in view, how long it took and who settled it.** Seven optional entries of the
   line format — `suggested` (the value in view when a decided attribute was settled), `sources` (the layer of the
   answer in view, named as answers name it), `promises` (the precision promised for it then, in [0, 1]), `settle_ms`
   (per attribute, the milliseconds from reaching it to settling it), `open_ms` (the milliseconds the record was open),
   `settled_by` (per attribute, an opaque id of who settled it) and `form_version` (the edition of the code lists, new
   when a value comes to mean something else) — are fields of `Record`, read and written back.
-  Nothing in the replays reads them yet; they are what a host keeps from its first record so that whether promises
+  The replays do not read them, and `usage` reads the first three; they are what a host keeps from its first record so that whether promises
   hold for the answers people saw, what settling costs them and how settlers differ can be measured later. A promise
   out of [0, 1], a layer other than the three and negative milliseconds are refused. Readers before this version refuse a
   line that carries them.
@@ -101,6 +118,8 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 - `Record` has seven more public fields (above). A struct literal that names every field needs `..Record::default()`.
 - `schema::Attribute` has one more public field, `first_of_batch`, and `tuning::AttributeTuning` six (below); a struct
   literal that names every field names them too (`None`, `false`).
+
+## 0.8.0
 
 ### Fixed
 
@@ -211,6 +230,11 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Documentation
 
+- The figures for `Pooled` (eight forward replays, 0.8 target) are now those of the rule as published, which reaches
+  back while the thresholds as they stand answer too few lookups: 1.10–1.80 times as many answers as `EveryBand`, 1.55
+  in the middle. The figures given before, 0.92–1.80 and 1.52, were of a near variant that counted the answers each
+  earlier choice had actually given, which differs only where answers are few; the target held and no attribute broke
+  under either.
 - `docs/settled-records.md` specifies the settled-record line every binding reads — its entries, why the time and
   the kind of settlement matter, and what an application should keep before it uses Gil — and the READMEs point to
   it.

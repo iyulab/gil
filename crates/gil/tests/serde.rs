@@ -10,7 +10,7 @@ use gil::schema::{
     SettlementKind,
 };
 use gil::tuning::{AttributeTuning, Stale, Tuning};
-use gil::usage::{Decision, usage};
+use gil::usage::usage;
 use serde_json::{Value, json};
 
 fn round_trip<T: serde::Serialize + serde::de::DeserializeOwned>(value: &T) -> (Value, T) {
@@ -301,14 +301,18 @@ fn a_tuning_and_its_staleness_read_back() {
 
 #[test]
 fn usage_counts_read_back() {
-    let counts = usage([Decision {
-        attribute: "team",
-        answer: Some("network"),
-        settled: Some("network"),
-        settlement: Some(SettlementKind::Accept),
-        probability: 1.0,
-        promise: Some(0.85),
-    }]);
+    let mut record = Record {
+        id: "r".to_owned(),
+        ..Record::default()
+    };
+    record
+        .values
+        .insert("team".to_owned(), "network".to_owned());
+    record
+        .settlements
+        .insert("team".to_owned(), SettlementKind::Accept);
+    record.promises.insert("team".to_owned(), 0.85);
+    let counts = usage([&record]);
     let (written, read) = round_trip(&counts);
     assert_eq!(read, counts);
     assert_eq!(written["team"]["accepted"], 1);

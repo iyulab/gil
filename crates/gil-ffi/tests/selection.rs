@@ -18,7 +18,7 @@ use gil::replay::{
 };
 use gil::schema::{Record, Schema, SettlementKind};
 use gil::tuning::Tuning;
-use gil::usage::{Decision, usage};
+use gil::usage::usage;
 use gil_native::*;
 use serde_json::{Value, json};
 
@@ -28,11 +28,6 @@ fn s(text: &str) -> GilStr {
         len: text.len(),
     }
 }
-
-const NONE: GilStr = GilStr {
-    ptr: ptr::null(),
-    len: 0,
-};
 
 fn copied(copy: unsafe extern "C" fn(*mut u8, usize) -> usize) -> String {
     let len = unsafe { copy(ptr::null_mut(), 0) };
@@ -309,92 +304,30 @@ fn the_other_selections_and_a_tuning_come_back_as_the_core_gives_them() {
 
 #[test]
 fn the_usage_counts_come_back_as_the_core_gives_them() {
-    let flat = |answer: Option<&'static str>,
-                settled: Option<&'static str>,
-                settlement: Option<&'static str>,
-                probability: f64,
-                promise: f64| GilDecision {
-        attribute: s("team"),
-        answer: answer.map_or(NONE, s),
-        settled: settled.map_or(NONE, s),
-        settlement: settlement.map_or(NONE, s),
-        probability,
-        promise,
-    };
-    let given = [
-        flat(Some("network"), Some("network"), Some("Accept"), 1.0, 0.85),
-        flat(
-            Some("network"),
-            Some("security"),
-            Some("Correct"),
-            1.0,
-            0.85,
-        ),
-        flat(
-            Some("network"),
-            Some("network"),
-            Some("Check"),
-            0.25,
-            f64::NAN,
-        ),
-        flat(None, Some("facilities"), Some("Enter"), 1.0, f64::NAN),
-        flat(Some("network"), None, None, 1.0, 0.85),
-        flat(Some("network"), Some("x"), Some("AcceptOther"), 1.0, 0.85),
-    ];
+    // Records of every shape: accepted, corrected, checked, entered with no answer, turned down with the answer in
+    // view, settled over another suggestion with an answer in view.
+    let lines = [
+        r#"{"id":"u1","settled_at":1,"values":{"team":"network"},"settlements":{"team":"Accept"},"suggested":{"team":"network"},"sources":{"team":"KeyMemory"},"promises":{"team":0.85}}"#,
+        r#"{"id":"u2","settled_at":2,"values":{"team":"security"},"settlements":{"team":"Correct"},"suggested":{"team":"network"},"sources":{"team":"KeyMemory"},"promises":{"team":0.85}}"#,
+        r#"{"id":"u3","settled_at":3,"values":{"team":"network"},"settlements":{"team":"Check"},"probabilities":{"team":0.25},"suggested":{"team":"network"},"sources":{"team":"SimilarRecord"}}"#,
+        r#"{"id":"u4","settled_at":4,"values":{"team":"facilities"},"settlements":{"team":"Enter"}}"#,
+        r#"{"id":"u5","settled_at":5,"values":{},"suggested":{"team":"network"},"sources":{"team":"KeyMemory"},"promises":{"team":0.85}}"#,
+        r#"{"id":"u6","settled_at":6,"values":{"team":"x"},"settlements":{"team":"AcceptOther"},"suggested":{"team":"x"},"sources":{"team":"KeyMemory"},"promises":{"team":0.85}}"#,
+    ]
+    .join("\n");
+    let mut records = ptr::null_mut();
+    ok(unsafe { gil_records_new(s(&lines), &mut records) });
     let mut len = 0;
-    let status = unsafe { gil_usage(given.as_ptr(), given.len(), &mut len) };
-    let d = |answer, settled, settlement, probability, promise| Decision {
-        attribute: "team",
-        answer,
-        settled,
-        settlement,
-        probability,
-        promise,
-    };
-    let core = usage([
-        d(
-            Some("network"),
-            Some("network"),
-            Some(SettlementKind::Accept),
-            1.0,
-            Some(0.85),
-        ),
-        d(
-            Some("network"),
-            Some("security"),
-            Some(SettlementKind::Correct),
-            1.0,
-            Some(0.85),
-        ),
-        d(
-            Some("network"),
-            Some("network"),
-            Some(SettlementKind::Check),
-            0.25,
-            None,
-        ),
-        d(
-            None,
-            Some("facilities"),
-            Some(SettlementKind::Enter),
-            1.0,
-            None,
-        ),
-        d(Some("network"), None, None, 1.0, Some(0.85)),
-        d(
-            Some("network"),
-            Some("x"),
-            Some(SettlementKind::AcceptOther),
-            1.0,
-            Some(0.85),
-        ),
-    ]);
-    assert_eq!(result(status, len), json!(core));
+    let status = unsafe { gil_usage(records, &mut len) };
+    let core_records: Vec<Record> = lines
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(result(status, len), json!(usage(&core_records)));
+    unsafe { gil_records_free(records) };
 
-    let bad = [flat(None, None, Some("Approve"), 1.0, f64::NAN)];
-    let status = unsafe { gil_usage(bad.as_ptr(), bad.len(), &mut len) };
-    assert_eq!(status, GIL_INVALID_INPUT);
-    assert_eq!(last_error(), "unknown settlement kind 'Approve'");
+    let status = unsafe { gil_usage(ptr::null(), &mut len) };
+    assert_eq!(status, GIL_INVALID_ARGUMENT);
 }
 
 #[test]

@@ -2,6 +2,8 @@
   <PropertyGroup>
     <RootNamespace>Gil.Telemetry</RootNamespace>
     <Description>Gil's telemetry, habit statistics, promotion and review logs in a single SQLite file whose tables are a contract other tools read directly.</Description>
+    <!-- No longer packed: 0.26.0 was its last package. The source stays, frozen with the tree track it serves. -->
+    <IsPackable>false</IsPackable>
     <PackageTags>$(PackageTags);sqlite;telemetry</PackageTags>
   </PropertyGroup>
   <ItemGroup>

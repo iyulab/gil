@@ -1,7 +1,7 @@
 name: Native libraries
 
 # Builds the native libraries the .NET bindings load — gil_native (crates/gil-ffi) and gil_review_native
-# (crates/gil-review-ffi) — for the six runtimes their packages carry, packs Gil and Gil.Review with them, and runs a
+# (crates/gil-review-ffi) — for the eight runtimes their packages carry, packs Gil and Gil.Review with them, and runs a
 # consumer of each package on each kind of runner. Runs when the native boundary changes, by hand, or called by a release
 # workflow before it publishes; this workflow publishes nothing. Public repository: runner minutes are not billed;
 # every artifact lives one day.
@@ -21,6 +21,7 @@ on:
       - src/Gil.Abstractions/**
       - Cargo.lock
       - .github/workflows/native.yml
+      - .github/native-consumer/**
   workflow_dispatch:
   workflow_call:
 
@@ -32,7 +33,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Release libraries without their symbol tables: the packages carry six of each.
+  # Release libraries without their symbol tables: the packages carry eight of each.
   CARGO_PROFILE_RELEASE_STRIP: symbols
 
 jobs:
@@ -54,6 +55,34 @@ jobs:
       - run: |
           mkdir -p "out/${{ matrix.rid }}"
           cp target/release/libgil_native.so target/release/libgil_review_native.so "out/${{ matrix.rid }}/"
+          ls -l "out/${{ matrix.rid }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-${{ matrix.rid }}
+          path: out/
+          retention-days: 1
+
+  # musl-based Linux such as Alpine, in the musllinux 1.2 images. Those are Alpine images, where actions do not run on
+  # arm64, so the build runs in the image started from the runner. Rust links the C runtime statically on musl by
+  # default, which leaves it no shared library to build: there it is linked dynamically, as the .NET host itself is.
+  linux-musl:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: linux-musl-x64, runner: ubuntu-latest, image: quay.io/pypa/musllinux_1_2_x86_64 }
+          - { rid: linux-musl-arm64, runner: ubuntu-24.04-arm, image: quay.io/pypa/musllinux_1_2_aarch64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - run: |
+          docker run --rm -v "$PWD:/w" -w /w -e CARGO_PROFILE_RELEASE_STRIP -e RUSTFLAGS="-C target-feature=-crt-static" \
+            ${{ matrix.image }} sh -c '
+              curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal &&
+              ~/.cargo/bin/cargo build --release --locked -p gil-ffi -p gil-review-ffi &&
+              mkdir -p "out/${{ matrix.rid }}" &&
+              cp target/release/libgil_native.so target/release/libgil_review_native.so "out/${{ matrix.rid }}/"'
           ls -l "out/${{ matrix.rid }}"
       - uses: actions/upload-artifact@v7
         with:
@@ -97,11 +126,11 @@ jobs:
           path: out/
           retention-days: 1
 
-  # Gil and Gil.Review packed with the six runtimes' libraries — each package checked to carry each under
+  # Gil and Gil.Review packed with the eight runtimes' libraries — each package checked to carry each under
   # runtimes/<rid>/native/. Gil.Tree (and the Gil.Abstractions it needs) too: its lexical memory calls the library Gil
   # carries.
   pack:
-    needs: [linux, desktop]
+    needs: [linux, linux-musl, desktop]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -124,8 +153,9 @@ jobs:
             id=${pair%%:*} lib=${pair##*:}
             package=$(ls packages/$id.[0-9]*.nupkg)
             unzip -l "$package"
-            for entry in linux-x64/native/lib$lib.so linux-arm64/native/lib$lib.so osx-x64/native/lib$lib.dylib \
-              osx-arm64/native/lib$lib.dylib win-x64/native/$lib.dll win-arm64/native/$lib.dll; do
+            for entry in linux-x64/native/lib$lib.so linux-arm64/native/lib$lib.so linux-musl-x64/native/lib$lib.so \
+              linux-musl-arm64/native/lib$lib.so osx-x64/native/lib$lib.dylib osx-arm64/native/lib$lib.dylib \
+              win-x64/native/$lib.dll win-arm64/native/$lib.dll; do
               unzip -l "$package" "runtimes/$entry" > /dev/null || { echo "::error::$package lacks runtimes/$entry"; exit 1; }
             done
           done
@@ -135,8 +165,8 @@ jobs:
           path: packages/*.nupkg
           retention-days: 1
 
-  # A consumer of each package, run where the .NET host picks each library: its first call checks the interface
-  # version. The packages come from the downloaded folder only — Gil of the same version may also be on NuGet.org.
+  # A consumer of each package (.github/native-consumer), run where the .NET host picks each library: its first call
+  # checks the interface version.
   consume:
     needs: pack
     strategy:
@@ -149,6 +179,7 @@ jobs:
       run:
         shell: bash
     steps:
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           name: packages
@@ -156,68 +187,21 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
-      - run: |
-          gil=$(ls packages | sed -n 's/^Gil\.\([0-9].*\)\.nupkg$/\1/p')
-          review=$(ls packages | sed -n 's/^Gil\.Review\.\(.*\)\.nupkg$/\1/p')
-          dotnet new console -o consumer --framework net10.0
-          cd consumer
-          cat > nuget.config <<EOF
-          <configuration>
-            <packageSources>
-              <clear />
-              <add key="built" value="$GITHUB_WORKSPACE/packages" />
-              <add key="nuget" value="https://api.nuget.org/v3/index.json" />
-            </packageSources>
-            <packageSourceMapping>
-              <packageSource key="built">
-                <package pattern="Gil" />
-                <package pattern="Gil.*" />
-              </packageSource>
-              <packageSource key="nuget">
-                <package pattern="*" />
-              </packageSource>
-            </packageSourceMapping>
-          </configuration>
-          EOF
-          dotnet add package Gil --version "$gil"
-          dotnet add package Gil.Review --version "$review"
-          dotnet add package Gil.Tree --version "$gil"
-          cat > Program.cs <<'EOF'
-          using Gil;
+      - run: sh .github/native-consumer/run.sh
 
-          var floor = Gil.Review.ReviewSampler.MinimumDesignDeviation;
-          var counts = Gil.Review.ReviewSampler.AllocateNeyman([new(600, 0.5), new(400, 0.1)], 50);
-          Console.WriteLine($"floor {floor:F6} · allocation {string.Join(",", counts)}");
-          if (Math.Abs(floor - Math.Sqrt(0.05 * 0.95)) > 1e-12 || counts.Sum() != 50)
-          {
-              return 1;
-          }
-
-          using var schema = new Schema("ticket",
-          [
-              new AttributeDefinition("component", AttributeRole.Observed),
-              new AttributeDefinition("team", AttributeRole.Decided) { KeyThreshold = 0.6 },
-          ]);
-          using var decider = new Decider();
-          for (var i = 0; i < 20; i++)
-          {
-              using var settled = OpenRecord.Open(schema, $"t/{i}", DateTimeOffset.UnixEpoch.AddMinutes(i));
-              settled.Observe(decider, "component", "vpn");
-              settled.Settle(decider, "team", SettlementKind.Enter, DateTimeOffset.UnixEpoch.AddMinutes(i), value: "network");
-          }
-
-          using var open = OpenRecord.Open(schema, "t/new", DateTimeOffset.UnixEpoch.AddHours(1));
-          var team = open.Observe(decider, "component", "vpn").Single(a => a.Attribute == "team");
-          var top = team.Candidates.Count > 0 ? team.Candidates[0].Value : null;
-          Console.WriteLine($"team {top} · answered {team.Answered}");
-          // Gil.Tree's lexical memory runs on the same library, found through the Gil package.
-          #pragma warning disable GIL0004
-          using var lexical = new Gil.Memory.LexicalMemory();
-          await lexical.RememberAsync("support", "t1", "refund for my last order", "refund_policy", "t1");
-          var near = lexical.Nearest("support", "Refund for my LAST order", 1);
-          #pragma warning restore GIL0004
-          Console.WriteLine($"lexical {near[0].Answer} · similarity {near[0].Similarity:F6}");
-          return team.Answered && top == "network" && near[0].Answer == "refund_policy"
-              && Math.Abs(near[0].Similarity - 1.0) < 1e-12 ? 0 : 1;
-          EOF
-          dotnet run -c Release
+  # The same consumer on musl: in the Alpine .NET image, started from the runner so that no action has to run inside it.
+  consume-musl:
+    needs: pack
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: packages
+          path: packages
+      - run: docker run --rm -v "$PWD:/w" -w /w mcr.microsoft.com/dotnet/sdk:10.0-alpine sh .github/native-consumer/run.sh

@@ -1,10 +1,22 @@
 # Changelog — Gil review (`iyulab-gil-review`, .NET `Gil.Review`)
 
-The Rust crate and its .NET binding share this version line. Neither is published yet: the line stays at the
-placeholder 0.0.0 until the first release, which is 0.1.0. Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
+The Rust crate and its .NET binding share this version line; 0.1.0 is the first release of both. Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do.
 
 ## Unreleased
+
+### Added
+
+- **musl-based Linux.** The `Gil.Review` package also carries the native library for `linux-musl-x64` and
+  `linux-musl-arm64` (musl 1.2 or later, such as Alpine 3.17 or later), in place of the glibc build the .NET host
+  fell back to there — which stopped at the first call on x64. The crate is unchanged.
+
+### Fixed
+
+- **`ReviewSampler.MinimumDesignDeviation` no longer loads the native library.** It is computed in managed code, so a
+  host that keeps it in a static field does not fail at type initialization where the library cannot load.
+
+## 0.1.0
 
 ### Added
 

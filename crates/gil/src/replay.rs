@@ -57,7 +57,7 @@ pub enum ThresholdRule {
     /// band of them. The lookups are the attribute's latest [`POOLED_RECENT_LOOKUPS`], reaching further back while the
     /// attribute's thresholds as they stand would have answered fewer than [`POOLED_RECENT_ANSWERS`] of them. In eight
     /// forward replays on seven public collections, each on records the rule was not tuned on, it kept a 0.8 target
-    /// every time and answered 0.92–1.80 times as often as [`ThresholdRule::EveryBand`], 1.52 in the middle. Some bands
+    /// every time and answered 1.10–1.80 times as often as [`ThresholdRule::EveryBand`], 1.55 in the middle. Some bands
     /// of its answers fall below the target where others are above it: choose it when the target is a share of all
     /// answers, not a floor under each kind of answer.
     Pooled,

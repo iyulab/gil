@@ -14,6 +14,16 @@ use common::{CHOSEN, fixture, lines, schema, to_record};
 use gil_native::*;
 use serde_json::{Value, json};
 
+/// A tuning with its version (the crate's, `gil::tuning::VERSION`) replaced by `VERSION_PLACEHOLDER`, so the fixture
+/// does not change with every release; .NET puts its own back before comparing.
+fn versionless(mut tuning: Value) -> Value {
+    assert_eq!(tuning["version"], gil::tuning::VERSION);
+    tuning["version"] = Value::from(VERSION_PLACEHOLDER);
+    tuning
+}
+
+const VERSION_PLACEHOLDER: &str = "{version}";
+
 fn check_or_write(name: &str, expected: &str) {
     let path = format!(
         "{}/../../tests/fixtures/core/native/{name}",
@@ -52,16 +62,6 @@ fn s(text: &str) -> GilStr {
     }
 }
 
-fn opt(text: Option<&str>) -> GilStr {
-    text.map_or(
-        GilStr {
-            ptr: ptr::null(),
-            len: 0,
-        },
-        s,
-    )
-}
-
 fn copied(copy: unsafe extern "C" fn(*mut u8, usize) -> usize) -> String {
     let len = unsafe { copy(ptr::null_mut(), 0) };
     let mut buffer = vec![0u8; len];
@@ -74,15 +74,6 @@ fn result(status: i32) -> Value {
     assert_eq!(status, GIL_OK, "{}", copied(gil_last_error));
     serde_json::from_str(&copied(gil_last_result)).unwrap()
 }
-
-/// A usage decision as given: answer, settled value, settlement kind, probability, promise.
-type Given = (
-    Option<&'static str>,
-    Option<&'static str>,
-    Option<&'static str>,
-    f64,
-    Option<f64>,
-);
 
 const COUNTING: [&str; 6] = [
     "Enter",
@@ -185,64 +176,34 @@ fn the_selections_fixture_is_up_to_date() {
         "attribute": "team",
         "settled": CHOSEN,
         "target_precision": 0.8,
-        "captured": captured,
-        "promised": promised,
+        "captured": versionless(captured),
+        "promised": versionless(promised),
         "applied": applied_json,
         "with_layers": with_layers_json,
         "stale_at": CHOSEN * 11 / 10,
         "stale": stale,
     }));
 
-    // Usage counts over decisions of every shape: answered and settled, corrected, checked, entered with no answer,
-    // unsettled, settled on another's answer; a promise of NaN is none.
-    let given: [Given; 6] = [
-        (
-            Some("network"),
-            Some("network"),
-            Some("Accept"),
-            1.0,
-            Some(0.85),
-        ),
-        (
-            Some("network"),
-            Some("security"),
-            Some("Correct"),
-            1.0,
-            Some(0.85),
-        ),
-        (Some("network"), Some("network"), Some("Check"), 0.25, None),
-        (None, Some("facilities"), Some("Enter"), 1.0, None),
-        (Some("network"), None, None, 1.0, Some(0.85)),
-        (
-            Some("network"),
-            Some("x"),
-            Some("AcceptOther"),
-            1.0,
-            Some(0.85),
-        ),
-    ];
-    let flat: Vec<GilDecision> = given
-        .iter()
-        .map(
-            |&(answer, settled, settlement, probability, promise)| GilDecision {
-                attribute: s("team"),
-                answer: opt(answer),
-                settled: opt(settled),
-                settlement: opt(settlement),
-                probability,
-                promise: promise.unwrap_or(f64::NAN),
-            },
-        )
+    // Records of every shape: accepted, corrected, checked, entered with no answer, turned down with the answer in
+    // view, settled over another suggestion with an answer in view.
+    let lines = [
+        r#"{"id":"u1","settled_at":1,"values":{"team":"network"},"settlements":{"team":"Accept"},"suggested":{"team":"network"},"sources":{"team":"KeyMemory"},"promises":{"team":0.85}}"#,
+        r#"{"id":"u2","settled_at":2,"values":{"team":"security"},"settlements":{"team":"Correct"},"suggested":{"team":"network"},"sources":{"team":"KeyMemory"},"promises":{"team":0.85}}"#,
+        r#"{"id":"u3","settled_at":3,"values":{"team":"network"},"settlements":{"team":"Check"},"probabilities":{"team":0.25},"suggested":{"team":"network"},"sources":{"team":"SimilarRecord"}}"#,
+        r#"{"id":"u4","settled_at":4,"values":{"team":"facilities"},"settlements":{"team":"Enter"}}"#,
+        r#"{"id":"u5","settled_at":5,"values":{},"suggested":{"team":"network"},"sources":{"team":"KeyMemory"},"promises":{"team":0.85}}"#,
+        r#"{"id":"u6","settled_at":6,"values":{"team":"x"},"settlements":{"team":"AcceptOther"},"suggested":{"team":"x"},"sources":{"team":"KeyMemory"},"promises":{"team":0.85}}"#,
+    ]
+    .join("\n");
+    let mut kept = ptr::null_mut();
+    assert_eq!(unsafe { gil_records_new(s(&lines), &mut kept) }, GIL_OK);
+    let counts = result(unsafe { gil_usage(kept, &mut len) });
+    unsafe { gil_records_free(kept) };
+    let records: Vec<Value> = lines
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
         .collect();
-    let counts = result(unsafe { gil_usage(flat.as_ptr(), flat.len(), &mut len) });
-    let decisions: Vec<Value> = given
-        .iter()
-        .map(|&(answer, settled, settlement, probability, promise)| {
-            json!({"attribute": "team", "answer": answer, "settled": settled, "settlement": settlement,
-                   "probability": probability, "promise": promise})
-        })
-        .collect();
-    calls.push(json!({"call": "usage", "decisions": decisions, "result": counts}));
+    calls.push(json!({"call": "usage", "records": records, "result": counts}));
 
     unsafe {
         gil_records_free(settled);

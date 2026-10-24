@@ -1232,3 +1232,120 @@ fn an_observed_attribute_is_not_asked_about() {
     let decider = Decider::new(KeyMemory::default(), None);
     OpenRecord::new(typed_ticket(), "d9", 0).answer_partial(&decider, "channel", Some("ph"));
 }
+
+#[test]
+fn reopening_a_saved_record_keeps_what_the_host_kept_until_an_attribute_is_settled_again() {
+    let saved = Record {
+        id: "d1".into(),
+        values: BTreeMap::from([
+            ("summary".to_owned(), "vpn drops".to_owned()),
+            ("team".to_owned(), "network".to_owned()),
+        ]),
+        settlements: BTreeMap::from([("team".to_owned(), SettlementKind::Accept)]),
+        batch: Some("import-7".into()),
+        suggested: BTreeMap::from([("team".to_owned(), "network".to_owned())]),
+        sources: BTreeMap::from([("team".to_owned(), Source::KeyMemory)]),
+        promises: BTreeMap::from([("team".to_owned(), 0.9)]),
+        settle_ms: BTreeMap::from([("team".to_owned(), 1_200)]),
+        open_ms: Some(5_000),
+        settled_by: BTreeMap::from([("team".to_owned(), "p7".to_owned())]),
+        form_version: Some("2026".into()),
+        ..Record::default()
+    };
+    let mut decider = Decider::new(KeyMemory::default(), None);
+    let mut open = OpenRecord::reopen(settled_ticket(), &saved);
+
+    let again = open.snapshot();
+    assert_eq!(
+        (
+            again.batch.as_deref(),
+            again.open_ms,
+            again.form_version.as_deref()
+        ),
+        (Some("import-7"), Some(5_000), Some("2026"))
+    );
+    assert_eq!(again.suggested, saved.suggested);
+    assert_eq!(again.sources, saved.sources);
+    assert_eq!(again.promises, saved.promises);
+    assert_eq!(again.settle_ms, saved.settle_ms);
+    assert_eq!(again.settled_by, saved.settled_by);
+
+    // Settled again, the attribute's entries described the settlement this one replaced; the record's stay.
+    open.settle(&mut decider, "team", &Settlement::correct("security"), DAY);
+    let after = open.snapshot();
+    assert!(after.suggested.is_empty() && after.sources.is_empty() && after.promises.is_empty());
+    assert!(after.settle_ms.is_empty() && after.settled_by.is_empty());
+    assert_eq!(
+        (after.batch.as_deref(), after.open_ms),
+        (Some("import-7"), Some(5_000))
+    );
+}
+
+#[test]
+fn what_was_in_view_at_settling_goes_on_the_record_and_the_counts_read_it() {
+    let mut team = attribute("team", AttributeRole::Decided);
+    team.key_threshold = Some(0.5);
+    let schema = Schema::new(
+        "ticket",
+        vec![attribute("channel", AttributeRole::Observed), team],
+    )
+    .expect("a valid schema");
+    let history: Vec<Record> = (1..=4)
+        .map(|i| {
+            record(
+                &format!("h{i}"),
+                &[("channel", "phone"), ("team", "network")],
+            )
+        })
+        .collect();
+    let mut decider = Decider::new(KeyMemory::default(), None);
+    decider.rebuild(&schema, &history);
+
+    let mut open = OpenRecord::new(schema, "d2", DAY);
+    let shown = open
+        .observe(&mut decider, "channel", Some("phone"))
+        .remove(0);
+    assert!(shown.answered());
+    open.settle(
+        &mut decider,
+        "team",
+        &Settlement::accept("network").with_answer(&shown, Some(0.9)),
+        2 * DAY,
+    );
+    let saved = open.snapshot();
+    assert_eq!(saved.suggested["team"], "network");
+    assert_eq!(saved.sources["team"], shown.source);
+    assert_eq!(saved.promises["team"], 0.9);
+    let counts = gil::usage::usage([&saved]);
+    assert_eq!((counts["team"].accepted, counts["team"].promised), (1, 1));
+
+    // Another's suggestion keeps the value, no layer; an abstention keeps nothing.
+    open.settle(
+        &mut decider,
+        "team",
+        &Settlement::correct_other("security").with_suggestion("facilities"),
+        3 * DAY,
+    );
+    let other = open.snapshot();
+    assert_eq!(other.suggested["team"], "facilities");
+    assert!(other.sources.is_empty() && other.promises.is_empty());
+    let mut abstained = shown.clone();
+    abstained.candidates.clear();
+    assert_eq!(
+        Settlement::enter("x")
+            .with_answer(&abstained, Some(0.9))
+            .in_view,
+        None
+    );
+}
+
+#[test]
+fn a_suggestion_in_view_with_a_promise_out_of_range_or_from_no_layer_is_refused() {
+    let open = OpenRecord::new(settled_ticket(), "d1", 0);
+    let mut bad = Settlement::accept("network").with_suggestion("network");
+    bad.in_view.as_mut().unwrap().promise = Some(1.5);
+    assert!(open.check_settle("team", &bad).is_err());
+    let mut none = Settlement::accept("network").with_suggestion("network");
+    none.in_view.as_mut().unwrap().source = Some(Source::None);
+    assert!(open.check_settle("team", &none).is_err());
+}

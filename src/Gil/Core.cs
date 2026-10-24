@@ -426,9 +426,12 @@ public sealed class OpenRecord : IDisposable
 
     /// <summary>Settles a decided attribute at <paramref name="now"/> with the parts its kind needs — a value for the
     /// kinds that settle one, values for <see cref="SettlementKind.Set"/> (and for a restore of an attribute that takes
-    /// several), the probability a check was drawn with — and returns the fresh answers it causes.</summary>
-    /// <exception cref="ArgumentException">A part the kind needs is missing, or the attribute is not decided or takes
-    /// the other kind of value.</exception>
+    /// several), the probability a check was drawn with — and returns the fresh answers it causes. What was in view
+    /// goes on the record: <paramref name="shown"/>, the decider's answer, when it answered — its first candidate and
+    /// its layer — with <paramref name="promise"/>, the precision promised for that layer
+    /// (<see cref="Tuning.PromiseOf"/>); or <paramref name="suggested"/>, a value that was not the decider's.</summary>
+    /// <exception cref="ArgumentException">A part the kind needs is missing, the attribute is not decided or takes the
+    /// other kind of value, or the promise is not in [0, 1].</exception>
     public IReadOnlyList<Answer> Settle(
         Decider decider,
         string attribute,
@@ -436,23 +439,33 @@ public sealed class OpenRecord : IDisposable
         DateTimeOffset now,
         string? value = null,
         IReadOnlyList<string>? values = null,
-        double probability = 1.0) =>
-        Answers.Read(SettleJson(decider, attribute, kind, now, value, values, probability));
+        double probability = 1.0,
+        Answer? shown = null,
+        double? promise = null,
+        string? suggested = null) =>
+        Answers.Read(SettleJson(decider, attribute, kind, now, value, values, probability, shown, promise, suggested));
 
     private unsafe string SettleJson(
         Decider decider,
         string attribute,
         SettlementKind kind,
         DateTimeOffset now,
-        string? value = null,
-        IReadOnlyList<string>? values = null,
-        double probability = 1.0)
+        string? value,
+        IReadOnlyList<string>? values,
+        double probability,
+        Answer? shown,
+        double? promise,
+        string? suggested)
     {
         ArgumentNullException.ThrowIfNull(decider);
         ArgumentNullException.ThrowIfNull(attribute);
         var name = new Utf8(attribute);
         var kindName = new Utf8(kind.ToString());
         var text = new Utf8(value);
+        var answered = shown is { Answered: true };
+        var inView = new Utf8(answered ? shown!.Candidates[0].Value : suggested);
+        var inViewSource = new Utf8(answered ? (shown!.Source == Source.External ? "Model" : shown.Source.ToString()) : null);
+        var inViewPromise = answered && promise is { } p ? p : double.NaN;
         var block = values is null ? null : Encoding.UTF8.GetBytes(string.Concat(values));
         // Never empty when given, so that an empty list pins to a real address: null is no values, a pointer to none
         // is an empty set.
@@ -464,6 +477,8 @@ public sealed class OpenRecord : IDisposable
             fixed (byte* a = &name.Pin())
             fixed (byte* k = &kindName.Pin())
             fixed (byte* v = &text.Pin())
+            fixed (byte* iv = &inView.Pin())
+            fixed (byte* ivs = &inViewSource.Pin())
             fixed (byte* b = block)
             fixed (Native.Str* s = strs)
             {
@@ -481,7 +496,8 @@ public sealed class OpenRecord : IDisposable
                 return Native.Result(
                     Native.OpenRecordSettle(
                         Handle, decider.Handle, name.At(a), kindName.At(k), Time.Ticks(now), text.At(v), s,
-                        (nuint)(values?.Count ?? 0), probability, &length),
+                        (nuint)(values?.Count ?? 0), probability, inView.At(iv), inViewSource.At(ivs), inViewPromise,
+                        &length),
                     changing: true);
             }
         }

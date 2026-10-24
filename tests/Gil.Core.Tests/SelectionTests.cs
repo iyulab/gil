@@ -35,6 +35,17 @@ public sealed class SelectionTests
     private static void Same(string actual, JsonNode? expected, string what) =>
         JsonNode.DeepEquals(Comparable(JsonNode.Parse(actual)), Comparable(expected)).Should().BeTrue(what);
 
+    /// <summary>A fixture's tuning with the core's version in place of the placeholder the C ABI's tests write there (the
+    /// fixture does not change with every release; those tests hold the version to the crate's).</summary>
+    private static JsonNode? Versioned(JsonNode? tuning, string version)
+    {
+        var copy = tuning!.DeepClone();
+        ((string)copy["version"]!).Should().Be("{version}");
+        version.Should().NotBeNullOrEmpty();
+        copy["version"] = version;
+        return copy;
+    }
+
     /// <summary>Every number as the double it denotes.</summary>
     private static JsonNode? Doubles(JsonNode? node) => node switch
     {
@@ -213,12 +224,12 @@ public sealed class SelectionTests
         var thresholds = Of("layers").First()["result"]!["thresholds"]!.ToJsonString();
 
         var captured = Tuning.Capture(schema, (int)call["settled"]!, (double)call["target_precision"]!);
-        Same(captured.ToJson(), call["captured"], "captured");
+        Same(captured.ToJson(), Versioned(call["captured"], captured.Version), "captured");
         Tuning.FromJson(captured.ToJson()).Should().BeEquivalentTo(captured);
         var layers = Replay.SelectLayers(schema, (string)call["attribute"]!, records, Options(Of("layers").First()["options"]!));
         Same(JsonSerializer.Serialize(layers.Thresholds, CoreJson.Default.LayerThresholds), JsonNode.Parse(thresholds), "thresholds");
         var promised = captured.Promise((string)call["attribute"]!, layers.Thresholds);
-        Same(promised.ToJson(), call["promised"], "promised");
+        Same(promised.ToJson(), Versioned(call["promised"], promised.Version), "promised");
         promised.Attributes.Single(a => a.Attribute == (string)call["attribute"]!).KeyPromise.Should().NotBeNull();
         using (var applied = promised.Apply(schema))
         {
@@ -255,20 +266,16 @@ public sealed class SelectionTests
     public void The_usage_counts_give_what_the_C_ABI_gave()
     {
         var call = Of("usage").Single();
-        var decisions = call["decisions"]!.AsArray().Select(d => new UsageDecision(
-            (string)d!["attribute"]!,
-            (string?)d["answer"],
-            (string?)d["settled"],
-            d["settlement"] is { } kind ? Enum.Parse<SettlementKind>((string)kind!) : null,
-            (double)d["probability"]!,
-            (double?)d["promise"])).ToArray();
-        Same(Usage.CountJson(decisions), call["result"], "usage");
-        var counted = Usage.Count(decisions);
+        using var records = SettledRecords.FromJsonLines(
+            string.Join("\n", call["records"]!.AsArray().Select(r => r!.ToJsonString())));
+        Same(Usage.CountJson(records), call["result"], "usage");
+        var counted = Usage.Count(records);
         Same(JsonSerializer.Serialize(counted, CoreJson.Default.IReadOnlyDictionaryStringAttributeUsage), call["result"], "typed usage");
         var team = counted["team"];
         team.Abstained.Should().Be(team.Decisions - team.Answered);
         team.Realized.Should().Be(team.RightWeight / team.JudgedWeight);
-        Usage.Count([]).Should().BeEmpty();
+        using var none = SettledRecords.From([]);
+        Usage.Count(none).Should().BeEmpty();
     }
 
     [Fact]

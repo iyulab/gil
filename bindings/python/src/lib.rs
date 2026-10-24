@@ -19,7 +19,7 @@ use gil::replay::{
 };
 use gil::schema::{Record, Schema, Settlement, SettlementKind};
 use gil::tuning::Tuning;
-use gil::usage::{Decision, usage};
+use gil::usage::usage;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use serde_json::{Value, json};
@@ -730,9 +730,9 @@ impl OpenRecord {
         }
     }
 
-    /// Settles a decided attribute at `now` (ticks) — `kind` by name, with the value, values or probability it needs;
-    /// the answers it changes, as JSON.
-    #[pyo3(signature = (decider, attribute, kind, now, value=None, values=None, probability=None))]
+    /// Settles a decided attribute at `now` (ticks) — `kind` by name, with the value, values or probability it needs, and
+    /// what was in view (JSON `{"value", "source", "promise"}`) for the record to keep; the answers it changes, as JSON.
+    #[pyo3(signature = (decider, attribute, kind, now, value=None, values=None, probability=None, in_view=None))]
     #[allow(clippy::too_many_arguments)]
     fn settle(
         &mut self,
@@ -743,10 +743,17 @@ impl OpenRecord {
         value: Option<&str>,
         values: Option<Vec<String>>,
         probability: Option<f64>,
+        in_view: Option<&str>,
     ) -> PyResult<String> {
         usable(self.broken, "record")?;
         usable(decider.broken, "decider")?;
-        let settlement = settlement_of(kind, value, values, probability).map_err(invalid)?;
+        let mut settlement = settlement_of(kind, value, values, probability).map_err(invalid)?;
+        settlement.in_view = in_view
+            .map(|text| {
+                serde_json::from_str(text)
+                    .map_err(|e| invalid(format!("what was in view does not read: {e}")))
+            })
+            .transpose()?;
         self.inner
             .check_settle(attribute, &settlement)
             .map_err(|e| invalid(e.to_string()))?;
@@ -957,55 +964,10 @@ fn tuning_stale_json(
         .map(|s| serde_json::to_string(&s).expect("a reason serializes")))
 }
 
-/// The usage counts of the decisions (a JSON list of `{"attribute", "answer", "settled", "settlement", "probability",
-/// "promise"}`), by attribute, as JSON.
+/// The usage counts of the decisions the records settled, by attribute, as JSON.
 #[pyfunction]
-fn usage_json(decisions_json: &str) -> PyResult<String> {
-    let items: Value = serde_json::from_str(decisions_json).map_err(|e| invalid(e.to_string()))?;
-    let items = items
-        .as_array()
-        .ok_or_else(|| invalid("decisions are a list".to_owned()))?;
-    let text = |v: &Value, what: &str| -> Parsed<Option<String>> {
-        match v {
-            Value::Null => Ok(None),
-            Value::String(s) => Ok(Some(s.clone())),
-            _ => Err(format!("a decision's {what} is a string or None")),
-        }
-    };
-    struct Owned {
-        attribute: String,
-        answer: Option<String>,
-        settled: Option<String>,
-        settlement: Option<SettlementKind>,
-        probability: f64,
-        promise: Option<f64>,
-    }
-    let owned = items
-        .iter()
-        .map(|d| {
-            Ok(Owned {
-                attribute: text(&d["attribute"], "attribute")?
-                    .ok_or("a decision needs its attribute")?,
-                answer: text(&d["answer"], "answer")?,
-                settled: text(&d["settled"], "settled")?,
-                settlement: text(&d["settlement"], "settlement")?
-                    .map(|k| settlement(&k))
-                    .transpose()?,
-                probability: d.get("probability").and_then(Value::as_f64).unwrap_or(1.0),
-                promise: d.get("promise").and_then(Value::as_f64),
-            })
-        })
-        .collect::<Parsed<Vec<_>>>()
-        .map_err(invalid)?;
-    let counts = usage(owned.iter().map(|d| Decision {
-        attribute: &d.attribute,
-        answer: d.answer.as_deref(),
-        settled: d.settled.as_deref(),
-        settlement: d.settlement,
-        probability: d.probability,
-        promise: d.promise,
-    }));
-    Ok(serde_json::to_string(&counts).expect("counts serialize"))
+fn usage_json(records: &Records) -> String {
+    serde_json::to_string(&usage(&records.records)).expect("counts serialize")
 }
 
 #[pymodule]
