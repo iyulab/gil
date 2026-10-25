@@ -466,7 +466,7 @@ it while the average holds. Set `SelectionOptions.ValueTails` (experimental, `GI
 `Keeper`, and the thresholds chosen carry `LayerThresholds.ValueTails`: for each value settled on at least
 `Replay.ValueTailDecisions` of the latest records asked about, how many there were, the share the chosen thresholds
 answered with another value (`AnsweredOtherwise`) and the value given in its place most often (`GivenInstead`). On public food inspections and public device event reports, the values whose share was 0.20 or more on the first half of the records were mostly still at 0.10 or more on the second (1.00 and 0.88 of them, against 0.10 and 0.06 of the other values).
-A value with a large share is a candidate for `AttributeDefinition.MustCatch`. The report moves no threshold.
+A value with a large share is a candidate for `AttributeDefinition.MustCatch`. The report moves no threshold. A value settled on fewer records is not reported: on six public streams, the rarest third of the values were answered for 1 to 14% of their records; on five of them every such answer was another value, on the sixth (food inspections, 60 values) 0.14 of them.
 
 Settle a record that arrives again — a retransmission, a re-save — under the same record id. The memories keep one
 version per id, and the replay asks a record settled again without its earlier version. Under a new id the copy is new

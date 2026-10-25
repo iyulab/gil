@@ -152,7 +152,7 @@ it while the average holds. Ask `select_layers` for `LayerOptions { value_tails:
 each value settled on at least `VALUE_TAIL_DECISIONS` of the latest records asked about, how many there were, the share
 the chosen thresholds answered with another value (`answered_otherwise`) and the value given in its place most often
 (`given_instead`). On public food inspections and public device event reports, the values whose share was 0.20 or more on the first half of the records were mostly still at 0.10 or more on the second (1.00 and 0.88 of them, against 0.10 and 0.06 of the other values). A value with a large share is a candidate for
-`Attribute::must_catch`. The report moves no threshold.
+`Attribute::must_catch`. The report moves no threshold. A value settled on fewer records is not reported: on six public streams, the rarest third of the values were answered for 1 to 14% of their records; on five of them every such answer was another value, on the sixth (food inspections, 60 values) 0.14 of them.
 
 ## License
 
