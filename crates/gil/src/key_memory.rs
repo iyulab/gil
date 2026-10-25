@@ -9,7 +9,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::OnceLock;
 
-use crate::schema::{Attribute, AttributeRole, Record, Schema};
+use crate::schema::{Attribute, AttributeRole, KeyCombine, Record, Schema};
 use crate::{hangul, text};
 
 /// A key: another attribute and its value as the key memory keeps it — normalized and cut to the memory's key length, so
@@ -538,7 +538,8 @@ impl KeyMemory {
     fn keyed(&self, index: &SchemaIndex, q: &Lookup) -> Vec<(String, f64, Key)> {
         let attribute = q.definition();
         let (typed, excluding) = (q.typed, q.excluding);
-        // value → (score, strongest, backing key, latest); summed in the order the keys come. `at` finds a value's entry —
+        // value → (score, strongest, backing key, latest); summed in the order the keys come, the strongest taken in its place
+        // when the attribute combines by it. `at` finds a value's entry —
         // a linear search made this quadratic in the attribute's distinct values.
         let mut scores: Vec<(String, f64, f64, Key, i64)> = Vec::new();
         let mut at: HashMap<String, usize> = HashMap::new();
@@ -593,6 +594,11 @@ impl KeyMemory {
             }
         }
 
+        if attribute.key_combine == KeyCombine::Max {
+            for entry in &mut scores {
+                entry.1 = entry.2;
+            }
+        }
         scores.sort_by(|a, b| {
             b.1.partial_cmp(&a.1)
                 .unwrap_or(Ordering::Equal)

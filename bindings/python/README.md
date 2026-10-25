@@ -61,6 +61,11 @@ The other settings follow the same pattern — choose, then set on the attribute
 `key_concentrations`, after `key_fields`) and, for an attribute with a coarse level (`"coarse": {"prefix": 2}`),
 `select_coarse` once its value thresholds are set.
 
+The key layer adds up the strengths a value has under the record's keys, so an attribute that repeats another — a code
+and its name, an id and a label that always go together — counts the same evidence twice and moves how often the key
+layer answers. Leave it out of `key_fields`, or set `"key_combine": "max"` on the attribute (experimental): a value is
+then scored by its strongest key alone. On two years of public device event reports and on public workplace injury reports, each of 23 attributes repeated in turn left the key layer's answers exactly where they were; summing moved them by 0.39 to 2.25 times. It gives up what keys that agree add to each other: with nothing repeated, the key layer answered 1.42 times as often on the workplace injury reports and 3.06 times as often on public aviation service difficulty reports, but 0.70 times as often on public recall enforcement reports (all answers 0.94 times, at 0.95 either way). The replay holds the promise under either.
+
 A threshold trades precision for coverage — the share of lookups answered, `answer_rate` in each `chosen`, the word
 selective prediction and automated coding use. Gil holds the precision (the target, at the bottom of an interval) and
 reports the coverage it reaches.

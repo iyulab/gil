@@ -40,6 +40,12 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Added
 
+- **Experimental: scoring a value by its strongest key.** `Attribute::key_combine` set to `KeyCombine::Max` has
+  the key layer score a value by its strength under its strongest key rather than by its strengths under every key
+  added up, so an attribute that repeats another leaves the answers where they were. `KeyCombine::Sum`, the default,
+  answers as before, and a schema that sums serializes without the setting. Python: `"key_combine": "max"` on the
+  attribute.
+
 - **Experimental: a keeper that says when the answers stopped keeping the promise.** `Keep { watch_realized: true, .. }`
   has `Keeper::stale` give `Stale::Realized` before any other reason when, of an attribute's last `REALIZED_WINDOW`
   (100) answers whose rightness came back — accepted, corrected, or checked against the answer in view — fewer were

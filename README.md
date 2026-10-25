@@ -96,6 +96,7 @@ type may change shape or be removed in any release without a migration note.
 | `GIL0008` | The least-cost rule in the decision core: `ThresholdRule.LeastCost`, the layers' `Calibration` it chooses with (`LayerThresholds.Calibration`, `AttributeDefinition.Calibration`), and answering by it |
 | `GIL0009` | Value tails in the decision core: a layers selection's report, value by settled value, of how the chosen thresholds answered (`SelectionOptions.ValueTails`, `LayerThresholds.ValueTails`, `ValueTail`) |
 | `GIL0010` | Watching the realized precision in the decision core: a `Keeper` that says, as a stale reason, when the answers stopped keeping the promise (`SelectionOptions.WatchRealized`, `Stale.Realized`) |
+| `GIL0011` | Key combination in the decision core: an attribute whose key layer scores a value by its strongest key alone (`AttributeDefinition.KeyCombine`, `KeyCombine`) |
 
 Suppress the ids of what you use, in the project file or around the code:
 
@@ -540,7 +541,9 @@ another — a code and its name, an id and a label that always go together — c
 often the key layer answers; the replay still holds the promise. On public device event reports, repeating the brand
 attribute had the key layer answer 1.08 times as often; on public workplace injury reports, repeating the employer
 attribute had it answer 0.39 times as often, and the attribute answered 0.55 times as often in all, at 0.92 either way.
-Leave a repeating attribute out of `KeyFields`.
+Leave a repeating attribute out of `KeyFields`, or set the attribute's `KeyCombine` to `KeyCombine.Max`
+(experimental, `GIL0011`): the key layer then scores a value by its strongest key alone, so a repeating attribute counts
+for nothing. On two years of public device event reports and on public workplace injury reports, each of 23 attributes repeated in turn left the key layer's answers exactly where they were; summing moved them by 0.39 to 2.25 times. It gives up what keys that agree add to each other: with nothing repeated, the key layer answered 1.42 times as often on the workplace injury reports and 3.06 times as often on public aviation service difficulty reports, but 0.70 times as often on public recall enforcement reports (all answers 0.94 times, at 0.95 either way). The replay holds the promise under either.
 
 How far a key seen only a few times is trusted depends on its attribute. A value's strength under a key is its weighted
 count there over the key's weighted total plus a concentration, 1 unless set: a key seen once lends its value half its

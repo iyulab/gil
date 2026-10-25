@@ -9,6 +9,10 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Added
 
+- **Experimental (`GIL0011`): scoring a value by its strongest key.** `AttributeDefinition.KeyCombine` set to
+  `KeyCombine.Max` has the key layer score a value by its strength under its strongest key rather than by its strengths
+  under every key added up, so an attribute that repeats another leaves the answers where they were. `KeyCombine.Sum`,
+  the default, answers as before, and a schema that sums writes no setting.
 - **Experimental (`GIL0010`): a keeper that says when the answers stopped keeping the promise.**
   `SelectionOptions.WatchRealized` has `Keeper.Stale()` give `Stale.Realized` before any other reason when, of an
   attribute's last 100 answers whose rightness came back — accepted, corrected, or checked against the answer in view —

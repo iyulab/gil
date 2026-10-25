@@ -28,6 +28,27 @@ pub enum AttributePolicy {
     Off,
 }
 
+/// Experimental. How the key layer makes a value's score from its strengths under the record's several keys.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum KeyCombine {
+    /// The strengths added up: keys that agree make the value more believed, and so does an attribute that repeats
+    /// another one — the same evidence counted twice.
+    #[default]
+    Sum,
+    /// The strongest alone: an attribute that repeats another one leaves the score where it was, and keys that agree add
+    /// nothing to the strongest of them.
+    Max,
+}
+
+impl KeyCombine {
+    /// Whether this is [`KeyCombine::Sum`], the default.
+    pub fn is_sum(&self) -> bool {
+        *self == KeyCombine::Sum
+    }
+}
+
 /// One attribute of a schema, with the settings that govern how it is answered.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -50,6 +71,13 @@ pub struct Attribute {
     /// How readily each key attribute's keys are believed; an attribute not named takes 1.
     #[cfg_attr(feature = "serde", serde(default))]
     pub key_concentrations: BTreeMap<String, f64>,
+    /// Experimental. How a value's strengths under the record's several keys make its score; [`KeyCombine::Sum`] unless
+    /// set.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "KeyCombine::is_sum")
+    )]
+    pub key_combine: KeyCombine,
     /// The score the first keyed value must reach to be trusted; `None` trusts none.
     #[cfg_attr(feature = "serde", serde(default))]
     pub key_threshold: Option<f64>,
@@ -120,6 +148,7 @@ impl Attribute {
             depends_on: None,
             key_fields: None,
             key_concentrations: BTreeMap::new(),
+            key_combine: KeyCombine::Sum,
             key_threshold: None,
             similar_votes: 10,
             memory_threshold: None,

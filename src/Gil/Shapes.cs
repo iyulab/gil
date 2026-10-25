@@ -35,6 +35,22 @@ public enum AttributePolicy : byte
     Off = 2,
 }
 
+/// <summary>How the key layer makes a value's score from its strengths under the record's several keys.</summary>
+[Experimental(Stability.KeyCombine, UrlFormat = Stability.Url)]
+[JsonConverter(typeof(JsonStringEnumConverter<KeyCombine>))]
+public enum KeyCombine : byte
+{
+    /// <summary>The strengths added up: keys that agree make the value more believed, and so does an attribute that
+    /// repeats another one — the same evidence counted twice.</summary>
+    [JsonStringEnumMemberName("sum")]
+    Sum = 0,
+
+    /// <summary>The strongest alone: an attribute that repeats another one leaves the score where it was, and keys that
+    /// agree add nothing to the strongest of them.</summary>
+    [JsonStringEnumMemberName("max")]
+    Max = 1,
+}
+
 /// <summary>A decided attribute's value-layer thresholds for the first record of a batch — the same three an attribute
 /// holds for every other record.</summary>
 [Experimental(Stability.FirstOfBatch, UrlFormat = Stability.Url)]
@@ -134,6 +150,12 @@ public sealed record AttributeDefinition(string Name, AttributeRole Role)
 
     /// <summary>How readily each key attribute's keys are believed; an attribute not named takes 1.</summary>
     public IReadOnlyDictionary<string, double> KeyConcentrations { get; init; } = ReadOnlyDictionary<string, double>.Empty;
+
+    /// <summary>How a value's strengths under the record's several keys make its score; <see cref="KeyCombine.Sum"/>
+    /// unless set.</summary>
+    [Experimental(Stability.KeyCombine, UrlFormat = Stability.Url)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public KeyCombine KeyCombine { get; init; }
 
     /// <summary>The score the first keyed value must reach to be trusted; null trusts none.</summary>
     public double? KeyThreshold { get; init; }

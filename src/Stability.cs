@@ -61,6 +61,12 @@ internal static class Stability
     /// </summary>
     public const string WatchRealized = "GIL0010";
 
+    /// <summary>
+    /// Key combination (package <c>Gil</c>): an attribute whose key layer scores a value by its strongest key alone rather
+    /// than by its strengths under every key added up.
+    /// </summary>
+    public const string KeyCombine = "GIL0011";
+
     /// <summary>Where the stability of each surface is described.</summary>
     public const string Url = "https://github.com/iyulab/gil/blob/main/README.md#stability";
 }

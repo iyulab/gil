@@ -154,6 +154,11 @@ the chosen thresholds answered with another value (`answered_otherwise`) and the
 (`given_instead`). On public food inspections and public device event reports, the values whose share was 0.20 or more on the first half of the records were mostly still at 0.10 or more on the second (1.00 and 0.88 of them, against 0.10 and 0.06 of the other values). A value with a large share is a candidate for
 `Attribute::must_catch`. The report moves no threshold. A value settled on fewer records is not reported: on six public streams, the rarest third of the values were answered for 1 to 14% of their records; on five of them every such answer was another value, on the sixth (food inspections, 60 values) 0.14 of them.
 
+The key layer adds up the strengths a value has under the record's keys, so an attribute that repeats another — a code
+and its name, an id and a label that always go together — counts the same evidence twice and moves how often the key
+layer answers. Leave it out of `Attribute::key_fields`, or set `Attribute::key_combine` to `KeyCombine::Max`
+(experimental): a value is then scored by its strongest key alone. On two years of public device event reports and on public workplace injury reports, each of 23 attributes repeated in turn left the key layer's answers exactly where they were; summing moved them by 0.39 to 2.25 times. It gives up what keys that agree add to each other: with nothing repeated, the key layer answered 1.42 times as often on the workplace injury reports and 3.06 times as often on public aviation service difficulty reports, but 0.70 times as often on public recall enforcement reports (all answers 0.94 times, at 0.95 either way). The replay holds the promise under either.
+
 ## License
 
 Apache-2.0 — see `LICENSE`.
