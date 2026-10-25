@@ -535,6 +535,13 @@ record layer and a coarse level on and a target of 0.95, keying the fault code b
 rightly 1.36 times as often as every attribute, at 0.96 either way; resting it on that attribute had answered less
 often than every attribute.
 
+Give each fact once. The key layer adds up the strengths its attributes lend a value, so an attribute that repeats
+another — a code and its name, an id and a label that always go together — counts the same evidence twice and moves how
+often the key layer answers; the replay still holds the promise. On public device event reports, repeating the brand
+attribute had the key layer answer 1.08 times as often; on public workplace injury reports, repeating the employer
+attribute had it answer 0.39 times as often, and the attribute answered 0.55 times as often in all, at 0.92 either way.
+Leave a repeating attribute out of `KeyFields`.
+
 How far a key seen only a few times is trusted depends on its attribute. A value's strength under a key is its weighted
 count there over the key's weighted total plus a concentration, 1 unless set: a key seen once lends its value half its
 strength, whatever attribute it comes from. An attribute that names the very thing the decided one describes — a
