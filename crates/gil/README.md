@@ -144,7 +144,7 @@ answers whose rightness came back (accepted, corrected, or checked against the a
 the target less `REALIZED_MARGIN` (0.15). It needs the settlement kinds; records settled with none, or filled by the
 host, leave it silent. Choosing again does not mend a revision: name the new edition. On public food inspections and
 public workplace injury reports, a window of 100 at a target of 0.9 fell under 0.75 within 54 and 163 records of the
-revision, with no edition named; on thirteen public streams with no revision it never did.
+revision, with no edition named; on thirteen public streams with no revision it never did. On public device recalls with no revision it said so once, on a nine-day run of recalls from one firm that the memory answered wrongly; look at what the window holds before naming an edition.
 
 A promise is an average over an attribute's values, and a value the layers keep taking for another can sit far below
 it while the average holds. Ask `select_layers` for `LayerOptions { value_tails: true, .. }`, or the keeper for
