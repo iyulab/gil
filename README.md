@@ -98,6 +98,7 @@ type may change shape or be removed in any release without a migration note.
 | `GIL0010` | Watching the realized precision in the decision core: a `Keeper` that says, as a stale reason, when the answers stopped keeping the promise (`SelectionOptions.WatchRealized`, `Stale.Realized`) |
 | `GIL0011` | Key combination in the decision core: an attribute whose key layer scores a value by its strongest key alone (`AttributeDefinition.KeyCombine`, `KeyCombine`) |
 | `GIL0012` | The unseen mass in the decision core: a `Keeper` that says how much of an attribute's next settled values is likely to be values no record settled yet (`Keeper.UnseenMass`, `UnseenMass`) |
+| `GIL0013` | Similar elements in the decision core: the similar record layer answering an attribute that takes several values, element by element (`AttributeDefinition.SimilarElements`, `Keeper.SimilarElements`, `ElementAnswer`) |
 
 Suppress the ids of what you use, in the project file or around the code:
 
@@ -668,7 +669,7 @@ question. Mark it `Multiple`; its values are settled as a set (`SettlementKind.S
 `Values`, and order carries no meaning. Each value is remembered and answered on its own, so several candidates can each
 be trusted against `KeyThreshold`, and the values a person has already chosen are evidence for the rest. An open record
 keeps such an attribute open after it is settled and goes on answering the remaining values. The similar record layer
-does not answer it, so it takes no `MemoryThreshold` and `SelectLayers` does not take it: its key threshold is the one
+does not answer it unless asked to (below, `SimilarElements`), so it takes no `MemoryThreshold` and `SelectLayers` does not take it: its key threshold is the one
 the key layer's replay in `Replay.SelectKeyFields` chose (`Chosen.Chosen?.Threshold`, with the key attributes it names),
 which replays each record as values are picked one after another. A value that has a main one among several is better a
 second, single-valued attribute that takes its candidates from the set (`CandidatesFrom`): once the record's values are
@@ -677,6 +678,28 @@ such as a subcategory within its category; while the other attribute is empty, n
 collection of patents, each classified into one or more of 37 technology classes, with one class of a record chosen,
 using the chosen class as evidence put a remaining class first slightly more often (0.46 against 0.44) and trusted about
 one and a half times as many of the remaining classes at the same precision (0.79 against a target of 0.8).
+
+**Similar elements** (experimental, `GIL0013`). The similar record layer can answer an attribute that takes several
+values too. Set `AttributeDefinition.SimilarElements` on a decided `Multiple` attribute (it then takes a
+`MemoryThreshold`, which the keeper chooses), and `Keeper.SimilarElements(decider, id, attribute, values, sets)` gives
+`ElementAnswer`s — the element, its `Share` and the `Promise` — for the record `id`. The nearest `SimilarVotes` settled
+records other than the record itself vote; each element is judged on its own, by the similarity of the voting records
+that hold it over the similarity of all of them, and offered when that share reaches the threshold. The keeper chooses
+the threshold on a replay of the records in settlement order, each asked about with those before it, by the rule it
+uses for a single value (the target precision, the fewest answers, the lowest score down to which every band of answers
+meets the target), counting every element offered as one answer; none stands unless enough elements are offered at the
+target, and then nothing is offered. What `sets` holds for the attribute is not evidence, and an element holding the
+unit separator (U+001F) or nothing is never remembered. Off, the default, the attribute, the keeper and the tuning are as
+they were, to the bit.
+
+The promise is about one element at a time — of the elements offered, that share are among those the record settled — not
+about a whole set being right. The layer stood where the text decides the values: on public medical device event reports
+it offered the elements of the problem-code set (5,249 elements over a judged span of 15,000 records) at a precision of
+0.987 against a target of 0.9, and on public vehicle complaints the components (1,296 elements) at 0.940. Where the text
+does not decide the values — tags on a public question site, the set of adverse reactions on public adverse event
+reports — no threshold stood at a target of 0.9, and the layer offers nothing. Even where it stands it offers few
+elements: a vehicle complaint is shown almost one element, so the layer reads as "add the sure tags and leave the rest to
+a person", not as a way to complete the set.
 
 **Asking first** (experimental, `GIL0005`). When no layer answers a decided attribute, one more observed value from the
 person — the component a ticket is about, the part a fault was found on — may let one answer, or a class be trusted.

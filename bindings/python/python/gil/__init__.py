@@ -67,6 +67,7 @@ __all__ = [
     "CoarseLook",
     "Decider",
     "DecisionRecord",
+    "ElementAnswer",
     "ExternalCandidate",
     "Keeper",
     "KeeperChoice",
@@ -808,6 +809,16 @@ class OpenRecord:
         return cast(dict[str, Any], json.loads(self._inner.snapshot()))
 
 
+class ElementAnswer(TypedDict):
+    """Experimental. An element of an attribute that takes several values, offered by the similar record layer: its
+    ``share`` of the vote — the similarity of the voting records that hold it over the similarity of all of them — and the
+    ``promise``, the precision promised for one element offered (``None`` before a choice recorded one)."""
+
+    value: str
+    share: float
+    promise: float | None
+
+
 class KeeperChoice(TypedDict, total=False):
     """A keeper's choice: the tuning with its promises (the core's ``Tuning``), each attribute's thresholds with how they
     did on the replay, its coarse level's for an attribute that has one, and — from :meth:`Keeper.rechoose` when asked
@@ -909,6 +920,30 @@ class Keeper:
         record settled it."""
         text = self._inner.unseen_mass(attribute)
         return None if text is None else cast(dict[str, Any], json.loads(text))
+
+    def similar_elements(
+        self,
+        decider: Decider,
+        id: str,
+        attribute: str,
+        values: Mapping[str, str],
+        sets: Mapping[str, Iterable[str]] | None = None,
+    ) -> list[ElementAnswer]:
+        """Experimental. The elements of ``attribute`` — an attribute that takes several values and sets
+        ``"similar_elements": true`` — that the similar record layer offers for record ``id`` from the ``values`` (and
+        ``sets``) given, most shared first. The nearest ``similar_votes`` settled records other than ``id`` vote, an element
+        is judged on its own by its share of the vote, and it is offered when the share reaches the memory threshold the
+        last :meth:`rechoose` found — none when it found none. The ``promise`` is about one element at a time: the share of
+        the elements offered that the record settles, not the chance that a whole set is right. What ``sets`` holds for
+        ``attribute`` is not evidence. Raises ``ValueError`` for an attribute that is not answered that way."""
+        found = self._inner.similar_elements(
+            decider._inner,
+            id,
+            attribute,
+            json.dumps(dict(values), ensure_ascii=False),
+            None if sets is None else json.dumps({k: list(v) for k, v in sets.items()}, ensure_ascii=False),
+        )
+        return cast(list[ElementAnswer], json.loads(found))
 
     @property
     def settled(self) -> int:

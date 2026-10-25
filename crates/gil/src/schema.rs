@@ -78,6 +78,16 @@ pub struct Attribute {
         serde(default, skip_serializing_if = "KeyCombine::is_sum")
     )]
     pub key_combine: KeyCombine,
+    /// Experimental. For an attribute that takes several values: whether the similar record layer answers it, by the
+    /// share of the most similar settled records that hold each value ([`crate::decider::Decider::similar_elements`]).
+    /// False, the default, leaves the layer silent, and a schema that leaves it so serializes without the setting. The
+    /// share an element must reach is the attribute's `memory_threshold`, which an attribute that takes several values
+    /// takes only with this set; the promise it keeps is about one element at a time, not about a whole set.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "std::ops::Not::not")
+    )]
+    pub similar_elements: bool,
     /// The score the first keyed value must reach to be trusted; `None` trusts none.
     #[cfg_attr(feature = "serde", serde(default))]
     pub key_threshold: Option<f64>,
@@ -128,6 +138,11 @@ pub struct Attribute {
     pub policy: AttributePolicy,
 }
 
+/// Whether the attribute is decided and takes several values.
+fn decided_several(a: &Attribute) -> bool {
+    a.role == AttributeRole::Decided && a.multiple
+}
+
 #[cfg(feature = "serde")]
 fn yes() -> bool {
     true
@@ -149,6 +164,7 @@ impl Attribute {
             key_fields: None,
             key_concentrations: BTreeMap::new(),
             key_combine: KeyCombine::Sum,
+            similar_elements: false,
             key_threshold: None,
             similar_votes: 10,
             memory_threshold: None,
@@ -300,7 +316,8 @@ impl<'de> serde::Deserialize<'de> for Schema {
 impl Schema {
     /// A schema named `name` with `attributes` in order, checked when it is made: a name, unique attribute names, at least
     /// one decided attribute, and settings that fit their attribute —
-    /// several values only for a decided attribute and then no memory threshold or typed key thresholds, at least one
+    /// several values only for a decided attribute and then no typed key thresholds, and no memory threshold unless
+    /// the similar record layer answers it by elements ([`Attribute::similar_elements`]), at least one
     /// similar-record vote, a coarse level (with a prefix of at least one, or a table of at least one value and no blank
     /// class) and values to catch only on a decided single-valued attribute, dependencies and key attributes that name
     /// other attributes that are evidence (key attributes among the dependencies when those are given), key
@@ -461,7 +478,12 @@ impl Schema {
                     "attribute '{n}' is observed; only a decided attribute can take several values"
                 ));
             }
-            if a.multiple && a.memory_threshold.is_some() {
+            if a.similar_elements && !decided_several(a) {
+                return Err(format!(
+                    "attribute '{n}' is answered by similar elements, which only a decided attribute that takes several values is"
+                ));
+            }
+            if a.multiple && !a.similar_elements && a.memory_threshold.is_some() {
                 return Err(format!(
                     "attribute '{n}' takes several values; the similar record layer does not answer it, so it takes no memory threshold"
                 ));

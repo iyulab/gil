@@ -141,6 +141,49 @@ public sealed class Keeper : IDisposable
         return found == "null" ? null : JsonSerializer.Deserialize(found, CoreJson.Default.UnseenMass);
     }
 
+    /// <summary>The elements of <paramref name="attribute"/> — an attribute that takes several values and sets
+    /// <c>AttributeDefinition.SimilarElements</c> — that the similar record layer offers for record
+    /// <paramref name="recordId"/> from the <paramref name="values"/> (and <paramref name="sets"/>) given, most shared
+    /// first. The nearest <c>SimilarVotes</c> settled records other than <paramref name="recordId"/> vote, an element is
+    /// judged on its own by its share of the vote, and it is offered when the share reaches the memory threshold the last
+    /// <see cref="Rechoose"/> found — none when it found none. The promise is about one element at a time, not about a
+    /// whole set being right. What <paramref name="sets"/> holds for <paramref name="attribute"/> is not evidence.</summary>
+    /// <exception cref="ArgumentException">The attribute is not answered by similar elements, or a value or set is where its
+    /// kind does not belong.</exception>
+    [Experimental(Stability.SimilarElements, UrlFormat = Stability.Url)]
+    public unsafe IReadOnlyList<ElementAnswer> SimilarElements(
+        Decider decider,
+        string recordId,
+        string attribute,
+        IReadOnlyDictionary<string, string> values,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? sets = null)
+    {
+        ArgumentNullException.ThrowIfNull(decider);
+        ArgumentNullException.ThrowIfNull(recordId);
+        ArgumentNullException.ThrowIfNull(attribute);
+        ArgumentNullException.ThrowIfNull(values);
+        var id = new Utf8(recordId);
+        var name = new Utf8(attribute);
+        var valuesJson = new Utf8(Json.Object(values));
+        var setsJson = new Utf8(sets is null ? string.Empty : Json.Sets(sets));
+        string found;
+        nuint length;
+        lock (sync)
+        using (decider.Gate.Reading())
+        {
+            fixed (byte* i = &id.Pin())
+            fixed (byte* n = &name.Pin())
+            fixed (byte* v = &valuesJson.Pin())
+            fixed (byte* s = &setsJson.Pin())
+            {
+                found = Native.Result(Native.KeeperSimilarElements(
+                    Handle, decider.Handle, id.At(i), name.At(n), valuesJson.At(v), setsJson.At(s), &length));
+            }
+        }
+
+        return JsonSerializer.Deserialize(found, CoreJson.Default.IReadOnlyListElementAnswer)!;
+    }
+
     /// <summary>Chooses every attribute's thresholds again on all the records settled — replaying only those settled
     /// since the last choice where it can — puts them on <see cref="Schema"/> and captures <see cref="Tuning"/> with
     /// their promises.</summary>

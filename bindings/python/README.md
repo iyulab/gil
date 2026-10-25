@@ -141,6 +141,25 @@ the decider answers. Taken at each choice of thresholds over 50,000 records, it 
 settled until the next choice by 0.021 on public device event reports, 0.040 on public adverse event reports and
 0.0004 on public food inspections, on average, and by less than 0.01 either way over all the choices.
 
+The similar record layer can answer an attribute that takes several values, element by element (experimental). Give a
+decided attribute `"multiple": True, "similar_elements": True` — it then takes a `memory_threshold`, which a `gil.Keeper`
+chooses — and `keeper.similar_elements(decider, id, attribute, values, sets=None)` gives, for record `id`, a list of
+`{"value", "share", "promise"}`, most shared first. The nearest `similar_votes` settled records other than the record
+itself vote; each element is judged on its own, by the similarity of the voting records that hold it over the similarity
+of all of them. The keeper chooses the threshold on a replay in settlement order, by the rule it uses for a single value,
+counting every element offered as one answer; none stands unless enough elements are offered at the target, and then
+nothing is offered. What `sets` holds for the attribute is not evidence, and asking for an attribute not answered this
+way raises `ValueError`. Off, the default, the attribute, the keeper and the tuning are as they were, to the bit.
+
+The promise is about one element at a time — of the elements offered, that share are among those the record settled — not
+about a whole set being right. The layer stood where the text decides the values: on public medical device event reports
+it offered the elements of the problem-code set (5,249 elements over a judged span of 15,000 records) at a precision of
+0.987 against a target of 0.9, and on public vehicle complaints the components (1,296 elements) at 0.940. Where the text
+does not decide the values — tags on a public question site, the set of adverse reactions on public adverse event
+reports — no threshold stood at a target of 0.9, and the layer offers nothing. Even where it stands it offers few
+elements: a vehicle complaint is shown almost one element, so the layer reads as "add the sure tags and leave the rest to
+a person", not as a way to complete the set.
+
 A promise is an average over an attribute's values, and a value the layers keep taking for another can sit far below
 it while the average holds. Pass `value_tails=True` to `gil.select_layers` or `gil.Keeper` (experimental), and the
 thresholds chosen carry `value_tails`: for each value settled on at least 30 of the latest records asked about, how

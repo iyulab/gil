@@ -40,6 +40,18 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Added
 
+- **Experimental: the similar record layer for an attribute that takes several values.** `Attribute::similar_elements`
+  on a decided `multiple` attribute (which then takes a `memory_threshold`) has `Keeper` choose a threshold for it —
+  `replay::select_similar_elements` is the replay alone — and `Keeper::similar_elements` (`Decider::similar_elements`
+  without the promise) gives each element the nearest `similar_votes` records hold, by its share of the vote (the
+  similarity of the voting records that hold it over the similarity of all of them), at or above the threshold, with the
+  promise: `ElementAnswer`. The promise is about one element at a time, not about a whole set. Python
+  `Keeper.similar_elements(decider, id, attribute, values, sets)`; the C ABI `gil_keeper_similar_elements` (the version
+  of the interface is unchanged: the function is new). On public medical device event reports it stood for the
+  problem-code set (5,249 elements over a judged span of 15,000 records, precision 0.987 against a target of 0.9) and on
+  public vehicle complaints for the components (1,296 elements, 0.940); on tags of a public question site and the
+  adverse reaction sets of public adverse event reports no threshold stood at 0.9. Off by default, and then answers,
+  stored tunings and goldens are as they were, to the bit.
 - **Experimental: `Keeper::unseen_mass`.** The share of an attribute's next settled values likely to be ones no record
   settled yet (`UnseenMass` — the values settled on exactly one record over the records that settled one, the
   Good-Turing estimate). Python `Keeper.unseen_mass(attribute)`; the C ABI `gil_keeper_unseen_mass`. It changes nothing

@@ -157,6 +157,15 @@ public sealed record AttributeDefinition(string Name, AttributeRole Role)
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public KeyCombine KeyCombine { get; init; }
 
+    /// <summary>For an attribute that takes several values: whether the similar record layer answers it, by the share of
+    /// the most similar settled records that hold each value (<see cref="Keeper.SimilarElements"/>). False, the default,
+    /// leaves the layer silent. The share an element must reach is <see cref="MemoryThreshold"/>, which an attribute that
+    /// takes several values takes only with this set. The promise it keeps is about one element at a time, not about a
+    /// whole set.</summary>
+    [Experimental(Stability.SimilarElements, UrlFormat = Stability.Url)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool SimilarElements { get; init; }
+
     /// <summary>The score the first keyed value must reach to be trusted; null trusts none.</summary>
     public double? KeyThreshold { get; init; }
 

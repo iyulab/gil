@@ -9,6 +9,16 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Added
 
+- **Experimental (`GIL0013`): the similar record layer for an attribute that takes several values.**
+  `AttributeDefinition.SimilarElements` on a decided `Multiple` attribute (which then takes a `MemoryThreshold`) has the
+  keeper choose a threshold for it, and `Keeper.SimilarElements(decider, id, attribute, values, sets)` gives
+  `ElementAnswer`s: each element the nearest `SimilarVotes` records hold, by its share of the vote (the similarity of the
+  voting records that hold it over the similarity of all of them), at or above the threshold, with the promise. The
+  promise is about one element at a time, not about a whole set. On public medical device event reports it stood for the
+  problem-code set (5,249 elements over a judged span of 15,000 records, precision 0.987 against a target of 0.9) and on
+  public vehicle complaints for the components (1,296 elements, 0.940); on tags of a public question site and the
+  adverse reaction sets of public adverse event reports no threshold stood at 0.9. Off by default, and then answers,
+  stored tunings and goldens are as they were, to the bit.
 - **Experimental (`GIL0012`): how much of the next settled values is likely to be new.** `Keeper.UnseenMass(attribute)`
   gives `UnseenMass`: the values settled on exactly one record over the records that settled one (the Good-Turing
   estimate) — the share of the next records the layers cannot answer right, since answers never offer such a value.

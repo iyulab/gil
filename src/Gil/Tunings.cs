@@ -251,6 +251,16 @@ public abstract record Stale
 [Experimental(Stability.UnseenMass, UrlFormat = Stability.Url)]
 public sealed record UnseenMass(int Once, int Settled, double Mass);
 
+/// <summary>An element of an attribute that takes several values, offered by the similar record layer
+/// (<see cref="Keeper.SimilarElements"/>).</summary>
+/// <param name="Value">The element.</param>
+/// <param name="Share">The similarity of the voting records that hold it over the similarity of all of them.</param>
+/// <param name="Promise">The precision promised for one element offered; null before a choice recorded one. About one
+/// element at a time: the share of the elements offered that the record settles, not the chance that a whole set is
+/// right.</param>
+[Experimental(Stability.SimilarElements, UrlFormat = Stability.Url)]
+public sealed record ElementAnswer(string Value, double Share, double? Promise);
+
 /// <summary>One attribute's counts of how its answers fared.</summary>
 /// <param name="Decisions">Decisions asked about.</param>
 /// <param name="Answered">Of them, answered (a trusted answer shown).</param>

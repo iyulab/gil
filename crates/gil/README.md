@@ -153,6 +153,26 @@ each and leaving out what the application filled. It changes nothing the keeper 
 settled until the next choice by 0.021 on public device event reports, 0.040 on public adverse event reports and
 0.0004 on public food inspections, on average, and by less than 0.01 either way over all the choices.
 
+The similar record layer can answer an attribute that takes several values, element by element (experimental). Set
+`Attribute::similar_elements` on a decided `multiple` attribute — it then takes a `memory_threshold`, which a `Keeper`
+chooses — and `Keeper::similar_elements(decider, record, attribute, values, sets)` gives `ElementAnswer`s (the element,
+its share and the promise) for the record. The nearest `similar_votes` settled records other than the record itself vote;
+each element is judged on its own, by the similarity of the voting records that hold it over the similarity of all of them
+(`Decider::similar_elements` gives the elements at the threshold, without the promise). The keeper chooses the threshold
+on a replay in settlement order, by the rule it uses for a single value, counting every element offered as one answer
+(`replay::select_similar_elements` is the replay alone); none stands unless enough elements are offered at the target, and
+then nothing is offered. What the set holds for the attribute is not evidence. Off, the default, the attribute, the keeper
+and the tuning are as they were, to the bit.
+
+The promise is about one element at a time — of the elements offered, that share are among those the record settled — not
+about a whole set being right. The layer stood where the text decides the values: on public medical device event reports
+it offered the elements of the problem-code set (5,249 elements over a judged span of 15,000 records) at a precision of
+0.987 against a target of 0.9, and on public vehicle complaints the components (1,296 elements) at 0.940. Where the text
+does not decide the values — tags on a public question site, the set of adverse reactions on public adverse event
+reports — no threshold stood at a target of 0.9, and the layer offers nothing. Even where it stands it offers few
+elements: a vehicle complaint is shown almost one element, so the layer reads as "add the sure tags and leave the rest to
+a person", not as a way to complete the set.
+
 A promise is an average over an attribute's values, and a value the layers keep taking for another can sit far below
 it while the average holds. Ask `select_layers` for `LayerOptions { value_tails: true, .. }`, or the keeper for
 `Keep { value_tails: true, .. }` (experimental), and the thresholds chosen carry `LayerThresholds::value_tails`: for

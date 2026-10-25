@@ -486,7 +486,8 @@ fn keeper_json(keeper: &gil::keeper::Keeper) -> String {
 
 #[pymethods]
 impl Keeper {
-    /// A keeper of the schema with nothing settled, choosing for every decided attribute that takes one value.
+    /// A keeper of the schema with nothing settled, choosing for every decided attribute that takes one value - and,
+    /// experimentally, the memory threshold of one that takes several and is answered by similar elements.
     #[new]
     #[pyo3(signature = (schema_json, target_precision, minimum_answered, counting=None, rule="every_band", threads=None, first_of_batch=false, restart_on_form_version=false, value_tails=false, watch_realized=false))]
     #[allow(clippy::too_many_arguments)]
@@ -575,6 +576,39 @@ impl Keeper {
             .inner
             .unseen_mass(attribute)
             .map(|m| json!({"once": m.once, "settled": m.settled, "mass": m.mass()}).to_string()))
+    }
+
+    /// Experimental. The elements of `attribute`, which takes several values and is answered by similar elements
+    /// (`"similar_elements": true`), that the similar record layer offers for record `record_id` from the values (and
+    /// sets) given, as a JSON list of `{"value", "share", "promise"}`, most shared first. The set chosen of `attribute`
+    /// so far is not evidence.
+    #[pyo3(signature = (decider, record_id, attribute, values_json, sets_json=None))]
+    fn similar_elements(
+        &self,
+        decider: PyRef<'_, Decider>,
+        record_id: &str,
+        attribute: &str,
+        values_json: &str,
+        sets_json: Option<&str>,
+    ) -> PyResult<String> {
+        usable(self.broken, "keeper")?;
+        usable(decider.broken, "decider")?;
+        let values: BTreeMap<String, String> = serde_json::from_str(values_json)
+            .map_err(|e| invalid(format!("values are an object of strings: {e}")))?;
+        let sets: BTreeMap<String, Vec<String>> = match sets_json {
+            Some(text) => serde_json::from_str(text)
+                .map_err(|e| invalid(format!("sets are an object of string lists: {e}")))?,
+            None => BTreeMap::new(),
+        };
+        self.inner
+            .schema()
+            .check_placement(&values, &sets)
+            .map_err(|m| invalid(format!("record '{record_id}': {m}")))?;
+        let found = guarded(|| {
+            self.inner
+                .similar_elements(&decider.inner, record_id, attribute, &values, &sets)
+        })?;
+        Ok(to_json(&found))
     }
 
     /// The edition of the code lists the keeper keeps records of, or `None`. Experimental.

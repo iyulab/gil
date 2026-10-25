@@ -73,6 +73,12 @@ internal static class Stability
     /// </summary>
     public const string UnseenMass = "GIL0012";
 
+    /// <summary>
+    /// Similar elements in the decision core (package <c>Gil</c>): the similar record layer answering an attribute that
+    /// takes several values, element by element, by the share of the nearest records that hold each.
+    /// </summary>
+    public const string SimilarElements = "GIL0013";
+
     /// <summary>Where the stability of each surface is described.</summary>
     public const string Url = "https://github.com/iyulab/gil/blob/main/README.md#stability";
 }

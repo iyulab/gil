@@ -314,6 +314,9 @@ pub fn fingerprint(schema: &Schema) -> u64 {
         list(&mut text, a.must_catch.as_ref());
         text.push_str(&a.similar_votes.to_string());
         text.push('\u{1e}');
+        if a.similar_elements {
+            text.push_str("elements\u{1e}");
+        }
         match &a.coarse {
             None => text.push('-'),
             Some(level) => {

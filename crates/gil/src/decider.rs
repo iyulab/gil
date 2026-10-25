@@ -109,6 +109,16 @@ impl Answer {
     }
 }
 
+/// Experimental. An element of an attribute that takes several values, offered by the similar record layer: its share of
+/// the vote ([`Decider::similar_elements`]).
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct ElementShare {
+    pub value: String,
+    /// The similarity of the voting records that hold it over the similarity of all of them, in [0, 1].
+    pub share: f64,
+}
+
 /// A record's settled value for one attribute, the evidence it was settled on and when.
 #[derive(Clone, Debug)]
 struct CaseEntry {
@@ -290,12 +300,28 @@ impl Decider {
             .filter(|f| f.role == AttributeRole::Decided)
         {
             let task = Self::task(schema, &attribute.name);
-            let entry = record.values.get(&attribute.name).map(|value| CaseEntry {
-                record: record.id.clone(),
-                evidence: schema.evidence(&attribute.name, &record.values, &record.sets),
-                value: value.clone(),
-                settled_at: record.settled_at,
-            });
+            let entry = if attribute.similar_elements {
+                // Remembered by its elements joined, under the evidence the attribute is asked with: the rest of the
+                // record, not the values being asked for.
+                let elements = similar_vote::elements_of(record.sets.get(&attribute.name));
+                similar_vote::join_elements(&elements).map(|value| {
+                    let mut asked = record.sets.clone();
+                    asked.remove(&attribute.name);
+                    CaseEntry {
+                        record: record.id.clone(),
+                        evidence: schema.evidence(&attribute.name, &record.values, &asked),
+                        value,
+                        settled_at: record.settled_at,
+                    }
+                })
+            } else {
+                record.values.get(&attribute.name).map(|value| CaseEntry {
+                    record: record.id.clone(),
+                    evidence: schema.evidence(&attribute.name, &record.values, &record.sets),
+                    value: value.clone(),
+                    settled_at: record.settled_at,
+                })
+            };
             let (forget, remember) = self
                 .cases
                 .entry(task.clone())
@@ -354,6 +380,65 @@ impl Decider {
                 .or_default()
                 .insert(record.to_owned());
         }
+    }
+
+    /// Experimental. The elements of `attribute`, which takes several values and is answered by similar elements
+    /// ([`crate::schema::Attribute::similar_elements`]), that the similar record layer offers for the record `record`
+    /// from the values and sets given — as if none of its own were chosen yet, whatever `sets` holds for it: the nearest
+    /// `similar_votes` settled records other than `record` vote, and an element is offered when its share of the vote
+    /// ([`ElementShare`]) reaches the attribute's `memory_threshold`, most shared first. Each element is judged on its own;
+    /// a record holding several votes for each. Nothing without a similar record memory, without a threshold, or without
+    /// evidence to look up by. An element outside the attribute's domain is left out. Writes nothing to memory.
+    ///
+    /// # Panics
+    /// When the attribute is not a decided attribute answered by similar elements, or `values` and `sets` keep an
+    /// attribute where its kind does not belong ([`Schema::check_placement`]).
+    pub fn similar_elements(
+        &self,
+        schema: &Schema,
+        record: &str,
+        attribute: &str,
+        values: &BTreeMap<String, String>,
+        sets: &BTreeMap<String, Vec<String>>,
+    ) -> Vec<ElementShare> {
+        if let Err(misplaced) = schema.check_placement(values, sets) {
+            panic!("{misplaced}");
+        }
+        let definition = schema.attribute(attribute);
+        assert!(
+            definition.role == AttributeRole::Decided
+                && definition.multiple
+                && definition.similar_elements,
+            "'{attribute}' is not answered by similar elements"
+        );
+        let (Some(memory), Some(threshold)) = (&self.record_memory, definition.memory_threshold)
+        else {
+            return Vec::new();
+        };
+        let mut asked = sets.clone();
+        asked.remove(attribute);
+        let evidence = schema.evidence(attribute, values, &asked);
+        if evidence.is_empty() {
+            return Vec::new();
+        }
+
+        let votes = definition.similar_votes;
+        let nearest: Vec<Match> = memory
+            .nearest(
+                &Self::task(schema, attribute),
+                &evidence,
+                self.similar_document_count.max(votes) + 1,
+            )
+            .into_iter()
+            .filter(|m| m.source != record)
+            .collect();
+        similar_vote::element_shares(&nearest, votes)
+            .into_iter()
+            .filter(|(element, share)| {
+                *share >= threshold && definition.admits_in(element, values, &asked)
+            })
+            .map(|(value, share)| ElementShare { value, share })
+            .collect()
     }
 
     /// Answers every open decided attribute — without a value, unless it takes several, and not off — from the values given, writing

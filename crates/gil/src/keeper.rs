@@ -29,13 +29,13 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::decider::Decider;
+use crate::decider::{Decider, Source};
 use crate::decision_record::DecisionRecord;
 use crate::key_memory::KeyMemory;
 use crate::lexical_memory::LexicalMemory;
 use crate::replay::{
-    Choice, LayerThresholds, ReplayState, Replaying, ThresholdRule, batch_check, carry_on,
-    coarse_layers, in_situation, layers, value_tails,
+    Choice, ElementState, LayerThresholds, ReplayState, Replaying, ThresholdRule, batch_check,
+    carry_on, carry_on_elements, coarse_layers, element_layers, in_situation, layers, value_tails,
 };
 use crate::schema::{AttributeRole, Record, Schema, SettlementKind};
 use crate::tuning::{Stale, Tuning};
@@ -105,6 +105,19 @@ impl UnseenMass {
     }
 }
 
+/// Experimental. An element of an attribute that takes several values, offered by the similar record layer: its share of
+/// the vote, and the precision promised for an element offered ([`Keeper::similar_elements`]). The promise is about one
+/// element at a time — the share of the elements offered that the record settled — not about a whole set being right.
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct ElementAnswer {
+    pub value: String,
+    /// The similarity of the voting records that hold it over the similarity of all of them, in [0, 1].
+    pub share: f64,
+    /// The precision the chosen threshold promised for the next elements offered; `None` before a choice recorded one.
+    pub promise: Option<f64>,
+}
+
 impl Keep {
     /// Thresholds for `target_precision`, resting on at least ten answers, counting every settlement, by
     /// [`ThresholdRule::EveryBand`].
@@ -139,14 +152,24 @@ struct Replay {
     through: usize,
 }
 
+/// An attribute's replay of the similar record layer by elements as it stands: its memory, its answers, and how many of
+/// the keeper's records it has gone through.
+struct ElementReplay {
+    memory: LexicalMemory,
+    state: ElementState,
+    through: usize,
+}
+
 /// The settled records and the replays the thresholds are chosen on, for the decided attributes of one schema that take
-/// one value. Not thread-safe.
+/// one value — and, experimentally, for those that take several and are answered by similar elements
+/// ([`crate::schema::Attribute::similar_elements`]). Not thread-safe.
 pub struct Keeper {
     schema: Schema,
     keep: Keep,
     threads: Option<usize>,
     records: Vec<Record>,
     replays: BTreeMap<String, Replay>,
+    elements: BTreeMap<String, ElementReplay>,
     chosen: BTreeMap<String, LayerThresholds>,
     first: BTreeMap<String, LayerThresholds>,
     coarse: BTreeMap<String, LayerThresholds>,
@@ -156,7 +179,8 @@ pub struct Keeper {
 }
 
 impl Keeper {
-    /// A keeper of `schema` with nothing settled, choosing for every decided attribute that takes one value. The
+    /// A keeper of `schema` with nothing settled, choosing for every decided attribute that takes one value — and,
+    /// experimentally, the memory threshold of every one that takes several and is answered by similar elements. The
     /// thresholds `schema` holds stand until the first [`Keeper::rechoose`]; a keeper with nothing chosen is stale as
     /// soon as a record is settled.
     ///
@@ -171,6 +195,7 @@ impl Keeper {
             threads: None,
             records: Vec::new(),
             replays: BTreeMap::new(),
+            elements: BTreeMap::new(),
             chosen: BTreeMap::new(),
             first: BTreeMap::new(),
             coarse: BTreeMap::new(),
@@ -229,7 +254,38 @@ impl Keeper {
 
     /// The attributes the keeper chooses thresholds for.
     pub fn attributes(&self) -> impl Iterator<Item = &str> {
-        self.replays.keys().map(String::as_str)
+        self.replays
+            .keys()
+            .chain(self.elements.keys())
+            .map(String::as_str)
+    }
+
+    /// Experimental. The elements of `attribute`, which takes several values and is answered by similar elements
+    /// ([`crate::schema::Attribute::similar_elements`]), that the similar record layer offers for the record `record`
+    /// ([`Decider::similar_elements`] with the thresholds the keeper last chose), each with the precision the choice
+    /// promised. The promise is about one element at a time, not about a whole set: of the elements offered, that share
+    /// are among those the record settled. Nothing before a choice found a threshold that stands.
+    ///
+    /// # Panics
+    /// As [`Decider::similar_elements`].
+    pub fn similar_elements(
+        &self,
+        decider: &Decider,
+        record: &str,
+        attribute: &str,
+        values: &BTreeMap<String, String>,
+        sets: &BTreeMap<String, Vec<String>>,
+    ) -> Vec<ElementAnswer> {
+        let promise = self.tuning.promise_of(attribute, Source::SimilarRecord);
+        decider
+            .similar_elements(&self.schema, record, attribute, values, sets)
+            .into_iter()
+            .map(|e| ElementAnswer {
+                value: e.value,
+                share: e.share,
+                promise,
+            })
+            .collect()
     }
 
     /// Experimental. The edition of the code lists the keeper keeps records of ([`Keep::restart_on_form_version`]) — the
@@ -320,6 +376,9 @@ impl Keeper {
                 }
             });
         }
+        for attribute in self.elements.keys() {
+            schema = schema.derived(attribute, |a| a.memory_threshold = None);
+        }
         self.schema = schema;
         self.chosen.clear();
         self.first.clear();
@@ -393,7 +452,15 @@ impl Keeper {
     /// of it ([`DecisionRecord::coarse`]), with whether the value layers answered first at the thresholds the schema held
     /// when the record was replayed.
     pub fn rechoose_with(&mut self, sink: &mut dyn FnMut(&DecisionRecord)) -> &Tuning {
-        if self.replays.values().any(|r| !self.carries_on(r)) {
+        if self
+            .replays
+            .values()
+            .any(|r| !self.carries_on(&r.state.last, r.through))
+            || self
+                .elements
+                .values()
+                .any(|r| !self.carries_on(&r.state.last, r.through))
+        {
             self.restart();
         }
 
@@ -496,6 +563,22 @@ impl Keeper {
             }
         }
 
+        for (attribute, replay) in &mut self.elements {
+            carry_on_elements(
+                &mut replay.state,
+                &mut replay.memory,
+                &self.schema,
+                attribute,
+                &self.records[replay.through..],
+                choice.counting,
+            );
+            replay.through = self.records.len();
+            let thresholds = element_layers(&replay.state, choice);
+            let threshold = thresholds.memory.chosen.as_ref().map(|c| c.threshold);
+            schema = schema.derived(attribute, |a| a.memory_threshold = threshold);
+            chosen.insert(attribute.clone(), thresholds);
+        }
+
         let mut tuning = Tuning::capture(&schema, self.records.len(), self.keep.target_precision);
         for (attribute, thresholds) in &chosen {
             tuning.promise(attribute, thresholds);
@@ -515,11 +598,11 @@ impl Keeper {
     }
 
     /// Whether the records not yet replayed all come after the last the replay went through.
-    fn carries_on(&self, replay: &Replay) -> bool {
-        let Some((at, id)) = &replay.state.last else {
+    fn carries_on(&self, last: &Option<(i64, String)>, through: usize) -> bool {
+        let Some((at, id)) = last else {
             return true;
         };
-        self.records[replay.through..]
+        self.records[through..]
             .iter()
             .all(|r| (r.settled_at, r.id.as_str()) > (*at, id.as_str()))
     }
@@ -532,6 +615,20 @@ impl Keeper {
             .iter()
             .filter(|a| a.role == AttributeRole::Decided && !a.multiple)
             .map(|a| a.name.clone())
+            .collect();
+        self.elements = self
+            .schema
+            .attributes()
+            .iter()
+            .filter(|a| a.role == AttributeRole::Decided && a.multiple && a.similar_elements)
+            .map(|a| {
+                let replay = ElementReplay {
+                    memory: self.lexical(),
+                    state: ElementState::default(),
+                    through: 0,
+                };
+                (a.name.clone(), replay)
+            })
             .collect();
         self.replays = attributes
             .into_iter()

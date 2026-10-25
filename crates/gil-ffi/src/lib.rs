@@ -1562,7 +1562,8 @@ pub unsafe extern "C" fn gil_tuning_stale(
     })
 }
 
-/// A keeper of `schema` with nothing settled, choosing for every decided attribute that takes one value as `options`
+/// A keeper of `schema` with nothing settled, choosing for every decided attribute that takes one value — and, for one
+/// that takes several and is answered by similar elements, its memory threshold — as `options`
 /// says (JSON — `target_precision`, `minimum_answered`, `counting`, `rule`, and `threads` for its replays, as for
 /// `gil_select_layers`, and the experimental `first_of_batch`, `restart_on_form_version`, `value_tails` and
 /// `watch_realized`), handed out
@@ -1718,6 +1719,56 @@ pub unsafe extern "C" fn gil_keeper_unseen_mass(
             Value::Null,
             |m| json!({"once": m.once, "settled": m.settled, "mass": m.mass()}),
         );
+        unsafe { result(&value, result_len) }
+    })
+}
+
+/// Experimental. Keeps as the result the elements of `attribute`, which takes several values and is answered by similar
+/// elements (`"similar_elements": true`), that the similar record layer offers for record `record_id` — a JSON array of
+/// `{"value": …, "share": …, "promise": …}`, most shared first, each element judged on its own at the memory threshold the
+/// keeper last chose, and `promise` the precision promised for one element offered (`null` before a choice recorded one).
+/// `values` is a JSON object of strings and `sets` a JSON object of string lists, or empty for none; what `sets` holds
+/// for `attribute` is not evidence. The array is empty without a threshold. An attribute not answered by similar
+/// elements is a contract violation (`GIL_PANIC`).
+///
+/// # Safety
+/// `keeper` and `decider` are live handles; the texts are valid for the call; `result_len` points to one writable
+/// `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_keeper_similar_elements(
+    keeper: *const GilKeeper,
+    decider: *const GilDecider,
+    record_id: GilStr,
+    attribute: GilStr,
+    values: GilStr,
+    sets: GilStr,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        if result_len.is_null() {
+            return Err(argument("result_len is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let keeper = &unsafe { live(keeper) }?.keeper;
+        let decider = &unsafe { live(decider) }?.decider;
+        let record_id = unsafe { text(record_id, "record_id") }?;
+        let attribute = unsafe { text(attribute, "attribute") }?;
+        let values = unsafe { text(values, "values") }?;
+        let sets = unsafe { text(sets, "sets") }?;
+        let values: BTreeMap<String, String> = serde_json::from_str(values)
+            .map_err(|e| argument(format!("values are a JSON object of strings: {e}")))?;
+        let sets: BTreeMap<String, Vec<String>> = if sets.trim().is_empty() {
+            BTreeMap::new()
+        } else {
+            serde_json::from_str(sets)
+                .map_err(|e| argument(format!("sets are a JSON object of string lists: {e}")))?
+        };
+        keeper
+            .schema()
+            .check_placement(&values, &sets)
+            .map_err(|m| input(format!("record '{record_id}': {m}")))?;
+        let found = keeper.similar_elements(decider, record_id, attribute, &values, &sets);
+        let value = serde_json::to_value(found).expect("elements serialize");
         unsafe { result(&value, result_len) }
     })
 }

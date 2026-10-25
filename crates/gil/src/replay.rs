@@ -2235,6 +2235,173 @@ pub(crate) fn carry_on(
     ) = (steps, remembered, cases, case_of, order);
 }
 
+/// Where a replay of the similar record layer of an attribute that takes several values stands: the answers it would
+/// have given at some threshold, the elements sought, the records the record memory holds and the case each represents,
+/// how many records it has gone through, and the last of them in settlement order.
+#[derive(Default)]
+pub(crate) struct ElementState {
+    answers: Vec<Answer>,
+    lookups: usize,
+    lookup_weight: f64,
+    remembered: usize,
+    cases: HashMap<String, String>,
+    case_of: HashMap<String, String>,
+    pub(crate) order: usize,
+    pub(crate) last: Option<(i64, String)>,
+}
+
+/// Experimental. Chooses the threshold of `attribute`'s similar record layer, which answers an attribute that takes
+/// several values by the share of the nearest records that hold each element ([`crate::schema::Attribute::similar_elements`]),
+/// by replaying `records` through `memory`, which must be empty and configured as the one in use. Each record, in
+/// settlement order, is asked about before it is put in — with the evidence of the values that had arrived before the
+/// attribute, none of its own chosen — and every element offered counts as one answer at its share of the vote, right
+/// when the record settled it. The record memory keeps one record per case, the latest settled. The threshold is chosen
+/// on those answers as [`select_layers`] chooses the memory threshold: `lookups` counts the elements the records settled,
+/// and the promise is about one element at a time, not about a whole set. A value the application filled is neither asked
+/// about nor remembered.
+///
+/// # Panics
+/// When `target_precision` is outside (0, 1], `minimum_answered` is 0, or the attribute is not a decided attribute
+/// answered by similar elements.
+pub fn select_similar_elements(
+    memory: &mut LexicalMemory,
+    schema: &Schema,
+    attribute: &str,
+    records: &[Record],
+    choice: Choice,
+) -> ThresholdReplay {
+    choice.check();
+    let mut state = ElementState::default();
+    carry_on_elements(
+        &mut state,
+        memory,
+        schema,
+        attribute,
+        records,
+        choice.counting,
+    );
+    element_layers(&state, choice).memory
+}
+
+/// The layers a replay of the similar record layer of an attribute that takes several values chose: the key layer's
+/// replay left empty, the memory's chosen on the elements.
+pub(crate) fn element_layers(state: &ElementState, choice: Choice) -> LayerThresholds {
+    let memory = fit_recent(
+        &state.answers,
+        state.lookups,
+        state.lookup_weight,
+        state.order,
+        choice.target_precision,
+        choice.minimum_answered,
+    );
+    LayerThresholds {
+        key: ThresholdReplay {
+            chosen: None,
+            most_precise: None,
+            lookups: 0,
+            candidates: 0,
+            keys: None,
+        },
+        memory,
+        batches: None,
+        value_tails: None,
+        calibration: None,
+    }
+}
+
+/// Carries a replay of the similar record layer of an attribute that takes several values on through `records`, all
+/// settled after those it has gone through, with the memory it left — the same answers, and the same memory, as replaying
+/// them all from the start.
+pub(crate) fn carry_on_elements(
+    state: &mut ElementState,
+    memory: &mut LexicalMemory,
+    schema: &Schema,
+    attribute: &str,
+    records: &[Record],
+    counting: Option<&[SettlementKind]>,
+) {
+    let definition = schema.attribute(attribute);
+    assert!(
+        definition.role == AttributeRole::Decided
+            && definition.multiple
+            && definition.similar_elements,
+        "'{attribute}' is not answered by similar elements"
+    );
+    let task = format!("{}/{attribute}", schema.name());
+    let votes = definition.similar_votes;
+    let mut ordered: Vec<Record> = records.iter().map(Record::remembered).collect();
+    ordered.sort_by(|a, b| {
+        a.settled_at
+            .cmp(&b.settled_at)
+            .then_with(|| a.id.cmp(&b.id))
+    });
+
+    if let (Some(last), Some(first)) = (&state.last, ordered.first()) {
+        assert!(
+            (first.settled_at, first.id.as_str()) > (last.0, last.1.as_str()),
+            "records carried on with must be settled after those replayed"
+        );
+    }
+    for record in &ordered {
+        state.order += 1;
+        // A record settled again is not its own evidence.
+        if let Some(own) = state.case_of.remove(&record.id) {
+            memory.forget(&task, &record.id);
+            state.cases.remove(&own);
+            state.remembered -= 1;
+        }
+
+        let settled = similar_vote::elements_of(record.sets.get(attribute));
+        let Some(joined) = similar_vote::join_elements(&settled) else {
+            continue;
+        };
+
+        // Asked with what the attribute's last suggestion saw; remembered, below, with everything but its own.
+        let before = arrived(schema, record, attribute, &record.values);
+        let before_sets = arrived(schema, record, attribute, &record.sets);
+        let weight = weight(record, attribute, counting);
+        if state.remembered > 0 && weight > 0.0 {
+            state.lookups += settled.len();
+            state.lookup_weight += settled.len() as f64 * weight;
+            let evidence = schema.evidence(attribute, &before, &before_sets);
+            if !evidence.is_empty() {
+                let found = memory.nearest(&task, &evidence, votes);
+                for (element, share) in similar_vote::element_shares(&found, votes) {
+                    if definition.admits_in(&element, &before, &before_sets) {
+                        state.answers.push(Answer {
+                            score: share,
+                            correct: settled.binary_search(&element).is_ok(),
+                            weight,
+                            order: state.order,
+                            key: None,
+                            caught: false,
+                        });
+                    }
+                }
+            }
+        }
+
+        let mut own = record.sets.clone();
+        own.remove(attribute);
+        let evidence = schema.evidence(attribute, &record.values, &own);
+        let case = text::normalize(&evidence);
+        if let Some(earlier) = state.cases.get(&case) {
+            memory.forget(&task, earlier);
+            state.case_of.remove(earlier);
+            state.remembered -= 1;
+        }
+
+        state.cases.insert(case.clone(), record.id.clone());
+        state.case_of.insert(record.id.clone(), case);
+        memory.remember(&task, &record.id, &evidence, &joined);
+        state.remembered += 1;
+    }
+
+    if let Some(last) = ordered.last() {
+        state.last = Some((last.settled_at, last.id.clone()));
+    }
+}
+
 /// The similarity choice over the given lookups: every one counts, answered or not. With more than one voter each
 /// threshold carries the similarity floor of the answers it rests on.
 fn similarity(

@@ -156,6 +156,16 @@ class Keeper:
     def unseen_mass(self, attribute: str) -> str | None:
         """Experimental. The share of `attribute`'s next settled values likely to be new, as JSON, or `None`."""
 
+    def similar_elements(
+        self,
+        decider: Decider,
+        record_id: str,
+        attribute: str,
+        values_json: str,
+        sets_json: str | None = None,
+    ) -> str:
+        """Experimental. The elements of `attribute` the similar record layer offers, as JSON."""
+
     def form_version(self) -> str | None:
         """The edition of the code lists the keeper keeps records of, or `None`. Experimental."""
 
