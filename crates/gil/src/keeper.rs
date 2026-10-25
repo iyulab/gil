@@ -86,6 +86,25 @@ pub const REALIZED_WINDOW: usize = 100;
 /// Experimental. How far under the target the answers in the window may fall before [`Keep::watch_realized`] says so.
 pub const REALIZED_MARGIN: f64 = 0.15;
 
+/// Experimental. How much of an attribute's next settled value is likely one no record settled yet — the Good-Turing
+/// estimate: the values settled on exactly one record, over the records that settled one ([`Keeper::unseen_mass`]).
+/// Answers never offer such a value, so this is the share of the next records the layers cannot answer right.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct UnseenMass {
+    /// The values settled on exactly one record.
+    pub once: usize,
+    /// The records that settled a value.
+    pub settled: usize,
+}
+
+impl UnseenMass {
+    /// `once` over `settled`.
+    pub fn mass(&self) -> f64 {
+        self.once as f64 / self.settled as f64
+    }
+}
+
 impl Keep {
     /// Thresholds for `target_precision`, resting on at least ten answers, counting every settlement, by
     /// [`ThresholdRule::EveryBand`].
@@ -222,6 +241,30 @@ impl Keeper {
     /// How many records were settled, a record settled again counting again — what staleness is counted on.
     pub fn settled(&self) -> usize {
         self.records.len()
+    }
+
+    /// Experimental. The share of `attribute`'s next settled values likely to be ones no record settled yet
+    /// ([`UnseenMass`]), counted on the records the keeper holds — the last settlement of each, leaving out a value the
+    /// application filled, as the memories do. `None` for an attribute the keeper does not choose for, or before a record
+    /// settled it. It changes nothing the keeper chooses or the decider answers.
+    pub fn unseen_mass(&self, attribute: &str) -> Option<UnseenMass> {
+        if !self.replays.contains_key(attribute) {
+            return None;
+        }
+        let mut last: BTreeMap<&str, Option<String>> = BTreeMap::new();
+        for record in &self.records {
+            let kept = record.remembered().values.get(attribute).cloned();
+            last.insert(record.id.as_str(), kept);
+        }
+        let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+        for value in last.into_values().flatten() {
+            *counts.entry(value).or_default() += 1;
+        }
+        let settled: usize = counts.values().sum();
+        (settled > 0).then(|| UnseenMass {
+            once: counts.values().filter(|&&n| n == 1).count(),
+            settled,
+        })
     }
 
     /// Takes settled records: `decider` learns them ([`Decider::rebuild`]) and the next choice replays them. Records may
@@ -514,7 +557,7 @@ impl Keeper {
 
 #[cfg(test)]
 mod tests {
-    use super::{Keep, Keeper, REALIZED_WINDOW};
+    use super::{Keep, Keeper, REALIZED_WINDOW, UnseenMass};
     use crate::decider::{Decider, Source};
     use crate::key_memory::KeyMemory;
     use crate::lexical_memory::LexicalMemory;
@@ -1011,6 +1054,57 @@ mod tests {
             )
         };
         assert_eq!(answers(&through), answers(&rebuilt));
+    }
+
+    #[test]
+    fn the_unseen_mass_counts_values_settled_once_on_the_last_settlement_of_each_record() {
+        let mut keeper = Keeper::new(schema(), Keep::new(0.8));
+        let mut decider = Decider::new(KeyMemory::default(), None);
+        assert_eq!(keeper.unseen_mass("team"), None);
+        let record = |id: &str, team: &str, at: i64| Record {
+            id: id.into(),
+            values: BTreeMap::from([("product".into(), "p".into()), ("team".into(), team.into())]),
+            settled_at: at,
+            ..Record::default()
+        };
+        let mut filled = record("f", "hardware", 5);
+        filled
+            .settlements
+            .insert("team".into(), SettlementKind::Fill);
+        keeper.settle(
+            &mut decider,
+            &[
+                record("a", "network", 1),
+                record("b", "network", 2),
+                record("c", "billing", 3),
+                record("d", "auth", 4),
+                filled,
+                // settled again: its last settlement counts, once
+                record("d", "network", 6),
+            ],
+        );
+        let mass = keeper
+            .unseen_mass("team")
+            .expect("records settled the team");
+        // network ×3 (a, b, d) · billing ×1 — the filled hardware and d's earlier auth do not count
+        assert_eq!(
+            mass,
+            UnseenMass {
+                once: 1,
+                settled: 4
+            }
+        );
+        assert!((mass.mass() - 0.25).abs() < 1e-12);
+        assert_eq!(
+            keeper.unseen_mass("queue"),
+            None,
+            "no record settled the queue"
+        );
+        assert_eq!(
+            keeper.unseen_mass("product"),
+            None,
+            "an observed attribute is not kept"
+        );
     }
 
     #[test]

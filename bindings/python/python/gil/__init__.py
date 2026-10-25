@@ -901,6 +901,15 @@ class Keeper:
         text = self._inner.stale()
         return None if text is None else cast(dict[str, Any] | str, json.loads(text))
 
+    def unseen_mass(self, attribute: str) -> dict[str, Any] | None:
+        """Experimental. The share of ``attribute``'s next settled values likely to be ones no record settled yet —
+        ``{"once": ..., "settled": ..., "mass": ...}``, the values settled on exactly one record over the records that
+        settled one (the Good-Turing estimate), on the last settlement of each and leaving out what the application
+        filled. Answers never offer such a value. ``None`` for an attribute the keeper does not choose for, or before a
+        record settled it."""
+        text = self._inner.unseen_mass(attribute)
+        return None if text is None else cast(dict[str, Any], json.loads(text))
+
     @property
     def settled(self) -> int:
         """How many records were settled, a record settled again counting again."""

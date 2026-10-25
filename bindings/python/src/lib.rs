@@ -566,6 +566,17 @@ impl Keeper {
         self.inner.settled()
     }
 
+    /// Experimental. The share of `attribute`'s next settled values likely to be ones no record settled yet, as JSON
+    /// `{"once", "settled", "mass"}`, or `None` for an attribute the keeper does not choose for or before a record
+    /// settled it.
+    fn unseen_mass(&self, attribute: &str) -> PyResult<Option<String>> {
+        usable(self.broken, "keeper")?;
+        Ok(self
+            .inner
+            .unseen_mass(attribute)
+            .map(|m| json!({"once": m.once, "settled": m.settled, "mass": m.mass()}).to_string()))
+    }
+
     /// The edition of the code lists the keeper keeps records of, or `None`. Experimental.
     fn form_version(&self) -> Option<String> {
         self.inner.form_version().map(str::to_owned)

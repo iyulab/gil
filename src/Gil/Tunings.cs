@@ -243,6 +243,14 @@ public abstract record Stale
     public sealed record Realized(string Attribute, int Right, int Judged) : Stale;
 }
 
+/// <summary>How much of an attribute's next settled values is likely to be values no record settled yet
+/// (<see cref="Keeper.UnseenMass"/>).</summary>
+/// <param name="Once">The values settled on exactly one record.</param>
+/// <param name="Settled">The records that settled a value.</param>
+/// <param name="Mass"><paramref name="Once"/> over <paramref name="Settled"/>.</param>
+[Experimental(Stability.UnseenMass, UrlFormat = Stability.Url)]
+public sealed record UnseenMass(int Once, int Settled, double Mass);
+
 /// <summary>One attribute's counts of how its answers fared.</summary>
 /// <param name="Decisions">Decisions asked about.</param>
 /// <param name="Answered">Of them, answered (a trusted answer shown).</param>

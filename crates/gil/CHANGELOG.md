@@ -40,6 +40,10 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Added
 
+- **Experimental: `Keeper::unseen_mass`.** The share of an attribute's next settled values likely to be ones no record
+  settled yet (`UnseenMass` — the values settled on exactly one record over the records that settled one, the
+  Good-Turing estimate). Python `Keeper.unseen_mass(attribute)`; the C ABI `gil_keeper_unseen_mass`. It changes nothing
+  the keeper chooses or the decider answers.
 - **Experimental: scoring a value by its strongest key.** `Attribute::key_combine` set to `KeyCombine::Max` has
   the key layer score a value by its strength under its strongest key rather than by its strengths under every key
   added up, so an attribute that repeats another leaves the answers where they were. `KeyCombine::Sum`, the default,

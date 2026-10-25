@@ -9,6 +9,10 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Added
 
+- **Experimental (`GIL0012`): how much of the next settled values is likely to be new.** `Keeper.UnseenMass(attribute)`
+  gives `UnseenMass`: the values settled on exactly one record over the records that settled one (the Good-Turing
+  estimate) — the share of the next records the layers cannot answer right, since answers never offer such a value.
+  It changes nothing the keeper chooses or the decider answers.
 - **Experimental (`GIL0011`): scoring a value by its strongest key.** `AttributeDefinition.KeyCombine` set to
   `KeyCombine.Max` has the key layer score a value by its strength under its strongest key rather than by its strengths
   under every key added up, so an attribute that repeats another leaves the answers where they were. `KeyCombine.Sum`,

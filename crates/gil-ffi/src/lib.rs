@@ -1694,6 +1694,34 @@ pub unsafe extern "C" fn gil_keeper_stale(keeper: *const GilKeeper, result_len: 
     })
 }
 
+/// Experimental. Keeps as the result the share of `attribute`'s next settled values likely to be ones no record settled
+/// yet — `{"once": …, "settled": …, "mass": …}`, the values settled on exactly one record over the records that settled
+/// one, on the last settlement of each and leaving out what the application filled — or `null` for an attribute the
+/// keeper does not choose for, or before a record settled it.
+///
+/// # Safety
+/// `keeper` is a live handle; `attribute` is valid for the call; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_keeper_unseen_mass(
+    keeper: *const GilKeeper,
+    attribute: GilStr,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        if result_len.is_null() {
+            return Err(argument("result_len is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let keeper = &unsafe { live(keeper) }?.keeper;
+        let attribute = unsafe { text(attribute, "attribute") }?;
+        let value = keeper.unseen_mass(attribute).map_or(
+            Value::Null,
+            |m| json!({"once": m.once, "settled": m.settled, "mass": m.mass()}),
+        );
+        unsafe { result(&value, result_len) }
+    })
+}
+
 /// How many records the keeper took, a record settled again counting again; 0 for null.
 ///
 /// # Safety

@@ -174,6 +174,9 @@ internal static unsafe partial class Native
     [LibraryImport(Library, EntryPoint = "gil_keeper_stale")]
     internal static partial int KeeperStale(KeeperHandle keeper, nuint* resultLen);
 
+    [LibraryImport(Library, EntryPoint = "gil_keeper_unseen_mass")]
+    internal static partial int KeeperUnseenMass(KeeperHandle keeper, Str attribute, nuint* resultLen);
+
     [LibraryImport(Library, EntryPoint = "gil_keeper_settled")]
     internal static partial nuint KeeperSettled(KeeperHandle keeper);
 

@@ -153,6 +153,9 @@ class Keeper:
     def settled(self) -> int:
         """How many records were settled, a record settled again counting again."""
 
+    def unseen_mass(self, attribute: str) -> str | None:
+        """Experimental. The share of `attribute`'s next settled values likely to be new, as JSON, or `None`."""
+
     def form_version(self) -> str | None:
         """The edition of the code lists the keeper keeps records of, or `None`. Experimental."""
 

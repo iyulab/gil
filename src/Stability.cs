@@ -67,6 +67,12 @@ internal static class Stability
     /// </summary>
     public const string KeyCombine = "GIL0011";
 
+    /// <summary>
+    /// The unseen mass in the decision core (package <c>Gil</c>): a keeper that says, attribute by attribute, how much of
+    /// the next settled values is likely to be values no record settled yet.
+    /// </summary>
+    public const string UnseenMass = "GIL0012";
+
     /// <summary>Where the stability of each surface is described.</summary>
     public const string Url = "https://github.com/iyulab/gil/blob/main/README.md#stability";
 }

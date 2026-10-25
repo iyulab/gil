@@ -97,6 +97,7 @@ type may change shape or be removed in any release without a migration note.
 | `GIL0009` | Value tails in the decision core: a layers selection's report, value by settled value, of how the chosen thresholds answered (`SelectionOptions.ValueTails`, `LayerThresholds.ValueTails`, `ValueTail`) |
 | `GIL0010` | Watching the realized precision in the decision core: a `Keeper` that says, as a stale reason, when the answers stopped keeping the promise (`SelectionOptions.WatchRealized`, `Stale.Realized`) |
 | `GIL0011` | Key combination in the decision core: an attribute whose key layer scores a value by its strongest key alone (`AttributeDefinition.KeyCombine`, `KeyCombine`) |
+| `GIL0012` | The unseen mass in the decision core: a `Keeper` that says how much of an attribute's next settled values is likely to be values no record settled yet (`Keeper.UnseenMass`, `UnseenMass`) |
 
 Suppress the ids of what you use, in the project file or around the code:
 
@@ -461,6 +462,13 @@ less 0.15. It needs the settlement kinds; records settled with none, or filled b
 again does not mend a revision: name the new edition. On public food inspections and public workplace injury reports, a
 window of 100 at a target of 0.9 fell under 0.75 within 54 and 163 records of the revision, with no edition named; on
 thirteen public streams with no revision it never did. On public device recalls with no revision it said so once, on a nine-day run of recalls from one firm that the memory answered wrongly; look at what the window holds before naming an edition.
+
+Answers never offer a value no record settled yet, so where new values keep coming the answers stay right and fewer
+records are answered. `Keeper.UnseenMass(attribute)` (experimental, `GIL0012`) says how much: the values settled on
+exactly one record over the records that settled one (the Good-Turing estimate), on the last settlement of each and
+leaving out what the application filled. It changes nothing the keeper chooses or the decider answers. Taken at each choice of thresholds over 50,000 records, it was off from the share of new values among the records
+settled until the next choice by 0.021 on public device event reports, 0.040 on public adverse event reports and
+0.0004 on public food inspections, on average, and by less than 0.01 either way over all the choices.
 
 A promise is an average over an attribute's values, and a value the layers keep taking for another can sit far below
 it while the average holds. Set `SelectionOptions.ValueTails` (experimental, `GIL0009`) for `Replay.SelectLayers` or the

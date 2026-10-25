@@ -119,6 +119,28 @@ public sealed class Keeper : IDisposable
         return found == "null" ? null : JsonSerializer.Deserialize(found, CoreJson.Default.Stale);
     }
 
+    /// <summary>The share of <paramref name="attribute"/>'s next settled values likely to be values no record settled
+    /// yet — the values settled on exactly one record over the records that settled one (the Good-Turing estimate), on
+    /// the last settlement of each and leaving out what the application filled. Answers never offer such a value. Null
+    /// for an attribute the keeper does not choose for, or before a record settled it.</summary>
+    [Experimental(Stability.UnseenMass, UrlFormat = Stability.Url)]
+    public unsafe UnseenMass? UnseenMass(string attribute)
+    {
+        ArgumentNullException.ThrowIfNull(attribute);
+        var name = new Utf8(attribute);
+        string found;
+        nuint length;
+        lock (sync)
+        {
+            fixed (byte* n = &name.Pin())
+            {
+                found = Native.Result(Native.KeeperUnseenMass(Handle, name.At(n), &length));
+            }
+        }
+
+        return found == "null" ? null : JsonSerializer.Deserialize(found, CoreJson.Default.UnseenMass);
+    }
+
     /// <summary>Chooses every attribute's thresholds again on all the records settled — replaying only those settled
     /// since the last choice where it can — puts them on <see cref="Schema"/> and captures <see cref="Tuning"/> with
     /// their promises.</summary>
