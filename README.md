@@ -35,7 +35,10 @@ The precision a replay promises can still be optimistic, most of all where settl
 Measure it on your own saved records before relying on it — [Choosing what to trust](#choosing-what-to-trust)
 says how.
 
-It is not the right tool for an attribute whose value the other attributes do not decide (free text, a new name), for a form
+A category decided by one piece of text — the team a message goes to, the intent of an utterance — is the same shape;
+[sorting text into categories](https://github.com/iyulab/gil/blob/main/bindings/python/README.md#sorting-text-into-categories) shows it.
+
+It is not the right tool for an attribute whose value nothing recorded decides (a new name, a free-text note), for a form
 nobody settles (memory then stays empty), or for choosing between models (a router does that).
 
 ## Layout
