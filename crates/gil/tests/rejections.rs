@@ -119,6 +119,12 @@ fn answer_one(attribute: &str, known: &[(&str, &str)], typed: Option<&str>) {
 // --- The similar record layer's selections ---
 
 #[test]
+#[should_panic(expected = "choose the key layer's threshold with select_key_fields")]
+fn the_refusal_names_where_the_key_layers_threshold_is_chosen() {
+    layers("topics", choice(0.9));
+}
+
+#[test]
 #[should_panic(
     expected = "'topics' takes several values; the similar record layer does not answer it"
 )]

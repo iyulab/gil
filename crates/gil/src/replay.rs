@@ -1085,6 +1085,15 @@ struct CoarseStep {
 /// The share of a threshold's answers whose nearest voter may fall below its similarity floor.
 const FLOOR_SHARE: f64 = 0.01;
 
+/// Why the layer selections refuse an attribute that takes several values, and where its key layer's threshold is
+/// chosen instead.
+fn several_values_refusal(attribute: &str) -> String {
+    format!(
+        "'{attribute}' takes several values; the similar record layer does not answer it — choose the key layer's \
+         threshold with select_key_fields"
+    )
+}
+
 /// Chooses `attribute`'s key threshold and memory threshold together by replaying `records` through both memories, which
 /// must be empty and configured as the ones in use. Each record, in settlement order, is asked about before it is put
 /// in: the key layer as [`select_key_threshold`] asks it, and the similar record layer with the evidence of the values
@@ -1122,7 +1131,8 @@ pub fn select_layers(
     );
     assert!(
         !definition.multiple,
-        "'{attribute}' takes several values; the similar record layer does not answer it"
+        "{}",
+        several_values_refusal(attribute)
     );
 
     let mut ignore = |_: &DecisionRecord| {};
@@ -1879,7 +1889,8 @@ pub fn select_coarse_with(
     );
     assert!(
         !definition.multiple,
-        "'{attribute}' takes several values; the similar record layer does not answer it"
+        "{}",
+        several_values_refusal(attribute)
     );
     assert!(
         definition.coarse.is_some(),

@@ -8,6 +8,10 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Changed
 
+- **The refusal of an attribute that takes several values names the way on.** `select_layers` (and the pooled and coarse
+  selections, in every binding) said only that the similar record layer does not answer such an attribute. It now adds
+  that the key layer's threshold for it is chosen with `select_key_fields`. The message still begins with the old text.
+
 - **Breaking: `replay::select_layers` takes `LayerOptions`, and `select_layers_by_rule`, `select_layers_with` and
   `select_layers_by_rule_with` are gone.** The four were one choice with the rule and the decision-record sink each
   optional. Pass `LayerOptions::default()` for what `select_layers` did, `LayerOptions { rule, ..Default::default() }`
