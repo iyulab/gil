@@ -213,9 +213,11 @@ one, or whose category has never been settled before, is left to the person; Gil
 settled. When the category values share a leading part, `"coarse": {"prefix": 2}` lets it give the group when it cannot
 give the value ([Choosing what to trust](https://github.com/iyulab/gil/blob/main/README.md#choosing-what-to-trust)).
 
-An attribute that takes several values — tags — is settled with `sets` and declared with `"multiple": true`. In this
-version the similar record layer does not answer it: `select_layers` refuses it, and only the key layer can, whose
-threshold `select_key_fields` chooses.
+An attribute that takes several values — tags — is settled with `sets` and declared with `"multiple": true`. The key
+layer answers it, with the threshold `select_key_fields` chooses; `select_layers` refuses it, since it chooses the
+similar record layer's. That layer answers tags element by element when the attribute also says
+`"similar_elements": true` (experimental, above). `keeper.unseen_mass` (experimental, above) estimates how large a
+share of the records still to come will settle a value no earlier record had — the records Gil leaves to the person.
 
 ## Answering a record while its values arrive
 
