@@ -173,6 +173,50 @@ thresholds, _ = gil.select_layers(schema, "team", records, target_precision=0.8)
 check = thresholds.get("batches")
 ```
 
+## Sorting text into categories
+
+A category decided by one piece of text — which team a message goes to, which intent an utterance has, which topic a note
+belongs to — is the same shape with one typed attribute. The layer that answers it is the similar record layer: the
+nearest settled records vote, compared by their characters with no model and no tokenizer. The key layer needs another
+attribute to agree on, so it has nothing to say here.
+
+```python
+import gil
+
+definition = {
+    "name": "inbox",
+    "attributes": [
+        {"name": "text", "role": "observed"},
+        {"name": "category", "role": "decided"},
+    ],
+}
+records = gil.read_records("settled.jsonl")  # one line per message a person sorted, in the order they did it
+layers, _ = gil.select_layers(
+    gil.Schema.from_dict(definition), "category", records, target_precision=0.9, decisions=False
+)
+similar = layers["memory"]["chosen"]  # None when no threshold held the target
+print(similar["answer_rate"] if similar else None)  # the share of lookups it answered at that precision
+
+category = next(a for a in definition["attributes"] if a["name"] == "category")
+category["memory_threshold"] = similar["threshold"]
+category["memory_floor"] = similar["similarity_floor"]
+schema = gil.Schema.from_dict(definition)
+
+decider = gil.Decider(schema, records)
+answer = decider.answer(schema, "m9000", "category", {"text": "i want my money back for the last order"})
+print(answer["answered"], answer["candidates"][0]["value"] if answer["answered"] else None, answer["source"])
+```
+
+A line of `settled.jsonl` is `{"id": "m1", "settled_at": "2026-09-01T09:00:00.0000000+00:00", "values": {"text": "where is my refund", "category": "billing"}, "settlements": {"category": "Enter"}}`
+— a settlement kind is a string; the person typed the category, so `Enter`. A message whose text is not near any settled
+one, or whose category has never been settled before, is left to the person; Gil answers only with values people have
+settled. When the category values share a leading part, `"coarse": {"prefix": 2}` lets it give the group when it cannot
+give the value ([Choosing what to trust](https://github.com/iyulab/gil/blob/main/README.md#choosing-what-to-trust)).
+
+An attribute that takes several values — tags — is settled with `sets` and declared with `"multiple": true`. In this
+version the similar record layer does not answer it: `select_layers` refuses it, and only the key layer can, whose
+threshold `select_key_fields` chooses.
+
 ## Answering a record while its values arrive
 
 A decider holds the settled records; an open record asks it each time a value arrives or is settled, and hands back
