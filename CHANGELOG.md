@@ -5,6 +5,14 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 [crates/gil/CHANGELOG.md](crates/gil/CHANGELOG.md), and the review statistics (`iyulab-gil-review` and its .NET binding
 `Gil.Review`) theirs in [crates/gil-review/CHANGELOG.md](crates/gil-review/CHANGELOG.md).
 
+## Unreleased
+
+### Fixed
+
+- **`Usage.Count` counts a `Reject` settlement as turned down.** A record that names the answer in view and no
+  settlement for the attribute was counted as turned down; one that kept the settlement as `Reject` was counted
+  nowhere. Both are turned down now.
+
 ## 0.27.0
 
 ### Added
