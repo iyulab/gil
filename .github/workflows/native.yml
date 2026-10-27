@@ -29,7 +29,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: native-${{ github.ref }}
+  # github.workflow is the caller's name when a release workflow calls this one, so a run it calls and a run a push
+  # starts on the same ref take turns in separate groups instead of cancelling each other.
+  group: native-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
