@@ -112,6 +112,10 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 - **What a promise means in operations terms.** The README says how sure a promise is (one standard error — a
   one-sided 84% bound; `Pooled`, 95%) and reads the usage counts as an automation rate, an error rate, an acceptance
   rate and an override rate; the Python README too.
+- **The same quantities in the words of neighbouring fields.** The READMEs read the automation rate as selective
+  prediction's coverage, the answered share as a match rate with the rest going to clerical review, the target
+  precision as the error tolerance and the chosen threshold as the cutoff, and the replay of settled records as the
+  validation sample. No figures.
 
 ## 0.9.0
 

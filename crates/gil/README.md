@@ -39,6 +39,12 @@ that the .NET library on NuGet, `Gil`, is checked against — `Gil` runs on this
   automation rate is `answer_rate()`, the error rate 1 − `realized()`, the acceptance rate `accepted ÷ answered` and the
   override rate `(corrected + rejected) ÷ answered`. Acceptance and overrides are read off answers people saw; put
   `realized()`, which counts unseen checks at their weight, beside `promise()`.
+  The same quantities go by other names elsewhere. Answering only above a threshold is selective prediction, whose
+  coverage is the automation rate and whose selective risk is the error rate of the answers. Record linkage and
+  automated coding in official statistics call the answered share the match rate and send the rest to clerical review
+  (a clerical referral); a document review that runs a classifier fixes a cutoff score and checks it on a validation
+  sample. Read across: the target precision is the error tolerance those fields state first, the chosen threshold is
+  their cutoff, and the replay of settled records is their validation sample.
 - **Keeper** — `keeper::Keeper` keeps the loop as records arrive: `settle` puts them into the decider and into the
   next choice, `stale` says when the choice no longer stands, and `rechoose` replays only the records settled since the
   last choice — the same thresholds as `select_layers` on all of them, and a coarse level's as `select_coarse` with

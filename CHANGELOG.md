@@ -86,6 +86,10 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 - **What a promise means in operations terms.** The README says how sure a promise is (one standard error — a
   one-sided 84% bound; `Pooled`, 95%) and reads `AttributeUsage` as an automation rate, an error rate, an acceptance
   rate and an override rate, with `Realized` the one to put beside `Promise`.
+- **The same quantities in the words of neighbouring fields.** The README reads the automation rate as selective
+  prediction's coverage, the answered share as a match rate with the rest going to clerical review, the target
+  precision as the error tolerance and the chosen threshold as the cutoff, and the replay of settled records as the
+  validation sample. No figures.
 - **When to ask a `Keeper` for `Pooled`.** At a 0.9 target on two public streams, a keeper choosing under
   `EveryBand` answered 0.98 right; under `Pooled` it answered 1.25 and 1.65 times as often, 0.92 right. The README
   gives the numbers beside the two ways to read a target.
