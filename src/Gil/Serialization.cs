@@ -19,6 +19,8 @@ internal sealed record SchemaForm(string Name, IReadOnlyList<AttributeDefinition
 [JsonSerializable(typeof(KeyEvidence))]
 [JsonSerializable(typeof(RecordEvidence))]
 [JsonSerializable(typeof(LayerSelection))]
+[JsonSerializable(typeof(ThresholdReplay))]
+[JsonSerializable(typeof(IReadOnlyList<ScoredDecision>))]
 [JsonSerializable(typeof(KeyFieldsChoice))]
 [JsonSerializable(typeof(IReadOnlyDictionary<string, double>))]
 [JsonSerializable(typeof(LayerThresholds))]

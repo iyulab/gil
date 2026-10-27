@@ -102,6 +102,7 @@ type may change shape or be removed in any release without a migration note.
 | `GIL0011` | Key combination in the decision core: an attribute whose key layer scores a value by its strongest key alone (`AttributeDefinition.KeyCombine`, `KeyCombine`) |
 | `GIL0012` | The unseen mass in the decision core: a `Keeper` that says how much of an attribute's next settled values is likely to be values no record settled yet (`Keeper.UnseenMass`, `UnseenMass`) |
 | `GIL0013` | Similar elements in the decision core: the similar record layer answering an attribute that takes several values, element by element (`AttributeDefinition.SimilarElements`, `Keeper.SimilarElements`, `ElementAnswer`) |
+| `GIL0014` | A threshold for a judge outside Gil, chosen from its scores and what people settled (`Replay.SelectScoreThreshold`, `ScoredDecision`) |
 
 Suppress the ids of what you use, in the project file or around the code:
 
@@ -710,6 +711,16 @@ does not decide the values — tags on a public question site, the set of advers
 reports — no threshold stood at a target of 0.9, and the layer offers nothing. Even where it stands it offers few
 elements: a vehicle complaint is shown almost one element, so the layer reads as "add the sure tags and leave the rest to
 a person", not as a way to complete the set.
+
+**A judge outside Gil** (experimental, `GIL0014`). Any judge that gives a score — a model, a rule — can have a threshold
+chosen the way a memory layer's is, from nothing but its scores and what people settled. Pass
+`Replay.SelectScoreThreshold(decisions, options)` a list of `ScoredDecision`s — an id, when the case was settled, the
+judge's `Score` for its best value (null when it gave none), whether that value was the settled one (`Right`) and a
+`Weight` (1, or one over the draw probability of a checked case) — and read the same `ThresholdReplay` a memory layer
+gets: the lowest score down to which every band of answers met the target, the answer rate, and the `Promise`. Admit the
+judge's answers as trusted at or above `Chosen.Threshold` and show the promise beside them; `Chosen` is null when no
+threshold stands. Only the target precision and the fewest answers of the options are read, and only "a higher score is
+surer" is assumed of the score. It does not choose how often to check the judge or where to send what it will not answer.
 
 **Asking first** (experimental, `GIL0005`). When no layer answers a decided attribute, one more observed value from the
 person — the component a ticket is about, the part a fault was found on — may let one answer, or a class be trusted.

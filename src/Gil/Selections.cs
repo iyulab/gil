@@ -136,6 +136,19 @@ public sealed record ThresholdChoice(
     double Promise,
     double PromiseAnswered);
 
+/// <summary>Experimental. One decision a judge outside Gil — a model, a rule, a person's score — made about a case a
+/// person later settled: how sure it was of its best value and whether that value was the settled one.</summary>
+/// <param name="Id">Names the case; decisions settled at the same instant are taken in the scalar order of their ids.</param>
+/// <param name="SettledAt">When the case was settled; decisions are replayed in this order.</param>
+/// <param name="Score">How sure the judge was of its best value, on its own scale, higher meaning surer; null when it gave
+/// no candidate — it still counts as a decision asked.</param>
+/// <param name="Right">Whether the judge's best value was the settled one; not read when <paramref name="Score"/> is
+/// null.</param>
+/// <param name="Weight">How many decisions this one counts as: 1, or one ÷ its draw probability for a case drawn for a
+/// check the judge did not see settled.</param>
+[Experimental(Stability.ScoreThreshold, UrlFormat = Stability.Url)]
+public sealed record ScoredDecision(string Id, DateTimeOffset SettledAt, double? Score, bool Right = false, double Weight = 1.0);
+
 /// <summary>How the key layer did under one key: the lookups whose best value this key backed most strongly, and how the
 /// chosen threshold treated them.</summary>
 /// <param name="Key">The key, as an answer's evidence names it — <c>attribute: value</c>.</param>

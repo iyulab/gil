@@ -62,6 +62,36 @@ public static class Replay
         Schema schema, string attribute, SettledRecords records) =>
         Read(SelectKeyConcentrationsJson(schema, attribute, records), CoreJson.Default.IReadOnlyDictionaryStringDouble);
 
+    /// <summary>Experimental. The threshold of a judge outside Gil, chosen from its scores and what people settled and
+    /// nothing else: the lowest score down to which every band of its answers met
+    /// <see cref="SelectionOptions.TargetPrecision"/>, with the answer rate and the promise a memory layer gets. Admit the
+    /// judge's answers as trusted at or above <c>Chosen.Threshold</c> and show <c>Chosen.Promise</c> beside them;
+    /// <c>Chosen</c> is null when no threshold stands. Only <see cref="SelectionOptions.TargetPrecision"/> and
+    /// <see cref="SelectionOptions.MinimumAnswered"/> are read. It does not choose how often to check the judge or where to
+    /// send what it will not answer.</summary>
+    /// <exception cref="ArgumentException">The options are out of range, or a score is not finite, or a weight is not
+    /// positive.</exception>
+    [Experimental(Stability.ScoreThreshold, UrlFormat = Stability.Url)]
+    public static ThresholdReplay SelectScoreThreshold(
+        IReadOnlyList<ScoredDecision> decisions, SelectionOptions options) =>
+        Read(SelectScoreThresholdJson(decisions, options), CoreJson.Default.ThresholdReplay);
+
+    /// <summary>The replay of <see cref="SelectScoreThreshold"/> as the core gives it.</summary>
+    internal static unsafe string SelectScoreThresholdJson(
+        IReadOnlyList<ScoredDecision> decisions, SelectionOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(decisions);
+        ArgumentNullException.ThrowIfNull(options);
+        var list = new Utf8(JsonSerializer.Serialize(decisions, CoreJson.Default.IReadOnlyListScoredDecision));
+        var json = new Utf8(Options(options));
+        nuint length;
+        fixed (byte* d = &list.Pin())
+        fixed (byte* o = &json.Pin())
+        {
+            return Native.Result(Native.SelectScoreThreshold(list.At(d), json.At(o), &length));
+        }
+    }
+
     private static T Read<T>(string json, JsonTypeInfo<T> type) =>
         JsonSerializer.Deserialize(json, type)!;
 

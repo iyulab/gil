@@ -9,6 +9,14 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Added
 
+- **Experimental (`GIL0014`): a threshold for a judge outside Gil, from its scores and what people settled.**
+  `Replay.SelectScoreThreshold(decisions, options)` takes `ScoredDecision`s — an id, when the case was settled, the
+  judge's `Score` for its best value (null when it gave none), whether that value was the settled one (`Right`) and a
+  `Weight` — and gives the same `ThresholdReplay` a memory layer gets: the lowest score down to which every band of
+  answers met the target, the answer rate, and the promise. Only "higher is surer" is assumed of the score. Admit the
+  judge's answers as trusted at or above `Chosen.Threshold` and show `Chosen.Promise` beside them. It does not choose how
+  often to check the judge or where to send what it will not answer. The Rust core, Python and the C ABI have it too
+  (see the crate's changelog).
 - **Experimental (`GIL0013`): the similar record layer for an attribute that takes several values.**
   `AttributeDefinition.SimilarElements` on a decided `Multiple` attribute (which then takes a `MemoryThreshold`) has the
   keeper choose a threshold for it, and `Keeper.SimilarElements(decider, id, attribute, values, sets)` gives

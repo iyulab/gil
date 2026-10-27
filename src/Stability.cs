@@ -79,6 +79,12 @@ internal static class Stability
     /// </summary>
     public const string SimilarElements = "GIL0013";
 
+    /// <summary>
+    /// A threshold for a judge outside Gil (package <c>Gil</c>): its threshold, answer rate and promise chosen from its
+    /// scores and what people settled, with nothing else of the judge known.
+    /// </summary>
+    public const string ScoreThreshold = "GIL0014";
+
     /// <summary>Where the stability of each surface is described.</summary>
     public const string Url = "https://github.com/iyulab/gil/blob/main/README.md#stability";
 }
