@@ -6,7 +6,7 @@
 //! in as (pointer, length) UTF-8 ([`Utf8`]); text that comes out (a message, a JSON result) is copied into a buffer the
 //! caller owns, with the full length returned so that a call with capacity 0 learns how much to allocate.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 /// The call succeeded.
@@ -59,15 +59,53 @@ pub fn input(message: impl Into<String>) -> Failure {
     Failure(INVALID_INPUT, message.into())
 }
 
+thread_local! {
+    static IN_CALL: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Marks the thread as inside a [`call`] until it is dropped, then restores what was there (a call may nest).
+struct InCall(bool);
+
+impl InCall {
+    fn enter() -> Self {
+        Self(IN_CALL.with(|c| c.replace(true)))
+    }
+}
+
+impl Drop for InCall {
+    fn drop(&mut self) {
+        IN_CALL.with(|c| c.set(self.0));
+    }
+}
+
+/// Puts a panic hook in front of the one that was set, once: it stays silent for a panic inside a [`call`] and passes
+/// every other panic on to the hook that was there.
+fn quiet_inside_calls() {
+    static INSTALLED: std::sync::Once = std::sync::Once::new();
+    INSTALLED.call_once(|| {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            if !IN_CALL.with(Cell::get) {
+                previous(info);
+            }
+        }));
+    });
+}
+
 /// Runs one call: clears the last error and the last result, keeps a panic from unwinding out, and turns the outcome
 /// into a status. A panic's message reaches the host as the last error, so the default hook's note on stderr — the
-/// host's stderr — is turned off, once; the hook belongs to this library's own copy of the Rust runtime.
+/// host's stderr — is turned off for a panic inside a call. A panic anywhere else in the process is reported by the
+/// hook that was set before, as it would be without this library; the hook belongs to this library's own copy of the
+/// Rust runtime.
 pub fn call(f: impl FnOnce() -> Result<(), Failure>) -> i32 {
-    static QUIET: std::sync::Once = std::sync::Once::new();
-    QUIET.call_once(|| std::panic::set_hook(Box::new(|_| {})));
+    quiet_inside_calls();
     LAST_ERROR.with(|e| e.borrow_mut().clear());
     LAST_RESULT.with(|r| r.borrow_mut().clear());
-    let outcome = catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|panic| {
+    let outcome = {
+        let _in_call = InCall::enter();
+        catch_unwind(AssertUnwindSafe(f))
+    }
+    .unwrap_or_else(|panic| {
         let message = panic
             .downcast_ref::<&str>()
             .map(|s| (*s).to_owned())
