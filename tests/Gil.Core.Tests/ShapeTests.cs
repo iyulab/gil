@@ -154,6 +154,26 @@ public sealed class ShapeTests
     }
 
     [Fact]
+    public void A_rejected_settlement_kept_on_a_record_counts_as_turned_down_like_one_left_unsettled()
+    {
+        var inView = new Dictionary<string, string> { ["team"] = "billing" };
+        var layer = new Dictionary<string, Source> { ["team"] = Source.KeyMemory };
+        var promise = new Dictionary<string, double> { ["team"] = 0.9 };
+        var rejected = new Record("t-2", DateTimeOffset.UnixEpoch)
+        {
+            Settlements = new Dictionary<string, SettlementKind> { ["team"] = SettlementKind.Reject },
+            Suggested = inView,
+            Sources = layer,
+            Promises = promise,
+        };
+        var left = new Record("t-3", DateTimeOffset.UnixEpoch) { Suggested = inView, Sources = layer, Promises = promise };
+
+        using var ledger = SettledRecords.From([rejected, left]);
+        var team = Usage.Count(ledger)["team"];
+        (team.Decisions, team.Answered, team.Rejected).Should().Be((2, 2, 2));
+    }
+
+    [Fact]
     public void A_coarse_level_is_made_from_a_prefix_or_a_table_and_names_a_value_s_class_as_the_core_does()
     {
         new CoarseLevel(2) { KeyThreshold = 0.9 }.Should().Be(new CoarseLevel { Prefix = 2, KeyThreshold = 0.9 });

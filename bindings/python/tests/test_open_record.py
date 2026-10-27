@@ -234,6 +234,9 @@ def test_usage_counts_each_settlement_by_its_meaning() -> None:
                  "settlements": {"team": "CorrectOther"}, "suggested": {"team": "it"}},
                 # turned down: the answer in view, nothing settled
                 {"id": "u4", "settled_at": 4, "values": {}, "suggested": {"team": "network"}, **kept},
+                # turned down and kept as such: the settlement a Reject
+                {"id": "u5", "settled_at": 5, "values": {}, "settlements": {"team": "Reject"},
+                 "suggested": {"team": "network"}, **kept},
             ]
         )
     )
@@ -244,7 +247,7 @@ def test_usage_counts_each_settlement_by_its_meaning() -> None:
         team["accepted"],
         team["corrected"],
         team["rejected"],
-    ) == (4, 3, 1, 1, 1)
+    ) == (5, 4, 1, 1, 2)
     assert team["corrected_other"] == 1
     assert team["right_weight"] / team["judged_weight"] == 0.5
     assert team["promise_sum"] / team["promised"] == pytest.approx(0.9)
