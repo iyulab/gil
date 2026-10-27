@@ -1,6 +1,6 @@
 [package]
 name = "iyulab-ffi-support"
-version = "0.0.0"
+version = "0.1.0"
 description = "Plumbing for a C ABI over Rust: status codes, a per-thread last error and last result, a panic guard, (pointer, length) UTF-8 and caller-owned output buffers, and handle rules."
 edition.workspace = true
 license.workspace = true

@@ -3,7 +3,7 @@
 The Rust crate and its .NET binding share this version line; 0.1.0 is the first release of both. Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do.
 
-## Unreleased
+## 0.1.1
 
 ### Added
 
