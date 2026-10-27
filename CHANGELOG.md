@@ -74,6 +74,26 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   selection's chosen thresholds promised (`AttributeTuning.CoarseKeyPromise` · `CoarseMemoryPromise`), and
   `CoarsePromiseOf(attribute, source)` reads it back by the coarse candidate's source; `PromiseOf` reads the value's
   layers only. A keeper records both.
+
+### Fixed
+
+- **`Usage.Count` counts a `Reject` settlement as turned down.** A record that names the answer in view and no
+  settlement for the attribute was counted as turned down; one that kept the settlement as `Reject` was counted
+  nowhere. Both are turned down now.
+
+### Documentation
+
+- **What a promise means in operations terms.** The README says how sure a promise is (one standard error — a
+  one-sided 84% bound; `Pooled`, 95%) and reads `AttributeUsage` as an automation rate, an error rate, an acceptance
+  rate and an override rate, with `Realized` the one to put beside `Promise`.
+- **When to ask a `Keeper` for `Pooled`.** At a 0.9 target on two public streams, a keeper choosing under
+  `EveryBand` answered 0.98 right; under `Pooled` it answered 1.25 and 1.65 times as often, 0.92 right. The README
+  gives the numbers beside the two ways to read a target.
+
+## 0.27.0
+
+### Added
+
 - **musl-based Linux.** The `Gil` package also carries the native library for `linux-musl-x64` and
   `linux-musl-arm64` (musl 1.2 or later, such as Alpine 3.17 or later). There the .NET host used to fall back to the
   glibc build: on x64 that stopped at the first call with a `DllNotFoundException` (it needs `ld-linux-x86-64.so.2`),
@@ -136,9 +156,6 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Documentation
 
-- **What a promise means in operations terms.** The README says how sure a promise is (one standard error — a
-  one-sided 84% bound; `Pooled`, 95%) and reads `AttributeUsage` as an automation rate, an error rate, an acceptance
-  rate and an override rate, with `Realized` the one to put beside `Promise`.
 - **How low `MinimumAnswered` may go.** Replaying 26 public coding tasks from their first records, 30 kept every task
   that answered more than once at its target over the first 500 decisions and 20 did not; 50 held one more edge case
   for 0.73 times the answers. The README now says not to set it below 30.
@@ -244,9 +261,6 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 - `docs/settled-records.md` specifies the settled-record line every binding reads — its entries, why the time and
   the kind of settlement matter, and what an application should keep before it uses Gil — and the READMEs point to
   it.
-- **When to ask a `Keeper` for `Pooled`.** At a 0.9 target on two public streams, a keeper choosing under
-  `EveryBand` answered 0.98 right; under `Pooled` it answered 1.25 and 1.65 times as often, 0.92 right. The README
-  gives the numbers beside the two ways to read a target.
 
 ### Dependencies
 

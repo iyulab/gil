@@ -80,7 +80,7 @@ impl AttributeUsage {
 }
 
 /// The counts of the decisions `records` settled, by attribute. A decided attribute counts once per record: settled,
-/// or turned down with this decider's answer in view. It was answered when its record names the layer the answer came
+/// or turned down with this decider's answer in view (a record that names no settlement for it, or `Reject`). It was answered when its record names the layer the answer came
 /// from, or was settled as accepted or corrected; a check is judged against the suggestion the record keeps.
 pub fn usage<'a>(
     records: impl IntoIterator<Item = &'a Record>,
@@ -139,7 +139,7 @@ pub fn usage<'a>(
                         }
                     }
                 }
-                None => u.rejected += 1,
+                None | Some(SettlementKind::Reject) => u.rejected += 1,
                 Some(SettlementKind::Fill) => u.filled += 1,
                 Some(SettlementKind::Enter) => u.entered_over_answer += 1,
                 _ => {}

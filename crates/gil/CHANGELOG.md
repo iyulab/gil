@@ -6,42 +6,6 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ## Unreleased
 
-### Changed
-
-- **The refusal of an attribute that takes several values names the way on.** `select_layers` (and the pooled and coarse
-  selections, in every binding) said only that the similar record layer does not answer such an attribute. It now adds
-  that the key layer's threshold for it is chosen with `select_key_fields`. The message still begins with the old text.
-
-- **Breaking: `replay::select_layers` takes `LayerOptions`, and `select_layers_by_rule`, `select_layers_with` and
-  `select_layers_by_rule_with` are gone.** The four were one choice with the rule and the decision-record sink each
-  optional. Pass `LayerOptions::default()` for what `select_layers` did, `LayerOptions { rule, ..Default::default() }`
-  for `select_layers_by_rule`, `LayerOptions { sink: Some(&mut sink), ..Default::default() }` for
-  `select_layers_with`, and both fields for `select_layers_by_rule_with`. Python's `select_layers` and the C ABI are
-  unchanged.
-- **A record reads `settled_at` as a time as well as in ticks.** With `serde`, `Record` takes `settled_at` as ticks or
-  as text `yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM` (.NET's round-trip format), and an entry given as null as left out; it
-  is written in ticks as before. Python records are read through it, and now refuse a date, time or offset out of
-  range (`2025-02-29`, `24:00`, `+15:00`) that they used to turn into ticks.
-- **A similar-record lookup over a large memory is split among threads.** When a lookup would add more than 2¹⁸
-  products, `LexicalMemory::nearest` splits the rows into up to eight ranges, one a thread, each summed in the same
-  order and ranked on its own — the similarities and the leaders are the same to the bit with any number of threads,
-  and one thread is used where none are available. Replaying 40,000 public food inspection records took 27 s against
-  60 s. The lists keep each row's count of an n-gram rather than its weight, a third less memory.
-  `LexicalMemory::with_threads(n)` caps the threads a lookup is split among — 1 keeps it on the caller's thread — for
-  a host that answers many requests at once or keeps its own budget of threads; Python takes it as `threads=` on
-  `Decider`, `select_layers` and `select_coarse`.
-- **Breaking: `usage::usage` counts the settled records, and `usage::Decision` is gone.** The counts read what a record
-  keeps of what was in view — `suggested`, `sources`, `promises` — beside how each decided attribute was settled: it
-  was answered when the record names the layer the answer came from, or it was accepted or corrected; turned down when
-  the answer was in view and nothing was settled; a check is judged against the suggestion kept. A host no longer
-  keeps a second list beside the records it saves: put the answer in view on the record, and pass the records —
-  `usage(&records)` in Rust, `gil.usage(gil.records(saved))` in Python. The C ABI's `gil_usage` takes a records
-  handle.
-- **A reopened record keeps what the host kept on it.** `OpenRecord::reopen` used to drop the batch, the suggestions in
-  view, their layers and promises, the milliseconds, who settled it and the form's version, so a record reopened to
-  settle another attribute lost them from its next snapshot. They come back in each snapshot now, less an attribute's
-  entries once that attribute is settled again.
-
 ### Added
 
 - **Experimental: the similar record layer for an attribute that takes several values.** `Attribute::similar_elements`
@@ -124,6 +88,67 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 - **Python `gil.Keeper`**, the same loop: `Keeper(schema, target_precision, minimum_answered, counting, rule, threads)`
   · `settle(decider, records)` · `remove(decider, id)` · `stale()` · `settled` · `rechoose(decisions=False)` → `{"tuning",
   "chosen", "coarse", "decisions"?}` · `state()` · `schema` · `tuning`.
+
+### Changed
+
+
+- **The refusal of an attribute that takes several values names the way on.** `select_layers` (and the pooled and coarse
+  selections, in every binding) said only that the similar record layer does not answer such an attribute. It now adds
+  that the key layer's threshold for it is chosen with `select_key_fields`. The message still begins with the old text.
+
+### Breaking
+
+- `schema::Attribute` has one more public field, `first_of_batch`, and `tuning::AttributeTuning` six (below); a struct
+  literal that names every field names them too (`None`, `false`).
+
+### Fixed
+
+- **`usage::usage` counts a `Reject` settlement as turned down.** A record that names the answer in view and no
+  settlement for the attribute was counted as turned down; one that kept the settlement as `Reject` was counted
+  nowhere. Both are turned down now.
+
+### Documentation
+
+- **What a promise means in operations terms.** The README says how sure a promise is (one standard error — a
+  one-sided 84% bound; `Pooled`, 95%) and reads the usage counts as an automation rate, an error rate, an acceptance
+  rate and an override rate; the Python README too.
+
+## 0.9.0
+
+### Changed
+
+- **Breaking: `replay::select_layers` takes `LayerOptions`, and `select_layers_by_rule`, `select_layers_with` and
+  `select_layers_by_rule_with` are gone.** The four were one choice with the rule and the decision-record sink each
+  optional. Pass `LayerOptions::default()` for what `select_layers` did, `LayerOptions { rule, ..Default::default() }`
+  for `select_layers_by_rule`, `LayerOptions { sink: Some(&mut sink), ..Default::default() }` for
+  `select_layers_with`, and both fields for `select_layers_by_rule_with`. Python's `select_layers` and the C ABI are
+  unchanged.
+- **A record reads `settled_at` as a time as well as in ticks.** With `serde`, `Record` takes `settled_at` as ticks or
+  as text `yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM` (.NET's round-trip format), and an entry given as null as left out; it
+  is written in ticks as before. Python records are read through it, and now refuse a date, time or offset out of
+  range (`2025-02-29`, `24:00`, `+15:00`) that they used to turn into ticks.
+- **A similar-record lookup over a large memory is split among threads.** When a lookup would add more than 2¹⁸
+  products, `LexicalMemory::nearest` splits the rows into up to eight ranges, one a thread, each summed in the same
+  order and ranked on its own — the similarities and the leaders are the same to the bit with any number of threads,
+  and one thread is used where none are available. Replaying 40,000 public food inspection records took 27 s against
+  60 s. The lists keep each row's count of an n-gram rather than its weight, a third less memory.
+  `LexicalMemory::with_threads(n)` caps the threads a lookup is split among — 1 keeps it on the caller's thread — for
+  a host that answers many requests at once or keeps its own budget of threads; Python takes it as `threads=` on
+  `Decider`, `select_layers` and `select_coarse`.
+- **Breaking: `usage::usage` counts the settled records, and `usage::Decision` is gone.** The counts read what a record
+  keeps of what was in view — `suggested`, `sources`, `promises` — beside how each decided attribute was settled: it
+  was answered when the record names the layer the answer came from, or it was accepted or corrected; turned down when
+  the answer was in view and nothing was settled; a check is judged against the suggestion kept. A host no longer
+  keeps a second list beside the records it saves: put the answer in view on the record, and pass the records —
+  `usage(&records)` in Rust, `gil.usage(gil.records(saved))` in Python. The C ABI's `gil_usage` takes a records
+  handle.
+- **A reopened record keeps what the host kept on it.** `OpenRecord::reopen` used to drop the batch, the suggestions in
+  view, their layers and promises, the milliseconds, who settled it and the form's version, so a record reopened to
+  settle another attribute lost them from its next snapshot. They come back in each snapshot now, less an attribute's
+  entries once that attribute is settled again.
+
+### Added
+
 - **What was in view goes on the record when it is settled.** `Settlement::with_answer(&answer, promise)` and
   `Settlement::with_suggestion(value)` set `Settlement::in_view` (`InView` — value, layer, promise); an open record keeps
   it as the attribute's `suggested`, `sources` and `promises`. A promise out of [0, 1], or a layer of `Source::None`, is
@@ -161,14 +186,6 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 ### Breaking
 
 - `Record` has seven more public fields (above). A struct literal that names every field needs `..Record::default()`.
-- `schema::Attribute` has one more public field, `first_of_batch`, and `tuning::AttributeTuning` six (below); a struct
-  literal that names every field names them too (`None`, `false`).
-
-### Documentation
-
-- **What a promise means in operations terms.** The README says how sure a promise is (one standard error — a
-  one-sided 84% bound; `Pooled`, 95%) and reads the usage counts as an automation rate, an error rate, an acceptance
-  rate and an override rate; the Python README too.
 
 ## 0.8.0
 

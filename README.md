@@ -313,7 +313,7 @@ records the rule was not tuned on, it kept a 0.8 target every time and answered 
 `EveryBand` (1.55 in the middle); holding the bound at one standard error instead broke the target on an attribute
 answered a few hundred times. Re-chosen by a `Keeper` as records arrived on two public streams at a 0.9 target,
 `EveryBand`'s answers were 0.98 right — a floor under every band leaves the whole well above the target — and
-`Pooled` answered 1.25 and 1.65 times as often, 0.92 right. Each layer's `Chosen` still reports that layer's own
+`Pooled` answered 1.25 and 1.65 times as often, 0.92 right. It sets no floor under a band of weak answers, and that has a price: beside it the realized-precision watch (`SelectionOptions.WatchRealized`, off by default) raised false alarms where `EveryBand` raised none — 21 across thirteen public streams against none, and 7 against 1 on streams the watch was not set on — and on two of the streams the answers came out 0.896 and 0.893 right at a 0.9 target. Ask for `Pooled` for the target on all answers together, not as a safer default; do not run the watch's default margin beside it. Each layer's `Chosen` still reports that layer's own
 precision and `Promise` (one standard error, its own answers); the bound the pair was chosen under is on the answers
 together, and is the one to show:
 

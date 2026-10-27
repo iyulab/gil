@@ -51,6 +51,8 @@ fn every_settlement_kind_lands_where_its_meaning_puts_it() {
         d(Some("network"), Some("security"), Some(Correct), 1.0),
         // Turned down: the answer in view, no value and no settlement.
         d(Some("network"), None, None, 1.0),
+        // Turned down and kept as such: the answer in view, the settlement a `Reject`.
+        d(Some("network"), None, Some(Reject), 1.0),
         d(Some("network"), Some("network"), Some(Fill), 1.0),
         d(Some("network"), Some("network"), Some(Check), 0.25),
         d(Some("network"), Some("security"), Some(Check), 0.5),
@@ -61,17 +63,20 @@ fn every_settlement_kind_lands_where_its_meaning_puts_it() {
     ];
     let counts = usage(&records);
     let team = &counts["team"];
-    assert_eq!((team.decisions, team.answered, team.abstained()), (9, 8, 1));
+    assert_eq!(
+        (team.decisions, team.answered, team.abstained()),
+        (10, 9, 1)
+    );
     assert_eq!(
         (team.accepted, team.corrected, team.rejected, team.filled),
-        (2, 1, 1, 1)
+        (2, 1, 2, 1)
     );
     assert_eq!((team.checked, team.checked_right, team.entered), (2, 1, 1));
     assert_eq!(team.entered_over_answer, 1);
     // Right: 2 accepts + a check worth 4; judged: those + 1 correction + a check worth 2.
     assert_eq!(team.realized(), Some(6.0 / 9.0));
     assert!((team.promise().unwrap() - 0.85).abs() < 1e-12);
-    assert_eq!(team.answer_rate(), Some(8.0 / 9.0));
+    assert_eq!(team.answer_rate(), Some(9.0 / 10.0));
 }
 
 #[test]

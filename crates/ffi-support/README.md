@@ -12,7 +12,9 @@ own copy, so the state below is per library and per thread.
   copy into a buffer the caller owns and return the full length, so a call with capacity 0 learns how much to
   allocate.
 - **The panic guard.** `call` runs a body that returns `Result<(), Failure>`, turns a failure into its status and
-  message, and keeps a panic from crossing the boundary.
+  message, and keeps a panic from crossing the boundary. The panic's note on stderr is silenced only for a panic
+  inside a `call` — its message reaches the host as the last error. A panic anywhere else in the process, such as a
+  failing assertion in a Rust test, is reported by the hook that was set before the first `call`.
 - **Reading caller memory.** `Utf8` is (pointer, length) UTF-8 the caller owns for one call; `text`, `slice`,
   `slice_mut` and `write` check pointers and lengths before they are read or written.
 - **Handles.** `handle` (`*const` — a read, which may run on several threads at once), `handle_mut` (`*mut` — a
