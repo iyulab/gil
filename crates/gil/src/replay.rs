@@ -2756,6 +2756,108 @@ fn likeliest(unseen: u64, totals: &[f64]) -> f64 {
     (low * high).sqrt()
 }
 
+/// Experimental. One decision a judge outside Gil — a model, a rule, a person's score — made about a case a person later
+/// settled: how sure the judge was of its best value, and whether that value was the one settled. A judge that gave no
+/// candidate has `score` `None`; it still counts as a decision asked.
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct ScoredDecision {
+    /// Names the case; decisions settled at the same instant are taken in the scalar order of their ids.
+    pub id: String,
+    /// When the case was settled, in the same ticks as [`crate::schema::Record::settled_at`]; decisions are replayed in
+    /// this order.
+    pub settled_at: i64,
+    /// How sure the judge was of its best value, on the judge's own scale, higher meaning surer; `None` when it gave no
+    /// candidate.
+    pub score: Option<f64>,
+    /// Whether the judge's best value was the settled one. Not read when `score` is `None`.
+    pub right: bool,
+    /// How many decisions this one counts as: 1, or one ÷ its draw probability for a case drawn for a check the judge
+    /// did not see settled.
+    pub weight: f64,
+}
+
+impl ScoredDecision {
+    /// A decision that counts once.
+    pub fn new(id: impl Into<String>, settled_at: i64, score: Option<f64>, right: bool) -> Self {
+        Self {
+            id: id.into(),
+            settled_at,
+            score,
+            right,
+            weight: 1.0,
+        }
+    }
+
+    /// The same decision counting as `weight` decisions.
+    #[must_use]
+    pub fn weighted(mut self, weight: f64) -> Self {
+        self.weight = weight;
+        self
+    }
+}
+
+/// Experimental. Chooses the threshold for a judge outside Gil from nothing but its scores and what people settled: the
+/// decisions are replayed in settlement order, and the threshold, its precision, answer rate and promise come out as
+/// [`select_layers`] gives them for a memory layer — the lowest score down to which every band of answers met
+/// `choice.target_precision`, resting on at least `choice.minimum_answered` independent answers, the promise being that of
+/// the latest [`RECENT_RECORDS`] decisions at one standard error. A decision with no score counts as asked and not
+/// answered. `choice.counting` is not read: the caller passes the decisions that count. The judge's answers are admitted
+/// as trusted ([`crate::decider::ExternalCandidate::trusted`]) at or above the chosen threshold, and the promise is the
+/// one to show beside them.
+///
+/// The score is the judge's own: nothing here assumes it is a probability, only that a higher one is more often right.
+/// Choosing a threshold for a judge is not choosing how often to check it or where to send the cases it will not answer.
+///
+/// # Panics
+/// When `choice.target_precision` is outside (0, 1], `choice.minimum_answered` is 0, a score is not finite, or a weight
+/// is not positive and finite.
+pub fn select_score_threshold(decisions: &[ScoredDecision], choice: Choice) -> ThresholdReplay {
+    choice.check();
+    for decision in decisions {
+        assert!(
+            decision.score.is_none_or(f64::is_finite),
+            "a score must be finite"
+        );
+        assert!(
+            decision.weight > 0.0 && decision.weight.is_finite(),
+            "a weight must be positive and finite"
+        );
+    }
+
+    let mut ordered: Vec<&ScoredDecision> = decisions.iter().collect();
+    ordered.sort_by(|a, b| {
+        a.settled_at
+            .cmp(&b.settled_at)
+            .then_with(|| a.id.cmp(&b.id))
+    });
+
+    let mut answers: Vec<Answer> = Vec::new();
+    let mut lookup_weight = 0.0_f64;
+    for (index, decision) in ordered.iter().enumerate() {
+        lookup_weight += decision.weight;
+        if let Some(score) = decision.score {
+            answers.push(Answer {
+                score,
+                correct: decision.right,
+                weight: decision.weight,
+                order: index + 1,
+                key: None,
+                caught: false,
+            });
+        }
+    }
+
+    fit_recent(
+        &answers,
+        ordered.len(),
+        lookup_weight,
+        ordered.len(),
+        choice.target_precision,
+        choice.minimum_answered,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Choice, ReplayState, Replaying, ThresholdRule, carry_on, layers};

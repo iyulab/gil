@@ -8,6 +8,13 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Added
 
+- **Experimental: a threshold for a judge outside Gil, from its scores and what people settled.**
+  `replay::select_score_threshold` takes `ScoredDecision`s — an id, when it was settled, the judge's score for its best
+  value (`None` when it gave none), whether that value was the settled one, and a weight — and gives the same
+  `ThresholdReplay` a memory layer gets: the lowest score down to which every band met the target, the answer rate, and
+  the promise. The score is the judge's own scale; only "higher is surer" is assumed. Admit the judge's answers as trusted
+  at or above `chosen.threshold` and show `chosen.promise` beside them. It does not choose how often to check the judge or
+  where to send what it will not answer.
 - **Experimental: the similar record layer for an attribute that takes several values.** `Attribute::similar_elements`
   on a decided `multiple` attribute (which then takes a `memory_threshold`) has `Keeper` choose a threshold for it —
   `replay::select_similar_elements` is the replay alone — and `Keeper::similar_elements` (`Decider::similar_elements`
