@@ -2769,12 +2769,20 @@ pub struct ScoredDecision {
     pub settled_at: i64,
     /// How sure the judge was of its best value, on the judge's own scale, higher meaning surer; `None` when it gave no
     /// candidate.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub score: Option<f64>,
     /// Whether the judge's best value was the settled one. Not read when `score` is `None`.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub right: bool,
     /// How many decisions this one counts as: 1, or one ÷ its draw probability for a case drawn for a check the judge
     /// did not see settled.
+    #[cfg_attr(feature = "serde", serde(default = "one_decision"))]
     pub weight: f64,
+}
+
+#[cfg(feature = "serde")]
+fn one_decision() -> f64 {
+    1.0
 }
 
 impl ScoredDecision {

@@ -14,8 +14,8 @@ use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::open_record;
 use gil::replay::{
-    Choice, LayerOptions, LayerThresholds, ThresholdRule, select_coarse_with,
-    select_key_concentrations, select_key_fields, select_layers,
+    Choice, LayerOptions, LayerThresholds, ScoredDecision, ThresholdRule, select_coarse_with,
+    select_key_concentrations, select_key_fields, select_layers, select_score_threshold,
 };
 use gil::schema::{Record, Schema, Settlement, SettlementKind};
 use gil::tuning::Tuning;
@@ -228,6 +228,27 @@ fn select_coarse_json(
         )
     })?;
     Ok((to_json(&layers), lines))
+}
+
+/// Experimental. Chooses the threshold of a judge outside Gil from its scores and what people settled, as
+/// `select_score_threshold` does. `decisions_json` is a JSON array of `{"id", "settled_at", "score", "right", "weight"}`
+/// (`score` left out or `null` when the judge gave no candidate; `right` false and `weight` 1 when left out). Returns the
+/// replay as JSON.
+#[pyfunction]
+fn select_score_threshold_json(
+    decisions_json: &str,
+    target_precision: f64,
+    minimum_answered: usize,
+) -> PyResult<String> {
+    let decisions: Vec<ScoredDecision> = serde_json::from_str(decisions_json)
+        .map_err(|e| invalid(format!("the decisions do not read: {e}")))?;
+    let choice = Choice {
+        target_precision,
+        minimum_answered,
+        counting: None,
+    };
+    let replay = guarded(|| select_score_threshold(&decisions, choice))?;
+    Ok(to_json(&replay))
 }
 
 /// Chooses, for each attribute that keys the decided attribute, how readily its keys are believed after only a few settlements,
@@ -1045,6 +1066,7 @@ fn _gil(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(select_layers_json, m)?)?;
     m.add_function(wrap_pyfunction!(select_key_fields_json, m)?)?;
     m.add_function(wrap_pyfunction!(select_coarse_json, m)?)?;
+    m.add_function(wrap_pyfunction!(select_score_threshold_json, m)?)?;
     m.add_function(wrap_pyfunction!(select_key_concentrations_json, m)?)?;
     m.add("RECENT_RECORDS", gil::replay::RECENT_RECORDS)?;
     m.add(

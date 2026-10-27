@@ -32,8 +32,8 @@ use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::open_record::OpenRecord;
 use gil::replay::{
-    Choice, LayerOptions, LayerThresholds, ThresholdRule, select_coarse_with,
-    select_key_concentrations, select_key_fields, select_layers,
+    Choice, LayerOptions, LayerThresholds, ScoredDecision, ThresholdRule, select_coarse_with,
+    select_key_concentrations, select_key_fields, select_layers, select_score_threshold,
 };
 use gil::schema::{AttributePolicy, InView, Record, Schema, Settlement, SettlementKind};
 use gil::tuning::Tuning;
@@ -1260,6 +1260,36 @@ pub unsafe extern "C" fn gil_select_key_concentrations(
         let found =
             select_key_concentrations(&mut KeyMemory::default(), schema, attribute, records);
         unsafe { result(&json!(found), result_len) }
+    })
+}
+
+/// Experimental. Chooses the threshold of a judge outside Gil from its scores and what people settled, as the core's
+/// `select_score_threshold` does. `decisions` is a JSON array of `{"id": …, "settled_at": …, "score": …, "right": …,
+/// "weight": …}` — `score` left out or `null` when the judge gave no candidate, `right` false and `weight` 1 when left
+/// out. `options` is as the selections' with `target_precision` and `minimum_answered` (only those two read, `counting`
+/// not; any other option is refused). Keeps as the result the replay in the core's `serde` form
+/// (`{"chosen": …, "most_precise": …, "lookups": …, "candidates": …, "keys": null}`); `chosen` is `null` when no
+/// threshold stands. A score that is not finite or a weight that is not positive is a contract violation (`GIL_PANIC`).
+///
+/// # Safety
+/// The texts are valid for the call; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_select_score_threshold(
+    decisions: GilStr,
+    options: GilStr,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        if result_len.is_null() {
+            return Err(argument("result_len is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let decisions = unsafe { text(decisions, "decisions") }?;
+        let options = unsafe { read_options(options) }?;
+        let decisions: Vec<ScoredDecision> = serde_json::from_str(decisions)
+            .map_err(|e| input(format!("the decisions do not read: {e}")))?;
+        let replay = select_score_threshold(&decisions, options.choice());
+        unsafe { result(&json!(replay), result_len) }
     })
 }
 

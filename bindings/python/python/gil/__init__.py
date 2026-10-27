@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Literal, TypedDict, cast
+from typing import Any, Literal, Required, TypedDict, cast
 
 from gil._gil import AskPlanner as _AskPlanner
 from gil._gil import Decider as _Decider
@@ -43,6 +43,7 @@ from gil._gil import (
     select_key_concentrations_json,
     select_key_fields_json,
     select_layers_json,
+    select_score_threshold_json,
     tuning_apply_json,
     tuning_capture_json,
     tuning_promise_json,
@@ -99,6 +100,7 @@ __all__ = [
     "select_key_concentrations",
     "select_key_fields",
     "select_layers",
+    "select_score_threshold",
     "tuning_stale",
     "usage",
 ]
@@ -495,6 +497,43 @@ def select_coarse(
         else [cast(DecisionRecord, json.loads(line)) for line in lines.splitlines()]
     )
     return cast(LayerThresholds, json.loads(thresholds)), out
+
+
+class ScoredDecision(TypedDict, total=False):
+    """One decision a judge outside Gil made about a case a person later settled (experimental).
+
+    ``id`` and ``settled_at`` (ticks, as a record's) order the decisions; ``score`` is the judge's own, higher meaning
+    surer, left out or ``None`` when it gave no candidate; ``right`` is whether its best value was the settled one;
+    ``weight`` (default 1) is how many decisions this one counts as, one over the draw probability for a checked case.
+    """
+
+    id: Required[str]
+    settled_at: Required[int]
+    score: float | None
+    right: bool
+    weight: float
+
+
+def select_score_threshold(
+    decisions: Iterable[ScoredDecision],
+    target_precision: float = 0.8,
+    minimum_answered: int = 10,
+) -> ThresholdReplay:
+    """Experimental. Chooses the threshold of a judge outside Gil from its scores and what people settled.
+
+    The same ``chosen`` threshold, answer rate and promise a memory layer gets (:class:`ThresholdReplay`), from nothing
+    but ``(score, right)`` in settlement order. Admit the judge's answers as trusted at or above ``chosen["threshold"]``
+    and show ``chosen["promise"]`` beside them; ``chosen`` is ``None`` when no threshold stands. Only "higher is surer"
+    is assumed of the score. It does not choose how often to check the judge or where to send what it will not answer.
+    """
+    return cast(
+        ThresholdReplay,
+        json.loads(
+            select_score_threshold_json(
+                json.dumps(list(decisions)), target_precision, minimum_answered
+            )
+        ),
+    )
 
 
 def select_key_concentrations(

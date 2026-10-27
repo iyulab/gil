@@ -15,6 +15,9 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   the promise. The score is the judge's own scale; only "higher is surer" is assumed. Admit the judge's answers as trusted
   at or above `chosen.threshold` and show `chosen.promise` beside them. It does not choose how often to check the judge or
   where to send what it will not answer.
+  Python `gil.select_score_threshold(decisions, target_precision, minimum_answered)` (decisions are dicts with `id`,
+  `settled_at`, `score`, `right`, `weight`); the C ABI `gil_select_score_threshold` (the version of the interface is
+  unchanged: the function is new).
 - **Experimental: the similar record layer for an attribute that takes several values.** `Attribute::similar_elements`
   on a decided `multiple` attribute (which then takes a `memory_threshold`) has `Keeper` choose a threshold for it —
   `replay::select_similar_elements` is the replay alone — and `Keeper::similar_elements` (`Decider::similar_elements`

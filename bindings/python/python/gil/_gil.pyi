@@ -20,6 +20,7 @@ __all__ = [
     "select_key_concentrations_json",
     "select_key_fields_json",
     "select_layers_json",
+    "select_score_threshold_json",
     "tuning_apply_json",
     "tuning_capture_json",
     "tuning_promise_json",
@@ -85,6 +86,11 @@ def select_coarse_json(
     threads: int | None = None,
 ) -> tuple[str, str | None]:
     """The attribute's coarse level thresholds as JSON and, when `decisions` is true, the decision records as JSON lines."""
+
+def select_score_threshold_json(
+    decisions_json: str, target_precision: float, minimum_answered: int
+) -> str:
+    """Experimental. The replay a judge outside Gil's scores and the settled outcomes give, as JSON."""
 
 def select_key_concentrations_json(
     schema_json: str, attribute: str, records: Records
