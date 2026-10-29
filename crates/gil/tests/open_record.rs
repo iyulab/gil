@@ -1246,6 +1246,7 @@ fn reopening_a_saved_record_keeps_what_the_host_kept_until_an_attribute_is_settl
         suggested: BTreeMap::from([("team".to_owned(), "network".to_owned())]),
         sources: BTreeMap::from([("team".to_owned(), Source::KeyMemory)]),
         promises: BTreeMap::from([("team".to_owned(), 0.9)]),
+        scores: BTreeMap::from([("team".to_owned(), 3.2)]),
         settle_ms: BTreeMap::from([("team".to_owned(), 1_200)]),
         open_ms: Some(5_000),
         settled_by: BTreeMap::from([("team".to_owned(), "p7".to_owned())]),
@@ -1267,6 +1268,7 @@ fn reopening_a_saved_record_keeps_what_the_host_kept_until_an_attribute_is_settl
     assert_eq!(again.suggested, saved.suggested);
     assert_eq!(again.sources, saved.sources);
     assert_eq!(again.promises, saved.promises);
+    assert_eq!(again.scores, saved.scores);
     assert_eq!(again.settle_ms, saved.settle_ms);
     assert_eq!(again.settled_by, saved.settled_by);
 
@@ -1274,6 +1276,7 @@ fn reopening_a_saved_record_keeps_what_the_host_kept_until_an_attribute_is_settl
     open.settle(&mut decider, "team", &Settlement::correct("security"), DAY);
     let after = open.snapshot();
     assert!(after.suggested.is_empty() && after.sources.is_empty() && after.promises.is_empty());
+    assert!(after.scores.is_empty());
     assert!(after.settle_ms.is_empty() && after.settled_by.is_empty());
     assert_eq!(
         (after.batch.as_deref(), after.open_ms),

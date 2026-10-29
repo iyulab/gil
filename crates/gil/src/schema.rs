@@ -1052,6 +1052,19 @@ pub struct Record {
         )
     )]
     pub promises: BTreeMap<String, f64>,
+    /// Experimental. For each decided attribute settled with an answer from a judge outside Gil in view (its source is
+    /// [`crate::decider::Source::External`]), the score the judge gave that answer when it was shown, on the judge's own
+    /// scale: a number, higher meaning surer. [`crate::replay::scored_decisions`] reads it for
+    /// [`crate::replay::select_score_threshold`]; for an attribute whose source is another layer it is not read.
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            default,
+            deserialize_with = "or_empty",
+            skip_serializing_if = "BTreeMap::is_empty"
+        )
+    )]
+    pub scores: BTreeMap<String, f64>,
     /// For each decided attribute, the milliseconds from when the person reached it — its suggestion came into view, or
     /// it was reached with nothing in view — to when it was settled.
     #[cfg_attr(

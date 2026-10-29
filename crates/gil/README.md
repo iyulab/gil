@@ -48,6 +48,7 @@ that the .NET library on NuGet, `Gil`, is checked against — `Gil` runs on this
 - **A judge outside Gil** (experimental) — `replay::select_score_threshold` chooses a threshold for any judge from nothing
   but its scores and what people settled: pass `ScoredDecision`s and read the threshold, the answer rate and the promise
   as for a memory layer. Admit the judge's answers as trusted at or above the threshold and show the promise beside them. Python: `gil.select_score_threshold`.
+  A record can keep the judge's score beside the answer a person saw (`Record::scores`), and `replay::scored_decisions` reads those records into the decisions.
 - **Keeper** — `keeper::Keeper` keeps the loop as records arrive: `settle` puts them into the decider and into the
   next choice, `stale` says when the choice no longer stands, and `rechoose` replays only the records settled since the
   last choice — the same thresholds as `select_layers` on all of them, and a coarse level's as `select_coarse` with

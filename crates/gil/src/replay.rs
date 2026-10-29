@@ -2866,6 +2866,57 @@ pub fn select_score_threshold(decisions: &[ScoredDecision], choice: Choice) -> T
     )
 }
 
+/// Experimental. The decisions a judge outside Gil made about `attribute`, read from settled records for
+/// [`select_score_threshold`]: every record whose `attribute` was settled with the judge's answer in view
+/// ([`Record::sources`] is [`crate::decider::Source::External`]), carrying the judge's score ([`Record::scores`]) and
+/// the value it suggested ([`Record::suggested`]), and settled by a person who took it ([`SettlementKind::Accept`]),
+/// changed it ([`SettlementKind::Correct`]) or, not having seen it, settled the case again ([`SettlementKind::Check`]).
+/// `right` is whether the suggested value is the settled one; a check counts as one ÷ the probability it was drawn with
+/// ([`Record::probabilities`]), the others as one.
+///
+/// A record is left out when the judge's score, its suggested value or its settled value is missing, the score is not
+/// finite, a check has no valid probability, or the answer was rejected, entered, filled or kept as another's — what
+/// the judge got right or wrong is then not known. The decisions are those the judge *answered*: a case it was asked
+/// and gave no candidate for leaves no trace in a record, so the answer rate the threshold reports is among answered
+/// cases unless the caller adds those as `ScoredDecision::new(id, settled_at, None, false)`. A record settled again
+/// under the same id appears once for each time it was written: pass the records that count.
+pub fn scored_decisions(records: &[Record], attribute: &str) -> Vec<ScoredDecision> {
+    records
+        .iter()
+        .filter_map(|record| {
+            if record.sources.get(attribute) != Some(&crate::decider::Source::External) {
+                return None;
+            }
+            let score = *record.scores.get(attribute)?;
+            if !score.is_finite() {
+                return None;
+            }
+            let shown = record.suggested.get(attribute)?;
+            let settled = record.values.get(attribute)?;
+            let weight = match record.settlements.get(attribute)? {
+                SettlementKind::Accept | SettlementKind::Correct => 1.0,
+                SettlementKind::Check => {
+                    let drawn = record.probabilities.get(attribute).copied().unwrap_or(1.0);
+                    if !(drawn > 0.0 && drawn <= 1.0) {
+                        return None;
+                    }
+                    1.0 / drawn
+                }
+                _ => return None,
+            };
+            Some(
+                ScoredDecision::new(
+                    record.id.clone(),
+                    record.settled_at,
+                    Some(score),
+                    shown == settled,
+                )
+                .weighted(weight),
+            )
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Choice, ReplayState, Replaying, ThresholdRule, carry_on, layers};

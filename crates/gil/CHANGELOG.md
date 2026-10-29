@@ -18,6 +18,15 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   Python `gil.select_score_threshold(decisions, target_precision, minimum_answered)` (decisions are dicts with `id`,
   `settled_at`, `score`, `right`, `weight`); the C ABI `gil_select_score_threshold` (the version of the interface is
   unchanged: the function is new).
+- **Experimental: the score of a judge outside Gil, kept on the settled record.** `Record::scores` (the optional
+  per-attribute JSON entry `scores`) holds the score the judge gave the answer that was in view when the attribute was
+  settled, on the judge's own scale. It is read only for an attribute whose `sources` entry is `Model`.
+  `replay::scored_decisions(records, attribute)` turns such records into the `ScoredDecision`s `select_score_threshold`
+  takes — a case settled as `Accept`, `Correct` or `Check` counts, a check as one over the probability it was drawn
+  with, `right` being whether the suggested value is the settled one — so a threshold and its promise are chosen from
+  the saved records alone. A reopened record carries its scores back, less an attribute's once that attribute is settled
+  again. Format: `docs/settled-records.md`. Earlier versions refuse a line that carries `scores`, so write it for a
+  reader that knows it.
 - **Experimental: the similar record layer for an attribute that takes several values.** `Attribute::similar_elements`
   on a decided `multiple` attribute (which then takes a `memory_threshold`) has `Keeper` choose a threshold for it —
   `replay::select_similar_elements` is the replay alone — and `Keeper::similar_elements` (`Decider::similar_elements`

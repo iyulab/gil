@@ -27,6 +27,7 @@ One JSON object per line, one line per settlement:
 | `suggested` | object of strings | no | For each decided attribute settled with a suggestion in view, the value suggested — Gil's answer, or what the application showed in its place (the kind says which); for a coarse level, the class shown |
 | `sources` | object of layer names | no | For each decided attribute settled with Gil's answer in view, the layer that gave it: `KeyMemory`, `SimilarRecord` or `Model` |
 | `promises` | object of numbers | no | For each decided attribute settled with Gil's answer in view, the precision promised for it when it was shown (the tuning's promise for its layer), in [0, 1] |
+| `scores` | object of numbers | no | For each decided attribute settled with an answer from a judge outside Gil in view (its `sources` entry is `Model`), the score the judge gave that answer when it was shown, on the judge's own scale — higher means surer; it is not a probability and is read for no other layer (experimental) |
 | `settle_ms` | object of integers | no | For each decided attribute, the milliseconds from when the person reached it — its suggestion came into view, or it was reached with nothing in view — to when it was settled |
 | `open_ms` | integer | no | The milliseconds the record was open, from opening it to this settlement |
 | `settled_by` | object of strings | no | For each decided attribute, who settled it, as an opaque id the application gives — one person, one id; never a name |
@@ -38,7 +39,8 @@ table does not name does not read, and neither does a time out of range (`2025-0
 rather than half understood. Lines are written back with `settled_at` in ticks.
 
 The last seven entries are read from `Gil` 0.27.0 and `iyulab-gil` 0.9.0; earlier versions refuse a line that carries
-them, so write them for a reader that knows them.
+them, so write them for a reader that knows them. `scores` is newer still: it is read from the release after those two,
+and earlier versions refuse a line that carries it.
 
 Lines may come in any order: a replay orders them by `settled_at`, then by `id`. A blank line is skipped.
 
@@ -78,13 +80,18 @@ Lines may come in any order: a replay orders them by `settled_at`, then by `id`.
 
 ## What was in view, what it cost, who settled it
 
-The replays choose thresholds from `settled_at`, the values and the kinds; nothing in them reads the last seven entries
-yet. They are kept because a record cannot be given them afterwards, and each answers a question the others cannot:
+The replays of Gil's own layers choose thresholds from `settled_at`, the values and the kinds; none of them reads the
+last seven entries yet (`replay::scored_decisions` reads `suggested`, `sources` and `scores`, for a judge outside Gil). They are kept because a record cannot be given them afterwards, and each answers a question the others cannot:
 
 - **`suggested`, `sources` and `promises`** — whether the promise held for the answers people actually saw, answer by
   answer and layer by layer, rather than for the answers a replay would have given; the usage counts (`Usage.Count`,
   `gil.usage`, `usage`) read them from the saved records. With `Check` settlements they also say how far a suggestion
   in view moves what people settle.
+- **`scores`** — how sure a judge outside Gil was of the answer a person saw, so that a threshold and a promise for that
+  judge can be chosen from the saved records alone. `replay::scored_decisions` turns the records settled with the
+  judge's answer in view into the decisions `select_score_threshold` takes; a case settled as `Accept`, `Correct` or
+  `Check` counts, a check as one over the probability it was drawn with. The score is kept as the judge gave it, on its
+  own scale, because a record cannot be given it afterwards.
 - **`settle_ms` and `open_ms`** — what settling costs a person, and whether it falls as settled records accumulate and
   more is left to Gil. A monotonic clock's difference is enough; the wall clock is `settled_at`.
 - **`settled_by`** — whether settlers differ in how often they are right, which a promise counted over everyone hides.

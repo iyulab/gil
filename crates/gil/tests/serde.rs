@@ -119,6 +119,41 @@ fn a_record_reads_back_with_how_each_value_was_settled() {
 }
 
 #[test]
+fn a_record_carries_the_score_a_judge_outside_gil_gave_its_answer() {
+    let line = json!({
+        "id": "t1",
+        "settled_at": 5,
+        "values": { "team": "network" },
+        "settlements": { "team": "Accept" },
+        "suggested": { "team": "network" },
+        "sources": { "team": "Model" },
+        "scores": { "team": 3.2, "owner": -0.5 }
+    });
+    let record: Record = serde_json::from_value(line.clone()).expect("a record");
+    assert_eq!(record.scores["team"], 3.2);
+    assert_eq!(record.scores["owner"], -0.5);
+    assert_eq!(
+        serde_json::to_value(&record).unwrap()["scores"],
+        line["scores"]
+    );
+
+    // Left out when none is kept, and null reads as left out.
+    let bare: Record =
+        serde_json::from_value(json!({ "id": "t2", "settled_at": 5, "scores": null }))
+            .expect("a record");
+    assert!(bare.scores.is_empty());
+    assert!(serde_json::to_value(&bare).unwrap().get("scores").is_none());
+
+    // Refused rather than half understood: a score that is not a number.
+    assert!(
+        serde_json::from_value::<Record>(
+            json!({ "id": "t3", "settled_at": 5, "scores": { "team": "high" } })
+        )
+        .is_err()
+    );
+}
+
+#[test]
 fn a_record_carries_what_was_in_view_how_long_it_took_and_who_settled_it() {
     let line = json!({
         "id": "t1",

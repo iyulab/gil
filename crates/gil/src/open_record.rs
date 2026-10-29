@@ -133,6 +133,7 @@ impl OpenRecord {
             suggested: saved.suggested.clone(),
             sources: saved.sources.clone(),
             promises: saved.promises.clone(),
+            scores: saved.scores.clone(),
             settle_ms: saved.settle_ms.clone(),
             open_ms: saved.open_ms,
             settled_by: saved.settled_by.clone(),
@@ -256,6 +257,7 @@ impl OpenRecord {
         self.kept.suggested.remove(attribute);
         self.kept.sources.remove(attribute);
         self.kept.promises.remove(attribute);
+        self.kept.scores.remove(attribute);
         self.kept.settle_ms.remove(attribute);
         self.kept.settled_by.remove(attribute);
         if let Some(in_view) = settlement.in_view.as_ref().filter(|_| {
@@ -349,7 +351,7 @@ impl OpenRecord {
     /// attribute was last settled (or the time the record was opened with, if none was since), the order the values
     /// arrived in, by which choosing thresholds replays the record, and how each decided value was settled — with the
     /// probability a checked one was drawn with. What the host keeps besides — the batch (or the one it named with
-    /// [`OpenRecord::with_batch`]), the suggestions in view, their layers and promises, the milliseconds, who settled
+    /// [`OpenRecord::with_batch`]), the suggestions in view, their layers and promises, the scores of a judge outside Gil, the milliseconds, who settled
     /// it, the form's version — it sets on the record before saving it; a reopened record carries back what was saved,
     /// less an attribute's entries once that attribute is settled again.
     pub fn snapshot(&self) -> Record {
