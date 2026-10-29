@@ -25,8 +25,9 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   takes — a case settled as `Accept`, `Correct` or `Check` counts, a check as one over the probability it was drawn
   with, `right` being whether the suggested value is the settled one — so a threshold and its promise are chosen from
   the saved records alone. A reopened record carries its scores back, less an attribute's once that attribute is settled
-  again. Format: `docs/settled-records.md`. Earlier versions refuse a line that carries `scores`, so write it for a
-  reader that knows it.
+  again. Python `gil.scored_decisions(records, attribute)`; the C ABI `gil_scored_decisions` (the version of the
+  interface is unchanged: the function is new). Format: `docs/settled-records.md`. Earlier versions refuse a line that
+  carries `scores`, so write it for a reader that knows it.
 - **Experimental: the similar record layer for an attribute that takes several values.** `Attribute::similar_elements`
   on a decided `multiple` attribute (which then takes a `memory_threshold`) has `Keeper` choose a threshold for it —
   `replay::select_similar_elements` is the replay alone — and `Keeper::similar_elements` (`Decider::similar_elements`

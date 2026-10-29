@@ -121,3 +121,71 @@ fn a_score_that_is_not_a_finite_number_is_refused_as_input() {
     let status = unsafe { gil_select_score_threshold(s(text), s(&options), &mut len) };
     assert_eq!(status, GIL_INVALID_INPUT);
 }
+
+fn free_records(records: *mut GilRecords) {
+    unsafe { gil_records_free(records) };
+}
+
+fn records_of(lines: &[Value]) -> *mut GilRecords {
+    let text: String = lines.iter().map(|l| l.to_string() + "\n").collect();
+    let mut out = ptr::null_mut();
+    let status = unsafe { gil_records_new(s(&text), &mut out) };
+    assert_eq!(status, GIL_OK, "{}", copied(gil_last_error));
+    out
+}
+
+#[test]
+fn records_that_keep_a_judges_score_give_the_decisions_the_threshold_takes() {
+    let line = |id: &str, at: i64, kind: &str, shown: &str, settled: &str, extra: Value| {
+        let mut line = json!({
+            "id": id, "settled_at": at,
+            "values": {"team": settled}, "settlements": {"team": kind},
+            "suggested": {"team": shown}, "sources": {"team": "Model"},
+            "scores": {"team": 0.75}
+        });
+        line.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        line
+    };
+    let records = records_of(&[
+        line("a", 1, "Accept", "network", "network", json!({})),
+        line("b", 2, "Correct", "desk", "network", json!({})),
+        line(
+            "c",
+            3,
+            "Check",
+            "network",
+            "network",
+            json!({"probabilities": {"team": 0.5}}),
+        ),
+        // another layer answered: left out
+        line(
+            "d",
+            4,
+            "Accept",
+            "network",
+            "network",
+            json!({"sources": {"team": "KeyMemory"}}),
+        ),
+    ]);
+    let mut len = 0usize;
+    let status = unsafe { gil_scored_decisions(records, s("team"), &mut len) };
+    assert_eq!(status, GIL_OK, "{}", copied(gil_last_error));
+    let decisions: Value = serde_json::from_str(&copied(gil_last_result)).unwrap();
+    free_records(records);
+
+    let decisions = decisions.as_array().unwrap();
+    assert_eq!(decisions.len(), 3);
+    assert_eq!(decisions[0]["id"], "a");
+    assert_eq!(decisions[0]["right"], true);
+    assert_eq!(decisions[1]["right"], false);
+    assert_eq!(decisions[2]["weight"], 2.0);
+
+    // They are what gil_select_score_threshold takes.
+    let (status, _) = run(
+        &Value::Array(decisions.clone()),
+        &json!({"target_precision": 0.5, "minimum_answered": 1}),
+    );
+    assert_eq!(status, GIL_OK);
+}

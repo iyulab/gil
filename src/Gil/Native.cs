@@ -124,6 +124,9 @@ internal static unsafe partial class Native
     [LibraryImport(Library, EntryPoint = "gil_select_score_threshold")]
     internal static partial int SelectScoreThreshold(Str decisions, Str options, nuint* resultLen);
 
+    [LibraryImport(Library, EntryPoint = "gil_scored_decisions")]
+    internal static partial int ScoredDecisions(RecordsHandle records, Str attribute, nuint* resultLen);
+
     [LibraryImport(Library, EntryPoint = "gil_select_key_fields")]
     internal static partial int SelectKeyFields(
         SchemaHandle schema, Str attribute, RecordsHandle records, Str options, nuint* resultLen);

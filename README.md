@@ -102,7 +102,7 @@ type may change shape or be removed in any release without a migration note.
 | `GIL0011` | Key combination in the decision core: an attribute whose key layer scores a value by its strongest key alone (`AttributeDefinition.KeyCombine`, `KeyCombine`) |
 | `GIL0012` | The unseen mass in the decision core: a `Keeper` that says how much of an attribute's next settled values is likely to be values no record settled yet (`Keeper.UnseenMass`, `UnseenMass`) |
 | `GIL0013` | Similar elements in the decision core: the similar record layer answering an attribute that takes several values, element by element (`AttributeDefinition.SimilarElements`, `Keeper.SimilarElements`, `ElementAnswer`) |
-| `GIL0014` | A threshold for a judge outside Gil, chosen from its scores and what people settled (`Replay.SelectScoreThreshold`, `ScoredDecision`) |
+| `GIL0014` | A threshold for a judge outside Gil, chosen from its scores and what people settled (`Replay.SelectScoreThreshold`, `Replay.ScoredDecisions`, `ScoredDecision`, `Record.Scores`) |
 
 Suppress the ids of what you use, in the project file or around the code:
 
@@ -720,7 +720,9 @@ judge's `Score` for its best value (null when it gave none), whether that value 
 gets: the lowest score down to which every band of answers met the target, the answer rate, and the `Promise`. Admit the
 judge's answers as trusted at or above `Chosen.Threshold` and show the promise beside them; `Chosen` is null when no
 threshold stands. Only the target precision and the fewest answers of the options are read, and only "a higher score is
-surer" is assumed of the score. It does not choose how often to check the judge or where to send what it will not answer.
+surer" is assumed of the score. It does not choose how often to check the judge or where to send what it will not answer. A saved record can keep the
+judge's score beside the answer a person saw (`Record.Scores`), and `Replay.ScoredDecisions(records, attribute)` reads
+such records into the decisions.
 
 **Asking first** (experimental, `GIL0005`). When no layer answers a decided attribute, one more observed value from the
 person — the component a ticket is about, the part a fault was found on — may let one answer, or a class be trusted.

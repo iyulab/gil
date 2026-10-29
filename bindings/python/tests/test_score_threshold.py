@@ -71,3 +71,39 @@ def test_what_the_core_refuses_raises_value_error() -> None:
         )
     with pytest.raises(ValueError):
         gil.select_score_threshold([{"id": "a"}], 0.8, 1)  # type: ignore[typeddict-item]
+
+
+def test_records_that_keep_a_judges_score_give_the_decisions_the_threshold_takes() -> (
+    None
+):
+    def line(
+        id: str, at: int, kind: str, shown: str, settled: str, **more: object
+    ) -> dict[str, object]:
+        return {
+            "id": id,
+            "settled_at": at,
+            "values": {"team": settled},
+            "settlements": {"team": kind},
+            "suggested": {"team": shown},
+            "sources": {"team": "Model"},
+            "scores": {"team": 0.75},
+            **more,
+        }
+
+    saved = gil.records(
+        [
+            line("a", 1, "Accept", "network", "network"),
+            line("b", 2, "Correct", "desk", "network"),
+            line("c", 3, "Check", "network", "network", probabilities={"team": 0.5}),
+            line("d", 4, "Accept", "network", "network", sources={"team": "KeyMemory"}),
+        ]
+    )
+    found = gil.scored_decisions(saved, "team")
+    assert [d["id"] for d in found] == ["a", "b", "c"]
+    assert [d["right"] for d in found] == [True, False, True]
+    assert found[2]["weight"] == 2.0
+    assert gil.scored_decisions(saved, "owner") == []
+
+    # They are what select_score_threshold takes.
+    replay = gil.select_score_threshold(found, 0.5, 1)
+    assert "chosen" in replay

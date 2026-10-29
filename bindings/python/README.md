@@ -373,7 +373,9 @@ A judge outside Gil can have its threshold chosen the same way, from nothing but
 (experimental): `gil.select_score_threshold(decisions, target_precision, minimum_answered)` takes dicts with `id`,
 `settled_at`, `score` (left out when the judge gave no candidate), `right` and an optional `weight`, and returns the
 replay a memory layer gets — admit the judge's answers as trusted at or above `chosen["threshold"]` and show
-`chosen["promise"]` beside them.
+`chosen["promise"]` beside them. A saved record can keep the judge's score beside the answer a person saw (a `scores`
+entry, read where `sources` is `"Model"`), and `gil.scored_decisions(records, attribute)` reads such records into
+the decisions.
 
 **Status: early.** The API may change within 0.x — each change is listed in
 [CHANGELOG.md](https://github.com/iyulab/gil/blob/main/crates/gil/CHANGELOG.md) with what to do about it.

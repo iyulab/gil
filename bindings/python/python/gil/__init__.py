@@ -39,6 +39,7 @@ from gil._gil import (
     schema_for_first_of_batch_json,
     schema_with_first_of_batch_json,
     schema_with_layers_json,
+    scored_decisions_json,
     select_coarse_json,
     select_key_concentrations_json,
     select_key_fields_json,
@@ -96,6 +97,7 @@ __all__ = [
     "record_first_of_batch_promise",
     "record_promise",
     "records",
+    "scored_decisions",
     "select_coarse",
     "select_key_concentrations",
     "select_key_fields",
@@ -512,6 +514,22 @@ class ScoredDecision(TypedDict, total=False):
     score: float | None
     right: bool
     weight: float
+
+
+def scored_decisions(records: Records, attribute: str) -> list[ScoredDecision]:
+    """Experimental. The decisions a judge outside Gil made about ``attribute``, read from settled records.
+
+    A record counts when the attribute was settled with the judge's answer in view (its ``sources`` entry is ``"Model"``),
+    the record keeps the judge's ``scores`` entry for it and the value it suggested, and a person accepted it, corrected
+    it or, not having seen it, settled the case again (a check). ``right`` is whether the suggested value is the settled
+    one; a check counts as one over the probability it was drawn with. Pass the result to
+    :func:`select_score_threshold`. A case the judge was asked and gave no candidate for leaves no trace in a record, so
+    the answer rate that comes out is among the cases it answered, unless you add those as decisions without a ``score``.
+    A record settled again under the same id appears once for each time it was written: pass the records that count.
+    """
+    return cast(
+        list[ScoredDecision], json.loads(scored_decisions_json(records, attribute))
+    )
 
 
 def select_score_threshold(

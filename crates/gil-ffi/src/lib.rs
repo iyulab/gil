@@ -32,8 +32,9 @@ use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::open_record::OpenRecord;
 use gil::replay::{
-    Choice, LayerOptions, LayerThresholds, ScoredDecision, ThresholdRule, select_coarse_with,
-    select_key_concentrations, select_key_fields, select_layers, select_score_threshold,
+    Choice, LayerOptions, LayerThresholds, ScoredDecision, ThresholdRule, scored_decisions,
+    select_coarse_with, select_key_concentrations, select_key_fields, select_layers,
+    select_score_threshold,
 };
 use gil::schema::{AttributePolicy, InView, Record, Schema, Settlement, SettlementKind};
 use gil::tuning::Tuning;
@@ -1940,6 +1941,29 @@ pub unsafe extern "C" fn gil_usage(records: *const GilRecords, result_len: *mut 
         // SAFETY: forwarded from the caller, for every pointer below.
         let records = &unsafe { handle(records, "records") }?.0;
         unsafe { result(&json!(usage(records)), result_len) }
+    })
+}
+
+/// Experimental. Keeps as the result the decisions a judge outside Gil made about `attribute`, read from `records` —
+/// `replay::scored_decisions` — as a JSON array of `{"id", "settled_at", "score", "right", "weight"}`, the decisions
+/// `gil_select_score_threshold` takes. A record is left out when what the judge got right or wrong is not known from it.
+///
+/// # Safety
+/// `records` is a live records handle; `attribute` is valid for the call; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_scored_decisions(
+    records: *const GilRecords,
+    attribute: GilStr,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        if result_len.is_null() {
+            return Err(argument("result_len is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let records = &unsafe { handle(records, "records") }?.0;
+        let attribute = unsafe { text(attribute, "attribute") }?;
+        unsafe { result(&json!(scored_decisions(records, attribute)), result_len) }
     })
 }
 

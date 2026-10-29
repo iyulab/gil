@@ -17,6 +17,11 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   judge's answers as trusted at or above `Chosen.Threshold` and show `Chosen.Promise` beside them. It does not choose how
   often to check the judge or where to send what it will not answer. The Rust core, Python and the C ABI have it too
   (see the crate's changelog).
+  A saved record can keep the judge's score beside the answer a person saw: `Record.Scores` (per attribute, read only
+  where `Record.Sources` is `Source.External`), and `Replay.ScoredDecisions(records, attribute)` reads such records into the
+  decisions `SelectScoreThreshold` takes — a case settled as `Accept`, `Correct` or `Check` counts, a check as one over the
+  probability it was drawn with, `Right` being whether the suggested value is the settled one — so the threshold and its
+  promise come from the saved records alone. Earlier versions refuse a record line that carries `scores`.
 - **Experimental (`GIL0013`): the similar record layer for an attribute that takes several values.**
   `AttributeDefinition.SimilarElements` on a decided `Multiple` attribute (which then takes a `MemoryThreshold`) has the
   keeper choose a threshold for it, and `Keeper.SimilarElements(decider, id, attribute, values, sets)` gives

@@ -16,6 +16,7 @@ __all__ = [
     "schema_for_first_of_batch_json",
     "schema_with_first_of_batch_json",
     "schema_with_layers_json",
+    "scored_decisions_json",
     "select_coarse_json",
     "select_key_concentrations_json",
     "select_key_fields_json",
@@ -91,6 +92,9 @@ def select_score_threshold_json(
     decisions_json: str, target_precision: float, minimum_answered: int
 ) -> str:
     """Experimental. The replay a judge outside Gil's scores and the settled outcomes give, as JSON."""
+
+def scored_decisions_json(records: Records, attribute: str) -> str:
+    """Experimental. The decisions a judge outside Gil made about the attribute, read from the records, as JSON."""
 
 def select_key_concentrations_json(
     schema_json: str, attribute: str, records: Records

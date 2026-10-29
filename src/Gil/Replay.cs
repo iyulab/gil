@@ -92,6 +92,32 @@ public static class Replay
         }
     }
 
+    /// <summary>Experimental. The decisions a judge outside Gil made about <paramref name="attribute"/>, read from settled
+    /// records — what <see cref="SelectScoreThreshold"/> takes. A record counts when the attribute was settled with the
+    /// judge's answer in view (<see cref="Record.Sources"/> is <see cref="Source.External"/>), the record keeps the
+    /// judge's score (<see cref="Record.Scores"/>) and the value it suggested, and a person accepted it, corrected it
+    /// or, not having seen it, settled the case again (<see cref="SettlementKind.Check"/>). <c>Right</c> is whether the
+    /// suggested value is the settled one; a check counts as one over the probability it was drawn with. A case the
+    /// judge was asked and gave no candidate for leaves no trace in a record, so the answer rate that comes out is among
+    /// the cases it answered, unless the caller adds those as decisions without a score. A record settled again under
+    /// the same id appears once for each time it was written: pass the records that count.</summary>
+    [Experimental(Stability.ScoreThreshold, UrlFormat = Stability.Url)]
+    public static IReadOnlyList<ScoredDecision> ScoredDecisions(SettledRecords records, string attribute) =>
+        Read(ScoredDecisionsJson(records, attribute), CoreJson.Default.IReadOnlyListScoredDecision);
+
+    /// <summary>The decisions of <see cref="ScoredDecisions"/> as the core gives them.</summary>
+    internal static unsafe string ScoredDecisionsJson(SettledRecords records, string attribute)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(attribute);
+        var name = new Utf8(attribute);
+        nuint length;
+        fixed (byte* a = &name.Pin())
+        {
+            return Native.Result(Native.ScoredDecisions(records.Handle, name.At(a), &length));
+        }
+    }
+
     private static T Read<T>(string json, JsonTypeInfo<T> type) =>
         JsonSerializer.Deserialize(json, type)!;
 

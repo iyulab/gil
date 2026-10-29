@@ -257,6 +257,13 @@ public sealed record Record(string Id, DateTimeOffset SettledAt)
     /// it was shown — what <see cref="Tuning.PromiseOf"/> gave for its layer; each in [0, 1].</summary>
     public IReadOnlyDictionary<string, double>? Promises { get; init; }
 
+    /// <summary>Experimental. For each decided attribute settled with an answer from a judge outside Gil in view (its
+    /// <see cref="Sources"/> entry is <see cref="Source.External"/>), the score the judge gave that answer when it was
+    /// shown, on the judge's own scale — higher means surer; it is not a probability and is read for no other layer.
+    /// <see cref="Replay.ScoredDecisions"/> reads it.</summary>
+    [Experimental(Stability.ScoreThreshold, UrlFormat = Stability.Url)]
+    public IReadOnlyDictionary<string, double>? Scores { get; init; }
+
     /// <summary>For each decided attribute, the milliseconds from when the person reached it — its suggestion came into
     /// view, or it was reached with nothing in view — to when it was settled.</summary>
     public IReadOnlyDictionary<string, ulong>? SettleMs { get; init; }

@@ -14,8 +14,9 @@ use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::open_record;
 use gil::replay::{
-    Choice, LayerOptions, LayerThresholds, ScoredDecision, ThresholdRule, select_coarse_with,
-    select_key_concentrations, select_key_fields, select_layers, select_score_threshold,
+    Choice, LayerOptions, LayerThresholds, ScoredDecision, ThresholdRule, scored_decisions,
+    select_coarse_with, select_key_concentrations, select_key_fields, select_layers,
+    select_score_threshold,
 };
 use gil::schema::{Record, Schema, Settlement, SettlementKind};
 use gil::tuning::Tuning;
@@ -249,6 +250,14 @@ fn select_score_threshold_json(
     };
     let replay = guarded(|| select_score_threshold(&decisions, choice))?;
     Ok(to_json(&replay))
+}
+
+/// Experimental. The decisions a judge outside Gil made about `attribute`, read from the records as `scored_decisions`
+/// does, as a JSON array of `{"id", "settled_at", "score", "right", "weight"}` — what `select_score_threshold_json` takes.
+#[pyfunction]
+fn scored_decisions_json(records: &Records, attribute: &str) -> String {
+    serde_json::to_string(&scored_decisions(&records.records, attribute))
+        .expect("decisions serialize")
 }
 
 /// Chooses, for each attribute that keys the decided attribute, how readily its keys are believed after only a few settlements,
@@ -1067,6 +1076,7 @@ fn _gil(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(select_key_fields_json, m)?)?;
     m.add_function(wrap_pyfunction!(select_coarse_json, m)?)?;
     m.add_function(wrap_pyfunction!(select_score_threshold_json, m)?)?;
+    m.add_function(wrap_pyfunction!(scored_decisions_json, m)?)?;
     m.add_function(wrap_pyfunction!(select_key_concentrations_json, m)?)?;
     m.add("RECENT_RECORDS", gil::replay::RECENT_RECORDS)?;
     m.add(

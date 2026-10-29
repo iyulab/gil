@@ -66,4 +66,36 @@ public sealed class ScoreThresholdTests
         badTarget.Should().Throw<ArgumentException>();
         badWeight.Should().Throw<ArgumentException>();
     }
+
+    [Fact]
+    public void RecordsThatKeepAJudgesScoreGiveTheDecisionsTheThresholdTakes()
+    {
+        static Record Line(string id, int at, SettlementKind kind, string shown, string settled, Source source = Source.External) =>
+            new(id, DateTimeOffset.UnixEpoch.AddSeconds(at))
+            {
+                Values = new Dictionary<string, string> { ["team"] = settled },
+                Settlements = new Dictionary<string, SettlementKind> { ["team"] = kind },
+                Suggested = new Dictionary<string, string> { ["team"] = shown },
+                Sources = new Dictionary<string, Source> { ["team"] = source },
+                Scores = new Dictionary<string, double> { ["team"] = 0.75 },
+            };
+
+        var checkedLine = Line("c", 3, SettlementKind.Check, "network", "network")
+            with { Probabilities = new Dictionary<string, double> { ["team"] = 0.5 } };
+        using var records = SettledRecords.From([
+            Line("a", 1, SettlementKind.Accept, "network", "network"),
+            Line("b", 2, SettlementKind.Correct, "desk", "network"),
+            checkedLine,
+            Line("d", 4, SettlementKind.Accept, "network", "network", Source.KeyMemory),
+        ]);
+
+        var decisions = Replay.ScoredDecisions(records, "team");
+
+        decisions.Select(d => d.Id).Should().Equal("a", "b", "c");
+        decisions.Select(d => d.Right).Should().Equal(true, false, true);
+        decisions.Select(d => d.Score).Should().OnlyContain(score => score == 0.75);
+        decisions[2].Weight.Should().Be(2.0);
+        Replay.ScoredDecisions(records, "owner").Should().BeEmpty();
+        Replay.SelectScoreThreshold(decisions, new SelectionOptions(0.5, 1)).Should().NotBeNull();
+    }
 }
