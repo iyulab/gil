@@ -213,6 +213,27 @@ one, or whose category has never been settled before, is left to the person; Gil
 settled. When the category values share a leading part, `"coarse": {"prefix": 2}` lets it give the group when it cannot
 give the value ([Choosing what to trust](https://github.com/iyulab/gil/blob/main/README.md#choosing-what-to-trust)).
 
+The similar record layer compares characters, so for a category decided by one short text and nothing else a model that
+reads meaning can answer more cases. Gil does not carry such a model; if you have one, keep it outside and let Gil choose
+where to trust it. Score each case the judge answered, mark whether its best value was the one a person settled, and
+hand over the list in the order they settled (experimental):
+
+```python
+decisions = [
+    {"id": case["id"], "settled_at": i, "score": judge_score(case), "right": judge_value(case) == case["category"]}
+    for i, case in enumerate(settled_cases)  # your judge's score and best value for each settled case
+]
+chosen = gil.select_score_threshold(decisions, target_precision=0.9, minimum_answered=30)["chosen"]
+# None when no threshold held the target; otherwise admit the judge's answers at or above chosen["threshold"]
+# and show chosen["promise"] beside them
+```
+
+The judge keeps its own threshold and promise; Gil does not blend its score with the similar record layer's. On two
+public intent-classification sets (CLINC150 and MASSIVE in Korean), with the promise margin of both sides matched, a
+sentence-embedding nearest-neighbour score answered about 1.2 times as many cases as the similar record layer at the
+same precision target; overlap between the embedding models' pretraining and those sets was not ruled out, and where the
+text names the value outright the gap is largely gone once the margins are matched. Measure on your own settled cases before relying on either.
+
 An attribute that takes several values — tags — is settled with `sets` and declared with `"multiple": true`. The key
 layer answers it, with the threshold `select_key_fields` chooses; `select_layers` refuses it, since it chooses the
 similar record layer's. That layer answers tags element by element when the attribute also says
