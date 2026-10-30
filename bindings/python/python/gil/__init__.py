@@ -543,7 +543,15 @@ def select_score_threshold(
     but ``(score, right)`` in settlement order. Admit the judge's answers as trusted at or above ``chosen["threshold"]``
     and show ``chosen["promise"]`` beside them; ``chosen`` is ``None`` when no threshold stands. Only "higher is surer"
     is assumed of the score. It does not choose how often to check the judge or where to send what it will not answer.
+
+    ``decisions`` is a list of :class:`ScoredDecision`; the order it arrives in does not matter, they are replayed by
+    ``settled_at`` and then ``id``. A JSON string goes to :func:`select_score_threshold_json`.
     """
+    if isinstance(decisions, str | bytes | bytearray | Mapping):
+        raise TypeError(
+            "decisions must be a list of ScoredDecision, not a "
+            f"{type(decisions).__name__}; pass a JSON string to select_score_threshold_json instead"
+        )
     return cast(
         ThresholdReplay,
         json.loads(

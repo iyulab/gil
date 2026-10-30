@@ -73,6 +73,25 @@ def test_what_the_core_refuses_raises_value_error() -> None:
         gil.select_score_threshold([{"id": "a"}], 0.8, 1)  # type: ignore[typeddict-item]
 
 
+def test_a_json_string_or_a_single_decision_is_refused_with_the_way_forward() -> None:
+    import json
+
+    base = decisions(40, 5)
+    for wrong in (json.dumps(base), json.dumps(base).encode(), base[0]):
+        with pytest.raises(TypeError, match="select_score_threshold_json"):
+            gil.select_score_threshold(wrong, 0.9, 30)  # type: ignore[arg-type]
+    # the pair that takes a string still does
+    assert "chosen" in gil.select_score_threshold_json(json.dumps(base), 0.9, 30)
+
+
+def test_the_order_the_decisions_arrive_in_does_not_change_the_threshold() -> None:
+    base = decisions(600, 6)
+    shuffled = list(reversed(base))
+    assert gil.select_score_threshold(shuffled, 0.8, 30) == gil.select_score_threshold(
+        base, 0.8, 30
+    )
+
+
 def test_records_that_keep_a_judges_score_give_the_decisions_the_threshold_takes() -> (
     None
 ):
