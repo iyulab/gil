@@ -67,6 +67,17 @@ public sealed class ScoreThresholdTests
         badWeight.Should().Throw<ArgumentException>();
     }
 
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    public void AScoreThatIsNotFiniteIsAnArgumentException(double score)
+    {
+        var bad = () => Replay.SelectScoreThreshold([new("a", DateTimeOffset.UnixEpoch, score)], new SelectionOptions(0.8, 1));
+
+        bad.Should().Throw<ArgumentException>();
+    }
+
     [Fact]
     public void RecordsThatKeepAJudgesScoreGiveTheDecisionsTheThresholdTakes()
     {
