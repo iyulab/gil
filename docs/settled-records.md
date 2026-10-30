@@ -39,7 +39,7 @@ table does not name does not read, and neither does a time out of range (`2025-0
 rather than half understood. Lines are written back with `settled_at` in ticks.
 
 The last seven entries are read from `Gil` 0.27.0 and `iyulab-gil` 0.9.0; earlier versions refuse a line that carries
-them, so write them for a reader that knows them. `scores` is newer still: it is read from the release after those two,
+them, so write them for a reader that knows them. `scores` is newer still: it is read from `Gil` 0.28.0 and `iyulab-gil` 0.10.0,
 and earlier versions refuse a line that carries it.
 
 Lines may come in any order: a replay orders them by `settled_at`, then by `id`. A blank line is skipped.

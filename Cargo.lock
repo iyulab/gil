@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "gil-ffi"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "iyulab-ffi-support",
  "iyulab-gil",
@@ -14,7 +14,7 @@ dependencies = [
 
 [[package]]
 name = "gil-py"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "iyulab-gil",
  "pyo3",
@@ -48,7 +48,7 @@ version = "0.1.0"
 
 [[package]]
 name = "iyulab-gil"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "serde",
  "serde_json",

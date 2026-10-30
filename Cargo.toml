@@ -19,7 +19,7 @@ resolver = "3"
 
 [workspace.package]
 # The version line of iyulab-gil, its C ABI and its Python package. The review crate and the C ABI plumbing keep their own.
-version = "0.9.0"
+version = "0.10.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/iyulab/gil"
