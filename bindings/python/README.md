@@ -229,10 +229,12 @@ chosen = gil.select_score_threshold(decisions, target_precision=0.9, minimum_ans
 ```
 
 The judge keeps its own threshold and promise; Gil does not blend its score with the similar record layer's. On two
-public intent-classification sets (CLINC150 and MASSIVE in Korean), with the promise margin of both sides matched, a
-sentence-embedding nearest-neighbour score answered about 1.2 times as many cases as the similar record layer at the
-same precision target; overlap between the embedding models' pretraining and those sets was not ruled out, and where the
-text names the value outright the gap is largely gone once the margins are matched. Measure on your own settled cases before relying on either.
+public intent-classification sets (CLINC150 and MASSIVE in Korean), with the promise margin of both sides matched, the
+nearest-neighbour score of a large multilingual sentence-embedding model answered about 1.2 times as many cases as the
+similar record layer at the same precision target. The margin grows with the model: the smallest of three sizes of one
+such family answered about 1.1 times as many in English and about as many in Korean. Overlap between the embedding
+models' pretraining and those sets was not ruled out, and where the text names the value outright the gap is largely
+gone once the margins are matched. Measure on your own settled cases before relying on either.
 
 An attribute that takes several values — tags — is settled with `sets` and declared with `"multiple": true`. The key
 layer answers it, with the threshold `select_key_fields` chooses; `select_layers` refuses it, since it chooses the
