@@ -228,6 +228,13 @@ chosen = gil.select_score_threshold(decisions, target_precision=0.9, minimum_ans
 # and show chosen["promise"] beside them
 ```
 
+`settled_at` is a whole number that only has to order the cases (a saved record's is ticks, not a date string); numpy
+scalars are fine for `score` and `right`, and a `score` that is not a finite number is refused with the decision's `id` —
+leave it out when the judge gave no candidate. The same list can come from saved records:
+`gil.scored_decisions(records, "category")` takes a record whose `sources` entry for the attribute is `"Model"`, that
+keeps the judge's `scores` entry and the `suggested` value, and that a person accepted, corrected or settled again
+(`Accept`, `Correct`, `Check`) — any other record is left out, so an empty list means none qualified.
+
 The judge keeps its own threshold and promise; Gil does not blend its score with the similar record layer's. On two
 public intent-classification sets (CLINC150 and MASSIVE in Korean), with the promise margin of both sides matched, the
 nearest-neighbour score of a large multilingual sentence-embedding model answered about 1.2 times as many cases as the

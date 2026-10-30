@@ -126,3 +126,96 @@ def test_records_that_keep_a_judges_score_give_the_decisions_the_threshold_takes
     # They are what select_score_threshold takes.
     replay = gil.select_score_threshold(found, 0.5, 1)
     assert "chosen" in replay
+
+
+class Scalar:
+    """Stands in for a numpy scalar: a zero-dimensional value that hands over the Python value it holds."""
+
+    ndim = 0
+
+    def __init__(self, value: object) -> None:
+        self._value = value
+
+    def item(self) -> object:
+        return self._value
+
+
+def unwrapped(base: list[gil.ScoredDecision], wrap: object) -> list[object]:
+    """The decisions with every number and flag put behind ``wrap``."""
+    return [
+        {
+            key: wrap(value) if key != "id" else value  # type: ignore[operator]
+            for key, value in decision.items()
+        }
+        for decision in base
+    ]
+
+
+def test_a_value_that_holds_a_python_number_is_read_as_that_number() -> None:
+    base = decisions(600, 7)
+    held = unwrapped(base, Scalar)
+    assert gil.select_score_threshold(
+        held,  # type: ignore[arg-type]
+        0.8,
+        30,
+    ) == gil.select_score_threshold(base, 0.8, 30)
+
+
+def test_numpy_scalars_are_read_as_the_numbers_they_hold() -> None:
+    np = pytest.importorskip("numpy")
+    base = decisions(600, 8)
+    held: list[object] = [
+        {
+            "id": d["id"],
+            "settled_at": np.int64(d["settled_at"]),
+            "score": np.float32(d["score"]),
+            "right": np.bool_(d["right"]),
+        }
+        for d in base
+    ]
+    narrowed: list[gil.ScoredDecision] = [
+        {**d, "score": float(np.float32(d["score"]))} for d in base
+    ]
+    assert gil.select_score_threshold(
+        held,  # type: ignore[arg-type]
+        0.8,
+        30,
+    ) == gil.select_score_threshold(narrowed, 0.8, 30)
+
+
+def test_a_score_that_is_not_finite_is_refused_with_the_decision_it_belongs_to() -> (
+    None
+):
+    for bad in (float("nan"), float("inf"), float("-inf"), Scalar(float("nan"))):
+        base = decisions(40, 9)
+        base[17]["score"] = bad  # type: ignore[typeddict-item]
+        with pytest.raises(ValueError, match=r"c00017.*score.*not finite.*leave score out"):
+            gil.select_score_threshold(base, 0.9, 30)
+
+
+def test_a_value_of_the_wrong_kind_is_refused_naming_the_decision_and_the_field() -> (
+    None
+):
+    wrong: list[tuple[str, object, str]] = [
+        ("settled_at", "2026-09-01T09:00:00+00:00", "whole number"),
+        ("settled_at", 1.5, "whole number"),
+        ("score", True, "a number"),
+        ("score", "0.9", "a number"),
+        ("right", "False", "True or False"),  # a string must not turn into True
+        ("right", 1, "True or False"),
+        ("weight", [1.0], "a number"),
+    ]
+    for key, value, expected in wrong:
+        base = decisions(40, 10)
+        base[3][key] = value  # type: ignore[literal-required]
+        with pytest.raises(TypeError, match=rf"c00003.*{key}.*{expected}"):
+            gil.select_score_threshold(base, 0.9, 30)
+
+
+def test_a_decision_that_is_not_a_dict_is_refused_with_its_position() -> None:
+    with pytest.raises(TypeError, match="decision 1 must be a ScoredDecision dict"):
+        gil.select_score_threshold(
+            [decisions(1, 11)[0], ("c", 1, 0.5, True)],  # type: ignore[list-item]
+            0.9,
+            1,
+        )

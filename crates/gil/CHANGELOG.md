@@ -17,9 +17,10 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   where to send what it will not answer.
   Python `gil.select_score_threshold(decisions, target_precision, minimum_answered)` (decisions are dicts with `id`,
   `settled_at`, `score`, `right`, `weight`; given a JSON string or a single dict it raises `TypeError` and names
-  `select_score_threshold_json`, the pair that takes a string); the decisions are replayed by `settled_at` and then
-  `id`, whatever order they arrive in; the C ABI `gil_select_score_threshold` (the version of the interface is
-  unchanged: the function is new).
+  `select_score_threshold_json`, the pair that takes a string; numpy scalars are read as the numbers they hold, and a
+  value of the wrong kind or a score that is not finite is refused naming the decision's `id` and the field); the
+  decisions are replayed by `settled_at` and then `id`, whatever order they arrive in; the C ABI
+  `gil_select_score_threshold` (the version of the interface is unchanged: the function is new).
 - **Experimental: the score of a judge outside Gil, kept on the settled record.** `Record::scores` (the optional
   per-attribute JSON entry `scores`) holds the score the judge gave the answer that was in view when the attribute was
   settled, on the judge's own scale. It is read only for an attribute whose `sources` entry is `Model`.

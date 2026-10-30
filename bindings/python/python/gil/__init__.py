@@ -21,6 +21,7 @@ An open record answers while its values arrive, from a decider whose memories ho
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any, Literal, Required, TypedDict, cast
@@ -552,14 +553,70 @@ def select_score_threshold(
             "decisions must be a list of ScoredDecision, not a "
             f"{type(decisions).__name__}; pass a JSON string to select_score_threshold_json instead"
         )
+    rows = [_decision_row(decision, i) for i, decision in enumerate(decisions)]
     return cast(
         ThresholdReplay,
         json.loads(
             select_score_threshold_json(
-                json.dumps(list(decisions)), target_precision, minimum_answered
+                json.dumps(rows, allow_nan=False), target_precision, minimum_answered
             )
         ),
     )
+
+
+def _plain(value: object) -> object:
+    """A numpy scalar (``float32``, ``int64``, ``bool_``) or 0-d array as the Python value it holds; anything else as it is."""
+    item = getattr(value, "item", None)
+    if callable(item) and getattr(value, "ndim", None) == 0:
+        return item()
+    return value
+
+
+def _decision_row(decision: object, index: int) -> dict[str, object]:
+    """One decision as plain JSON values, or the error that names it: numpy scalars unwrapped, a score that is not a
+    finite number refused with the decision's id (the core refuses it too, but without saying which one)."""
+    if not isinstance(decision, Mapping):
+        raise TypeError(
+            f"decision {index} must be a ScoredDecision dict, not a {type(decision).__name__}"
+        )
+    row = {key: _plain(value) for key, value in decision.items()}
+    name = repr(row.get("id", index))
+    for key, kinds in _DECISION_FIELDS.items():
+        value = row.get(key)
+        if value is None:
+            continue
+        # a bool is an int in Python, but only `right` may be one
+        if not isinstance(value, kinds) or (
+            kinds is not bool and isinstance(value, bool)
+        ):
+            raise TypeError(
+                f"decision {name}: {key} is a {type(value).__name__}, expected "
+                f"{_DECISION_KINDS[key]}; convert it before passing it in (float(), bool(), int())"
+            )
+        if isinstance(value, float) and not math.isfinite(value):
+            hint = (
+                "; leave score out (or None) when the judge gave no candidate"
+                if key == "score"
+                else ""
+            )
+            raise ValueError(f"decision {name}: {key} is {value}, not finite{hint}")
+    return row
+
+
+_DECISION_FIELDS: dict[str, type | tuple[type, ...]] = {
+    "id": str,
+    "settled_at": int,
+    "score": (int, float),
+    "right": bool,
+    "weight": (int, float),
+}
+_DECISION_KINDS = {
+    "id": "a string",
+    "settled_at": "a whole number (ticks, as a record's — only the order matters)",
+    "score": "a number",
+    "right": "True or False",
+    "weight": "a number",
+}
 
 
 def select_key_concentrations(
