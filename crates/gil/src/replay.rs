@@ -6,6 +6,7 @@
 //! Every sum here is taken in a fixed order — the same operations on the same operands — so the numbers come out the
 //! same to the bit on every run and every platform.
 
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -239,12 +240,7 @@ pub fn select_key_threshold(
     );
     let multiple = definition.multiple;
 
-    let mut ordered: Vec<Record> = records.iter().map(Record::remembered).collect();
-    ordered.sort_by(|a, b| {
-        a.settled_at
-            .cmp(&b.settled_at)
-            .then_with(|| a.id.cmp(&b.id))
-    });
+    let ordered = in_settlement_order(records);
 
     let mut matches: Vec<Answer> = Vec::new();
     let (mut lookups, mut lookup_weight, mut order) = (0_usize, 0.0_f64, 0_usize);
@@ -463,12 +459,7 @@ pub fn select_typed_key_thresholds_with(
         "'{attribute}' takes several values; typed key thresholds are for an attribute that takes one"
     );
 
-    let mut ordered: Vec<Record> = records.iter().map(Record::remembered).collect();
-    ordered.sort_by(|a, b| {
-        a.settled_at
-            .cmp(&b.settled_at)
-            .then_with(|| a.id.cmp(&b.id))
-    });
+    let ordered = in_settlement_order(records);
     let mut asked: Vec<Asked> = Vec::new();
     let mut order = 0;
     for record in &ordered {
@@ -1998,6 +1989,19 @@ pub(crate) fn coarse_layers(
     }
 }
 
+/// The records as memory remembers them ([`Record::remembered`]) in settlement order — by settlement time, then id; records
+/// settled at the same time and under the same id keep the order they came in. A record nothing was filled in is borrowed,
+/// not copied: a replay holds one reference a record instead of a second copy of all of them.
+fn in_settlement_order(records: &[Record]) -> Vec<Cow<'_, Record>> {
+    let mut ordered: Vec<&Record> = records.iter().collect();
+    ordered.sort_by(|a, b| {
+        a.settled_at
+            .cmp(&b.settled_at)
+            .then_with(|| a.id.cmp(&b.id))
+    });
+    ordered.into_iter().map(Record::as_remembered).collect()
+}
+
 /// What a replay is for: the value layers or the coarse level as well, handing each lookup's decision record to a sink.
 pub(crate) enum Replaying<'s> {
     Values(&'s mut dyn FnMut(&DecisionRecord)),
@@ -2056,12 +2060,7 @@ pub(crate) fn carry_on(
     let task = format!("{}/{attribute}", schema.name());
     let definition = schema.attribute(attribute);
     let votes = definition.similar_votes;
-    let mut ordered: Vec<Record> = records.iter().map(Record::remembered).collect();
-    ordered.sort_by(|a, b| {
-        a.settled_at
-            .cmp(&b.settled_at)
-            .then_with(|| a.id.cmp(&b.id))
-    });
+    let ordered = in_settlement_order(records);
 
     if let (Some(last), Some(first)) = (&state.last, ordered.first()) {
         assert!(
@@ -2340,12 +2339,7 @@ pub(crate) fn carry_on_elements(
     );
     let task = format!("{}/{attribute}", schema.name());
     let votes = definition.similar_votes;
-    let mut ordered: Vec<Record> = records.iter().map(Record::remembered).collect();
-    ordered.sort_by(|a, b| {
-        a.settled_at
-            .cmp(&b.settled_at)
-            .then_with(|| a.id.cmp(&b.id))
-    });
+    let ordered = in_settlement_order(records);
 
     if let (Some(last), Some(first)) = (&state.last, ordered.first()) {
         assert!(
@@ -2698,12 +2692,7 @@ pub fn select_key_concentrations(
 
     // No key concentrations keeps the schema valid.
     let schema = schema.derived(attribute, |f| f.key_concentrations.clear());
-    let mut ordered: Vec<Record> = records.iter().map(Record::remembered).collect();
-    ordered.sort_by(|a, b| {
-        a.settled_at
-            .cmp(&b.settled_at)
-            .then_with(|| a.id.cmp(&b.id))
-    });
+    let ordered = in_settlement_order(records);
 
     // key attribute → (predictions of a new value, the totals predicted from), in record order.
     let mut predictions: BTreeMap<String, (u64, Vec<f64>)> = BTreeMap::new();

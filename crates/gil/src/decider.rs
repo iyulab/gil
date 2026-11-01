@@ -287,7 +287,7 @@ impl Decider {
     /// Replaces the record's contribution to both memories with what its current values imply — leaving out values
     /// the application filled on its own.
     fn put(&mut self, schema: &Schema, record: &Record) {
-        let record = record.remembered();
+        let record = record.as_remembered();
         self.key_memory.put(schema, &record);
         self.place(&record.id, record.batch.as_deref());
         let Some(memory) = self.record_memory.as_mut() else {

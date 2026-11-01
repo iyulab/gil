@@ -445,7 +445,7 @@ impl Keeper {
         }
         let mut last: BTreeMap<&str, Option<String>> = BTreeMap::new();
         for record in &self.records {
-            let kept = record.remembered().values.get(attribute).cloned();
+            let kept = record.as_remembered().values.get(attribute).cloned();
             last.insert(record.id.as_str(), kept);
         }
         let mut counts: BTreeMap<String, usize> = BTreeMap::new();

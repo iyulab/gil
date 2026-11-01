@@ -21,6 +21,12 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   chooses; the public surface is unchanged. `rechoose_with` hands its sink only the records it goes through this time,
   which after such a record are those from the checkpoint on.
 
+- **Replays go through the records in place instead of copying all of them first.** `select_layers`, `select_coarse`,
+  `Keeper::rechoose` and the other replays used to hold a second copy of every record while they ran; they now hold a
+  reference to each, and copy only a record the application filled a value of (without that value). The choices are the
+  same to the bit. On a synthetic stream of short records the process held about 1.5 KB a record less after a choice,
+  about a fifth of what it held.
+
 ## 0.10.0
 
 ### Added

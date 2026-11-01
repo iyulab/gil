@@ -15,6 +15,11 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   replays from the start. The thresholds and promises are what a replay from the start chooses; the API is unchanged
   (see the crate's changelog).
 
+- **Choosing thresholds takes less memory at its peak.** A replay used to copy every record before it went through them;
+  it now goes through the records where they are (a record the application filled a value of is still copied, without
+  that value). On a synthetic stream of short records, the process held about a fifth less memory after a choice
+  (about 1.5 KB less a record). The choices are unchanged.
+
 ## 0.28.0
 
 ### Added

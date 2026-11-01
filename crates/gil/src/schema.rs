@@ -1107,6 +1107,12 @@ impl Record {
     /// The record as memory remembers it: the values (and sets) the application filled ([`SettlementKind::Fill`]) are
     /// left out, with their settlements.
     pub fn remembered(&self) -> Record {
+        self.as_remembered().into_owned()
+    }
+
+    /// [`Record::remembered`], borrowed when nothing was filled — the record itself, with no copy.
+    pub(crate) fn as_remembered(&self) -> std::borrow::Cow<'_, Record> {
+        use std::borrow::Cow;
         let filled: Vec<&String> = self
             .settlements
             .iter()
@@ -1114,11 +1120,11 @@ impl Record {
             .map(|(attribute, _)| attribute)
             .collect();
         if filled.is_empty() {
-            return self.clone();
+            return Cow::Borrowed(self);
         }
 
         let kept = |attribute: &String| !filled.contains(&attribute);
-        Record {
+        Cow::Owned(Record {
             values: self
                 .values
                 .iter()
@@ -1138,7 +1144,7 @@ impl Record {
                 .map(|(f, k)| (f.clone(), *k))
                 .collect(),
             ..self.clone()
-        }
+        })
     }
 }
 
@@ -1296,6 +1302,27 @@ fn chosen(layers: &LayerThresholds) -> (Option<f64>, Option<f64>, Option<f64>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_record_is_remembered_as_itself_unless_the_application_filled_a_value() {
+        use std::borrow::Cow;
+        let mut record = Record {
+            id: "r1".into(),
+            values: BTreeMap::from([("a".into(), "x".into()), ("b".into(), "y".into())]),
+            settled_at: 7,
+            ..Record::default()
+        };
+        record.settlements.insert("b".into(), SettlementKind::Enter);
+        assert!(matches!(record.as_remembered(), Cow::Borrowed(_)));
+        assert_eq!(record.remembered().values, record.values);
+
+        record.settlements.insert("b".into(), SettlementKind::Fill);
+        let kept = record.as_remembered();
+        assert!(matches!(kept, Cow::Owned(_)));
+        assert_eq!(kept.values, BTreeMap::from([("a".into(), "x".into())]));
+        assert!(!kept.settlements.contains_key("b"));
+        assert_eq!(kept.settled_at, 7);
+    }
 
     #[test]
     fn a_class_by_prefix_counts_scalars() {
