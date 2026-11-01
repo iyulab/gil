@@ -20,6 +20,11 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   that value). On a synthetic stream of short records, the process held about a fifth less memory after a choice
   (about 1.5 KB less a record). The choices are unchanged.
 
+- **A memory of similar texts takes about a third less memory, and so does each checkpoint of a keeper.** A remembered
+  text no longer keeps a copy of its weights that nothing read, and its n-gram ids are 32 bits. On a synthetic stream of
+  eight-word texts, the similar record layer's memory went from about 3.4 KB to 2.1 KB a record, and the process held
+  about a fifth less after a choice. Lookups return what they returned (checked against the full walk of every row).
+
 ## 0.28.0
 
 ### Added

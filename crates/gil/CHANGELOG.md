@@ -27,6 +27,11 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   same to the bit. On a synthetic stream of short records the process held about 1.5 KB a record less after a choice,
   about a fifth of what it held.
 
+- **`LexicalMemory` takes about a third less memory** (so does the checkpoint of a keeper, which copies it): a remembered
+  text no longer keeps its weights, which only its norm was ever read from, and its n-gram ids are `u32`. On a synthetic
+  stream of eight-word texts the memory of the similar record layer went from about 3.4 KB to 2.1 KB a record, a copy of it
+  from 3.1 KB to 1.8 KB. The similarities, the order of the matches and the choices are the same to the bit.
+
 ## 0.10.0
 
 ### Added

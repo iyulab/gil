@@ -111,16 +111,16 @@ impl LexicalMemory {
     }
 }
 
-/// One remembered text: its n-gram ids, ascending, with their counts and weights.
+/// One remembered text: its n-gram ids, ascending, with their counts. A row's weight for an id is its count × the id's
+/// inverse record frequency ([`Index::idf_of`]); the weights are not kept, only their norm.
 #[derive(Clone)]
 struct Row {
     key: String,
     answer: String,
     /// When the key was first remembered, among the rows of this index; breaks ties.
     order: u64,
-    ids: Vec<usize>,
+    ids: Vec<u32>,
     counts: Vec<u32>,
-    weights: Vec<f64>,
 }
 
 /// The slots of the rows holding one id and how many times each holds it, side by side, in the order they were posted —
@@ -165,7 +165,7 @@ struct Index {
     owners: Vec<u32>,
     remembered: u64,
     position: HashMap<String, usize>,
-    ids: HashMap<String, usize>,
+    ids: HashMap<String, u32>,
     /// How many rows hold each id.
     frequency: Vec<i64>,
     postings: Vec<Postings>,
@@ -189,15 +189,13 @@ impl Index {
                 self.remembered - 1
             }
         };
-        let mut weights = vec![0.0; ids.len()];
-        let norm = self.weigh(&ids, &counts, &mut weights);
+        let norm = self.norm_of(&ids, &counts);
         let row = Row {
             key: key.to_owned(),
             answer: answer.to_owned(),
             order,
             ids,
             counts,
-            weights,
         };
         let at = match existing {
             Some(at) => {
@@ -248,8 +246,8 @@ impl Index {
 
     /// The query's known ids, ascending, their weights, and its norm. An n-gram no row has ever held matches nothing, but
     /// still weighs in the norm — added in the query's scalar order, then the known ones in the order of their ids.
-    fn weigh_query(&self, query: &[(String, u32)]) -> (Vec<usize>, Vec<f64>, f64) {
-        let mut known: Vec<(usize, u32)> = Vec::with_capacity(query.len());
+    fn weigh_query(&self, query: &[(String, u32)]) -> (Vec<u32>, Vec<f64>, f64) {
+        let mut known: Vec<(u32, u32)> = Vec::with_capacity(query.len());
         let mut squares = 0.0_f64;
         for (gram, count) in query {
             match self.ids.get(gram) {
@@ -264,7 +262,7 @@ impl Index {
         }
 
         known.sort_unstable();
-        let ids: Vec<usize> = known.iter().map(|k| k.0).collect();
+        let ids: Vec<u32> = known.iter().map(|k| k.0).collect();
         let counts: Vec<u32> = known.iter().map(|k| k.1).collect();
         let mut weights = vec![0.0; ids.len()];
         let known_norm = self.weigh(&ids, &counts, &mut weights);
@@ -277,7 +275,7 @@ impl Index {
         let (ids, weights, query_norm) = self.weigh_query(query);
         let products: usize = ids
             .iter()
-            .filter_map(|&id| self.postings.get(id))
+            .filter_map(|&id| self.postings.get(id as usize))
             .map(|p| p.slots.len())
             .sum();
         let threads = if products < SPLIT_AT || query_norm == 0.0 || most == 1 {
@@ -320,7 +318,7 @@ impl Index {
     /// in the same order, as walking each row against the query, but only over the rows that share one.
     fn leaders(
         &self,
-        ids: &[usize],
+        ids: &[u32],
         weights: &[f64],
         query_norm: f64,
         range: std::ops::Range<usize>,
@@ -330,7 +328,7 @@ impl Index {
         if query_norm > 0.0 {
             let (low, high) = (range.start as u32, range.end as u32);
             for (&id, &weight) in ids.iter().zip(weights) {
-                let Some(postings) = self.postings.get(id) else {
+                let Some(postings) = self.postings.get(id as usize) else {
                     continue;
                 };
                 let from = postings.slots.partition_point(|&s| s < low);
@@ -381,13 +379,14 @@ impl Index {
 
     /// The ids of the n-grams, ascending, with their counts. An n-gram seen for the first time takes the next id, in the
     /// n-grams' scalar order.
-    fn intern(&mut self, grams: &[(String, u32)]) -> (Vec<usize>, Vec<u32>) {
-        let mut pairs: Vec<(usize, u32)> = Vec::with_capacity(grams.len());
+    fn intern(&mut self, grams: &[(String, u32)]) -> (Vec<u32>, Vec<u32>) {
+        let mut pairs: Vec<(u32, u32)> = Vec::with_capacity(grams.len());
         for (gram, count) in grams {
             let id = match self.ids.get(gram) {
                 Some(&id) => id,
                 None => {
-                    let id = self.ids.len();
+                    let id = u32::try_from(self.ids.len())
+                        .expect("fewer than 2^32 distinct n-grams in one memory");
                     self.ids.insert(gram.clone(), id);
                     self.frequency.push(0);
                     self.postings.push(Postings::default());
@@ -415,7 +414,7 @@ impl Index {
             std::mem::take(&mut self.norms),
         );
         for (row, norm) in rows.iter_mut().zip(&mut norms) {
-            *norm = self.weigh(&row.ids, &row.counts, &mut row.weights);
+            *norm = self.norm_of(&row.ids, &row.counts);
         }
         (self.rows, self.norms) = (rows, norms);
         self.repost();
@@ -430,7 +429,7 @@ impl Index {
         self.owners.push(at as u32);
         let row = &self.rows[at];
         for (&id, &count) in row.ids.iter().zip(&row.counts) {
-            let postings = &mut self.postings[id];
+            let postings = &mut self.postings[id as usize];
             postings.slots.push(slot);
             postings.counts.push(count);
         }
@@ -465,7 +464,7 @@ impl Index {
     }
 
     /// Fills `weights` with count × idf and returns their norm.
-    fn weigh(&self, ids: &[usize], counts: &[u32], weights: &mut [f64]) -> f64 {
+    fn weigh(&self, ids: &[u32], counts: &[u32], weights: &mut [f64]) -> f64 {
         let mut squares = 0.0_f64;
         for i in 0..ids.len() {
             weights[i] = f64::from(counts[i]) * self.idf_of(ids[i]);
@@ -475,10 +474,21 @@ impl Index {
         squares.sqrt()
     }
 
+    /// The norm of the weights count × idf, as [`Index::weigh`] gives it, without keeping the weights.
+    fn norm_of(&self, ids: &[u32], counts: &[u32]) -> f64 {
+        let mut squares = 0.0_f64;
+        for (&id, &count) in ids.iter().zip(counts) {
+            let weight = f64::from(count) * self.idf_of(id);
+            squares += weight * weight;
+        }
+
+        squares.sqrt()
+    }
+
     /// The inverse record frequency of `id` at the last refresh; an id first seen since then had none.
-    fn idf_of(&self, id: usize) -> f64 {
+    fn idf_of(&self, id: u32) -> f64 {
         self.idf
-            .get(id)
+            .get(id as usize)
             .copied()
             .unwrap_or_else(|| self.smoothed(0))
     }
@@ -490,9 +500,9 @@ impl Index {
 }
 
 /// Adds `delta` to the frequency of each id.
-fn tally(frequency: &mut [i64], ids: &[usize], delta: i64) {
+fn tally(frequency: &mut [i64], ids: &[u32], delta: i64) {
     for &id in ids {
-        frequency[id] += delta;
+        frequency[id as usize] += delta;
     }
 }
 
@@ -707,7 +717,7 @@ mod tests {
             let mut sum = 0.0_f64;
             for (&id, &weight) in ids.iter().zip(&weights) {
                 if let Ok(at) = row.ids.binary_search(&id) {
-                    sum += weight * row.weights[at];
+                    sum += weight * (f64::from(row.counts[at]) * index.idf_of(id));
                 }
             }
             if query_norm > 0.0 && norm > 0.0 {
@@ -783,7 +793,7 @@ mod tests {
         let (ids, _, _) = index.weigh_query(&text::grams(&text(4_001), 2, 3));
         let products: usize = ids
             .iter()
-            .filter_map(|&id| index.postings.get(id))
+            .filter_map(|&id| index.postings.get(id as usize))
             .map(|p| p.slots.len())
             .sum();
         assert!(products >= SPLIT_AT, "the lookup is large enough to split");
