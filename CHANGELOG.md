@@ -25,6 +25,12 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   eight-word texts, the similar record layer's memory went from about 3.4 KB to 2.1 KB a record, and the process held
   about a fifth less after a choice. Lookups return what they returned (checked against the full walk of every row).
 
+- **The key layer's memory takes about two fifths less, in both the decider and each replay.** The settled key memory kept a
+  copy of every record's value, id and slot for each key a record settled under, and again in each slot's counts; they
+  are now shared, and a record's index holds the slot the memory already has instead of its own. On a synthetic stream of
+  short records the key memory went from about 1.07 KB to 0.58 KB a record, and the process held about a fifth less
+  again after a choice. Choices and promises are the same.
+
 ## 0.28.0
 
 ### Added

@@ -7,7 +7,7 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use crate::schema::{Attribute, AttributeRole, KeyCombine, Record, Schema};
 use crate::{hangul, text};
@@ -27,19 +27,24 @@ impl std::fmt::Display for Key {
     }
 }
 
-/// An attribute's counts under one key, or overall when the key is `None`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct Slot {
+/// An attribute's counts under one key, or overall when the key is `None`. A slot is shared, not copied: a record's
+/// settlements are held under it in the memory's index of records and in its counts.
+type Slot = Arc<SlotKey>;
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct SlotKey {
     attribute: String,
     key: Option<Key>,
 }
 
-/// A value a record settled, and when; the time and then the record id order settlements.
+/// A value a record settled, and when; the time and then the record id order settlements. The value and the record are
+/// shared, not copied, by every place a settlement is held — a record's settlement is under several slots, and in each
+/// of them twice.
 #[derive(Clone, Debug, PartialEq)]
 struct Settled {
-    value: String,
+    value: Arc<str>,
     at: i64,
-    record: String,
+    record: Arc<str>,
 }
 
 /// One value's place under a slot: its share of the weighted total, its weight, the total and its latest settlement.
@@ -205,6 +210,7 @@ impl KeyMemory {
             panic!("record '{}': {misplaced}", record.id);
         }
         self.remove(schema.name(), &record.id);
+        let id: Arc<str> = Arc::from(record.id.as_str());
         let mut tallies = Vec::new();
         for attribute in schema
             .attributes()
@@ -216,15 +222,15 @@ impl KeyMemory {
                 let keys = self.keys(schema, attribute, &record.values, &record.sets);
                 for element in &elements {
                     let settled = Settled {
-                        value: (*element).clone(),
+                        value: Arc::from(element.as_str()),
                         at: record.settled_at,
-                        record: record.id.clone(),
+                        record: id.clone(),
                     };
                     tallies.push((
-                        Slot {
+                        Slot::new(SlotKey {
                             attribute: attribute.name.clone(),
                             key: None,
-                        },
+                        }),
                         settled.clone(),
                     ));
                     let mut under = keys.clone();
@@ -237,10 +243,10 @@ impl KeyMemory {
                     }
                     for key in under {
                         tallies.push((
-                            Slot {
+                            Slot::new(SlotKey {
                                 attribute: attribute.name.clone(),
                                 key: Some(key),
-                            },
+                            }),
                             settled.clone(),
                         ));
                     }
@@ -254,23 +260,23 @@ impl KeyMemory {
             };
 
             let settled = Settled {
-                value: value.clone(),
+                value: Arc::from(value.as_str()),
                 at: record.settled_at,
-                record: record.id.clone(),
+                record: id.clone(),
             };
             tallies.push((
-                Slot {
+                Slot::new(SlotKey {
                     attribute: attribute.name.clone(),
                     key: None,
-                },
+                }),
                 settled.clone(),
             ));
             for key in self.keys(schema, attribute, &record.values, &record.sets) {
                 tallies.push((
-                    Slot {
+                    Slot::new(SlotKey {
                         attribute: attribute.name.clone(),
                         key: Some(key),
-                    },
+                    }),
                     settled.clone(),
                 ));
             }
@@ -282,7 +288,11 @@ impl KeyMemory {
 
         let decay = self.recency_decay;
         let index = self.schemas.entry(schema.name().to_owned()).or_default();
-        for (slot, settled) in &tallies {
+        for (slot, settled) in &mut tallies {
+            // The slot the memory already holds stands for this one, so a record's index holds no slot of its own.
+            if let Some(known) = index.values.get_key_value(&*slot).map(|(k, _)| k.clone()) {
+                *slot = known;
+            }
             index
                 .values
                 .entry(slot.clone())
@@ -360,10 +370,10 @@ impl KeyMemory {
                 },
             })
             .collect();
-        let overall = Slot {
+        let overall = Slot::new(SlotKey {
             attribute: q.attribute.to_owned(),
             key: None,
-        };
+        });
         if let Some(counts) = index.values.get(&overall)
             && candidates.len() < count
         {
@@ -461,10 +471,10 @@ impl KeyMemory {
 
         let mut found = Vec::new();
         for key in self.keys(q.schema, q.definition(), q.known, &NO_SETS) {
-            let slot = Slot {
+            let slot = Slot::new(SlotKey {
                 attribute: q.attribute.to_owned(),
                 key: Some(key.clone()),
-            };
+            });
             let Some(counts) = index.values.get(&slot) else {
                 continue;
             };
@@ -520,10 +530,10 @@ impl KeyMemory {
         self.keys(q.schema, attribute, q.known, q.known_sets)
             .into_iter()
             .any(|key| {
-                let slot = Slot {
+                let slot = Slot::new(SlotKey {
                     attribute: attribute.name.clone(),
                     key: Some(key),
-                };
+                });
                 index.values.get(&slot).is_some_and(|counts| {
                     counts
                         .shares(q.excluding)
@@ -557,10 +567,10 @@ impl KeyMemory {
         }
 
         for key in keys {
-            let slot = Slot {
+            let slot = Slot::new(SlotKey {
                 attribute: attribute.name.clone(),
                 key: Some(key.clone()),
-            };
+            });
             let Some(counts) = index.values.get(&slot) else {
                 continue;
             };
@@ -664,7 +674,7 @@ struct Counts {
     recency_decay: f64,
     settled: Vec<Settled>,
     /// Settlements per record, to tell whether leaving one out changes anything.
-    records: HashMap<String, usize>,
+    records: HashMap<Arc<str>, usize>,
     /// The fold of every settlement, while settlements arrive in order; none once one did not.
     fold: Option<Fold>,
     /// The fold run again from the earliest, when one was needed since the last change.
@@ -726,7 +736,7 @@ impl Counts {
             let rest: Vec<&Settled> = self
                 .settled
                 .iter()
-                .filter(|s| s.record != excluded)
+                .filter(|s| &*s.record != excluded)
                 .collect();
             return Cow::Owned(Fold::weigh(rest, self.recency_decay).shares());
         }
@@ -781,8 +791,7 @@ impl Fold {
     /// Whether `settled` may be added next: later than the latest settlement, or settled together with it.
     fn takes_next(&self, settled: &Settled) -> bool {
         self.newest.last().is_none_or(|last| {
-            settled.at > last.at
-                || (settled.at == last.at && settled.record.as_str() >= last.record.as_str())
+            settled.at > last.at || (settled.at == last.at && *settled.record >= *last.record)
         })
     }
 
@@ -800,7 +809,7 @@ impl Fold {
             for previous in &self.newest {
                 let entry = self
                     .raw
-                    .entry(previous.value.clone())
+                    .entry(previous.value.to_string())
                     .or_insert((0.0, previous.at));
                 *entry = (entry.0 + amount, previous.at);
                 self.raw_total += amount;
@@ -831,7 +840,7 @@ impl Fold {
             .map(|(v, &(r, at))| (v.as_str(), (r * self.scale, at)))
             .collect();
         for s in &self.newest {
-            let own = weights.get(s.value.as_str()).map_or(0.0, |w| w.0);
+            let own = weights.get(&*s.value).map_or(0.0, |w| w.0);
             weights.insert(&s.value, (own + 1.0, s.at));
         }
 

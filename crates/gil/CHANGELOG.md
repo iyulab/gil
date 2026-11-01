@@ -32,6 +32,11 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   stream of eight-word texts the memory of the similar record layer went from about 3.4 KB to 2.1 KB a record, a copy of it
   from 3.1 KB to 1.8 KB. The similarities, the order of the matches and the choices are the same to the bit.
 
+- **`KeyMemory` takes about two fifths less memory** (1.07 KB to 0.58 KB a record on a synthetic stream of short records):
+  a settlement's value and record id are shared (`Arc<str>`) by the places that hold it, and a record's index points to the
+  slot the memory already holds instead of keeping its own. The decider and each of a keeper's replays hold one. The
+  scores, the candidates and the order they come in are the same to the bit, and settling and choosing run no slower.
+
 ## 0.10.0
 
 ### Added
