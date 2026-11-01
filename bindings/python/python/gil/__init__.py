@@ -1020,13 +1020,17 @@ class Keeper:
         )
 
     def settle(self, decider: Decider, records: Records) -> None:
-        """Puts ``records`` into ``decider`` and into the next choice. Records may come in any order; one settled before
-        the last a replay has gone through has the next choice replay from the start."""
+        """Puts ``records`` into ``decider`` and into the next choice. Records may come in any order. One settled before
+        the last a replay has gone through has the next choice go on from where the records before it ended: the first
+        time it happens the keeper replays from the start and keeps checkpoints on the way, and from then on a late
+        record costs the replay of the records settled after it. The choice is the same either way."""
         self._inner.settle(decider._inner, records)
 
     def remove(self, decider: Decider, record_id: str) -> None:
         """Takes record ``record_id``, which the host deleted, out of ``decider`` and out of the records; the next
-        choice replays from the start without it."""
+        choice goes on from where the records before it ended, as for a record settled out of order (see ``settle``).
+        The choice is the same as without the record, but the decider's similar record scores can differ slightly from
+        those of a decider that never held it."""
         self._inner.remove(decider._inner, record_id)
 
     def stale(self) -> dict[str, Any] | str | None:

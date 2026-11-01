@@ -72,8 +72,10 @@ public sealed class Keeper : IDisposable
     public Tuning Tuning => State().Tuning;
 
     /// <summary>Puts settled records into <paramref name="decider"/> and into the next choice. Records may come in any
-    /// order; one settled before the last a replay has gone through has the next choice replay from the start. With
-    /// <see cref="SelectionOptions.RestartOnFormVersion"/>, a record under a new edition starts the keeper again from
+    /// order. One settled before the last a replay has gone through has the next choice go on from where the records
+    /// before it ended: the first time it happens the keeper replays from the start and keeps checkpoints on the way,
+    /// and from then on a late record costs the replay of the records settled after it. The choice is the same either
+    /// way. With <see cref="SelectionOptions.RestartOnFormVersion"/>, a record under a new edition starts the keeper again from
     /// nothing before it is taken.</summary>
     /// <exception cref="ArgumentException">A record keeps an attribute where its kind does not belong.</exception>
     public void Settle(Decider decider, SettledRecords records)
@@ -88,7 +90,9 @@ public sealed class Keeper : IDisposable
     }
 
     /// <summary>Takes record <paramref name="recordId"/>, which the host deleted, out of <paramref name="decider"/> and
-    /// out of the records; the next choice replays from the start without it.</summary>
+    /// out of the records; the next choice goes on from where the records before it ended, as for a record settled out
+    /// of order (see <see cref="Settle"/>). The choice is the same as without the record, but the decider's similar
+    /// record scores can differ slightly from those of a decider that never held it.</summary>
     public unsafe void Remove(Decider decider, string recordId)
     {
         ArgumentNullException.ThrowIfNull(decider);
