@@ -351,8 +351,11 @@ schema = keeper.schema  # answer with this and the decider
 
 It chooses for every decided attribute that takes one value, and for an attribute with a coarse level the level's
 thresholds too, on the same replay — as `select_coarse` would with the value thresholds just chosen. A record settled out of order, or
-one taken out with `keeper.remove(decider, id)`, has the next choice replay from the start. Nothing is stored outside
-the process: a keeper made at start-up replays the saved records once.
+one taken out with `keeper.remove(decider, id)`, has the next choice replay from where the records before it ended: the
+first time it happens the keeper replays from the start and keeps checkpoints on the way (two to three times the memory of
+the replays themselves, measured on a synthetic stream), and from then on a late record costs the replay of the records settled after it, not of all of them.
+The choice is the same either way. Nothing is stored outside the process: a keeper made at start-up replays the saved
+records once.
 
 An answer does not carry its promise; the promise is its layer's, which `gil.promise_of` reads from the tuning by the
 answer's `source` (`keeper.tuning` for a keeper's). A coarse class offered instead reads its promise with

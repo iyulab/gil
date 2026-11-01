@@ -154,13 +154,14 @@ impl<'a> Lookup<'a> {
 }
 
 /// The settled key memory. Not thread-safe.
+#[derive(Clone)]
 pub struct KeyMemory {
     max_key_length: usize,
     recency_decay: f64,
     schemas: HashMap<String, SchemaIndex>,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct SchemaIndex {
     records: HashMap<String, Vec<(Slot, Settled)>>,
     values: HashMap<Slot, Counts>,
@@ -658,6 +659,7 @@ impl KeyMemory {
 /// one taken away, has the fold run again from the earliest on the next look. Either way the same settlements reach the
 /// same weights to the bit. A record settles at most once under a slot ([`KeyMemory::put`] replaces what it
 /// contributed) — with one value, or with several of an attribute that takes several, which weigh alike as one.
+#[derive(Clone)]
 struct Counts {
     recency_decay: f64,
     settled: Vec<Settled>,

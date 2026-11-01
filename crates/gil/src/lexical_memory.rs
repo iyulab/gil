@@ -22,6 +22,7 @@ pub struct Match {
 }
 
 /// The lexical memory. Not thread-safe.
+#[derive(Clone)]
 pub struct LexicalMemory {
     min_gram: usize,
     max_gram: usize,
@@ -111,6 +112,7 @@ impl LexicalMemory {
 }
 
 /// One remembered text: its n-gram ids, ascending, with their counts and weights.
+#[derive(Clone)]
 struct Row {
     key: String,
     answer: String,
@@ -125,7 +127,7 @@ struct Row {
 /// the slots ascending. A row's weight for the id is that count × the id's inverse record frequency, which every entry
 /// of the list shares until the weights are taken afresh and the lists rebuilt: a lookup multiplies it again, as the
 /// row's own weights were, and reads a third less than a list of weights.
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct Postings {
     slots: Vec<u32>,
     counts: Vec<u32>,
@@ -152,7 +154,7 @@ const MOST_THREADS: usize = 8;
 /// A lookup that would add many products splits the slots into ranges, one a thread: each range's sums take the same
 /// additions in the same order, and each thread ranks its own rows, so the leaders are the same to the bit whatever
 /// the number of threads — one where threads are not available.
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct Index {
     rows: Vec<Row>,
     /// Each row's weight norm and the slot its sum is kept in during a lookup, beside the rows: a lookup reads every

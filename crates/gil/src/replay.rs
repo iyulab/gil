@@ -2024,7 +2024,7 @@ fn replay(
 
 /// Where a replay stands: its steps, the records the record memory holds and the case each represents, how many
 /// records it has gone through, and the last of them in settlement order.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct ReplayState {
     pub(crate) steps: Vec<Step>,
     remembered: usize,

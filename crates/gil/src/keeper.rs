@@ -150,6 +150,132 @@ struct Replay {
     memory: LexicalMemory,
     state: ReplayState,
     through: usize,
+    /// Where the replay stood earlier, thinning out toward the start: a record settled out of order, or taken out, has
+    /// the replay go on from the last of these before it instead of from nothing.
+    checkpoints: Vec<Checkpoint>,
+}
+
+/// A replay as it stood once it had gone through `through` of the keeper's records.
+struct Checkpoint {
+    key_memory: KeyMemory,
+    memory: LexicalMemory,
+    state: ReplayState,
+    through: usize,
+}
+
+impl Replay {
+    fn new(memory: LexicalMemory) -> Self {
+        Replay {
+            key_memory: KeyMemory::default(),
+            memory,
+            state: ReplayState::default(),
+            through: 0,
+            checkpoints: Vec::new(),
+        }
+    }
+
+    /// Carries the replay on through the records at `order[self.through..]`. With `checkpointing`, it keeps a checkpoint
+    /// of where it stood whenever it has grown by a quarter since the last, and goes through the records in steps of
+    /// about that size, so that a replay started from nothing leaves checkpoints on the way.
+    #[allow(clippy::too_many_arguments)]
+    fn advance(
+        &mut self,
+        schema: &Schema,
+        attribute: &str,
+        records: &[Record],
+        order: &[usize],
+        counting: Option<&[SettlementKind]>,
+        coarse: bool,
+        checkpointing: bool,
+        sink: &mut dyn FnMut(&DecisionRecord),
+    ) {
+        let end = order.len();
+        while self.through < end {
+            let mut stop = end;
+            if checkpointing {
+                self.checkpoint_if_grown();
+                stop = (self.through + (self.through / 4 + 1).max(64)).min(end);
+            }
+            // Records settled together are carried on with together.
+            let together = |i: usize| (records[order[i]].settled_at, &records[order[i]].id);
+            while stop < end && together(stop) == together(stop - 1) {
+                stop += 1;
+            }
+            // Records that came in in order lie side by side; any others are gathered.
+            let ids = &order[self.through..stop];
+            let gathered: Vec<Record>;
+            let step: &[Record] = if ids.windows(2).all(|w| w[1] == w[0] + 1) {
+                &records[ids[0]..=ids[ids.len() - 1]]
+            } else {
+                gathered = ids.iter().map(|&i| records[i].clone()).collect();
+                &gathered
+            };
+            let replaying = if coarse {
+                Replaying::Coarse(&mut *sink)
+            } else {
+                Replaying::Values(&mut *sink)
+            };
+            carry_on(
+                &mut self.state,
+                &mut self.key_memory,
+                &mut self.memory,
+                schema,
+                attribute,
+                step,
+                counting,
+                replaying,
+            );
+            self.through = stop;
+        }
+    }
+
+    /// Keeps where the replay stands if it has gone through a quarter more records than at the last checkpoint, and
+    /// thins the checkpoints to the newest two and the last of each doubling of records gone through — a few times the
+    /// replay's own memory in all.
+    fn checkpoint_if_grown(&mut self) {
+        let grown = self
+            .checkpoints
+            .last()
+            .is_none_or(|c| self.through * 4 >= c.through * 5);
+        if self.through == 0 || !grown {
+            return;
+        }
+        self.checkpoints.push(Checkpoint {
+            key_memory: self.key_memory.clone(),
+            memory: self.memory.clone(),
+            state: self.state.clone(),
+            through: self.through,
+        });
+        let octave = |c: &Checkpoint| usize::BITS - c.through.leading_zeros();
+        let last = self.checkpoints.len() - 1;
+        let mut i = 0;
+        let checkpoints = std::mem::take(&mut self.checkpoints);
+        let octaves: Vec<u32> = checkpoints.iter().map(octave).collect();
+        self.checkpoints = checkpoints
+            .into_iter()
+            .filter(|_| {
+                i += 1;
+                let at = i - 1;
+                at + 2 > last || octaves[at] != octaves[at + 1]
+            })
+            .collect();
+    }
+
+    /// Puts the replay back to its last checkpoint that `usable` accepts, dropping the later ones, or to nothing (with
+    /// `fresh` as its record memory) where there is none.
+    fn restore(&mut self, fresh: LexicalMemory, usable: impl Fn(&Checkpoint) -> bool) {
+        match self.checkpoints.iter().rposition(usable) {
+            Some(i) => {
+                self.checkpoints.truncate(i + 1);
+                let c = &self.checkpoints[i];
+                self.key_memory = c.key_memory.clone();
+                self.memory = c.memory.clone();
+                self.state = c.state.clone();
+                self.through = c.through;
+            }
+            None => *self = Replay::new(fresh),
+        }
+    }
 }
 
 /// An attribute's replay of the similar record layer by elements as it stands: its memory, its answers, and how many of
@@ -168,6 +294,13 @@ pub struct Keeper {
     keep: Keep,
     threads: Option<usize>,
     records: Vec<Record>,
+    /// The indexes of `records` in settlement order — the order the replays go through them — and the first place in it
+    /// where a record has come in or gone out since the replays last went through, `usize::MAX` for none.
+    order: Vec<usize>,
+    changed: usize,
+    /// Whether the replays keep checkpoints: from the first record that comes in or goes out of order, so that a
+    /// keeper whose records come in order spends nothing on them.
+    checkpointing: bool,
     replays: BTreeMap<String, Replay>,
     elements: BTreeMap<String, ElementReplay>,
     chosen: BTreeMap<String, LayerThresholds>,
@@ -194,6 +327,9 @@ impl Keeper {
             keep,
             threads: None,
             records: Vec::new(),
+            order: Vec::new(),
+            changed: usize::MAX,
+            checkpointing: false,
             replays: BTreeMap::new(),
             elements: BTreeMap::new(),
             chosen: BTreeMap::new(),
@@ -324,13 +460,15 @@ impl Keeper {
     }
 
     /// Takes settled records: `decider` learns them ([`Decider::rebuild`]) and the next choice replays them. Records may
-    /// come in any order; one settled before the last a replay has gone through has the next choice replay everything
-    /// from the start. With [`Keep::restart_on_form_version`], a record under a new edition starts the keeper again
+    /// come in any order; one settled before the last a replay has gone through has the next choice replay from the
+    /// last checkpoint before it ([`Keeper::rechoose_with`]). With [`Keep::restart_on_form_version`], a record under a new edition starts the keeper again
     /// from nothing before it is taken — what came before it, in this call or earlier, is forgotten.
     pub fn settle(&mut self, decider: &mut Decider, records: &[Record]) {
         if !self.keep.restart_on_form_version {
             decider.rebuild(&self.schema, records);
+            let from = self.records.len();
             self.records.extend_from_slice(records);
+            self.put_in_order(from);
             return;
         }
         let mut taken: Vec<Record> = Vec::with_capacity(records.len());
@@ -349,13 +487,56 @@ impl Keeper {
             taken.push(record.clone());
         }
         decider.rebuild(&self.schema, &taken);
+        let from = self.records.len();
         self.records.extend(taken);
+        self.put_in_order(from);
+    }
+
+    /// Puts the records from `from` on into `order`, noting the first place one came in at.
+    fn put_in_order(&mut self, from: usize) {
+        let records = &self.records;
+        let key = |i: &usize| (records[*i].settled_at, records[*i].id.as_str());
+        let mut new: Vec<usize> = (from..records.len()).collect();
+        new.sort_by(|a, b| key(a).cmp(&key(b)));
+        let Some(first) = new.first() else { return };
+        let old = std::mem::take(&mut self.order);
+        // Settled after all before, as records mostly are: they go on at the end.
+        if old.last().is_none_or(|last| key(last) < key(first)) {
+            self.order = old;
+            self.order.extend(new);
+            return;
+        }
+        let mut merged = Vec::with_capacity(old.len() + new.len());
+        let (mut i, mut j) = (0, 0);
+        let mut earliest = None;
+        while i < old.len() || j < new.len() {
+            if j < new.len() && (i == old.len() || key(&new[j]) < key(&old[i])) {
+                // Settled together with records already there, it is carried on with them.
+                let mut at = merged.len();
+                while at > 0 && key(&merged[at - 1]) == key(&new[j]) {
+                    at -= 1;
+                }
+                earliest = Some(earliest.map_or(at, |e: usize| e.min(at)));
+                merged.push(new[j]);
+                j += 1;
+            } else {
+                merged.push(old[i]);
+                i += 1;
+            }
+        }
+        if let Some(place) = earliest {
+            self.changed = self.changed.min(place);
+            self.checkpointing = true;
+        }
+        self.order = merged;
     }
 
     /// Starts again from nothing under `edition`: the records settled so far leave `decider` and the replays, their
     /// edition is left behind, and the thresholds chosen on them leave the schema.
     fn begin(&mut self, decider: &mut Decider, edition: &str) {
         let ids: BTreeSet<String> = self.records.drain(..).map(|r| r.id).collect();
+        self.order.clear();
+        self.changed = usize::MAX;
         for id in &ids {
             decider.remove(&self.schema, id);
         }
@@ -388,11 +569,25 @@ impl Keeper {
     }
 
     /// Takes a record the host deleted out of `decider` ([`Decider::remove`]) and out of the records; the next choice
-    /// replays from the start, without it.
+    /// replays without it, from the last checkpoint before it.
     pub fn remove(&mut self, decider: &mut Decider, record: &str) {
         decider.remove(&self.schema, record);
+        let Some(place) = self
+            .order
+            .iter()
+            .position(|&i| self.records[i].id == record)
+        else {
+            return;
+        };
         self.records.retain(|r| r.id != record);
-        self.restart();
+        let records = &self.records;
+        self.order = (0..records.len()).collect();
+        self.order.sort_by(|&a, &b| {
+            (records[a].settled_at, &records[a].id).cmp(&(records[b].settled_at, &records[b].id))
+        });
+        self.changed = self.changed.min(place);
+        self.checkpointing = true;
+        self.restart_elements();
     }
 
     /// Why the last choice no longer stands, or `None` while it does — [`Tuning::stale`] on the records settled, and
@@ -443,6 +638,13 @@ impl Keeper {
 
     /// Chooses every attribute's thresholds again on all the records settled — replaying only those settled since the
     /// last choice where it can — puts them on the schema and captures the tuning with their promises.
+    ///
+    /// A replay can go on only through records settled after those it has gone through. When a record has come in
+    /// before them, or one has gone out, it goes back instead to where it stood at the last checkpoint before that
+    /// record, or to the start where there is none. A keeper keeps checkpoints from the first such record on, and
+    /// spends nothing on them until then: the first one is replayed from the start, leaving checkpoints on the way — the
+    /// newest two and the last of each doubling of records gone through, two to three times the memory of the
+    /// replays themselves — and later ones from the checkpoint before them. The choice is the same whichever way it was reached.
     pub fn rechoose(&mut self) -> &Tuning {
         self.rechoose_with(&mut |_| {})
     }
@@ -452,16 +654,24 @@ impl Keeper {
     /// of it ([`DecisionRecord::coarse`]), with whether the value layers answered first at the thresholds the schema held
     /// when the record was replayed.
     pub fn rechoose_with(&mut self, sink: &mut dyn FnMut(&DecisionRecord)) -> &Tuning {
+        // A record come in or gone out before where a replay has got to has it go on from the last checkpoint before.
+        let changed = std::mem::replace(&mut self.changed, usize::MAX);
+        let names: Vec<String> = self.replays.keys().cloned().collect();
+        for name in names {
+            if changed < self.replays[&name].through {
+                let fresh = self.lexical();
+                self.replays
+                    .get_mut(&name)
+                    .expect("a name just listed")
+                    .restore(fresh, |c| c.through <= changed);
+            }
+        }
         if self
-            .replays
+            .elements
             .values()
             .any(|r| !self.carries_on(&r.state.last, r.through))
-            || self
-                .elements
-                .values()
-                .any(|r| !self.carries_on(&r.state.last, r.through))
         {
-            self.restart();
+            self.restart_elements();
         }
 
         let choice = self.keep.choice();
@@ -471,22 +681,16 @@ impl Keeper {
         let mut coarse = BTreeMap::new();
         for (attribute, replay) in &mut self.replays {
             let definition = self.schema.attribute(attribute);
-            let replaying = if definition.coarse.is_some() {
-                Replaying::Coarse(&mut *sink)
-            } else {
-                Replaying::Values(&mut *sink)
-            };
-            carry_on(
-                &mut replay.state,
-                &mut replay.key_memory,
-                &mut replay.memory,
+            replay.advance(
                 &self.schema,
                 attribute,
-                &self.records[replay.through..],
+                &self.records,
+                &self.order,
                 choice.counting,
-                replaying,
+                definition.coarse.is_some(),
+                self.checkpointing,
+                &mut *sink,
             );
-            replay.through = self.records.len();
             // Apart, the value thresholds are the later records' and the first records' are chosen on their own.
             let later = self
                 .keep
@@ -609,6 +813,12 @@ impl Keeper {
 
     /// Every replay back to the start, with empty memories.
     fn restart(&mut self) {
+        self.restart_replays();
+        self.restart_elements();
+    }
+
+    /// The replays of the attributes that take one value back to the start, with empty memories.
+    fn restart_replays(&mut self) {
         let attributes: Vec<String> = self
             .schema
             .attributes()
@@ -616,6 +826,14 @@ impl Keeper {
             .filter(|a| a.role == AttributeRole::Decided && !a.multiple)
             .map(|a| a.name.clone())
             .collect();
+        self.replays = attributes
+            .into_iter()
+            .map(|attribute| (attribute, Replay::new(self.lexical())))
+            .collect();
+    }
+
+    /// The replays by elements back to the start, with empty memories.
+    fn restart_elements(&mut self) {
         self.elements = self
             .schema
             .attributes()
@@ -628,18 +846,6 @@ impl Keeper {
                     through: 0,
                 };
                 (a.name.clone(), replay)
-            })
-            .collect();
-        self.replays = attributes
-            .into_iter()
-            .map(|attribute| {
-                let replay = Replay {
-                    key_memory: KeyMemory::default(),
-                    memory: self.lexical(),
-                    state: ReplayState::default(),
-                    through: 0,
-                };
-                (attribute, replay)
             })
             .collect();
     }
@@ -1103,6 +1309,86 @@ mod tests {
         all.retain(|r| r.id != "t10");
         assert_eq!(of(&keeper), from_the_start(&keep, &all));
         assert_eq!(keeper.settled(), all.len());
+    }
+
+    #[test]
+    fn a_record_out_of_order_or_removed_goes_on_from_a_checkpoint() {
+        let records = settled(800);
+        for keep in [
+            Keep::new(0.8),
+            Keep {
+                counting: Some(vec![SettlementKind::Enter, SettlementKind::Check]),
+                rule: ThresholdRule::Pooled,
+                value_tails: true,
+                ..Keep::new(0.75)
+            },
+        ] {
+            let mut keeper = Keeper::new(schema(), keep.clone());
+            let mut decider = decider();
+            let mut done = 0;
+            for at in [100, 150, 230, 400, 550, 700, 800] {
+                keeper.settle(&mut decider, &records[done..at]);
+                done = at;
+                keeper.rechoose();
+            }
+            assert_eq!(of(&keeper), from_the_start(&keep, &records));
+            // Records settled in order leave no checkpoints.
+            assert!(keeper.replays["team"].checkpoints.is_empty());
+
+            // Records settled late: the first has the replay start again and leave checkpoints on its way, the newest
+            // within a step of the end and thinning toward the start; the others, at the end, near it, in the middle,
+            // near the start, before everything, go on from them.
+            let mut all = records.clone();
+            for (k, at) in [799, 600, 330, 120, 10, 0].into_iter().enumerate() {
+                let mut late = records[at].clone();
+                late.id = format!("late{k}");
+                late.settled_at = records[at].settled_at;
+                keeper.settle(&mut decider, std::slice::from_ref(&late));
+                all.push(late);
+                keeper.rechoose();
+                assert_eq!(of(&keeper), from_the_start(&keep, &all), "late at {at}");
+                if k == 0 {
+                    let team = &keeper.replays["team"];
+                    let throughs: Vec<usize> = team.checkpoints.iter().map(|c| c.through).collect();
+                    assert!(throughs.len() >= 3, "checkpoints {throughs:?}");
+                    assert!(throughs.windows(2).all(|w| w[0] < w[1]), "{throughs:?}");
+                    assert!(*throughs.last().unwrap() * 5 >= 800 * 3, "{throughs:?}");
+                }
+            }
+            // Several at once, the earliest deciding where the replay goes back to.
+            let mut two = Vec::new();
+            for (k, at) in [750, 450].into_iter().enumerate() {
+                let mut late = records[at].clone();
+                late.id = format!("pair{k}");
+                late.settled_at = records[at].settled_at;
+                two.push(late);
+            }
+            keeper.settle(&mut decider, &two);
+            all.extend(two);
+            keeper.rechoose();
+            assert_eq!(of(&keeper), from_the_start(&keep, &all), "two at once");
+
+            // Records taken out, at the end, in the middle, near the start, and again out of order after.
+            for id in ["t780", "t400", "t3", "late2", "t10"] {
+                keeper.remove(&mut decider, id);
+                all.retain(|r| r.id != id);
+                keeper.rechoose();
+                assert_eq!(of(&keeper), from_the_start(&keep, &all), "without {id}");
+            }
+            let mut late = records[500].clone();
+            late.id = "after-removal".into();
+            keeper.remove(&mut decider, "t5");
+            all.retain(|r| r.id != "t5");
+            keeper.settle(&mut decider, std::slice::from_ref(&late));
+            all.push(late);
+            keeper.rechoose();
+            assert_eq!(
+                of(&keeper),
+                from_the_start(&keep, &all),
+                "removal and a late record"
+            );
+            assert_eq!(keeper.settled(), all.len());
+        }
     }
 
     #[test]

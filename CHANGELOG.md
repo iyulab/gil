@@ -5,6 +5,16 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 [crates/gil/CHANGELOG.md](crates/gil/CHANGELOG.md), and the review statistics (`iyulab-gil-review` and its .NET binding
 `Gil.Review`) theirs in [crates/gil-review/CHANGELOG.md](crates/gil-review/CHANGELOG.md).
 
+## Unreleased
+
+### Changed
+
+- **A record settled out of order, or taken out with `Keeper.Remove`, no longer has the next choice replay everything.**
+  The keeper keeps checkpoints of its replays from the first such record on (two to three times the memory of the replays
+  themselves; none while records come in order) and goes on from the last checkpoint before the record. The first one still
+  replays from the start. The thresholds and promises are what a replay from the start chooses; the API is unchanged
+  (see the crate's changelog).
+
 ## 0.28.0
 
 ### Added

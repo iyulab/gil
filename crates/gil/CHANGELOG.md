@@ -4,6 +4,18 @@ The Rust crate (crates.io) and the Python package (PyPI), both published as `iyu
 Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the repository's root `CHANGELOG.md`.
 
+## Unreleased
+
+### Changed
+
+- **A record settled out of order, or taken out, no longer has the keeper replay everything.** `Keeper` keeps checkpoints
+  of its replays from the first such record on (the newest two and the last of each doubling of records gone through,
+  two to three times the memory of the replays themselves, measured on a synthetic stream; a keeper whose records come in order keeps none), and the next
+  `rechoose` goes on from the last checkpoint before the record. The first out-of-order record still replays from the
+  start, leaving the checkpoints on its way. The thresholds and promises are the same as a replay from the start
+  chooses; the public surface is unchanged. `rechoose_with` hands its sink only the records it goes through this time,
+  which after such a record are those from the checkpoint on.
+
 ## 0.10.0
 
 ### Added
