@@ -629,3 +629,10 @@ def test_a_keeper_rechooses_as_a_selection_from_the_start() -> None:
     removed = items[5]["id"]
     keeper.remove(decider, removed)
     assert keeper.settled == len([i for i in items if i["id"] != removed])
+
+
+def test_the_package_says_the_version_it_is() -> None:
+    from importlib.metadata import version
+
+    assert gil.__version__ == version("iyulab-gil")
+    assert "__version__" in gil.__all__

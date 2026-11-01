@@ -12,6 +12,7 @@ __all__ = [
     "Keeper",
     "OpenRecord",
     "Records",
+    "__version__",
     "check_schema",
     "schema_for_first_of_batch_json",
     "schema_with_first_of_batch_json",
@@ -47,6 +48,8 @@ class Records:
         """Records from JSON lines, one record per line, in settlement order."""
 
     def __len__(self) -> int: ...
+
+__version__: str
 
 def check_schema(schema_json: str) -> None:
     """Checks a schema's JSON; raises ValueError when it does not read."""

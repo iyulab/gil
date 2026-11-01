@@ -6,6 +6,11 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ## Unreleased
 
+### Added
+
+- **Python: `gil.__version__`**, the version of the installed package, and the PyPI classifiers name Python 3.11 and CPython
+  (the README states the lower bound).
+
 ### Changed
 
 - **A record settled out of order, or taken out, no longer has the keeper replay everything.** `Keeper` keeps checkpoints

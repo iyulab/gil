@@ -11,6 +11,8 @@ schema attribute can be trusted, and get back the decision records the choice re
 pip install iyulab-gil
 ```
 
+Python 3.11 or later. `gil.__version__` is the installed package's version.
+
 ```python
 import gil
 

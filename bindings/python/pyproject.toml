@@ -13,6 +13,8 @@ dynamic = ["version"]
 keywords = ["forms", "suggestion", "precision", "replay", "classification"]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Rust",
     "Typing :: Typed",
 ]

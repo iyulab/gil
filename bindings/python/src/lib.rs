@@ -1058,6 +1058,7 @@ fn _gil(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // A broken contract reaches Python as an exception carrying the core's message; the default hook would also print
     // it to stderr. The hook belongs to this extension's own copy of the Rust runtime.
     std::panic::set_hook(Box::new(|_| {}));
+    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_class::<Records>()?;
     m.add_class::<Decider>()?;
     m.add_class::<OpenRecord>()?;
