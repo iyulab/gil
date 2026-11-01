@@ -459,7 +459,8 @@ impl Keeper {
         })
     }
 
-    /// Takes settled records: `decider` learns them ([`Decider::rebuild`]) and the next choice replays them. Records may
+    /// Takes settled records: `decider` learns them ([`Decider::rebuild`]) and the next choice replays them. The keeper
+    /// keeps its own copy of them, so the caller need not keep its own. Records may
     /// come in any order; one settled before the last a replay has gone through has the next choice replay from the
     /// last checkpoint before it ([`Keeper::rechoose_with`]). With [`Keep::restart_on_form_version`], a record under a new edition starts the keeper again
     /// from nothing before it is taken — what came before it, in this call or earlier, is forgotten.
