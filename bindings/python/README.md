@@ -356,7 +356,7 @@ thresholds too, on the same replay — as `select_coarse` would with the value t
 one taken out with `keeper.remove(decider, id)`, has the next choice replay from where the records before it ended: the
 first time it happens the keeper replays from the start and keeps checkpoints on the way (two to three times the memory of
 the replays themselves, measured on a synthetic stream), and from then on a late record costs the replay of the records settled after it, not of all of them.
-The choice is the same either way. The keeper holds its own copy of the records it settles, so a host that settles them as
+The choice is the same either way. The decider is another matter: its similar record layer weighs a text by how rare its n-grams are among the texts it remembers, and takes those counts afresh each time that number has moved by a tenth, so one built from the same records in another order, or after a record was removed, scores a little differently. On a public Korean intent set (MASSIVE; 8,000 records settled, 4,000 asked, 15% and 40% of the records moved later in the order, and 5% removed, three random draws each) the answer or its value differed on 0.4 to 1.0% of the lookups and the precision of what it answered moved by at most 0.1 point, at 0.97 and 0.92 realized for a target of 0.9. The keeper holds its own copy of the records it settles, so a host that settles them as
 they arrive need not keep a list of its own (nor the objects `gil.records` made) beside it. Nothing is stored outside the
 process: a keeper made at start-up replays the saved records once.
 
