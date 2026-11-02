@@ -7,6 +7,14 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ## Unreleased
 
+### Added
+
+- **Experimental (`GIL0015`): the similar record layer's runners-up as candidates.** `AttributeDefinition.SimilarCandidates`
+  (0, the default, is off) on a decided attribute with a single value: the values that drew less of the vote follow the
+  value the layer voted for in the answer's candidates, never trusted, each scored by its share of the vote (not a margin
+  and not a promise). The value the layer voted for keeps its score and trust; a schema that leaves it off serializes as
+  before.
+
 ### Changed
 
 - **A record settled out of order, or taken out with `Keeper.Remove`, no longer has the next choice replay everything.**

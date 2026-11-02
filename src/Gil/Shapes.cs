@@ -166,6 +166,16 @@ public sealed record AttributeDefinition(string Name, AttributeRole Role)
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool SimilarElements { get; init; }
 
+    /// <summary>For a decided attribute that takes one value: how many values the similar record layer offers at most,
+    /// ranked by the share of the vote each drew. 0, the default, and 1 leave the layer offering only the value it voted
+    /// for. With more, the values that drew less come after it in the answer's candidates, never trusted, each scored by
+    /// its share of the vote — a vote's weight, not a margin and not a promise — and the answer then holds at least this
+    /// many candidates. The value the vote chose, its score and its trust are as without; the thresholds a keeper
+    /// chooses do not depend on this.</summary>
+    [Experimental(Stability.SimilarCandidates, UrlFormat = Stability.Url)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int SimilarCandidates { get; init; }
+
     /// <summary>The score the first keyed value must reach to be trusted; null trusts none.</summary>
     public double? KeyThreshold { get; init; }
 

@@ -305,6 +305,11 @@ class Schema:
 
     An attribute's optional settings are those of the core's ``Attribute`` (``key_fields``, ``key_threshold``,
     ``memory_threshold``, ``similar_votes``, ``coarse`` …); an unknown setting is an error.
+
+    Experimental: a decided attribute with a single value may set ``similar_candidates`` (0, the default, is off). With
+    more than one, the values that drew less of the similar record layer's vote follow the value it chose in the answer's
+    candidates — never trusted, each scored by its share of the vote (a vote's weight, not a margin and not a promise),
+    and the answer then holds at least that many candidates. The first candidate, its score and its trust are as without.
     """
 
     __slots__ = ("_json",)

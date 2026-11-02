@@ -103,6 +103,7 @@ type may change shape or be removed in any release without a migration note.
 | `GIL0012` | The unseen mass in the decision core: a `Keeper` that says how much of an attribute's next settled values is likely to be values no record settled yet (`Keeper.UnseenMass`, `UnseenMass`) |
 | `GIL0013` | Similar elements in the decision core: the similar record layer answering an attribute that takes several values, element by element (`AttributeDefinition.SimilarElements`, `Keeper.SimilarElements`, `ElementAnswer`) |
 | `GIL0014` | A threshold for a judge outside Gil, chosen from its scores and what people settled (`Replay.SelectScoreThreshold`, `Replay.ScoredDecisions`, `ScoredDecision`, `Record.Scores`) |
+| `GIL0015` | Similar candidates in the decision core: the similar record layer offering, after the value it voted for, the values that drew less of the vote (`AttributeDefinition.SimilarCandidates`) |
 
 Suppress the ids of what you use, in the project file or around the code:
 
@@ -715,6 +716,20 @@ does not decide the values — tags on a public question site, the set of advers
 reports — no threshold stood at a target of 0.9, and the layer offers nothing. Even where it stands it offers few
 elements: a vehicle complaint is shown almost one element, so the layer reads as "add the sure tags and leave the rest to
 a person", not as a way to complete the set.
+
+**Runners-up from the similar records** (experimental, `GIL0015`). When the similar record layer does not answer, the
+settled value is often the one that drew the second or third most of the vote. Set `AttributeDefinition.SimilarCandidates`
+on a decided attribute that takes one value, and the values that drew less of the vote follow the one the layer voted for
+in the answer's candidates, in the order the vote ranks them, never trusted. Each is scored by its share of the vote —
+the similarity of the voting records that hold it over the similarity of all of them — which is a vote's weight, not a
+margin and not a promise: no precision is kept for it. The value the layer voted for keeps its score (its margin) and its
+trust, so a list mixes the two scales; read the first by `Trusted` and the rest as an ordering. The answer then holds at
+least this many candidates, whatever its usual cap, and the thresholds a keeper chooses do not depend on the setting.
+Off, the default, the answer and the schema's JSON are as they were, to the bit. On two public sets of short customer
+requests classified by intent (one English, one Korean), when no layer answered, the settled value was
+the one it voted for in 65% and 61% of the cases, among its top two in 82% and 78%, and among its top three in 86% and 83%.
+That is one kind of data, short texts with a single label, and a model that embeds the text may place the settled value
+higher still on English; it says nothing about how much a person's work shrinks.
 
 **A judge outside Gil** (experimental, `GIL0014`). Any judge that gives a score — a model, a rule — can have a threshold
 chosen the way a memory layer's is, from nothing but its scores and what people settled. Pass

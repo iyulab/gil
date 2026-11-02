@@ -8,6 +8,14 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Added
 
+- **Experimental: `Attribute::similar_candidates`, the similar record layer's runners-up as candidates.** A decided
+  attribute with a single value may set it (0, the default, is off). With more than one, the values that drew less of
+  the vote follow the value the layer voted for in `Answer::candidates`, in the order `similar_vote::decide` ranks them,
+  each scored by its share of the vote (`similar_vote::ranking`), never trusted. The first candidate, its score and its
+  trust are as without; the answer's candidate cap is at least the setting; the thresholds `Keeper` chooses and the
+  tuning fingerprint do not depend on it. A schema that leaves it off serializes as before. The C ABI and Python read it
+  from the schema's JSON.
+
 - **Python: `gil.__version__`**, the version of the installed package, and the PyPI classifiers name Python 3.11 and CPython
   (the README states the lower bound).
 

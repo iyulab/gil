@@ -85,6 +85,12 @@ internal static class Stability
     /// </summary>
     public const string ScoreThreshold = "GIL0014";
 
+    /// <summary>
+    /// Similar candidates in the decision core (package <c>Gil</c>): the similar record layer offering, after the value
+    /// it voted for, the values that drew less of the vote as candidates that are not trusted.
+    /// </summary>
+    public const string SimilarCandidates = "GIL0015";
+
     /// <summary>Where the stability of each surface is described.</summary>
     public const string Url = "https://github.com/iyulab/gil/blob/main/README.md#stability";
 }
