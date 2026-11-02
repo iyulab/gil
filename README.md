@@ -361,6 +361,14 @@ is counted only when `Counting` is left out:
 var unprompted = Replay.SelectLayers(schema, "team", saved, options with { Counting = [SettlementKind.Enter] });
 ```
 
+The same lever handles history loaded in bulk from an existing database. Such records share one settlement time, so they
+have no order to replay, and they say nothing about how the layers do on live records. Settle them with a kind the live
+records do not use and leave that kind out of `Counting`: memory learns them, and thresholds and promises are chosen on
+the live records alone (in a replay counting only `Accept`, the first counted record found its value already
+remembered from a history settled as `Enter`; the same history settled as `Fill` taught memory nothing). Give them one `Record.Batch` too, so that
+the batch checks below treat the load as one batch rather than as that many independent records. This borrows a settlement
+kind for what is really a provenance, so it works only while some kind is spare.
+
 Settlements that saw no answer are not a sample of the answers, though. Where the application shows every answer it has,
 they are the records the thresholds did not answer, so a promise counted on them speaks of the records just below the
 thresholds. Replaying two public streams that way, the thresholds stayed close to where counting every settlement put
