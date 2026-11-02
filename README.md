@@ -723,11 +723,13 @@ on a decided attribute that takes one value, and the values that drew less of th
 in the answer's candidates, in the order the vote ranks them, never trusted. Each is scored by its share of the vote —
 the similarity of the voting records that hold it over the similarity of all of them — which is a vote's weight, not a
 margin and not a promise: no precision is kept for it. The value the layer voted for keeps its score (its margin) and its
-trust, so a list mixes the two scales; read the first by `Trusted` and the rest as an ordering. The answer then holds at
-least this many candidates, whatever its usual cap, and the thresholds a keeper chooses do not depend on the setting.
-Off, the default, the answer and the schema's JSON are as they were, to the bit. On two public sets of short customer
-requests classified by intent (one English, one Korean), when no layer answered, the settled value was
-the one it voted for in 65% and 61% of the cases, among its top two in 82% and 78%, and among its top three in 86% and 83%.
+trust, so a list mixes the two scales; read the first by `Trusted` and the rest as an ordering. The runners-up come
+besides the answer's usual candidates, not among them: the usual cap counts the others, so a value another layer offered
+cannot take a runner-up's place (a value two layers offer appears once, where the first of them put it). The thresholds a
+keeper chooses do not depend on the setting. Off, the default, the answer and the schema's JSON are as they were, to the bit. On two public sets of short customer
+requests classified by intent (one English, one Korean), read from the answers of a decider with the setting on, when
+no layer answered, the settled value was the one the layer voted for in 64% and 60% of the cases, among its top two in 82%
+and 77%, and among its top three in 86% and 83% (a value another layer had already offered counted where the vote ranks it).
 That is one kind of data, short texts with a single label, and a model that embeds the text may place the settled value
 higher still on English; it says nothing about how much a person's work shrinks.
 

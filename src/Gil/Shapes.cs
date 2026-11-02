@@ -169,9 +169,9 @@ public sealed record AttributeDefinition(string Name, AttributeRole Role)
     /// <summary>For a decided attribute that takes one value: how many values the similar record layer offers at most,
     /// ranked by the share of the vote each drew. 0, the default, and 1 leave the layer offering only the value it voted
     /// for. With more, the values that drew less come after it in the answer's candidates, never trusted, each scored by
-    /// its share of the vote — a vote's weight, not a margin and not a promise — and the answer then holds at least this
-    /// many candidates. The value the vote chose, its score and its trust are as without; the thresholds a keeper
-    /// chooses do not depend on this.</summary>
+    /// its share of the vote — a vote's weight, not a margin and not a promise. They come besides the answer's usual
+    /// candidates, not among them, so a value another layer offered cannot take a runner-up's place. The value the vote
+    /// chose, its score and its trust are as without; the thresholds a keeper chooses do not depend on this.</summary>
     [Experimental(Stability.SimilarCandidates, UrlFormat = Stability.Url)]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public int SimilarCandidates { get; init; }

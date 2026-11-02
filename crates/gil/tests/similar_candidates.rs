@@ -257,3 +257,68 @@ fn the_setting_is_written_only_when_set() {
     let plain: Schema = serde_json::from_str(&off).expect("reads");
     assert_eq!(plain.attribute("category").similar_candidates, 0);
 }
+
+/// Seven records about one router, each settled under a different category, and eight about something else under a
+/// category that is the most frequent of the attribute: the vote (of seven) has seven values, and another layer offers
+/// the frequent one, which the vote does not hold.
+#[test]
+fn a_value_another_layer_offers_does_not_take_a_runners_up_place() {
+    let categories = [
+        "billing", "outage", "refund", "setup", "upgrade", "privacy", "abuse",
+    ];
+    let asked = "router keeps dropping the connection every evening";
+    let mut records: Vec<Record> = categories
+        .iter()
+        .zip(1..)
+        .map(|(category, n)| {
+            let note = format!("router keeps dropping the connection every evening {category}");
+            doc(n, &[("note", &note), ("category", category)])
+        })
+        .collect();
+    records.extend((8..16).map(|n| {
+        let note = format!("quarterly lorem ipsum dolor sit amet {n}");
+        doc(n, &[("note", &note), ("category", "other")])
+    }));
+    let mut category = Attribute::new("category", AttributeRole::Decided);
+    category.memory_threshold = Some(0.0);
+    category.similar_votes = 7;
+    category.similar_candidates = 5;
+    let schema = Schema::new(
+        "intake",
+        vec![Attribute::new("note", AttributeRole::Observed), category],
+    )
+    .expect("a valid schema");
+    let mut decider = Decider::new(KeyMemory::default(), Some(LexicalMemory::default()));
+    decider.rebuild(&schema, &records);
+    let answer = decider.answer_one(
+        &schema,
+        "d99",
+        "category",
+        &values(&[("note", asked)]),
+        &BTreeMap::new(),
+        None,
+    );
+
+    // The vote, as `decide` ranks it.
+    let mut memory = LexicalMemory::default();
+    let task = Decider::task(&schema, "category");
+    for record in &records {
+        let evidence = schema.evidence("category", &record.values, &BTreeMap::new());
+        memory.remember(&task, &record.id, &evidence, &record.values["category"]);
+    }
+    let evidence = schema.evidence("category", &values(&[("note", asked)]), &BTreeMap::new());
+    let nearest = memory.nearest(&task, &evidence, 7);
+    let ranking = similar_vote::ranking(&nearest, 7);
+    assert_eq!(ranking.len(), 7, "seven voters, seven values");
+
+    // The frequent value is offered by its own layer, and still every one of the top five values is offered.
+    let offered: Vec<&str> = answer.candidates.iter().map(|c| c.value.as_str()).collect();
+    assert!(offered.contains(&"other"), "{offered:?}");
+    for (m, _) in ranking.iter().take(5) {
+        assert!(
+            offered.contains(&m.answer.as_str()),
+            "{} in {offered:?}",
+            m.answer
+        );
+    }
+}

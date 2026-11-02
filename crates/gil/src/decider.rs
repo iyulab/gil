@@ -673,13 +673,19 @@ impl Decider {
             .chain(frequent.iter().copied().take(1))
             .chain(similar.iter().filter(|c| !c.trusted))
             .chain(frequent.iter().copied().skip(1));
+        // The values that drew less of the vote (experimental) come besides the answer's usual candidates, not among them:
+        // the cap counts the others, so a value another layer offered cannot take a runner-up's place.
+        let runners_up = similar.get(1..).unwrap_or_default();
+        let mut usual = 0;
         for candidate in ordered {
-            if candidates.len() == self.candidate_count.max(attribute.similar_candidates) {
-                break;
+            let runner_up = runners_up.iter().any(|r| std::ptr::eq(r, candidate));
+            if !runner_up && usual == self.candidate_count {
+                continue;
             }
 
             if !candidates.iter().any(|c| c.value == candidate.value) {
                 candidates.push(candidate.clone());
+                usual += usize::from(!runner_up);
             }
         }
 

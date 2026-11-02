@@ -92,8 +92,10 @@ pub struct Attribute {
     /// most, ranked by the share of the vote each drew ([`crate::decider::Decider::suggest`]). 0, the default, and 1 leave
     /// the layer offering only the value it voted for; with more, the values that drew less come after it as candidates
     /// that are not trusted, each scored by its share of the vote — a share is a vote's weight, not a margin and not a
-    /// promise, and no promise is kept for them. The answer then holds at least this many candidates, whatever its usual
-    /// cap. A schema that leaves it 0 serializes without the setting, and the thresholds chosen do not depend on it.
+    /// promise, and no promise is kept for them. They come besides the answer's usual candidates, not among them: the
+    /// usual cap counts the others, so a value another layer offered cannot take a runner-up's place (a value two layers
+    /// offer appears once, where the first of them put it). A schema that leaves it 0 serializes without the setting, and
+    /// the thresholds chosen do not depend on it.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "crate::schema::is_zero")

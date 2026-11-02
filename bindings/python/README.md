@@ -146,7 +146,7 @@ settled until the next choice by 0.021 on public device event reports, 0.040 on 
 A decided attribute with a single value may set `"similar_candidates": 3` (experimental; 0, the default, is off): the values
 that drew less of the similar record layer's vote follow the value it chose in the answer's `candidates`, never trusted,
 each scored by its share of the vote — a vote's weight, not a margin and not a promise. The first candidate, its score and its
-trust are as without it; the answer then holds at least that many candidates.
+trust are as without it; they come besides the answer's usual candidates, not among them.
 
 The similar record layer can answer an attribute that takes several values, element by element (experimental). Give a
 decided attribute `"multiple": True, "similar_elements": True` — it then takes a `memory_threshold`, which a `gil.Keeper`
