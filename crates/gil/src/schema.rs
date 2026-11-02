@@ -89,7 +89,7 @@ pub struct Attribute {
     )]
     pub similar_elements: bool,
     /// Experimental. For a decided attribute that takes one value: how many values the similar record layer offers at
-    /// most, ranked by the share of the vote each drew ([`crate::decider::Decider::suggest`]). 0, the default, and 1 leave
+    /// most, ranked by the share of the vote each drew ([`crate::similar_vote::ranking`]). 0, the default, and 1 leave
     /// the layer offering only the value it voted for; with more, the values that drew less come after it as candidates
     /// that are not trusted, each scored by its share of the vote — a share is a vote's weight, not a margin and not a
     /// promise, and no promise is kept for them. They come besides the answer's usual candidates, not among them: the
