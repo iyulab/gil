@@ -18,6 +18,21 @@ pub fn decide(nearest: &[Match], votes: usize) -> Option<(&Match, f64)> {
         return Some((first, first.similarity));
     }
 
+    let tally = tally(nearest, votes);
+    let total = tally.iter().fold(0.0, |sum, t| sum + t.1);
+    let runner_up = tally.get(1).map_or(0.0, |t| t.1);
+    let score = if total > 0.0 {
+        (tally[0].1 - runner_up) / total
+    } else {
+        0.0
+    };
+    Some((tally[0].0, score))
+}
+
+/// The values the nearest `votes` records vote for, each with its weight (the similarity of the records voting for it, a
+/// negative one counting as none) and the nearest record that voted for it: the heaviest first, a tie going to the value
+/// whose nearest voter is nearer.
+fn tally(nearest: &[Match], votes: usize) -> Vec<(&Match, f64)> {
     // Values enter the tally in order of their nearest voter.
     let mut tally: Vec<(&Match, f64)> = Vec::new();
     for m in nearest.iter().take(votes) {
@@ -30,14 +45,19 @@ pub fn decide(nearest: &[Match], votes: usize) -> Option<(&Match, f64)> {
 
     // Stable, so a tie keeps the nearer one first; the total is summed in this order.
     tally.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    tally
+}
+
+/// Experimental. Every value the nearest `votes` records vote for, in the order [`decide`] ranks them — the winner
+/// first — each with the nearest record that voted for it and its share of the vote: its weight over all the weight cast
+/// (0 when none was). A share is a vote's weight, not a margin and not a promise. Empty when there are no records.
+pub fn ranking(nearest: &[Match], votes: usize) -> Vec<(&Match, f64)> {
+    let tally = tally(nearest, votes);
     let total = tally.iter().fold(0.0, |sum, t| sum + t.1);
-    let runner_up = tally.get(1).map_or(0.0, |t| t.1);
-    let score = if total > 0.0 {
-        (tally[0].1 - runner_up) / total
-    } else {
-        0.0
-    };
-    Some((tally[0].0, score))
+    tally
+        .into_iter()
+        .map(|(m, weight)| (m, if total > 0.0 { weight / total } else { 0.0 }))
+        .collect()
 }
 
 /// Experimental. What a record that settled several values is remembered by in the similar record memory: its elements

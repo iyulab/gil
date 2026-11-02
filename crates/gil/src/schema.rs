@@ -88,6 +88,17 @@ pub struct Attribute {
         serde(default, skip_serializing_if = "std::ops::Not::not")
     )]
     pub similar_elements: bool,
+    /// Experimental. For a decided attribute that takes one value: how many values the similar record layer offers at
+    /// most, ranked by the share of the vote each drew ([`crate::decider::Decider::suggest`]). 0, the default, and 1 leave
+    /// the layer offering only the value it voted for; with more, the values that drew less come after it as candidates
+    /// that are not trusted, each scored by its share of the vote — a share is a vote's weight, not a margin and not a
+    /// promise, and no promise is kept for them. The answer then holds at least this many candidates, whatever its usual
+    /// cap. A schema that leaves it 0 serializes without the setting, and the thresholds chosen do not depend on it.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "crate::schema::is_zero")
+    )]
+    pub similar_candidates: usize,
     /// The score the first keyed value must reach to be trusted; `None` trusts none.
     #[cfg_attr(feature = "serde", serde(default))]
     pub key_threshold: Option<f64>,
@@ -144,6 +155,11 @@ fn decided_several(a: &Attribute) -> bool {
 }
 
 #[cfg(feature = "serde")]
+fn is_zero(n: &usize) -> bool {
+    *n == 0
+}
+
+#[cfg(feature = "serde")]
 fn yes() -> bool {
     true
 }
@@ -165,6 +181,7 @@ impl Attribute {
             key_concentrations: BTreeMap::new(),
             key_combine: KeyCombine::Sum,
             similar_elements: false,
+            similar_candidates: 0,
             key_threshold: None,
             similar_votes: 10,
             memory_threshold: None,
@@ -491,6 +508,11 @@ impl Schema {
             if a.similar_votes < 1 {
                 return Err(format!(
                     "attribute '{n}' gives no similar record a vote; at least one must"
+                ));
+            }
+            if a.similar_candidates > 0 && !decided_one {
+                return Err(format!(
+                    "attribute '{n}' offers similar candidates, which only a decided attribute with a single value does"
                 ));
             }
             if let Some(level) = &a.coarse {

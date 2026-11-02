@@ -674,7 +674,7 @@ impl Decider {
             .chain(similar.iter().filter(|c| !c.trusted))
             .chain(frequent.iter().copied().skip(1));
         for candidate in ordered {
-            if candidates.len() == self.candidate_count {
+            if candidates.len() == self.candidate_count.max(attribute.similar_candidates) {
                 break;
             }
 
@@ -820,6 +820,23 @@ impl Decider {
             }),
             trusted: hit,
         };
+        // Experimental: the values that drew less of the vote, after the winner, never trusted.
+        let rest = (attribute.similar_candidates > 1).then(|| {
+            similar_vote::ranking(&admitted, attribute.similar_votes)
+                .into_iter()
+                .skip(1)
+                .take(attribute.similar_candidates - 1)
+                .map(|(nearest, share)| Candidate {
+                    value: nearest.answer.clone(),
+                    score: share,
+                    source: Source::SimilarRecord,
+                    evidence: Some(Evidence::Record {
+                        id: nearest.source.clone(),
+                        similarity: nearest.similarity,
+                    }),
+                    trusted: false,
+                })
+        });
         let look = SimilarLook {
             score,
             value: winner.answer.clone(),
@@ -828,7 +845,10 @@ impl Decider {
             nearest: winner.similarity,
             voted,
         };
-        (vec![candidate], admitted, Some(look))
+        let candidates = std::iter::once(candidate)
+            .chain(rest.into_iter().flatten())
+            .collect();
+        (candidates, admitted, Some(look))
     }
 }
 
