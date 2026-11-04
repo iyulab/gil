@@ -116,6 +116,7 @@ fn choice(minimum_answered: usize) -> Choice<'static> {
         target_precision: 0.8,
         minimum_answered,
         counting: None,
+        uncounted_batches: &[],
     }
 }
 

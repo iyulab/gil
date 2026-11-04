@@ -95,6 +95,7 @@ fn the_form_paths_key_fields_and_concentrations_reproduce_its_golden() {
             target_precision: 0.8,
             minimum_answered: 10,
             counting: Some(&COUNTED),
+            uncounted_batches: &[],
         },
         0,
     );
@@ -133,6 +134,7 @@ fn key_fields_with_every_trial_reproduce_their_golden() {
             target_precision: 0.8,
             minimum_answered: 10,
             counting: Some(&COUNTED),
+            uncounted_batches: &[],
         },
         0,
     );
@@ -163,6 +165,7 @@ fn key_fields_with_every_trial_reproduce_their_golden() {
             target_precision: 0.8,
             minimum_answered: 10,
             counting: None,
+            uncounted_batches: &[],
         },
         0,
     );
@@ -177,6 +180,7 @@ fn key_fields_with_every_trial_reproduce_their_golden() {
             target_precision: 0.8,
             minimum_answered: 10,
             counting: Some(&COUNTED),
+            uncounted_batches: &[],
         },
         2,
     );

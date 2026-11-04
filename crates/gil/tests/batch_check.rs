@@ -84,6 +84,7 @@ fn chosen(records: &[Record]) -> LayerThresholds {
             target_precision: 0.7,
             minimum_answered: 30,
             counting: None,
+            uncounted_batches: &[],
         },
         LayerOptions::default(),
     )

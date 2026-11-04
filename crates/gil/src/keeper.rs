@@ -34,8 +34,9 @@ use crate::decision_record::DecisionRecord;
 use crate::key_memory::KeyMemory;
 use crate::lexical_memory::LexicalMemory;
 use crate::replay::{
-    Choice, ElementState, LayerThresholds, ReplayState, Replaying, ThresholdRule, batch_check,
-    carry_on, carry_on_elements, coarse_layers, element_layers, in_situation, layers, value_tails,
+    Choice, Counted, ElementState, LayerThresholds, ReplayState, Replaying, ThresholdRule,
+    batch_check, carry_on, carry_on_elements, coarse_layers, element_layers, in_situation, layers,
+    value_tails,
 };
 use crate::schema::{AttributeRole, Record, Schema, SettlementKind};
 use crate::tuning::{Stale, Tuning};
@@ -49,6 +50,10 @@ pub struct Keep {
     pub minimum_answered: usize,
     /// The kinds of settlement whose lookups are counted — `None` counts every settlement.
     pub counting: Option<Vec<SettlementKind>>,
+    /// Experimental. The batches ([`Record::batch`]) replayed into memory but not counted, as in
+    /// [`Choice::uncounted_batches`]. Set before the first record is taken in: a keeper does not go back over records
+    /// it has replayed when this changes.
+    pub uncounted_batches: Vec<String>,
     /// How the two thresholds are chosen.
     pub rule: ThresholdRule,
     /// Experimental. Whether the first records of batches — whose batch had no settled record when they were answered
@@ -126,6 +131,7 @@ impl Keep {
             target_precision,
             minimum_answered: 10,
             counting: None,
+            uncounted_batches: Vec::new(),
             rule: ThresholdRule::EveryBand,
             first_of_batch: false,
             restart_on_form_version: false,
@@ -139,6 +145,7 @@ impl Keep {
             target_precision: self.target_precision,
             minimum_answered: self.minimum_answered,
             counting: self.counting.as_deref(),
+            uncounted_batches: &self.uncounted_batches,
         }
     }
 }
@@ -184,7 +191,7 @@ impl Replay {
         attribute: &str,
         records: &[Record],
         order: &[usize],
-        counting: Option<&[SettlementKind]>,
+        counting: Counted,
         coarse: bool,
         checkpointing: bool,
         sink: &mut dyn FnMut(&DecisionRecord),
@@ -687,7 +694,7 @@ impl Keeper {
                 attribute,
                 &self.records,
                 &self.order,
-                choice.counting,
+                choice.counted(),
                 definition.coarse.is_some(),
                 self.checkpointing,
                 &mut *sink,
@@ -775,7 +782,7 @@ impl Keeper {
                 &self.schema,
                 attribute,
                 &self.records[replay.through..],
-                choice.counting,
+                choice.counted(),
             );
             replay.through = self.records.len();
             let thresholds = element_layers(&replay.state, choice);
@@ -1019,6 +1026,50 @@ mod tests {
 
     fn layers_of(t: &crate::replay::LayerThresholds) -> String {
         format!("{:?} {:?}", t.key, t.memory)
+    }
+
+    #[test]
+    fn a_keeper_leaves_uncounted_batches_out_as_a_replay_does() {
+        let mut records = settled(700);
+        for record in records.iter_mut().take(300) {
+            record.batch = Some("import".to_owned());
+        }
+        let keep = Keep {
+            uncounted_batches: vec!["import".to_owned()],
+            ..Keep::new(0.8)
+        };
+        let mut keeper = Keeper::new(schema(), keep.clone());
+        let mut decider = decider();
+        for part in records.chunks(150) {
+            keeper.settle(&mut decider, part);
+            keeper.rechoose();
+        }
+        let by_hand = select_layers(
+            &mut KeyMemory::default(),
+            &mut LexicalMemory::default(),
+            &schema(),
+            "team",
+            &records,
+            keep.choice(),
+            LayerOptions {
+                rule: keep.rule,
+                sink: None,
+                value_tails: keep.value_tails,
+            },
+        );
+        assert_eq!(
+            layers_of(keeper.chosen("team").expect("chosen")),
+            layers_of(&by_hand)
+        );
+        // Counting every batch asks about more records.
+        let mut counting_all = Keeper::new(schema(), Keep::new(0.8));
+        let mut other = self::decider();
+        counting_all.settle(&mut other, &records);
+        counting_all.rechoose();
+        assert!(
+            counting_all.chosen("team").expect("chosen").key.lookups
+                > keeper.chosen("team").expect("chosen").key.lookups
+        );
     }
 
     #[test]

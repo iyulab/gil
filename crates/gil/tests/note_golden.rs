@@ -139,6 +139,7 @@ fn the_note_settings_reproduce_their_golden() {
                     target_precision: 0.8,
                     minimum_answered: 10,
                     counting: counted,
+                    uncounted_batches: &[],
                 };
                 let (mut keys, mut memory) = (KeyMemory::default(), LexicalMemory::default());
                 let layers = if kind == "layers" {
@@ -166,6 +167,7 @@ fn the_note_settings_reproduce_their_golden() {
                         target_precision: 0.8,
                         minimum_answered: 10,
                         counting: counted,
+                        uncounted_batches: &[],
                     },
                     2,
                 );
@@ -181,6 +183,7 @@ fn the_note_settings_reproduce_their_golden() {
                         target_precision: 0.8,
                         minimum_answered: 10,
                         counting: None,
+                        uncounted_batches: &[],
                     },
                 );
                 json!({ "kind": kind, "field": attribute, "replay": self::replay(&replay) })
@@ -318,6 +321,7 @@ fn the_typed_replay_writes_the_golden_decision_records() {
         target_precision: 0.8,
         minimum_answered: 10,
         counting: Some(&common::COUNTED[..]),
+        uncounted_batches: &[],
     };
     let mut logs = Vec::new();
     let typed = gil::replay::select_typed_key_thresholds_with(

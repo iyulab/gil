@@ -188,6 +188,7 @@ fn the_decisions_a_judge_made_choose_its_threshold_from_the_records_alone() {
         target_precision: 0.8,
         minimum_answered: 30,
         counting: None,
+        uncounted_batches: &[],
     };
     let chosen = select_score_threshold(&decisions, choice)
         .chosen

@@ -166,6 +166,7 @@ fn select_layers_json(
         target_precision,
         minimum_answered,
         counting: counting.as_deref(),
+        uncounted_batches: &[],
     };
     let mut lines = decisions.then(String::new);
     let layers = guarded(|| {
@@ -215,6 +216,7 @@ fn select_coarse_json(
         target_precision,
         minimum_answered,
         counting: counting.as_deref(),
+        uncounted_batches: &[],
     };
     let mut lines = decisions.then(String::new);
     let layers = guarded(|| {
@@ -247,6 +249,7 @@ fn select_score_threshold_json(
         target_precision,
         minimum_answered,
         counting: None,
+        uncounted_batches: &[],
     };
     let replay = guarded(|| select_score_threshold(&decisions, choice))?;
     Ok(to_json(&replay))
@@ -298,6 +301,7 @@ fn select_key_fields_json(
         target_precision,
         minimum_answered,
         counting: counting.as_deref(),
+        uncounted_batches: &[],
     };
     let chosen =
         guarded(|| select_key_fields(&schema, attribute, &records.records, choice, typed_longest))?;
@@ -542,6 +546,7 @@ impl Keeper {
             target_precision,
             minimum_answered,
             counting,
+            uncounted_batches: Vec::new(),
             rule,
             first_of_batch,
             restart_on_form_version,

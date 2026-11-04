@@ -187,6 +187,7 @@ fn a_replay_taking_the_strongest_chooses_the_same_key_threshold_when_an_attribut
                 target_precision: 0.8,
                 minimum_answered: 10,
                 counting: None,
+                uncounted_batches: &[],
             },
         );
         let chosen = replay.chosen.expect("a threshold is chosen");

@@ -87,6 +87,7 @@ fn chosen(
             target_precision: 0.6,
             minimum_answered: 10,
             counting: None,
+            uncounted_batches: &[],
         },
         LayerOptions {
             sink,

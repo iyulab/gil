@@ -94,6 +94,29 @@ pub struct Choice<'a> {
     pub minimum_answered: usize,
     /// The kinds of settlement whose lookups are counted — `None` counts every settlement, including those not known.
     pub counting: Option<&'a [SettlementKind]>,
+    /// Experimental. The batches ([`Record::batch`]) whose settlements are replayed into memory but not counted — not asked
+    /// about, so no threshold or promise rests on them. For history loaded from another system in bulk, whose records
+    /// carry no settlement order: the memory learns from it, and the thresholds are chosen on the records settled since.
+    /// A record that names none is never left out by this. Empty counts every batch, as before. Which batches are left out
+    /// is the source of a record, not how it was settled, so it leaves `counting` alone: records from other batches with
+    /// the same kind of settlement still count.
+    pub uncounted_batches: &'a [String],
+}
+
+/// What a replay counts: the kinds of settlement and, besides them, the batches left out.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Counted<'a> {
+    pub(crate) kinds: Option<&'a [SettlementKind]>,
+    pub(crate) uncounted_batches: &'a [String],
+}
+
+impl<'a> Choice<'a> {
+    pub(crate) fn counted(&self) -> Counted<'a> {
+        Counted {
+            kinds: self.counting,
+            uncounted_batches: self.uncounted_batches,
+        }
+    }
 }
 
 impl Choice<'_> {
@@ -262,7 +285,7 @@ pub fn select_key_threshold(
         }
 
         memory.remove(schema.name(), &record.id); // a record settled again is not its own evidence
-        let weight = weight(record, attribute, choice.counting);
+        let weight = weight(record, attribute, choice.counted());
         if memory.count(schema.name()) > 0 && weight > 0.0 {
             let before = arrived(schema, record, attribute, &record.values);
             let before_sets = arrived(schema, record, attribute, &record.sets);
@@ -469,7 +492,7 @@ pub fn select_typed_key_thresholds_with(
         };
 
         memory.remove(schema.name(), &record.id); // a record settled again is not its own evidence
-        let weight = weight(record, attribute, choice.counting);
+        let weight = weight(record, attribute, choice.counted());
         if memory.count(schema.name()) > 0 && weight > 0.0 {
             let before = arrived(schema, record, attribute, &record.values);
             let before_sets = arrived(schema, record, attribute, &record.sets);
@@ -560,10 +583,15 @@ pub fn select_typed_key_thresholds_with(
     TypedKeyThresholds { by_length }
 }
 
-fn weight(record: &Record, attribute: &str, counting: Option<&[SettlementKind]>) -> f64 {
+fn weight(record: &Record, attribute: &str, counted: Counted) -> f64 {
     let kind = record.settlements.get(attribute).copied();
-    if let Some(counting) = counting
+    if let Some(counting) = counted.kinds
         && !kind.is_some_and(|k| counting.contains(&k))
+    {
+        return 0.0;
+    }
+    if let Some(batch) = &record.batch
+        && counted.uncounted_batches.contains(batch)
     {
         return 0.0;
     }
@@ -1133,7 +1161,7 @@ pub fn select_layers(
         schema,
         attribute,
         records,
-        choice.counting,
+        choice.counted(),
         Replaying::Values(options.sink.unwrap_or(&mut ignore)),
     );
     let thresholds = layers(&steps, latest, definition, choice, options.rule);
@@ -1894,7 +1922,7 @@ pub fn select_coarse_with(
         schema,
         attribute,
         records,
-        choice.counting,
+        choice.counted(),
         Replaying::Coarse(sink),
     );
     coarse_layers(&steps, latest, definition, None, choice)
@@ -2016,7 +2044,7 @@ fn replay(
     schema: &Schema,
     attribute: &str,
     records: &[Record],
-    counting: Option<&[SettlementKind]>,
+    counting: Counted,
     replaying: Replaying,
 ) -> (Vec<Step>, usize) {
     let mut state = ReplayState::default();
@@ -2050,7 +2078,7 @@ pub(crate) fn carry_on(
     schema: &Schema,
     attribute: &str,
     records: &[Record],
-    counting: Option<&[SettlementKind]>,
+    counting: Counted,
     replaying: Replaying,
 ) {
     let (coarse, sink) = match replaying {
@@ -2288,7 +2316,7 @@ pub fn select_similar_elements(
         schema,
         attribute,
         records,
-        choice.counting,
+        choice.counted(),
     );
     element_layers(&state, choice).memory
 }
@@ -2328,7 +2356,7 @@ pub(crate) fn carry_on_elements(
     schema: &Schema,
     attribute: &str,
     records: &[Record],
-    counting: Option<&[SettlementKind]>,
+    counting: Counted,
 ) {
     let definition = schema.attribute(attribute);
     assert!(
@@ -2799,7 +2827,7 @@ impl ScoredDecision {
 /// [`select_layers`] gives them for a memory layer — the lowest score down to which every band of answers met
 /// `choice.target_precision`, resting on at least `choice.minimum_answered` independent answers, the promise being that of
 /// the latest [`RECENT_RECORDS`] decisions at one standard error. A decision with no score counts as asked and not
-/// answered. `choice.counting` is not read: the caller passes the decisions that count. The judge's answers are admitted
+/// answered. `choice.counting` and `choice.uncounted_batches` are not read: the caller passes the decisions that count. The judge's answers are admitted
 /// as trusted ([`crate::decider::ExternalCandidate::trusted`]) at or above the chosen threshold, and the promise is the
 /// one to show beside them.
 ///
@@ -2968,6 +2996,7 @@ mod tests {
             target_precision: 0.8,
             minimum_answered: 10,
             counting: None,
+            uncounted_batches: &[],
         };
         let definition = schema.attribute("team");
 
@@ -2987,7 +3016,7 @@ mod tests {
                     &schema,
                     "team",
                     part,
-                    None,
+                    super::Counted::default(),
                     Replaying::Values(&mut sink),
                 );
             }
@@ -3039,7 +3068,7 @@ mod tests {
             &schema,
             "team",
             &records[10..],
-            None,
+            super::Counted::default(),
             Replaying::Values(&mut ignore),
         );
         carry_on(
@@ -3049,7 +3078,7 @@ mod tests {
             &schema,
             "team",
             &records[..10],
-            None,
+            super::Counted::default(),
             Replaying::Values(&mut ignore),
         );
     }

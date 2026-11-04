@@ -57,6 +57,7 @@ fn the_layers_replay_writes_the_golden_decision_records() {
         target_precision: 0.8,
         minimum_answered: 10,
         counting: Some(&COUNTED),
+        uncounted_batches: &[],
     };
     for attribute in ["team", "code"] {
         let schema = schema(&golden, |l| {
@@ -305,6 +306,7 @@ fn the_coarse_replay_writes_the_golden_decision_records() {
         target_precision: 0.8,
         minimum_answered: 10,
         counting: Some(&COUNTED),
+        uncounted_batches: &[],
     };
     let mut logs = Vec::new();
     let coarse = select_coarse_with(

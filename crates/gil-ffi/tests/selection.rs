@@ -189,6 +189,7 @@ fn the_other_selections_and_a_tuning_come_back_as_the_core_gives_them() {
         target_precision: 0.8,
         minimum_answered: 10,
         counting: Some(&COUNTED),
+        uncounted_batches: &[],
     };
     let mut len = 0;
 

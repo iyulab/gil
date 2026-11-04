@@ -184,6 +184,7 @@ fn choosing_thresholds_replays_in_settlement_order_with_one_record_per_case() {
         target_precision: 1.0,
         minimum_answered: 1,
         counting: None,
+        uncounted_batches: &[],
     };
     let layers = select_layers(
         &mut key_memory,

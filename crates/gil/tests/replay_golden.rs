@@ -37,6 +37,7 @@ fn the_key_threshold_replay_reproduces_its_golden() {
                 target_precision: 0.8,
                 minimum_answered: 10,
                 counting: Some(&COUNTED),
+                uncounted_batches: &[],
             },
         );
         let actual =
@@ -67,6 +68,7 @@ fn the_set_field_replay_reproduces_its_golden() {
             target_precision: 0.8,
             minimum_answered: 10,
             counting: None,
+            uncounted_batches: &[],
         },
     );
     let actual = json!({ "kind": "key", "field": "tags", "replay": self::replay(&replay) });
@@ -98,6 +100,7 @@ fn the_layers_replay_reproduces_its_golden() {
                 target_precision: 0.8,
                 minimum_answered: 10,
                 counting: Some(&COUNTED),
+                uncounted_batches: &[],
             },
             LayerOptions::default(),
         );
@@ -135,6 +138,7 @@ fn the_coarse_replay_reproduces_its_golden() {
             target_precision: 0.8,
             minimum_answered: 10,
             counting: Some(&COUNTED),
+            uncounted_batches: &[],
         },
     );
     let actual = json!({
@@ -183,6 +187,7 @@ fn the_layers_replay_with_documents_settled_again_reproduces_its_golden() {
                 target_precision: 0.8,
                 minimum_answered: 10,
                 counting: Some(&COUNTED),
+                uncounted_batches: &[],
             },
             LayerOptions::default(),
         );
@@ -248,6 +253,7 @@ fn the_pooled_rule_reproduces_its_golden() {
                     target_precision: 0.8,
                     minimum_answered: 10,
                     counting: Some(&COUNTED),
+                    uncounted_batches: &[],
                 },
                 LayerOptions {
                     rule: ThresholdRule::Pooled,

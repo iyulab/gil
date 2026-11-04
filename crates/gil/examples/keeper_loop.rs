@@ -68,6 +68,7 @@ fn main() {
                 target_precision: keep.target_precision,
                 minimum_answered: keep.minimum_answered,
                 counting: None,
+                uncounted_batches: &[],
             },
             LayerOptions::default(),
         );

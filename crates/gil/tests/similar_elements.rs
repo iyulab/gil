@@ -337,6 +337,7 @@ fn a_keeper_that_carries_on_chooses_what_one_that_starts_over_does() {
             target_precision: 0.9,
             minimum_answered: 10,
             counting: None,
+            uncounted_batches: &[],
         },
     );
     assert_eq!(Some(&replay), whole.chosen("tags").map(|c| &c.memory));

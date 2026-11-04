@@ -97,6 +97,7 @@ fn chosen(
             target_precision: target,
             minimum_answered: 10,
             counting: None,
+            uncounted_batches: &[],
         },
         LayerOptions {
             rule,

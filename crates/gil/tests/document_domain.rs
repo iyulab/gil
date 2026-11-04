@@ -238,6 +238,7 @@ fn a_key_threshold_replay_narrows_as_answers_do() {
         target_precision: 0.95,
         minimum_answered: 5,
         counting: None,
+        uncounted_batches: &[],
     };
 
     let narrowed =

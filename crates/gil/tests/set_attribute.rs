@@ -232,6 +232,7 @@ const CHOICE: Choice = Choice {
     target_precision: 0.9,
     minimum_answered: 5,
     counting: None,
+    uncounted_batches: &[],
 };
 
 /// Areas alternate: ai papers cover nlp and vision, bio papers genomics.

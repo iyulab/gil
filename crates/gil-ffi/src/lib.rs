@@ -1031,7 +1031,8 @@ pub unsafe extern "C" fn gil_decider_is_first_of_batch(
 
 /// What a threshold is chosen for, as the selections read it from JSON: `target_precision` in (0, 1] and
 /// `minimum_answered` at least 1, and optionally `counting` (the settlement kinds whose lookups count, by name; all when
-/// left out), `rule` (`every_band`, the default, or `pooled` — the layers' selection only), `decisions` (whether to keep
+/// left out), experimental `uncounted_batches` (batch names whose records are replayed into memory but not counted; none
+/// when left out), `rule` (`every_band`, the default, or `pooled` — the layers' selection only), `decisions` (whether to keep
 /// the decision records of the replay — the layers' and the coarse level's selections), `typed_longest` (the key
 /// attributes' selection: count typing up to that many characters), experimental and the keeper's only,
 /// `first_of_batch` (choose and promise the first records of batches apart), `restart_on_form_version` (start again
@@ -1045,6 +1046,8 @@ struct Options {
     minimum_answered: usize,
     #[serde(default)]
     counting: Option<Vec<SettlementKind>>,
+    #[serde(default)]
+    uncounted_batches: Vec<String>,
     #[serde(default)]
     rule: ThresholdRule,
     #[serde(default)]
@@ -1070,6 +1073,7 @@ impl Options {
             target_precision: self.target_precision,
             minimum_answered: self.minimum_answered,
             counting: self.counting.as_deref(),
+            uncounted_batches: &self.uncounted_batches,
         }
     }
 }
@@ -1619,6 +1623,7 @@ pub unsafe extern "C" fn gil_keeper_new(
             target_precision: options.target_precision,
             minimum_answered: options.minimum_answered,
             counting: options.counting.clone(),
+            uncounted_batches: options.uncounted_batches.clone(),
             rule: options.rule,
             first_of_batch: options.first_of_batch,
             restart_on_form_version: options.restart_on_form_version,

@@ -16,8 +16,22 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   tuning fingerprint do not depend on it. A schema that leaves it off serializes as before. The C ABI and Python read it
   from the schema's JSON.
 
+- **Experimental: `Choice::uncounted_batches` and `Keep::uncounted_batches`, history taken into memory without being counted.**
+  Records from the named batches (`Record::batch`) are replayed into memory like any other settlement but not asked
+  about, so no threshold or promise rests on them. It is for history loaded in bulk from another system, whose records
+  carry no settlement order worth testing: the memory learns from them, and the thresholds are chosen on the records
+  settled since. It is the source of a record, not how it was settled, so `counting` is untouched and records from other
+  batches settled the same way still count (borrowing a settlement kind that `counting` leaves out did both at once).
+  Empty, the default, counts every batch. The C ABI reads it as the selection options' `uncounted_batches`.
+
 - **Python: `gil.__version__`**, the version of the installed package, and the PyPI classifiers name Python 3.11 and CPython
   (the README states the lower bound).
+
+### Breaking
+
+- **`replay::Choice` has a new field, `uncounted_batches`, and so has `keeper::Keep`.** Where you build either with a struct
+  literal, add `uncounted_batches: &[]` to a `Choice` and `uncounted_batches: Vec::new()` to a `Keep` (or build a `Keep`
+  with `..Keep::new(target)`). Nothing else changes while it is empty.
 
 ### Changed
 

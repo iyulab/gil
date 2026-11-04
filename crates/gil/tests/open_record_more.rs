@@ -118,6 +118,7 @@ fn choice(target_precision: f64, minimum_answered: usize) -> Choice<'static> {
         target_precision,
         minimum_answered,
         counting: None,
+        uncounted_batches: &[],
     }
 }
 

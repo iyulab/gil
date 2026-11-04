@@ -25,6 +25,7 @@ fn choice(target_precision: f64) -> Choice<'static> {
         target_precision,
         minimum_answered: 1,
         counting: None,
+        uncounted_batches: &[],
     }
 }
 
