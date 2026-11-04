@@ -14,7 +14,7 @@ internal static unsafe partial class Native
     internal const int Panic = 3;
 
     /// <summary>The version of the C ABI this binding was built for (<c>GIL_REVIEW_ABI_VERSION</c>).</summary>
-    internal const uint AbiVersion = 1;
+    internal const uint AbiVersion = 2;
 
     private static volatile bool _compatible;
 
@@ -151,6 +151,9 @@ internal static unsafe partial class Native
 
     [LibraryImport(Library, EntryPoint = "gil_review_allocate_neyman")]
     internal static partial int AllocateNeyman(StratumSpread* strata, nuint strataLen, ulong budget, ulong* counts);
+
+    [LibraryImport(Library, EntryPoint = "gil_review_allocate_neyman_with_minimum")]
+    internal static partial int AllocateNeymanWithMinimum(StratumSpread* strata, nuint strataLen, ulong budget, ulong minimum, ulong* counts);
 
     [LibraryImport(Library, EntryPoint = "gil_review_minimum_design_deviation")]
     internal static partial double MinimumDesignDeviation();

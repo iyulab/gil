@@ -19,7 +19,7 @@ pub const GIL_REVIEW_PANIC: i32 = iyulab_ffi_support::PANIC;
 
 /// The version of this interface — its functions, structures and statuses. It changes whenever a binding built for one
 /// version would misread the library of another.
-pub const GIL_REVIEW_ABI_VERSION: u32 = 1;
+pub const GIL_REVIEW_ABI_VERSION: u32 = 2;
 
 /// The version of this interface the library speaks ([`GIL_REVIEW_ABI_VERSION`]) — what a binding checks before its
 /// first call.
@@ -256,6 +256,37 @@ pub unsafe extern "C" fn gil_review_allocate_neyman(
             })
             .collect();
         counts.copy_from_slice(&gil_review::allocate_neyman(&spreads, budget)?);
+        Ok(())
+    })
+}
+
+/// `gil_review::allocate_neyman_with_minimum`: as `gil_review_allocate_neyman`, with a minimum number of records for
+/// every stratum (capped to half the budget between them) — writes one count per stratum to `counts`.
+///
+/// # Safety
+/// As [`gil_review_allocate_neyman`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_review_allocate_neyman_with_minimum(
+    strata: *const GilReviewStratumSpread,
+    strata_len: usize,
+    budget: u64,
+    minimum: u64,
+    counts: *mut u64,
+) -> i32 {
+    call(|| {
+        // SAFETY: forwarded from the caller.
+        let strata = unsafe { slice(strata, strata_len, "strata") }?;
+        let counts = unsafe { slice_mut(counts, strata_len, "counts") }?;
+        let spreads: Vec<StratumSpread> = strata
+            .iter()
+            .map(|s| StratumSpread {
+                population: s.population,
+                deviation: s.deviation,
+            })
+            .collect();
+        counts.copy_from_slice(&gil_review::allocate_neyman_with_minimum(
+            &spreads, budget, minimum,
+        )?);
         Ok(())
     })
 }

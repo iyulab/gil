@@ -24,7 +24,7 @@ pub use estimate::{
 pub use sample::{
     PILOT_RECORDS_PER_STRATUM, PopulationStratum, ReviewSample, SAMPLE_NO_PARAMETERS,
     SAMPLE_STRATUM_EMPTY, SAMPLE_STRATUM_TAKEN_WHOLE, SampledStratum, StratumSpread,
-    allocate_neyman, draw_pilot, minimum_design_deviation,
+    allocate_neyman, allocate_neyman_with_minimum, draw_pilot, minimum_design_deviation,
 };
 
 /// The README's example, compiled and run as a test.

@@ -3,6 +3,26 @@
 The Rust crate and its .NET binding share this version line; 0.1.0 is the first release of both. Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do.
 
+## Unreleased
+
+### Added
+
+- **`allocate_neyman_with_minimum`, the Neyman allocation with a minimum number of records for every stratum.** Neyman
+  puts the fewest records where the pilot saw the least spread, so a small, noisy stratum could end up with a single
+  record and an error of its own far above the rest. Each stratum is first given `min(minimum, its population)` records
+  and the rest of the budget is shared by `allocate_neyman` over what each has left. The minimum is capped at
+  `⌊budget / 2 / strata⌋`, so the minimums never take more than half the budget; a minimum of 0 or 1, or a budget too
+  small for 2 a stratum, allocates exactly as `allocate_neyman`, which is unchanged. In replays on two public
+  classification sets with the minimum at 10, the worst stratum's error fell to 0.38 – 0.53 of `allocate_neyman`'s in
+  the set with small strata, for 5 – 13% more error overall across budgets of 3 – 15% of the answered records; without
+  the cap, a minimum of 10 took 23% more overall at one budget and could not be met at the smallest ones. The .NET
+  binding has the overload `ReviewSampler.AllocateNeyman(strata, budget, minimumPerStratum)`.
+
+### Changed
+
+- **The C ABI is version 2** (`gil_review_abi_version`): it adds `gil_review_allocate_neyman_with_minimum`. Nothing else
+  changes. The package carries the native library built with its binding, as before.
+
 ## 0.1.1
 
 ### Added

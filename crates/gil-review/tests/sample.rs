@@ -3,7 +3,8 @@
 
 use gil_review::{
     PopulationStratum, ReviewError, SAMPLE_STRATUM_EMPTY, SAMPLE_STRATUM_TAKEN_WHOLE,
-    StratumSpread, allocate_neyman, draw_pilot, minimum_design_deviation,
+    StratumSpread, allocate_neyman, allocate_neyman_with_minimum, draw_pilot,
+    minimum_design_deviation,
 };
 
 fn spread(population: u64, deviation: f64) -> StratumSpread {
@@ -194,5 +195,93 @@ fn a_pilot_refuses_strata_that_do_not_partition_the_population() {
     assert_eq!(
         draw_pilot(&[s("a", &["x"])], 0, 0),
         Err(ReviewError::PerStratumTooSmall)
+    );
+}
+
+/// A stratum of 60, three of 17-ish and two large, with the deviations a pilot saw in a classification set whose
+/// strata differ in size; the expected counts are those of the reference replay (`experiments/review_allocation.py`,
+/// `allocate_capped_neyman`), not computed here.
+fn small_strata() -> [StratumSpread; 5] {
+    [
+        spread(60, 0.217945),
+        spread(17, 0.0),
+        spread(17, 0.235294),
+        spread(226, 0.232838),
+        spread(452, 0.167134),
+    ]
+}
+
+#[test]
+fn a_minimum_keeps_the_smallest_strata_from_one_record_each() {
+    let strata = small_strata();
+    assert_eq!(
+        allocate_neyman(&strata, 77).unwrap(),
+        [6, 2, 2, 23, 44],
+        "without a minimum, two strata of 17 get two records"
+    );
+    for (budget, minimum, expected) in [
+        (23, 10, [3, 3, 3, 5, 9]),       // the cap: ⌊23 / 2 / 5⌋ = 2
+        (39, 10, [5, 4, 4, 10, 16]),     // ⌊39 / 2 / 5⌋ = 3
+        (77, 10, [10, 8, 8, 20, 31]),    // ⌊77 / 2 / 5⌋ = 7
+        (116, 10, [14, 11, 11, 31, 49]), // ⌊116 / 2 / 5⌋ = 11, so 10 stands
+    ] {
+        let counts = allocate_neyman_with_minimum(&strata, budget, minimum).unwrap();
+        assert_eq!(counts, expected, "budget {budget}");
+        assert_eq!(counts.iter().sum::<u64>(), budget);
+    }
+}
+
+#[test]
+fn the_minimum_never_takes_more_than_half_the_budget() {
+    let strata = small_strata();
+    // 5 strata of at least 17: a minimum of 1,000 is capped to ⌊budget / 2 / 5⌋ per stratum.
+    for budget in [25, 40, 77, 200, 500] {
+        let counts = allocate_neyman_with_minimum(&strata, budget, 1_000).unwrap();
+        let cap = budget / 2 / 5;
+        assert_eq!(counts.iter().sum::<u64>(), budget.min(766));
+        for (count, stratum) in counts.iter().zip(&strata) {
+            assert!(
+                *count >= cap.min(stratum.population),
+                "budget {budget}: {counts:?}"
+            );
+            assert!(*count <= stratum.population);
+        }
+    }
+}
+
+#[test]
+fn a_minimum_of_one_or_none_allocates_as_without() {
+    let strata = small_strata();
+    for budget in [5, 23, 77, 400] {
+        let plain = allocate_neyman(&strata, budget).unwrap();
+        for minimum in [0, 1] {
+            assert_eq!(
+                allocate_neyman_with_minimum(&strata, budget, minimum).unwrap(),
+                plain
+            );
+        }
+    }
+    // A budget too small for two a stratum: the cap is under 2, so the same again.
+    assert_eq!(
+        allocate_neyman_with_minimum(&strata, 19, 10).unwrap(),
+        allocate_neyman(&strata, 19).unwrap()
+    );
+}
+
+#[test]
+fn a_stratum_smaller_than_the_minimum_is_taken_whole_and_the_errors_are_the_same() {
+    let strata = [spread(3, 0.5), spread(400, 0.2), spread(600, 0.2)];
+    let counts = allocate_neyman_with_minimum(&strata, 100, 10).unwrap();
+    assert_eq!(counts[0], 3);
+    assert_eq!(counts.iter().sum::<u64>(), 100);
+    assert!(counts[1] >= 10 && counts[2] >= 10);
+
+    assert_eq!(
+        allocate_neyman_with_minimum(&[], 10, 5),
+        Err(ReviewError::NoStrata)
+    );
+    assert_eq!(
+        allocate_neyman_with_minimum(&strata, 2, 5),
+        allocate_neyman(&strata, 2)
     );
 }

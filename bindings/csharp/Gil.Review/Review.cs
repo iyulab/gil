@@ -92,7 +92,25 @@ public static class ReviewSampler
     /// largest fractional part, the lower index first on a tie.</summary>
     /// <exception cref="ArgumentException">No strata, a population of 0, a budget below the number of strata, or a
     /// deviation that is negative or not finite.</exception>
-    public static unsafe long[] AllocateNeyman(IReadOnlyList<StratumSpread> strata, long budget)
+    public static long[] AllocateNeyman(IReadOnlyList<StratumSpread> strata, long budget) =>
+        Allocate(strata, budget, null);
+
+    /// <summary>As <see cref="AllocateNeyman(IReadOnlyList{StratumSpread}, long)"/>, with at least
+    /// <paramref name="minimumPerStratum"/> records for every stratum (or all it holds), for a pilot that left a small
+    /// stratum with one or two records to size the round by. Each stratum is first given its minimum and the rest of the
+    /// budget is shared by Neyman over what each has left. The minimum is capped at half the budget between the strata
+    /// (<c>budget / 2 / strata</c>, rounded down), so a minimum meant for a larger budget never takes the budget it is
+    /// shared out of; a minimum of 0 or 1, or a budget too small for 2 a stratum, allocates as without one. Replays on
+    /// two public classification sets, with the minimum at 10, cut the worst stratum's error to 0.38 – 0.53 of the plain
+    /// allocation's in the set with small strata, for 5 – 13% more error overall.</summary>
+    /// <exception cref="ArgumentException">As for <see cref="AllocateNeyman(IReadOnlyList{StratumSpread}, long)"/>.</exception>
+    public static long[] AllocateNeyman(IReadOnlyList<StratumSpread> strata, long budget, long minimumPerStratum)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(minimumPerStratum);
+        return Allocate(strata, budget, minimumPerStratum);
+    }
+
+    private static unsafe long[] Allocate(IReadOnlyList<StratumSpread> strata, long budget, long? minimum)
     {
         ArgumentNullException.ThrowIfNull(strata);
         ArgumentOutOfRangeException.ThrowIfNegative(budget);
@@ -108,7 +126,9 @@ public static class ReviewSampler
         fixed (Native.StratumSpread* s = native)
         fixed (ulong* c = counts)
         {
-            Native.Check(Native.AllocateNeyman(s, (nuint)native.Length, (ulong)budget, c));
+            Native.Check(minimum is { } m
+                ? Native.AllocateNeymanWithMinimum(s, (nuint)native.Length, (ulong)budget, (ulong)m, c)
+                : Native.AllocateNeyman(s, (nuint)native.Length, (ulong)budget, c));
         }
 
         return Array.ConvertAll(counts, c => (long)c);

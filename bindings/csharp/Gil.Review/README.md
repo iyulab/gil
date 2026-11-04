@@ -4,7 +4,7 @@ Review statistics for checking automated decisions by hand, for .NET — a bindi
 `iyulab-gil-review` ([repository](https://github.com/iyulab/gil)):
 
 - **which records to review** — a seeded pilot draw over strata you form (`ReviewSampler.DrawPilot`), then the Neyman
-  allocation of the round after it (`ReviewSampler.AllocateNeyman`);
+  allocation of the round after it (`ReviewSampler.AllocateNeyman`, optionally with a minimum for every stratum);
 - **what the reviewed scores say about the whole population** — a stratified, weighted estimate with a normal and a
   bootstrap interval (`ReviewEstimator.Estimate`), and a band for items the review could not settle
   (`ReviewEstimator.EstimateBounds`);

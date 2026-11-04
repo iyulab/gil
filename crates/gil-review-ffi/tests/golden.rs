@@ -431,5 +431,38 @@ fn a_malformed_call_is_refused_before_the_computation() {
 #[test]
 fn the_library_says_which_interface_it_speaks() {
     assert_eq!(gil_review_abi_version(), GIL_REVIEW_ABI_VERSION);
-    assert_eq!(GIL_REVIEW_ABI_VERSION, 1);
+    assert_eq!(GIL_REVIEW_ABI_VERSION, 2);
+}
+
+#[test]
+fn the_allocation_with_a_minimum_matches_the_crate() {
+    let strata = [
+        (60, 0.217945),
+        (17, 0.0),
+        (17, 0.235294),
+        (226, 0.232838),
+        (452, 0.167134),
+    ]
+    .map(|(population, deviation)| GilReviewStratumSpread {
+        population,
+        deviation,
+    });
+    let mut counts = [0u64; 5];
+    ok(unsafe {
+        gil_review_allocate_neyman_with_minimum(strata.as_ptr(), 5, 77, 10, counts.as_mut_ptr())
+    });
+    assert_eq!(counts, [10, 8, 8, 20, 31]);
+
+    // A minimum of 1 allocates as `gil_review_allocate_neyman`.
+    let mut plain = [0u64; 5];
+    ok(unsafe { gil_review_allocate_neyman(strata.as_ptr(), 5, 77, plain.as_mut_ptr()) });
+    ok(unsafe {
+        gil_review_allocate_neyman_with_minimum(strata.as_ptr(), 5, 77, 1, counts.as_mut_ptr())
+    });
+    assert_eq!(counts, plain);
+
+    let status = unsafe {
+        gil_review_allocate_neyman_with_minimum(strata.as_ptr(), 5, 2, 10, counts.as_mut_ptr())
+    };
+    assert_eq!(status, GIL_REVIEW_INVALID_INPUT);
 }

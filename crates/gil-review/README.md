@@ -3,7 +3,8 @@
 Review statistics for checking automated decisions by hand, with no dependencies and no I/O:
 
 - **which records to review** — a seeded pilot draw over strata you form (`draw_pilot`), then the Neyman allocation of
-  the round after it (`allocate_neyman`), planned against a floor on each stratum's deviation;
+  the round after it (`allocate_neyman`), planned against a floor on each stratum's deviation, or with a minimum for
+  every stratum (`allocate_neyman_with_minimum`) when a small stratum would otherwise get one or two records;
 - **what the reviewed scores say about the whole population** — a stratified, weighted estimate with a normal and a
   bootstrap interval, and a band for items the record could not settle;
 - **how far two reviewers agree** — Cohen's κ, Gwet's AC1 and the agreement specific to each outcome.
