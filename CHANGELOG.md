@@ -15,6 +15,13 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   and not a promise). The value the layer voted for keeps its score and trust; a schema that leaves it off serializes as
   before.
 
+- **Experimental (`GIL0016`): history taken into memory without being counted.** `SelectionOptions.UncountedBatches` names
+  batches (`Record.Batch`) whose records are replayed into memory like any other settlement but not asked about, so no
+  threshold or promise rests on them: for history loaded in bulk from another system, whose records carry no settlement
+  order worth asking about. It is the source of a record, not how it was settled, so `Counting` is untouched and live
+  records settled the same way still count (settling the import as a kind `Counting` leaves out did both at once). Null
+  or empty counts every batch, as before. Set it before the first record goes into a `Keeper`.
+
 ### Changed
 
 - **A record settled out of order, or taken out with `Keeper.Remove`, no longer has the next choice replay everything.**

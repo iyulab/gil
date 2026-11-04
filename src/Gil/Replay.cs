@@ -194,6 +194,17 @@ public static class Replay
                 writer.WriteEndArray();
             }
 
+            if (options.UncountedBatches is { Count: > 0 } uncounted)
+            {
+                writer.WriteStartArray("uncounted_batches");
+                foreach (var batch in uncounted)
+                {
+                    writer.WriteStringValue(batch);
+                }
+
+                writer.WriteEndArray();
+            }
+
             writer.WriteString("rule", options.Rule switch
             {
                 ThresholdRule.Pooled => "pooled",

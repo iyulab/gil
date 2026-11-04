@@ -91,6 +91,12 @@ internal static class Stability
     /// </summary>
     public const string SimilarCandidates = "GIL0015";
 
+    /// <summary>
+    /// Uncounted batches in the decision core (package <c>Gil</c>): a selection or a keeper that takes the records of named
+    /// batches into memory without counting them — history loaded in bulk from another system.
+    /// </summary>
+    public const string UncountedBatches = "GIL0016";
+
     /// <summary>Where the stability of each surface is described.</summary>
     public const string Url = "https://github.com/iyulab/gil/blob/main/README.md#stability";
 }

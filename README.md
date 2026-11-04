@@ -104,6 +104,7 @@ type may change shape or be removed in any release without a migration note.
 | `GIL0013` | Similar elements in the decision core: the similar record layer answering an attribute that takes several values, element by element (`AttributeDefinition.SimilarElements`, `Keeper.SimilarElements`, `ElementAnswer`) |
 | `GIL0014` | A threshold for a judge outside Gil, chosen from its scores and what people settled (`Replay.SelectScoreThreshold`, `Replay.ScoredDecisions`, `ScoredDecision`, `Record.Scores`) |
 | `GIL0015` | Similar candidates in the decision core: the similar record layer offering, after the value it voted for, the values that drew less of the vote (`AttributeDefinition.SimilarCandidates`) |
+| `GIL0016` | Uncounted batches in the decision core: a selection or a `Keeper` that takes the records of named batches into memory without counting them (`SelectionOptions.UncountedBatches`) |
 
 Suppress the ids of what you use, in the project file or around the code:
 
@@ -361,13 +362,14 @@ is counted only when `Counting` is left out:
 var unprompted = Replay.SelectLayers(schema, "team", saved, options with { Counting = [SettlementKind.Enter] });
 ```
 
-The same lever handles history loaded in bulk from an existing database. Such records share one settlement time, so they
-have no order to replay, and they say nothing about how the layers do on live records. Settle them with a kind the live
-records do not use and leave that kind out of `Counting`: memory learns them, and thresholds and promises are chosen on
-the live records alone (in a replay counting only `Accept`, the first counted record found its value already
-remembered from a history settled as `Enter`; the same history settled as `Fill` taught memory nothing). Give them one `Record.Batch` too, so that
-the batch checks below treat the load as one batch rather than as that many independent records. This borrows a settlement
-kind for what is really a provenance, so it works only while some kind is spare.
+History loaded in bulk from an existing database has its own lever (experimental, `GIL0016`). Such records share one
+settlement time, so they have no order to replay, and they say nothing about how the layers do on live records. Give them
+one `Record.Batch` and name it in `SelectionOptions.UncountedBatches`: memory learns them like any other settlement, and
+thresholds and promises are chosen on the records settled since. It is where a record came from, not how it was settled,
+so `Counting` is untouched and live records settled the same way still count. Set it before the first record goes into a
+`Keeper`. (Python: `uncounted_batches=` on `select_layers`, `select_key_fields`, `select_coarse` and `Keeper`; Rust:
+`Choice::uncounted_batches`, `Keep::uncounted_batches`.) Settling the import as a kind `Counting` leaves out does the
+same for the lookups but takes that kind away from live records, and `Fill` teaches memory nothing.
 
 Settlements that saw no answer are not a sample of the answers, though. Where the application shows every answer it has,
 they are the records the thresholds did not answer, so a promise counted on them speaks of the records just below the

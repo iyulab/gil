@@ -113,6 +113,16 @@ public sealed record SelectionOptions(double TargetPrecision, int MinimumAnswere
     /// <summary>The settlement kinds whose lookups count; all when null.</summary>
     public IReadOnlyList<SettlementKind>? Counting { get; init; }
 
+    /// <summary>The batches (<see cref="Record.Batch"/>) whose records are replayed into memory like any other settlement but
+    /// not counted — not asked about, so no threshold or promise rests on them. For history loaded in bulk from another
+    /// system, whose records carry no settlement order worth asking about: the memory learns from it and the thresholds
+    /// are chosen on the records settled since. It is where a record came from, not how it was settled, so
+    /// <see cref="Counting"/> is untouched, and records of other batches settled the same way still count (settling the
+    /// import as a kind <see cref="Counting"/> leaves out did both at once). Null or empty counts every batch. A keeper
+    /// does not go back over records it has replayed, so set it before the first record goes in.</summary>
+    [Experimental(Stability.UncountedBatches, UrlFormat = Stability.Url)]
+    public IReadOnlyList<string>? UncountedBatches { get; init; }
+
     /// <summary>How the layers' selection chooses its two thresholds.</summary>
     public ThresholdRule Rule { get; init; }
 
