@@ -22,7 +22,8 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   carry no settlement order worth testing: the memory learns from them, and the thresholds are chosen on the records
   settled since. It is the source of a record, not how it was settled, so `counting` is untouched and records from other
   batches settled the same way still count (borrowing a settlement kind that `counting` leaves out did both at once).
-  Empty, the default, counts every batch. The C ABI reads it as the selection options' `uncounted_batches`.
+  Empty, the default, counts every batch. The C ABI reads it as the selection options' `uncounted_batches`, and Python as
+  the `uncounted_batches` argument of `select_layers`, `select_key_fields`, `select_coarse` and `Keeper`.
 
 - **Python: `gil.__version__`**, the version of the installed package, and the PyPI classifiers name Python 3.11 and CPython
   (the README states the lower bound).

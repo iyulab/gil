@@ -143,9 +143,14 @@ fn record_memory(threads: Option<usize>) -> PyResult<LexicalMemory> {
 
 /// Replays the records in order and chooses the attribute's key and memory thresholds, as `select_layers` does. Returns
 /// the thresholds as JSON and, when `decisions` is true, the decision records as JSON lines. Experimental:
+/// The batches left out of the count, as the core takes them: none when the argument is left out.
+fn batches(uncounted_batches: Option<Vec<String>>) -> Vec<String> {
+    uncounted_batches.unwrap_or_default()
+}
+
 /// `value_tails` reports, value by settled value, how the chosen thresholds answered.
 #[pyfunction]
-#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, decisions=true, rule="every_band", threads=None, value_tails=false))]
+#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, decisions=true, rule="every_band", threads=None, value_tails=false, uncounted_batches=None))]
 #[allow(clippy::too_many_arguments)]
 fn select_layers_json(
     schema_json: &str,
@@ -158,15 +163,17 @@ fn select_layers_json(
     rule: &str,
     threads: Option<usize>,
     value_tails: bool,
+    uncounted_batches: Option<Vec<String>>,
 ) -> PyResult<(String, Option<String>)> {
     let rule = threshold_rule(rule)?;
     let (schema, counting) = selection_input(schema_json, counting)?;
+    let uncounted_batches = batches(uncounted_batches);
     let mut memory = record_memory(threads)?;
     let choice = Choice {
         target_precision,
         minimum_answered,
         counting: counting.as_deref(),
-        uncounted_batches: &[],
+        uncounted_batches: &uncounted_batches,
     };
     let mut lines = decisions.then(String::new);
     let layers = guarded(|| {
@@ -198,7 +205,7 @@ fn push_record(lines: &mut Option<String>, r: &DecisionRecord) {
 /// the lookups the value layers leave at the attribute's thresholds. Returns them as JSON and, when `decisions` is true, the
 /// decision records with what the coarse level made of each lookup as JSON lines.
 #[pyfunction]
-#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, decisions=true, threads=None))]
+#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, decisions=true, threads=None, uncounted_batches=None))]
 #[allow(clippy::too_many_arguments)]
 fn select_coarse_json(
     schema_json: &str,
@@ -209,14 +216,16 @@ fn select_coarse_json(
     counting: Option<Vec<String>>,
     decisions: bool,
     threads: Option<usize>,
+    uncounted_batches: Option<Vec<String>>,
 ) -> PyResult<(String, Option<String>)> {
     let (schema, counting) = selection_input(schema_json, counting)?;
+    let uncounted_batches = batches(uncounted_batches);
     let mut memory = record_memory(threads)?;
     let choice = Choice {
         target_precision,
         minimum_answered,
         counting: counting.as_deref(),
-        uncounted_batches: &[],
+        uncounted_batches: &uncounted_batches,
     };
     let mut lines = decisions.then(String::new);
     let layers = guarded(|| {
@@ -286,7 +295,8 @@ fn select_key_concentrations_json(
 /// Chooses the attributes that should key the decided attribute, as `select_key_fields` does: each attribute it rests on alone, then
 /// greedy additions while the key layer's gain over the target grows. Returns the choice as JSON.
 #[pyfunction]
-#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, typed_longest=0))]
+#[pyo3(signature = (schema_json, attribute, records, target_precision, minimum_answered, counting=None, typed_longest=0, uncounted_batches=None))]
+#[allow(clippy::too_many_arguments)]
 fn select_key_fields_json(
     schema_json: &str,
     attribute: &str,
@@ -295,13 +305,15 @@ fn select_key_fields_json(
     minimum_answered: usize,
     counting: Option<Vec<String>>,
     typed_longest: usize,
+    uncounted_batches: Option<Vec<String>>,
 ) -> PyResult<String> {
     let (schema, counting) = selection_input(schema_json, counting)?;
+    let uncounted_batches = batches(uncounted_batches);
     let choice = Choice {
         target_precision,
         minimum_answered,
         counting: counting.as_deref(),
-        uncounted_batches: &[],
+        uncounted_batches: &uncounted_batches,
     };
     let chosen =
         guarded(|| select_key_fields(&schema, attribute, &records.records, choice, typed_longest))?;
@@ -523,7 +535,7 @@ impl Keeper {
     /// A keeper of the schema with nothing settled, choosing for every decided attribute that takes one value - and,
     /// experimentally, the memory threshold of one that takes several and is answered by similar elements.
     #[new]
-    #[pyo3(signature = (schema_json, target_precision, minimum_answered, counting=None, rule="every_band", threads=None, first_of_batch=false, restart_on_form_version=false, value_tails=false, watch_realized=false))]
+    #[pyo3(signature = (schema_json, target_precision, minimum_answered, counting=None, rule="every_band", threads=None, first_of_batch=false, restart_on_form_version=false, value_tails=false, watch_realized=false, uncounted_batches=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         schema_json: &str,
@@ -536,6 +548,7 @@ impl Keeper {
         restart_on_form_version: bool,
         value_tails: bool,
         watch_realized: bool,
+        uncounted_batches: Option<Vec<String>>,
     ) -> PyResult<Self> {
         let rule = threshold_rule(rule)?;
         let (schema, counting) = selection_input(schema_json, counting)?;
@@ -546,7 +559,7 @@ impl Keeper {
             target_precision,
             minimum_answered,
             counting,
-            uncounted_batches: Vec::new(),
+            uncounted_batches: batches(uncounted_batches),
             rule,
             first_of_batch,
             restart_on_form_version,

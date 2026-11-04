@@ -65,6 +65,7 @@ def select_layers_json(
     rule: str = "every_band",
     threads: int | None = None,
     value_tails: bool = False,
+    uncounted_batches: list[str] | None = None,
 ) -> tuple[str, str | None]:
     """The attribute's key and memory threshold replays as JSON and, when `decisions` is true, the decision records as JSON lines."""
 
@@ -76,6 +77,7 @@ def select_key_fields_json(
     minimum_answered: int,
     counting: list[str] | None = None,
     typed_longest: int = 0,
+    uncounted_batches: list[str] | None = None,
 ) -> str:
     """The attributes chosen to key the decided attribute, with the key layer's replay for each set tried, as JSON."""
 
@@ -88,6 +90,7 @@ def select_coarse_json(
     counting: list[str] | None = None,
     decisions: bool = True,
     threads: int | None = None,
+    uncounted_batches: list[str] | None = None,
 ) -> tuple[str, str | None]:
     """The attribute's coarse level thresholds as JSON and, when `decisions` is true, the decision records as JSON lines."""
 
@@ -153,6 +156,7 @@ class Keeper:
         restart_on_form_version: bool = False,
         value_tails: bool = False,
         watch_realized: bool = False,
+        uncounted_batches: list[str] | None = None,
     ) -> Keeper: ...
     def settle(self, decider: Decider, records: Records) -> None:
         """Puts `records` into `decider` and into the next choice."""

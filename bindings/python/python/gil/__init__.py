@@ -392,6 +392,7 @@ def select_layers(
     rule: Literal["every_band", "pooled", "least_cost"] = "every_band",
     threads: int | None = None,
     value_tails: bool = False,
+    uncounted_batches: Iterable[str] | None = None,
 ) -> tuple[LayerThresholds, list[DecisionRecord] | None]:
     """Replays ``records`` and chooses ``attribute``'s key and memory thresholds.
 
@@ -419,6 +420,12 @@ def select_layers(
 
     ``threads`` caps the threads a similar-record lookup over many records is split among (``None``: as many as the
     machine offers, up to eight; ``1``: none). The choice is the same whatever it is.
+
+    Experimental: ``uncounted_batches`` names batches (the records' ``batch``) that are replayed into memory like any
+    other settlement but not counted — not asked about, so no threshold or promise rests on them. It is for history
+    loaded in bulk from another system, whose records carry no settlement order worth asking about: the memory learns
+    from it and the thresholds are chosen on the records settled since. It is where a record came from, not how it was
+    settled, so ``counting`` is untouched and records of other batches settled the same way still count.
     """
     thresholds, lines = select_layers_json(
         schema.json,
@@ -431,6 +438,7 @@ def select_layers(
         rule,
         threads,
         value_tails,
+        None if uncounted_batches is None else list(uncounted_batches),
     )
     out = (
         None
@@ -448,6 +456,7 @@ def select_key_fields(
     minimum_answered: int = 10,
     counting: Iterable[str] | None = None,
     typed_longest: int = 0,
+    uncounted_batches: Iterable[str] | None = None,
 ) -> KeyFieldsChoice:
     """Chooses the attributes that should key ``attribute`` in the settled key memory by replaying its key layer.
 
@@ -456,6 +465,12 @@ def select_key_fields(
     keys every later record that shares it; narrowing the key attributes keeps such an attribute from answering. Set the
     choice as the attribute's ``key_fields`` before choosing its thresholds with :func:`select_layers`. With
     ``typed_longest`` above zero the typed key thresholds that go with the choice come back too.
+
+    Experimental: ``uncounted_batches`` names batches (the records' ``batch``) that are replayed into memory like any
+    other settlement but not counted — not asked about, so no threshold or promise rests on them. It is for history
+    loaded in bulk from another system, whose records carry no settlement order worth asking about: the memory learns
+    from it and the thresholds are chosen on the records settled since. It is where a record came from, not how it was
+    settled, so ``counting`` is untouched and records of other batches settled the same way still count.
     """
     return cast(
         KeyFieldsChoice,
@@ -468,6 +483,7 @@ def select_key_fields(
                 minimum_answered,
                 None if counting is None else list(counting),
                 typed_longest,
+                None if uncounted_batches is None else list(uncounted_batches),
             )
         ),
     )
@@ -482,6 +498,7 @@ def select_coarse(
     counting: Iterable[str] | None = None,
     decisions: bool = True,
     threads: int | None = None,
+    uncounted_batches: Iterable[str] | None = None,
 ) -> tuple[LayerThresholds, list[DecisionRecord] | None]:
     """Replays ``records`` and chooses the thresholds of ``attribute``'s coarse level.
 
@@ -490,6 +507,12 @@ def select_coarse(
     :func:`select_layers` first. Returns the level's key and similar record replays and, unless ``decisions`` is false,
     the decision records with what the level made of each lookup (``coarse``). ``threads`` is as for
     :func:`select_layers`.
+
+    Experimental: ``uncounted_batches`` names batches (the records' ``batch``) that are replayed into memory like any
+    other settlement but not counted — not asked about, so no threshold or promise rests on them. It is for history
+    loaded in bulk from another system, whose records carry no settlement order worth asking about: the memory learns
+    from it and the thresholds are chosen on the records settled since. It is where a record came from, not how it was
+    settled, so ``counting`` is untouched and records of other batches settled the same way still count.
     """
     thresholds, lines = select_coarse_json(
         schema.json,
@@ -500,6 +523,7 @@ def select_coarse(
         None if counting is None else list(counting),
         decisions,
         threads,
+        None if uncounted_batches is None else list(uncounted_batches),
     )
     out = (
         None
@@ -979,6 +1003,9 @@ class Keeper:
     and resting on ``minimum_answered``; the choice's ``first_of_batch`` holds theirs, :attr:`schema` carries them, and
     a first record's promise is ``first_of_batch_promise_of(keeper.tuning, attribute, answer["source"])``.
 
+    Experimental: ``uncounted_batches`` is as for :func:`select_layers` — set it before the first record goes in; a keeper
+    does not go back over records it has replayed.
+
     Experimental: with ``restart_on_form_version``, a record under a new edition of the code lists (its
     ``form_version`` — new only when a value comes to mean something else) starts the keeper again from nothing: the
     records settled before it leave the decider and the replays, the thresholds chosen on them leave :attr:`schema`,
@@ -1010,6 +1037,7 @@ class Keeper:
         restart_on_form_version: bool = False,
         value_tails: bool = False,
         watch_realized: bool = False,
+        uncounted_batches: Iterable[str] | None = None,
     ) -> None:
         self._inner = _Keeper(
             schema.json,
@@ -1022,6 +1050,7 @@ class Keeper:
             restart_on_form_version,
             value_tails,
             watch_realized,
+            None if uncounted_batches is None else list(uncounted_batches),
         )
 
     def settle(self, decider: Decider, records: Records) -> None:
