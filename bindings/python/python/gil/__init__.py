@@ -1069,7 +1069,7 @@ class Keeper:
 
     def stale(self) -> dict[str, Any] | str | None:
         """Why the last choice no longer stands — ``{"settled": {"chosen": ..., "now": ...}}`` once a tenth more or fewer
-        records are settled, and before it, with ``watch_realized``, ``{"realized": ...}`` for the first attribute whose
+        records are counted (:attr:`counted`: those outside ``uncounted_batches``), and before it, with ``watch_realized``, ``{"realized": ...}`` for the first attribute whose
         answers stopped keeping the promise — or ``None`` while it does."""
         text = self._inner.stale()
         return None if text is None else cast(dict[str, Any] | str, json.loads(text))
@@ -1111,6 +1111,12 @@ class Keeper:
     def settled(self) -> int:
         """How many records were settled, a record settled again counting again."""
         return self._inner.settled()
+
+    @property
+    def counted(self) -> int:
+        """How many of :attr:`settled` the choice counts — those outside ``uncounted_batches`` — and what :meth:`stale`
+        counts a tenth of; with no uncounted batch it is :attr:`settled`. Experimental, as ``uncounted_batches``."""
+        return self._inner.counted()
 
     @property
     def form_version(self) -> str | None:

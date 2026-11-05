@@ -170,6 +170,9 @@ class Keeper:
     def settled(self) -> int:
         """How many records were settled, a record settled again counting again."""
 
+    def counted(self) -> int:
+        """How many of the settled records the choice counts — those outside the uncounted batches."""
+
     def unseen_mass(self, attribute: str) -> str | None:
         """Experimental. The share of `attribute`'s next settled values likely to be new, as JSON, or `None`."""
 

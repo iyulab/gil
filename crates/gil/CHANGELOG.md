@@ -24,6 +24,10 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   batches settled the same way still count (borrowing a settlement kind that `counting` leaves out did both at once).
   Empty, the default, counts every batch. The C ABI reads it as the selection options' `uncounted_batches`, and Python as
   the `uncounted_batches` argument of `select_layers`, `select_key_fields`, `select_coarse` and `Keeper`.
+  A `Keeper` leaves them out of what it watches too: `Keeper::stale` goes stale on a tenth more or fewer records it
+  counts (`Keeper::counted`; `Tuning::settled` is that number), not on a tenth of everything settled, so a large
+  import does not hold the first choice's staleness off until a tenth of the import has been settled since; and
+  `watch_realized` judges only the answers of counted records. `Keeper::settled` still counts every record.
 
 - **Python: `gil.__version__`**, the version of the installed package, and the PyPI classifiers name Python 3.11 and CPython
   (the README states the lower bound).

@@ -83,3 +83,29 @@ def test_a_batch_name_that_is_not_text_is_refused() -> None:
             gil.records(with_import()),
             uncounted_batches=[1],  # type: ignore[list-item]
         )
+
+
+def test_the_keeper_goes_stale_on_the_records_it_counts() -> None:
+    # A tenth of everything settled is 30 records; of the 180 the choice counts, 18.
+    keeper = gil.Keeper(schema(), uncounted_batches=["import"])
+    decider = gil.Decider(schema())
+    keeper.settle(decider, gil.records(with_import()))
+    assert (keeper.settled, keeper.counted) == (300, 300 - IMPORTED)
+    keeper.rechoose()
+    assert keeper.stale() is None
+
+    live = [
+        dict(r, id=f"live-{i}", settled_at=f"2027-01-01T00:{i:02d}:00.0000000+00:00")
+        for i, r in enumerate(items()[:19])
+    ]
+    keeper.settle(decider, gil.records(live))
+    assert keeper.counted == 300 - IMPORTED + 19
+    assert keeper.stale() == {
+        "settled": {"chosen": 300 - IMPORTED, "now": 300 - IMPORTED + 19}
+    }
+
+
+def test_without_an_uncounted_batch_every_record_counts() -> None:
+    keeper = gil.Keeper(schema())
+    keeper.settle(gil.Decider(schema()), gil.records(with_import()))
+    assert keeper.counted == keeper.settled == 300

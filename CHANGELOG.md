@@ -20,7 +20,9 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   threshold or promise rests on them: for history loaded in bulk from another system, whose records carry no settlement
   order worth asking about. It is the source of a record, not how it was settled, so `Counting` is untouched and live
   records settled the same way still count (settling the import as a kind `Counting` leaves out did both at once). Null
-  or empty counts every batch, as before. Set it before the first record goes into a `Keeper`.
+  or empty counts every batch, as before. Set it before the first record goes into a `Keeper`. A `Keeper` leaves the
+  batches out of its staleness and its realized-precision watch as well (Python: `Keeper.counted`; the `settled` count
+  still includes them).
 
 ### Changed
 

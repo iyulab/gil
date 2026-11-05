@@ -615,6 +615,12 @@ impl Keeper {
         self.inner.settled()
     }
 
+    /// How many of the settled records the choice counts — those outside the uncounted batches — and what staleness is
+    /// counted on.
+    fn counted(&self) -> usize {
+        self.inner.counted()
+    }
+
     /// Experimental. The share of `attribute`'s next settled values likely to be ones no record settled yet, as JSON
     /// `{"once", "settled", "mass"}`, or `None` for an attribute the keeper does not choose for or before a record
     /// settled it.

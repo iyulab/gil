@@ -301,6 +301,8 @@ pub struct Keeper {
     keep: Keep,
     threads: Option<usize>,
     records: Vec<Record>,
+    /// How many of `records` the choice counts — the ones outside [`Keep::uncounted_batches`]. What staleness is counted on.
+    counted: usize,
     /// The indexes of `records` in settlement order — the order the replays go through them — and the first place in it
     /// where a record has come in or gone out since the replays last went through, `usize::MAX` for none.
     order: Vec<usize>,
@@ -334,6 +336,7 @@ impl Keeper {
             keep,
             threads: None,
             records: Vec::new(),
+            counted: 0,
             order: Vec::new(),
             changed: usize::MAX,
             checkpointing: false,
@@ -437,9 +440,23 @@ impl Keeper {
         self.form_version.as_deref()
     }
 
-    /// How many records were settled, a record settled again counting again — what staleness is counted on.
+    /// How many records were settled, a record settled again counting again.
     pub fn settled(&self) -> usize {
         self.records.len()
+    }
+
+    /// How many of [`Keeper::settled`] the choice counts — those outside [`Keep::uncounted_batches`] — and what staleness
+    /// is counted on: records the thresholds and promises do not rest on do not make them stale.
+    pub fn counted(&self) -> usize {
+        self.counted
+    }
+
+    /// Whether the thresholds and promises rest on `record`: not when it is of a batch left uncounted.
+    fn counts(&self, record: &Record) -> bool {
+        !record
+            .batch
+            .as_ref()
+            .is_some_and(|batch| self.keep.uncounted_batches.contains(batch))
     }
 
     /// Experimental. The share of `attribute`'s next settled values likely to be ones no record settled yet
@@ -475,6 +492,7 @@ impl Keeper {
         if !self.keep.restart_on_form_version {
             decider.rebuild(&self.schema, records);
             let from = self.records.len();
+            self.counted += records.iter().filter(|r| self.counts(r)).count();
             self.records.extend_from_slice(records);
             self.put_in_order(from);
             return;
@@ -496,6 +514,7 @@ impl Keeper {
         }
         decider.rebuild(&self.schema, &taken);
         let from = self.records.len();
+        self.counted += taken.iter().filter(|r| self.counts(r)).count();
         self.records.extend(taken);
         self.put_in_order(from);
     }
@@ -543,6 +562,7 @@ impl Keeper {
     /// edition is left behind, and the thresholds chosen on them leave the schema.
     fn begin(&mut self, decider: &mut Decider, edition: &str) {
         let ids: BTreeSet<String> = self.records.drain(..).map(|r| r.id).collect();
+        self.counted = 0;
         self.order.clear();
         self.changed = usize::MAX;
         for id in &ids {
@@ -588,6 +608,7 @@ impl Keeper {
             return;
         };
         self.records.retain(|r| r.id != record);
+        self.counted = self.records.iter().filter(|r| self.counts(r)).count();
         let records = &self.records;
         self.order = (0..records.len()).collect();
         self.order.sort_by(|&a, &b| {
@@ -606,7 +627,7 @@ impl Keeper {
         {
             return Some(reason);
         }
-        self.tuning.stale(&self.schema, self.records.len())
+        self.tuning.stale(&self.schema, self.counted)
     }
 
     /// [`Stale::Realized`] for `attribute` when its last [`REALIZED_WINDOW`] judged answers fall under the target less
@@ -615,6 +636,9 @@ impl Keeper {
         let mut right = 0;
         let mut judged = 0;
         for record in self.records.iter().rev() {
+            if !self.counts(record) {
+                continue;
+            }
             let correct = match record.settlements.get(attribute) {
                 Some(SettlementKind::Accept) => true,
                 Some(SettlementKind::Correct) => false,
@@ -791,7 +815,7 @@ impl Keeper {
             chosen.insert(attribute.clone(), thresholds);
         }
 
-        let mut tuning = Tuning::capture(&schema, self.records.len(), self.keep.target_precision);
+        let mut tuning = Tuning::capture(&schema, self.counted, self.keep.target_precision);
         for (attribute, thresholds) in &chosen {
             tuning.promise(attribute, thresholds);
         }
@@ -1748,6 +1772,74 @@ mod tests {
         }
         keeper.settle(&mut decider, &silent);
         assert!(!matches!(keeper.stale(), Some(Stale::Realized { .. })));
+    }
+
+    /// `records` of the batch `batch`.
+    fn of_batch(mut records: Vec<Record>, batch: &str) -> Vec<Record> {
+        for record in &mut records {
+            record.batch = Some(batch.to_owned());
+        }
+        records
+    }
+
+    #[test]
+    fn records_of_an_uncounted_batch_make_neither_staleness_nor_the_realized_watch() {
+        let keep = Keep {
+            uncounted_batches: vec!["import".to_owned()],
+            ..watching()
+        };
+        // An import of 150 settlements that all say the answer was corrected, then live ones all accepted.
+        let import = of_batch(judged(0, &[false; 150]), "import");
+        let mut keeper = Keeper::new(schema(), keep);
+        let mut decider = decider();
+        keeper.settle(&mut decider, &import);
+        assert_eq!((keeper.settled(), keeper.counted()), (150, 0));
+        // Nothing the choice counts has come in: the empty choice stands.
+        assert_eq!(keeper.stale(), None);
+        keeper.rechoose();
+
+        // 60 accepted live records are the whole window the watch can judge: fewer than 100, so it is silent, where
+        // counting the import would judge 40 corrected ones with them (60 of 100) and say the promise is broken.
+        keeper.settle(&mut decider, &judged(150, &[true; 60]));
+        assert_eq!(keeper.stale(), Some(Stale::Settled { chosen: 0, now: 60 }));
+        keeper.rechoose();
+        assert_eq!(keeper.stale(), None);
+
+        // A tenth of what the choice counts (60), not of everything settled (210).
+        keeper.settle(&mut decider, &judged(210, &[true; 5]));
+        assert_eq!(keeper.stale(), None);
+        keeper.settle(&mut decider, &judged(215, &[true; 1]));
+        assert_eq!(
+            keeper.stale(),
+            Some(Stale::Settled {
+                chosen: 60,
+                now: 66
+            })
+        );
+
+        // The same records with the import not left out are what the watch reads as a broken promise.
+        let mut counting = Keeper::new(schema(), watching());
+        let mut other = self::decider();
+        counting.settle(&mut other, &import);
+        counting.settle(&mut other, &judged(150, &[true; 60]));
+        assert!(matches!(counting.stale(), Some(Stale::Realized { .. })));
+    }
+
+    #[test]
+    fn taking_a_record_out_takes_it_off_the_count_only_if_it_counted() {
+        let keep = Keep {
+            uncounted_batches: vec!["import".to_owned()],
+            ..Keep::new(0.8)
+        };
+        let mut keeper = Keeper::new(schema(), keep);
+        let mut decider = decider();
+        keeper.settle(&mut decider, &of_batch(judged(0, &[true; 20]), "import"));
+        keeper.settle(&mut decider, &judged(20, &[true; 30]));
+        assert_eq!((keeper.settled(), keeper.counted()), (50, 30));
+        keeper.remove(&mut decider, "j3");
+        assert_eq!((keeper.settled(), keeper.counted()), (49, 30));
+        keeper.remove(&mut decider, "j25");
+        assert_eq!((keeper.settled(), keeper.counted()), (48, 29));
     }
 
     #[test]

@@ -64,7 +64,8 @@ pub struct Tuning {
     pub version: String,
     /// The fingerprint of the settings the choice rests on ([`fingerprint`]).
     pub schema: u64,
-    /// How many records were settled when they were chosen.
+    /// How many records the choice counted when they were chosen — those settled, less the ones of a batch left
+    /// uncounted ([`crate::replay::Choice::uncounted_batches`]).
     pub settled: usize,
     /// The precision the replays were asked to meet.
     pub target_precision: f64,
@@ -80,7 +81,7 @@ pub enum Stale {
     Version { chosen: String },
     /// A setting the choice rests on changed.
     Schema,
-    /// The settled records grew or shrank by a tenth or more since the choice.
+    /// The records the choice counts grew or shrank by a tenth or more since the choice.
     Settled { chosen: usize, now: usize },
     /// Experimental. Of `attribute`'s last `judged` answers whose rightness came back, only `right` were — under the
     /// target less [`crate::keeper::REALIZED_MARGIN`]. A keeper says it ([`crate::keeper::Keep::watch_realized`]); a
