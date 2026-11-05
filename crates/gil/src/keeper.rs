@@ -453,10 +453,7 @@ impl Keeper {
 
     /// Whether the thresholds and promises rest on `record`: not when it is of a batch left uncounted.
     fn counts(&self, record: &Record) -> bool {
-        !record
-            .batch
-            .as_ref()
-            .is_some_and(|batch| self.keep.uncounted_batches.contains(batch))
+        !self.keep.choice().counted().leaves_out(record)
     }
 
     /// Experimental. The share of `attribute`'s next settled values likely to be ones no record settled yet
@@ -1826,6 +1823,22 @@ mod tests {
     }
 
     #[test]
+    fn the_unseen_mass_is_of_what_memory_holds_so_it_includes_uncounted_batches() {
+        // Unlike the signals the choice rests on, the share of values no record settled yet describes what the memories
+        // have learned, and a batch left uncounted is learned.
+        let keep = Keep {
+            uncounted_batches: vec!["import".to_owned()],
+            ..Keep::new(0.8)
+        };
+        let mut keeper = Keeper::new(schema(), keep);
+        let mut decider = decider();
+        keeper.settle(&mut decider, &of_batch(judged(0, &[true; 20]), "import"));
+        keeper.settle(&mut decider, &judged(20, &[true; 10]));
+        let mass = keeper.unseen_mass("team").expect("a mass");
+        assert_eq!((keeper.counted(), mass.settled), (10, 30));
+    }
+
+    #[test]
     fn taking_a_record_out_takes_it_off_the_count_only_if_it_counted() {
         let keep = Keep {
             uncounted_batches: vec!["import".to_owned()],
@@ -1840,6 +1853,109 @@ mod tests {
         assert_eq!((keeper.settled(), keeper.counted()), (49, 30));
         keeper.remove(&mut decider, "j25");
         assert_eq!((keeper.settled(), keeper.counted()), (48, 29));
+    }
+
+    /// What a keeper chose and holds, in one string: the value layers, the first-record layers, the coarse level and
+    /// the tuning's promises.
+    fn signature(keeper: &Keeper) -> String {
+        let mut text = String::new();
+        for attribute in ["queue", "team"] {
+            text += &format!(
+                "{attribute}: {:?} | {:?} | {:?}\n",
+                keeper.chosen(attribute),
+                keeper.chosen_first_of_batch(attribute),
+                keeper.chosen_coarse(attribute)
+            );
+        }
+        text + &format!("{:?}", keeper.tuning().attributes)
+    }
+
+    /// The options a keeper takes, every pair of them settled together: whatever a keeper has gone back over — late
+    /// records, records taken out — it holds what a keeper that was given all the records at once holds, and the counts
+    /// its signals rest on are the ones of the records it has.
+    #[test]
+    fn options_in_every_combination_agree_with_a_keeper_that_never_went_back() {
+        let mut records = settled(220);
+        for (i, record) in records.iter_mut().enumerate() {
+            // Three batches; the middle one is left out when asked.
+            record.batch = Some(format!("b{}", (i / 24) % 3));
+        }
+        let rules = [
+            ThresholdRule::EveryBand,
+            ThresholdRule::Pooled,
+            ThresholdRule::LeastCost,
+        ];
+        let mut combinations = 0;
+        for (n, rule) in rules.into_iter().enumerate() {
+            for flags in 0..8_u8 {
+                let keep = Keep {
+                    rule,
+                    first_of_batch: flags & 1 != 0,
+                    value_tails: flags & 2 != 0,
+                    uncounted_batches: if flags & 4 != 0 {
+                        vec!["b1".to_owned()]
+                    } else {
+                        Vec::new()
+                    },
+                    // These two do not change what is chosen: they take turns across the combinations. Records here
+                    // name no edition, so restarting is asked for and never happens.
+                    watch_realized: (n + usize::from(flags)) % 2 == 0,
+                    restart_on_form_version: flags % 3 == 0,
+                    ..Keep::new(0.8)
+                };
+                let uncounted = |r: &Record| {
+                    !keep.uncounted_batches.is_empty() && r.batch.as_deref() == Some("b1")
+                };
+
+                let mut keeper = Keeper::new(schema(), keep.clone());
+                let mut decider = decider();
+                let mut all: Vec<Record> = Vec::new();
+                for part in records[..160].chunks(80) {
+                    keeper.settle(&mut decider, part);
+                    all.extend_from_slice(part);
+                    keeper.rechoose();
+                }
+                // Late, in the middle of the stream and near its start, and then one taken out.
+                for (k, at) in [130, 20].into_iter().enumerate() {
+                    let mut late = records[at].clone();
+                    late.id = format!("late{k}");
+                    keeper.settle(&mut decider, std::slice::from_ref(&late));
+                    all.push(late);
+                    keeper.rechoose();
+                }
+                keeper.settle(&mut decider, &records[160..]);
+                all.extend_from_slice(&records[160..]);
+                keeper.remove(&mut decider, "t60");
+                all.retain(|r| r.id != "t60");
+                keeper.rechoose();
+
+                let mut fresh = Keeper::new(schema(), keep.clone());
+                fresh.settle(&mut self::decider(), &all);
+                fresh.rechoose();
+                let label = format!("rule {rule:?} flags {flags:#05b}");
+                assert_eq!(signature(&keeper), signature(&fresh), "{label}");
+
+                assert_eq!(keeper.settled(), all.len(), "{label}");
+                assert_eq!(
+                    keeper.counted(),
+                    all.iter().filter(|r| !uncounted(r)).count(),
+                    "{label}"
+                );
+                // Counting nothing that the choice does not rest on, the keeper is as stale as the tuning says.
+                assert_eq!(
+                    keeper.tuning().settled,
+                    keeper.counted(),
+                    "{label}: the tuning holds the count staleness is on"
+                );
+                assert!(
+                    !matches!(keeper.stale(), Some(Stale::Settled { .. })),
+                    "{label}: {:?}",
+                    keeper.stale()
+                );
+                combinations += 1;
+            }
+        }
+        assert_eq!(combinations, 24);
     }
 
     #[test]

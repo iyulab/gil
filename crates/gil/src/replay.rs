@@ -110,6 +110,16 @@ pub(crate) struct Counted<'a> {
     pub(crate) uncounted_batches: &'a [String],
 }
 
+impl Counted<'_> {
+    /// Whether `record` is of a batch left out: replayed into memory, not asked about.
+    pub(crate) fn leaves_out(&self, record: &Record) -> bool {
+        record
+            .batch
+            .as_ref()
+            .is_some_and(|batch| self.uncounted_batches.contains(batch))
+    }
+}
+
 impl<'a> Choice<'a> {
     pub(crate) fn counted(&self) -> Counted<'a> {
         Counted {
@@ -590,9 +600,7 @@ fn weight(record: &Record, attribute: &str, counted: Counted) -> f64 {
     {
         return 0.0;
     }
-    if let Some(batch) = &record.batch
-        && counted.uncounted_batches.contains(batch)
-    {
+    if counted.leaves_out(record) {
         return 0.0;
     }
 
