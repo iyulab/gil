@@ -61,7 +61,7 @@ pub const GIL_BROKEN: i32 = iyulab_ffi_support::BROKEN;
 
 /// The version of this interface — its functions, structures and statuses. It changes whenever a binding built for one
 /// version would misread the library of another.
-pub const GIL_ABI_VERSION: u32 = 5;
+pub const GIL_ABI_VERSION: u32 = 6;
 
 /// [`GilCandidate::source`]: no layer.
 pub const GIL_SOURCE_NONE: u8 = 0;
@@ -1817,6 +1817,17 @@ pub unsafe extern "C" fn gil_keeper_similar_elements(
 pub unsafe extern "C" fn gil_keeper_settled(keeper: *const GilKeeper) -> usize {
     // SAFETY: forwarded from the caller.
     unsafe { keeper.as_ref() }.map_or(0, |k| k.keeper.settled())
+}
+
+/// How many of the records the keeper took its choice counts — those outside the options' `uncounted_batches` — and what
+/// staleness is counted on; 0 for null. The same as `gil_keeper_settled` while no batch is left uncounted.
+///
+/// # Safety
+/// `keeper` is null or a live keeper handle.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_keeper_counted(keeper: *const GilKeeper) -> usize {
+    // SAFETY: forwarded from the caller.
+    unsafe { keeper.as_ref() }.map_or(0, |k| k.keeper.counted())
 }
 
 /// The keeper's choice as it stands: `{"tuning": …, "chosen": {attribute: thresholds, …}, "coarse": {attribute:

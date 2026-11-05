@@ -45,6 +45,17 @@ public sealed class UncountedBatchesTests
     }
 
     [Fact]
+    public void WithNoBatchLeftOutEveryRecordIsCounted()
+    {
+        using var schema = Plain();
+        using var keeper = new Keeper(schema, new SelectionOptions(0.5, 5));
+        using var decider = new Decider();
+        using var records = Settled(400, 200);
+        keeper.Settle(decider, records);
+        keeper.Counted.Should().Be(keeper.Settled);
+    }
+
+    [Fact]
     public void AKeeperLeavesThemOutAsASelectionDoes()
     {
         using var schema = Plain();
@@ -56,6 +67,8 @@ public sealed class UncountedBatchesTests
             keeper.Settle(decider, records);
         }
 
+        keeper.Settled.Should().Be(400);
+        keeper.Counted.Should().Be(200);
         var chosen = keeper.Rechoose().Chosen["team"];
         using var all = Settled(400, 200);
         var alone = Replay.SelectLayers(schema, "team", all, options).Thresholds;

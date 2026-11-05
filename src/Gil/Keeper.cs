@@ -39,8 +39,7 @@ public sealed class Keeper : IDisposable
 
     internal KeeperHandle Handle { get; }
 
-    /// <summary>How many records were settled, a record settled again counting again — what staleness is counted
-    /// on.</summary>
+    /// <summary>How many records were settled, a record settled again counting again.</summary>
     public int Settled
     {
         get
@@ -48,6 +47,21 @@ public sealed class Keeper : IDisposable
             lock (sync)
             {
                 return (int)Native.KeeperSettled(Handle);
+            }
+        }
+    }
+
+    /// <summary>Experimental (<c>GIL0016</c>). How many of <see cref="Settled"/> the choice counts — those outside
+    /// <see cref="SelectionOptions.UncountedBatches"/> — and what <see cref="Stale"/> counts a tenth of. The same as
+    /// <see cref="Settled"/> while no batch is left uncounted.</summary>
+    [Experimental(Stability.UncountedBatches, UrlFormat = Stability.Url)]
+    public int Counted
+    {
+        get
+        {
+            lock (sync)
+            {
+                return (int)Native.KeeperCounted(Handle);
             }
         }
     }

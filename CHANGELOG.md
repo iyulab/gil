@@ -21,10 +21,13 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   order worth asking about. It is the source of a record, not how it was settled, so `Counting` is untouched and live
   records settled the same way still count (settling the import as a kind `Counting` leaves out did both at once). Null
   or empty counts every batch, as before. Set it before the first record goes into a `Keeper`. A `Keeper` leaves the
-  batches out of its staleness and its realized-precision watch as well (Python: `Keeper.counted`; the `settled` count
-  still includes them).
+  batches out of its staleness and its realized-precision watch as well (`Keeper.Counted`, Python `Keeper.counted`; the
+  `Settled` count still includes them).
 
 ### Changed
+
+- **The native library speaks version 6 of its C interface.** `gil_keeper_counted` is new, and the .NET binding checks
+  for 6: a binding and a native library from different releases refuse each other, as with any change of version.
 
 - **A record settled out of order, or taken out with `Keeper.Remove`, no longer has the next choice replay everything.**
   The keeper keeps checkpoints of its replays from the first such record on (two to three times the memory of the replays

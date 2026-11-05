@@ -191,6 +191,9 @@ internal static unsafe partial class Native
     [LibraryImport(Library, EntryPoint = "gil_keeper_settled")]
     internal static partial nuint KeeperSettled(KeeperHandle keeper);
 
+    [LibraryImport(Library, EntryPoint = "gil_keeper_counted")]
+    internal static partial nuint KeeperCounted(KeeperHandle keeper);
+
     [LibraryImport(Library, EntryPoint = "gil_keeper_rechoose")]
     internal static partial int KeeperRechoose(KeeperHandle keeper, byte decisions, nuint* resultLen);
 
