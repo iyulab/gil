@@ -4,7 +4,7 @@ The Rust crate (crates.io) and the Python package (PyPI), both published as `iyu
 Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the repository's root `CHANGELOG.md`.
 
-## Unreleased
+## 0.11.0
 
 ### Added
 
@@ -63,6 +63,17 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   a settlement's value and record id are shared (`Arc<str>`) by the places that hold it, and a record's index points to the
   slot the memory already holds instead of keeping its own. The decider and each of a keeper's replays hold one. The
   scores, the candidates and the order they come in are the same to the bit, and settling and choosing run no slower.
+
+### Documentation
+
+- **The Python README opens with what Gil is for**, letting a decision model work on fields whose choices cannot be
+  written down in advance, whether the answer comes from Gil's own layers or from a judge you plug in.
+- **The Python README shows how a table you already have becomes records**: each row a dict in the line's form,
+  `gil.records` over the list, and a part of the records taken from the list of dicts, since a `Records` is neither
+  indexed nor iterated.
+- **The Python README says to score a judge's cases out of sample** — a judge scored on the cases it was fitted on is
+  given a promise it does not keep — which answers a layer's `promise` is counted over (`promise_answered`: the answers
+  among the latest 5,000 records replayed), and what `Keeper.stale()` returns.
 
 ## 0.10.0
 

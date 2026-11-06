@@ -5,7 +5,7 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 [crates/gil/CHANGELOG.md](crates/gil/CHANGELOG.md), and the review statistics (`iyulab-gil-review` and its .NET binding
 `Gil.Review`) theirs in [crates/gil-review/CHANGELOG.md](crates/gil-review/CHANGELOG.md).
 
-## Unreleased
+## 0.29.0
 
 ### Added
 
@@ -54,16 +54,9 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 ### Documentation
 
 - **The README opens with what Gil is for:** letting a decision model work on fields whose choices cannot be written down
-  in advance, with the threshold, the promise and the count of whether it was kept; the Python README opens the same way.
-  The README no longer says the similar record layer compares by meaning through an embedding model — the decision core
-  compares characters only, and an embedding model reaches Gil as a judge you plug in (experimental, `GIL0014`). No
-  behaviour changes.
-- **The Python README shows how a table you already have becomes records**: each row a dict in the line's form,
-  `gil.records` over the list, and a part of the records taken from the list of dicts, since a `Records` is neither
-  indexed nor iterated.
-- **The Python README says to score a judge's cases out of sample**: a judge scored on the cases it was fitted on is
-  given a promise it does not keep. It also says which answers a layer's `promise` is counted over (`promise_answered`:
-  the answers among the latest 5,000 records replayed) and what `Keeper.stale()` returns.
+  in advance, with the threshold, the promise and the count of whether it was kept. The README no longer says the similar
+  record layer compares by meaning through an embedding model — the decision core compares characters only, and an
+  embedding model reaches Gil as a judge you plug in (experimental, `GIL0014`). No behaviour changes.
 
 ## 0.28.0
 
