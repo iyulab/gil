@@ -61,6 +61,9 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 - **The Python README shows how a table you already have becomes records**: each row a dict in the line's form,
   `gil.records` over the list, and a part of the records taken from the list of dicts, since a `Records` is neither
   indexed nor iterated.
+- **The Python README says to score a judge's cases out of sample**: a judge scored on the cases it was fitted on is
+  given a promise it does not keep. It also says which answers a layer's `promise` is counted over (`promise_answered`:
+  the answers among the latest 5,000 records replayed) and what `Keeper.stale()` returns.
 
 ## 0.28.0
 

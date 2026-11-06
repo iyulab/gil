@@ -75,7 +75,7 @@ with open("settled.jsonl", "w", encoding="utf-8") as f:
     f.writelines(json.dumps(line) + "\n" for line in lines)
 
 earlier = gil.records([line for line in lines if line["settled_at"] < "2026-07-01"])
-later = [line for line in lines if line["settled_at"] >= "2026-07-01"]  # settle these one by one, below
+later = [line for line in lines if line["settled_at"] >= "2026-07-01"]  # settle these one by one: «Keeping a tuning»
 ```
 
 Before choosing thresholds, narrow the attributes that key the decided attribute. An attribute that happened to settle
@@ -109,7 +109,10 @@ then scored by its strongest key alone. On two years of public device event repo
 
 A threshold trades precision for coverage — the share of lookups answered, `answer_rate` in each `chosen`, the word
 selective prediction and automated coding use. Gil holds the precision (the target, at the bottom of an interval) and
-reports the coverage it reaches.
+reports the coverage it reaches. In a layer's `chosen`, `precision`, `answered` and `answer_rate` are counted over the
+whole replay; `promise` — what to expect of the next answers — is counted over the answers among the latest 5,000
+records replayed, `promise_answered` of them, and falls back to the whole replay when those are fewer than
+`minimum_answered`.
 
 When the target is a share of all the attribute's answers rather than a floor under every band of them, choose both
 thresholds together with `rule="pooled"`: the pair that answers the most of the latest 5,000 lookups while all those
@@ -274,6 +277,10 @@ chosen = gil.select_score_threshold(decisions, target_precision=0.9, minimum_ans
 # and show chosen["promise"] beside them
 ```
 
+Score each case with a judge that did not learn from it — a model fitted on earlier cases than the ones it scores, or
+scores taken out of fold. A judge is surer of the cases it was fitted on than of new ones, and a threshold chosen on
+those scores promises more than the judge keeps on the cases that follow.
+
 `settled_at` is a whole number that only has to order the cases (a saved record's is ticks, not a date string); numpy
 scalars are fine for `score` and `right`, and a `score` that is not a finite number is refused with the decision's `id` —
 leave it out when the judge gave no candidate. The same list can come from saved records:
@@ -298,7 +305,8 @@ share of the records still to come will settle a value no earlier record had —
 ## Answering a record while its values arrive
 
 A decider holds the settled records; an open record asks it each time a value arrives or is settled, and hands back
-the answers that changed. Times are 100-nanosecond ticks since the Unix epoch, UTC.
+the answers that changed. Times are 100-nanosecond ticks since the Unix epoch, UTC, or the line's time text; `now` in
+the examples below is the time the value was settled.
 
 ```python
 decider = gil.Decider(schema, records)
@@ -380,7 +388,10 @@ schema = gil.apply_tuning(tuning, base)
 
 While records keep arriving, `gil.Keeper` keeps the loop in one object. `settle` puts records into the decider and into
 the next choice, `stale` says when the choice no longer stands, and `rechoose` replays only the records settled since the
-last choice — the same thresholds as `select_layers` on all of them, without replaying them all again:
+last choice — the same thresholds as `select_layers` on all of them, without replaying them all again. `stale()` is
+`None` while the choice stands; otherwise it names the reason — the string `"schema"` when a setting the choice rests on
+changed, or a dict with one key: `version` (chosen by another version of the package), `settled` with the counts
+`chosen` and `now` (the records grew or shrank by a tenth or more) or, with `watch_realized=True` (below), `realized`:
 
 ```python
 keeper = gil.Keeper(gil.Schema.from_dict(definition), target_precision=TARGET)
@@ -453,7 +464,7 @@ A judge outside Gil can have its threshold chosen the same way, from nothing but
 (experimental): `gil.select_score_threshold(decisions, target_precision, minimum_answered)` takes dicts with `id`,
 `settled_at`, `score` (left out when the judge gave no candidate), `right` and an optional `weight`, and returns the
 replay a memory layer gets — admit the judge's answers as trusted at or above `chosen["threshold"]` and show
-`chosen["promise"]` beside them. A saved record can keep the judge's score beside the answer a person saw (a `scores`
+`chosen["promise"]` beside them. The scores must be ones the judge gave cases it did not learn from (above). A saved record can keep the judge's score beside the answer a person saw (a `scores`
 entry, read where `sources` is `"Model"`), and `gil.scored_decisions(records, attribute)` reads such records into
 the decisions.
 
