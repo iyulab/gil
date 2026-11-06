@@ -51,6 +51,14 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   short records the key memory went from about 1.07 KB to 0.58 KB a record, and the process held about a fifth less
   again after a choice. Choices and promises are the same.
 
+### Documentation
+
+- **The README opens with what Gil is for:** letting a decision model work on fields whose choices cannot be written down
+  in advance, with the threshold, the promise and the count of whether it was kept; the Python README opens the same way.
+  The README no longer says the similar record layer compares by meaning through an embedding model — the decision core
+  compares characters only, and an embedding model reaches Gil as a judge you plug in (experimental, `GIL0014`). No
+  behaviour changes.
+
 ## 0.28.0
 
 ### Added

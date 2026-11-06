@@ -1,10 +1,13 @@
 # Gil
 
-Suggests the decided attributes of a record — a ticket's team, a report's fault code — from the records already settled,
-and says how often a suggestion it trusts is right. It needs no model: it learns from the values settled together and
-from the settled records most like the one being filled, and how far to trust each is chosen by replaying the saved
-records in the order they were settled. The library also carries an experimental path that answers requests in front
-of an LLM from confirmed answers and one-token judgments; see [Stability](#stability).
+Lets a decision model work where the choices cannot be written down in advance — a form field whose value is open,
+such as a ticket's team or a report's fault code. Gil replays the records people have already settled, in the order
+they were settled, to decide how far a suggestion can be trusted and how often a trusted suggestion will be right, and
+then counts on the records that follow whether that promise was kept. Its own layers suggest from the values settled
+together and from the settled records most like the one being filled, with no model and locally; a judge you plug in —
+an embedding model, a classifier, a rule engine — can answer where they have no evidence, and its scores can be given a
+threshold the same way (experimental). The library also carries an experimental path that
+answers requests in front of an LLM from confirmed answers and one-token judgments; see [Stability](#stability).
 
 **Status: early.** The library is being built from a specification whose behaviour was measured first in a
 research harness. Published on NuGet as `Gil`, the decision core — native (Rust) inside, the package carrying its
@@ -20,8 +23,10 @@ person finally settled is kept. It suggests those decided attributes one at a ti
 
 - **From values settled together**: a value settled alongside the same value of another attribute, weighted toward the
   more recent.
-- **From similar settled records**: the nearest settled records vote, compared by their characters with no model,
-  or by meaning through an embedding model you choose.
+- **From similar settled records**: the nearest settled records vote, compared by their characters with no model.
+- **From a judge outside Gil**: where neither has evidence, a model, a rule engine or a service you plug in can answer —
+  an embedding model's nearest settled records, for instance — and its scores can have a threshold chosen the same way
+  (experimental, `GIL0014`).
 - **At a precision you choose**: each layer's threshold is chosen by replaying the saved records, so a suggestion it
   trusts carries the precision the replay saw. What falls short is still offered as an untrusted guess.
 

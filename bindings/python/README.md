@@ -1,8 +1,9 @@
 # Gil (Python — `iyulab-gil`)
 
-Gil answers the decided attributes of a record from the records people have already settled, and chooses — by
-replaying them in the order they were settled — how far each answer can be trusted and how often a trusted one will
-be right.
+Gil lets a decision model work on fields whose choices cannot be written down in advance. It answers the decided
+attributes of a record from the records people have already settled, and chooses — by replaying them in the order they
+were settled — how far each answer can be trusted and how often a trusted one will be right, whether the answer comes
+from Gil's own layers or from a judge you plug in.
 
 This package binds its Rust decision core: replay settled records to choose how far each layer's answers for a
 schema attribute can be trusted, and get back the decision records the choice rests on.
