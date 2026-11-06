@@ -40,6 +40,44 @@ A line holds a record's `id`, `settled_at`, `values` and, for each decided attri
 (`settlements`) — the form [docs/settled-records.md](https://github.com/iyulab/gil/blob/main/docs/settled-records.md) specifies, which the other bindings read too.
 Records kept in it before Gil is in use are what the first thresholds are chosen from.
 
+### From a table you already have
+
+Decisions people already made — a spreadsheet, a database export — become records one row at a time. Each row is a
+dict in the line's form: the time it was settled, every value it held, and how each decided attribute was settled. A
+person who picked the value with no suggestion in view settled it as `Enter`. A day with no time of day is given as
+midnight in the line's time format; rows settled on the same day are then ordered by `id`.
+
+```python
+import csv
+
+lines = []
+with open("tickets.csv", encoding="utf-8") as f:
+    for row in csv.DictReader(f):  # oldest first
+        lines.append(
+            {
+                "id": row["ticket_id"],
+                "settled_at": row["closed_on"] + "T00:00:00.0000000+00:00",  # a yyyy-MM-dd date
+                "values": {"product": row["product"], "summary": row["summary"], "team": row["team"]},
+                "settlements": {"team": "Enter"},
+            }
+        )
+records = gil.records(lines)
+```
+
+To keep them, write each dict as one line of JSON — `gil.read_records` reads that file back. A `Records` is handed to
+Gil as a whole: it is neither indexed nor iterated, so take a part of the records — the earlier ones to choose thresholds
+on, the later ones to try them against — from the list of dicts, and make records of each part:
+
+```python
+import json
+
+with open("settled.jsonl", "w", encoding="utf-8") as f:
+    f.writelines(json.dumps(line) + "\n" for line in lines)
+
+earlier = gil.records([line for line in lines if line["settled_at"] < "2026-07-01"])
+later = [line for line in lines if line["settled_at"] >= "2026-07-01"]  # settle these one by one, below
+```
+
 Before choosing thresholds, narrow the attributes that key the decided attribute. An attribute that happened to settle
 with one value for a while would otherwise key every later record that shares it:
 

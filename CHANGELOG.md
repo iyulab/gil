@@ -58,6 +58,9 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   The README no longer says the similar record layer compares by meaning through an embedding model — the decision core
   compares characters only, and an embedding model reaches Gil as a judge you plug in (experimental, `GIL0014`). No
   behaviour changes.
+- **The Python README shows how a table you already have becomes records**: each row a dict in the line's form,
+  `gil.records` over the list, and a part of the records taken from the list of dicts, since a `Records` is neither
+  indexed nor iterated.
 
 ## 0.28.0
 
