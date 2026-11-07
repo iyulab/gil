@@ -271,6 +271,15 @@ the application can say by how much the attribute falls short. Leaving an attrib
 records that what has been settled does not yet decide that attribute, so the person keeps deciding it. A layer starts
 answering an attribute once a threshold is chosen for it, and not before.
 
+The attributes left unanswered are also the ones corrected more often later. Replayed through a `Keeper` at a target of
+0.9 that chose its thresholds again as the settled records grew, a value the keeper abstained on was later corrected
+3.51 times as often as one it answered on public vulnerability records (the first weakness type; 95% interval 2.01 to
+6.15, stratified by code, product and quarter, resting on 12 corrected answers), and 1.70 times as often on public bug
+reports (the first component) once one component, to which a single account filed bugs that were all moved later, is set
+aside — kept, the ratio is 0.22. This is a relative risk between two groups on two public streams, derived from what the
+sources changed later, not from records people confirmed: an unanswered attribute is not a wrong one, and the ratio does
+not say which unanswered record to look at first. The [replication kit](https://github.com/iyulab/gil-replication/tree/main/abstention-claim) rebuilds both from public data.
+
 `MinimumAnswered`, the fewest answers a threshold may be chosen on, is what keeps an early choice from resting on a
 handful of lucky answers. Replaying 26 public coding tasks from their first records at a target of 0.8, 30 (the value
 in these examples) kept every task that answered more than once at or above the target over its first 500 decisions,

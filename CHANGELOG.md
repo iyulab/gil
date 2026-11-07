@@ -26,6 +26,12 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   right when the value settled equals `Suggested`), so a host records that answer, its layer and its promise on the
   check as on any other answer. `docs/settled-records.md` and the `Record` docs now say so.
 
+- **The README says what unanswered attributes go on to show.** On public vulnerability records and public bug
+  reports replayed through the keeper at a target of 0.9, a value it abstained on was later corrected 3.51 and 1.70
+  times as often as one it answered (the bug-report ratio holds once one component filled by a single account is set
+  aside; kept, it is 0.22). The paragraph states the limits — a relative risk on two derived public streams, not a
+  review order — and links the replication kit that rebuilds both.
+
 ## 0.29.0
 
 ### Added

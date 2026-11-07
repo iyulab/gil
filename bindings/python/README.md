@@ -114,6 +114,16 @@ whole replay; `promise` — what to expect of the next answers — is counted ov
 records replayed, `promise_answered` of them, and falls back to the whole replay when those are fewer than
 `minimum_answered`.
 
+An attribute left unanswered is not a failure: the person keeps deciding it. Those attributes are also the ones
+corrected more often later. Replayed through a `gil.Keeper` at a target of 0.9 that chose its thresholds again as the
+settled records grew, a value the keeper abstained on was later corrected 3.51 times as often as one it answered on
+public vulnerability records (the first weakness type; 95% interval 2.01 to 6.15, stratified by code, product and
+quarter, resting on 12 corrected answers), and 1.70 times as often on public bug reports (the first component) once one
+component, to which a single account filed bugs that were all moved later, is set aside — kept, the ratio is 0.22. This
+is a relative risk between two groups on two public streams, derived from what the sources changed later, not from
+records people confirmed: an unanswered attribute is not a wrong one, and the ratio does not say which unanswered record
+to look at first. The [replication kit](https://github.com/iyulab/gil-replication/tree/main/abstention-claim) rebuilds both from public data.
+
 When the target is a share of all the attribute's answers rather than a floor under every band of them, choose both
 thresholds together with `rule="pooled"`: the pair that answers the most of the latest 5,000 lookups while all those
 answers hold the target at the bottom of their Wilson interval at 1.645 standard errors (it reaches further back when

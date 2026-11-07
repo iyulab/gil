@@ -33,6 +33,12 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   many as the similar record layer, at about the same precision. The paragraph now says which score was used and that
   the score matters as much as the model.
 
+- **The Python README says what unanswered attributes go on to show.** On public vulnerability records and public bug
+  reports replayed through the keeper at a target of 0.9, a value it abstained on was later corrected 3.51 and 1.70
+  times as often as one it answered (the bug-report ratio holds once one component filled by a single account is set
+  aside; kept, it is 0.22). The paragraph states the limits — a relative risk on two derived public streams, not a
+  review order — and links the replication kit that rebuilds both.
+
 ## 0.11.0
 
 ### Added
