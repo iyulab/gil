@@ -4,6 +4,17 @@ The Rust crate (crates.io) and the Python package (PyPI), both published as `iyu
 Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the repository's root `CHANGELOG.md`.
 
+## Unreleased
+
+### Documentation
+
+- **The Python README names the score its embedding comparison used.** The judge that answered about 1.2 times as many
+  cases as the similar record layer scored each answer by the similarity-weighted share of the value among its ten
+  nearest settled cases; the README called this a nearest-neighbour score, which reads as the cosine of the nearest
+  case. Scored that way instead, with the same model and the same answers, the judge answered only about two thirds as
+  many as the similar record layer, at about the same precision. The paragraph now says which score was used and that
+  the score matters as much as the model.
+
 ## 0.11.0
 
 ### Added

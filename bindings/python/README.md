@@ -290,11 +290,14 @@ keeps the judge's `scores` entry and the `suggested` value, and that a person ac
 
 The judge keeps its own threshold and promise; Gil does not blend its score with the similar record layer's. On two
 public intent-classification sets (CLINC150 and MASSIVE in Korean), with the promise margin of both sides matched, the
-nearest-neighbour score of a large multilingual sentence-embedding model answered about 1.2 times as many cases as the
-similar record layer at the same precision target. The margin grows with the model: the smallest of three sizes of one
-such family answered about 1.1 times as many in English and about as many in Korean. Overlap between the embedding
-models' pretraining and those sets was not ruled out, and where the text names the value outright the gap is largely
-gone once the margins are matched. Measure on your own settled cases before relying on either.
+score of a large multilingual sentence-embedding model — the similarity-weighted share of the value among its ten
+nearest settled cases — answered about 1.2 times as many cases as the similar record layer at the same precision
+target. The margin grows with the model: the smallest of three sizes of one such family answered about 1.1 times as
+many in English and about as many in Korean. The score matters as much as the model: with the same model and the same
+answers, scored instead by the cosine of the nearest case holding that value, the judge answered only about two thirds as
+many as the similar record layer in Korean, at about the same precision. Overlap between the embedding models' pretraining and those sets was not
+ruled out, and where the text names the value outright the gap is largely gone once the margins are matched. Measure
+your judge, with the score you will use, on your own settled cases before relying on either.
 
 An attribute that takes several values — tags — is settled with `sets` and declared with `"multiple": true`. The key
 layer answers it, with the threshold `select_key_fields` chooses; `select_layers` refuses it, since it chooses the
