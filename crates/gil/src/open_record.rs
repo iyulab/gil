@@ -137,6 +137,7 @@ impl OpenRecord {
             settle_ms: saved.settle_ms.clone(),
             open_ms: saved.open_ms,
             settled_by: saved.settled_by.clone(),
+            promise_shown: saved.promise_shown.clone(),
             form_version: saved.form_version.clone(),
             ..Record::default()
         };
@@ -260,6 +261,7 @@ impl OpenRecord {
         self.kept.scores.remove(attribute);
         self.kept.settle_ms.remove(attribute);
         self.kept.settled_by.remove(attribute);
+        self.kept.promise_shown.remove(attribute);
         if let Some(in_view) = settlement.in_view.as_ref().filter(|_| {
             settlement.kind != SettlementKind::Revert && settlement.kind != SettlementKind::Restore
         }) {

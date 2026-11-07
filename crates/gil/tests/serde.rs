@@ -6,8 +6,8 @@ use std::collections::BTreeMap;
 
 use gil::decider::Source;
 use gil::schema::{
-    Attribute, AttributePolicy, AttributeRole, CoarseLevel, Record, Schema, Settlement,
-    SettlementKind,
+    Attribute, AttributePolicy, AttributeRole, CoarseLevel, PromiseShown, Record, Schema,
+    Settlement, SettlementKind,
 };
 use gil::tuning::{AttributeTuning, Stale, Tuning};
 use gil::usage::usage;
@@ -166,6 +166,7 @@ fn a_record_carries_what_was_in_view_how_long_it_took_and_who_settled_it() {
         "settle_ms": { "team": 4200 },
         "open_ms": 61000,
         "settled_by": { "team": "p-17" },
+        "promise_shown": { "team": { "shown": false, "probability": 0.5 } },
         "form_version": "9f2c"
     });
     let record: Record = serde_json::from_value(line.clone()).expect("a record");
@@ -176,6 +177,10 @@ fn a_record_carries_what_was_in_view_how_long_it_took_and_who_settled_it() {
     assert_eq!(record.open_ms, Some(61000));
     assert_eq!(record.settled_by["team"], "p-17");
     assert_eq!(record.form_version.as_deref(), Some("9f2c"));
+    assert_eq!(
+        record.promise_shown["team"],
+        PromiseShown::new(false, 0.5).unwrap()
+    );
     let written = serde_json::to_value(&record).unwrap();
     for entry in [
         "suggested",
@@ -184,6 +189,7 @@ fn a_record_carries_what_was_in_view_how_long_it_took_and_who_settled_it() {
         "settle_ms",
         "open_ms",
         "settled_by",
+        "promise_shown",
         "form_version",
     ] {
         assert_eq!(written[entry], line[entry], "{entry}");
@@ -209,6 +215,7 @@ fn a_record_carries_what_was_in_view_how_long_it_took_and_who_settled_it() {
         "settle_ms",
         "open_ms",
         "settled_by",
+        "promise_shown",
         "form_version",
     ] {
         assert!(written.get(entry).is_none(), "{entry}");
@@ -230,6 +237,23 @@ fn a_record_carries_what_was_in_view_how_long_it_took_and_who_settled_it() {
     assert!(refused(json!({ "sources": { "team": "None" } })).contains("layer that answered"));
     refused(json!({ "open_ms": -1 }));
     refused(json!({ "settle_ms": { "team": 1.5 } }));
+    // A promise's display: a probability out of [0, 1], an outcome the probability rules out, a part missing.
+    let shown = |shown: bool, probability: f64| {
+        refused(
+            json!({ "promise_shown": { "team": { "shown": shown, "probability": probability } } }),
+        )
+    };
+    assert!(shown(true, 1.5).contains("not possible"));
+    assert!(shown(true, 0.0).contains("not possible"));
+    assert!(shown(false, 1.0).contains("not possible"));
+    refused(json!({ "promise_shown": { "team": { "shown": true } } }));
+    refused(json!({ "promise_shown": { "team": true } }));
+    // Always and never displayed are what a host that does not draw records.
+    for (shown, probability) in [(true, 1.0), (false, 0.0)] {
+        let line = json!({ "id": "t4", "settled_at": 5,
+            "promise_shown": { "team": { "shown": shown, "probability": probability } } });
+        serde_json::from_value::<Record>(line).expect("possible");
+    }
 }
 
 #[test]

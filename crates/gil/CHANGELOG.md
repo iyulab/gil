@@ -6,6 +6,18 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ## Unreleased
 
+### Added
+
+- **A record says whether a promise was displayed beside its answer.** `Record::promise_shown` (`promise_shown` in a
+  record line) holds, for each decided attribute settled with an answer and its promise, whether the promise was
+  displayed and the probability it was drawn to be displayed with — fixed before the draw, 1 for a host that always
+  displays it and 0 for one that never does. A host that displays the promise on a random share of decisions can then
+  see whether displaying it changes what people settle. The host writes it on the record it saves, as it writes
+  `settle_ms`; a reopened record keeps it until the attribute is settled again. A promise displayed at probability 0,
+  or not displayed at 1, is refused when the record is read. Python reads it as the `promise_shown` entry of a record
+  dictionary; the C ABI reads it in a record's JSON. Versions up to 0.11.0 refuse a line that carries it, so write it
+  for a reader of this version or later.
+
 ### Documentation
 
 - **The settled-record format says what a check carries.** `suggested`, `sources` and `promises` were described as what

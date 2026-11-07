@@ -31,16 +31,19 @@ One JSON object per line, one line per settlement:
 | `settle_ms` | object of integers | no | For each decided attribute, the milliseconds from when the person reached it — its suggestion came into view, or it was reached with nothing in view — to when it was settled |
 | `open_ms` | integer | no | The milliseconds the record was open, from opening it to this settlement |
 | `settled_by` | object of strings | no | For each decided attribute, who settled it, as an opaque id the application gives — one person, one id; never a name |
+| `promise_shown` | object of objects | no | For each decided attribute settled with Gil's answer and its promise given, `{"shown": …, "probability": …}`: whether the promise was displayed beside the answer, and the probability it was drawn to be displayed with — fixed before the draw; 1 for an application that always displays it, 0 for one that never does. Read only where the attribute has a promise and was not settled as a `Check` |
 | `form_version` | string | no | The version of the form the record was settled on: the edition of the code lists its decided attributes are settled from, as the application identifies it |
 
 An entry left out, or given as `null`, reads as empty (`arrival`, `batch` and the last seven as unknown). An entry the
 table does not name does not read, and neither does a time out of range (`2025-02-29`, `24:00`, an offset past
-±14:00), a promise outside [0, 1], a layer other than the three or a negative number of milliseconds: the line is refused
+±14:00), a promise outside [0, 1], a layer other than the three, a negative number of milliseconds or a promise
+displayed at probability 0 (or not displayed at 1): the line is refused
 rather than half understood. Lines are written back with `settled_at` in ticks.
 
 The last seven entries are read from `Gil` 0.27.0 and `iyulab-gil` 0.9.0; earlier versions refuse a line that carries
 them, so write them for a reader that knows them. `scores` is newer still: it is read from `Gil` 0.28.0 and `iyulab-gil` 0.10.0,
-and earlier versions refuse a line that carries it.
+and earlier versions refuse a line that carries it. `promise_shown` is read from `Gil` 0.30.0 and `iyulab-gil` 0.12.0;
+earlier versions refuse a line that carries it.
 
 Lines may come in any order: a replay orders them by `settled_at`, then by `id`. A blank line is skipped.
 
@@ -103,6 +106,11 @@ last seven entries yet (`replay::scored_decisions` reads `suggested`, `sources` 
 - **`settled_by`** is kept for each attribute because one record is often settled by more than one person — a clerk
   enters some attributes, a reviewer others — and a settler's rate of being right is a rate over the attributes they
   settled.
+- **`promise_shown`** — whether displaying the promise beside an answer changes what people settle. An answer shown
+  with "right 9 times in 10" beside it may be kept more readily than the same answer shown alone, and the promise then
+  looks kept partly because it was displayed. Drawing at random, with a known probability fixed before the draw,
+  whether each promise is displayed lets the two groups be compared on the same attribute; recording only the outcome
+  could not tell a random draw from an application that displays promises on some screens and not others.
 - **`form_version`** — which records were settled on which version of a form. Give it a new value when a revision
   makes a value mean something else: a code renumbered, two codes merged into one, one split into several. Do not
   change it when only a label, a description or the order of the form changes. Records settled before a revision that

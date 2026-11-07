@@ -569,11 +569,18 @@ def test_records_carry_what_was_in_view_how_long_it_took_and_who_settled_it() ->
         "settle_ms": {"team": 4200},
         "open_ms": 61000,
         "settled_by": {"team": "p-17"},
+        "promise_shown": {"team": {"shown": False, "probability": 0.5}},
         "form_version": "9f2c",
     }
     gil.records([line])
     # Refused rather than half understood.
-    for wrong in ({"promises": {"team": 1.2}}, {"sources": {"team": "Key"}}, {"open_ms": -1}):
+    for wrong in (
+        {"promises": {"team": 1.2}},
+        {"sources": {"team": "Key"}},
+        {"open_ms": -1},
+        {"promise_shown": {"team": {"shown": True, "probability": 0}}},
+        {"promise_shown": {"team": {"shown": True}}},
+    ):
         with pytest.raises(ValueError):
             gil.records([{**line, **wrong}])
 

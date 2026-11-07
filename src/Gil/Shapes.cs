@@ -288,8 +288,21 @@ public sealed record Record(string Id, DateTimeOffset SettledAt)
     /// name. One record may be settled by several people, an attribute each.</summary>
     public IReadOnlyDictionary<string, string>? SettledBy { get; init; }
 
+    /// <summary>For each decided attribute settled with this decider's answer and its promise given, whether the
+    /// promise was displayed beside the answer and the probability it was drawn to be displayed with — fixed before the
+    /// draw; 1 for a host that always displays it, 0 for one that never does. Read only where the attribute has a
+    /// promise and was not settled as a <see cref="SettlementKind.Check"/>.</summary>
+    public IReadOnlyDictionary<string, PromiseShown>? PromiseShown { get; init; }
+
     /// <summary>The version of the form the record was settled on, as the host identifies it — the edition of the code
     /// lists its decided attributes are settled from, which changes when a value comes to mean something else, not when
     /// only a label changes.</summary>
     public string? FormVersion { get; init; }
 }
+
+/// <summary>Whether a promise was displayed beside the answer it was given for, drawn at random with a known
+/// probability.</summary>
+/// <param name="Shown">Whether the promise was displayed.</param>
+/// <param name="Probability">The probability the promise was drawn to be displayed with, fixed before the draw, in
+/// [0, 1]; a promise displayed at 0, or not displayed at 1, is refused when the record is read.</param>
+public sealed record PromiseShown(bool Shown, double Probability);

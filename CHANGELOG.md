@@ -7,6 +7,17 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ## Unreleased
 
+### Added
+
+- **A record says whether a promise was displayed beside its answer.** `Record.PromiseShown` holds, for each decided
+  attribute settled with an answer and its promise, a `PromiseShown(Shown, Probability)`: whether the promise was
+  displayed and the probability it was drawn to be displayed with — fixed before the draw, 1 for a host that always
+  displays it and 0 for one that never does. A host that displays the promise on a random share of decisions can then
+  see whether displaying it changes what people settle. The host sets it on the record it saves, as it sets
+  `SettleMs`; a reopened record keeps it until the attribute is settled again. A promise displayed at probability 0,
+  or not displayed at 1, is refused when the record is read. Versions up to 0.29.0 refuse a record that carries it,
+  so write it for a reader of this version or later.
+
 ### Documentation
 
 - **The settled-record format says what a check carries.** `Record.Suggested`, `Sources` and `Promises` were described

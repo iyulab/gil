@@ -833,6 +833,54 @@ pub struct InView {
     pub promise: Option<f64>,
 }
 
+/// Whether a promise was displayed beside the answer it was given for, drawn at random with a known probability.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "PromiseShownForm"))]
+pub struct PromiseShown {
+    /// Whether the promise was displayed.
+    pub shown: bool,
+    /// The probability the promise was drawn to be displayed with, fixed before the draw, in [0, 1].
+    pub probability: f64,
+}
+
+impl PromiseShown {
+    /// A promise displayed (`shown`) or not, drawn with `probability`; `None` when the probability is outside [0, 1] or
+    /// the outcome is one it rules out (displayed at 0, not displayed at 1).
+    pub fn new(shown: bool, probability: f64) -> Option<Self> {
+        let possible = (0.0..=1.0).contains(&probability)
+            && if shown {
+                probability > 0.0
+            } else {
+                probability < 1.0
+            };
+        possible.then_some(Self { shown, probability })
+    }
+}
+
+#[cfg(feature = "serde")]
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PromiseShownForm {
+    shown: bool,
+    probability: f64,
+}
+
+#[cfg(feature = "serde")]
+impl TryFrom<PromiseShownForm> for PromiseShown {
+    type Error = String;
+
+    fn try_from(form: PromiseShownForm) -> Result<Self, String> {
+        Self::new(form.shown, form.probability).ok_or_else(|| {
+            format!(
+                "a promise {} with probability {} is not possible",
+                if form.shown { "shown" } else { "not shown" },
+                form.probability
+            )
+        })
+    }
+}
+
 impl Settlement {
     /// The settlement with `answer` in view when it answered — its first candidate, the layer it came from and
     /// `promise`, the precision promised for that layer ([`crate::tuning::Tuning::promise_of`]); unchanged when it
@@ -1120,6 +1168,19 @@ pub struct Record {
         )
     )]
     pub settled_by: BTreeMap<String, String>,
+    /// For each decided attribute settled with this decider's answer and its promise given, whether the promise was
+    /// displayed beside the answer, and the probability it was drawn to be displayed with — fixed before the draw; 1
+    /// for a host that always displays it, 0 for one that never does. Read only where the attribute has a promise and was
+    /// not settled as a [`SettlementKind::Check`] (whose answer was not displayed at all).
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            default,
+            deserialize_with = "or_empty",
+            skip_serializing_if = "BTreeMap::is_empty"
+        )
+    )]
+    pub promise_shown: BTreeMap<String, PromiseShown>,
     /// The version of the form the record was settled on, as the host identifies it — the edition of the code lists
     /// its decided attributes are settled from, which changes when a value comes to mean something else (a code
     /// renumbered, merged or split), not when only a label or the schema's layout changes.

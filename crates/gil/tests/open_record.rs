@@ -15,7 +15,8 @@ use gil::key_memory::{Key, KeyMemory};
 use gil::lexical_memory::LexicalMemory;
 use gil::open_record::OpenRecord;
 use gil::schema::{
-    Attribute, AttributePolicy, AttributeRole, Record, Schema, Settlement, SettlementKind,
+    Attribute, AttributePolicy, AttributeRole, PromiseShown, Record, Schema, Settlement,
+    SettlementKind,
 };
 
 const MINUTE: i64 = 60 * 10_000_000;
@@ -1250,6 +1251,7 @@ fn reopening_a_saved_record_keeps_what_the_host_kept_until_an_attribute_is_settl
         settle_ms: BTreeMap::from([("team".to_owned(), 1_200)]),
         open_ms: Some(5_000),
         settled_by: BTreeMap::from([("team".to_owned(), "p7".to_owned())]),
+        promise_shown: BTreeMap::from([("team".to_owned(), PromiseShown::new(true, 0.5).unwrap())]),
         form_version: Some("2026".into()),
         ..Record::default()
     };
@@ -1271,6 +1273,7 @@ fn reopening_a_saved_record_keeps_what_the_host_kept_until_an_attribute_is_settl
     assert_eq!(again.scores, saved.scores);
     assert_eq!(again.settle_ms, saved.settle_ms);
     assert_eq!(again.settled_by, saved.settled_by);
+    assert_eq!(again.promise_shown, saved.promise_shown);
 
     // Settled again, the attribute's entries described the settlement this one replaced; the record's stay.
     open.settle(&mut decider, "team", &Settlement::correct("security"), DAY);
@@ -1278,6 +1281,7 @@ fn reopening_a_saved_record_keeps_what_the_host_kept_until_an_attribute_is_settl
     assert!(after.suggested.is_empty() && after.sources.is_empty() && after.promises.is_empty());
     assert!(after.scores.is_empty());
     assert!(after.settle_ms.is_empty() && after.settled_by.is_empty());
+    assert!(after.promise_shown.is_empty());
     assert_eq!(
         (after.batch.as_deref(), after.open_ms),
         (Some("import-7"), Some(5_000))

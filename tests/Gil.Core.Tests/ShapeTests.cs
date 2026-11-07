@@ -139,6 +139,7 @@ public sealed class ShapeTests
             Sources = new Dictionary<string, Source> { ["team"] = Source.KeyMemory },
             Promises = new Dictionary<string, double> { ["team"] = 0.9 },
             SettledBy = new Dictionary<string, string> { ["team"] = "p7" },
+            PromiseShown = new Dictionary<string, PromiseShown> { ["team"] = new(Shown: false, Probability: 0.5) },
             FormVersion = "2026",
         };
 
@@ -149,8 +150,20 @@ public sealed class ShapeTests
         back.Sources.Should().Equal(saved.Sources);
         back.Promises.Should().Equal(saved.Promises);
         back.SettledBy.Should().Equal(saved.SettledBy);
+        back.PromiseShown.Should().Equal(saved.PromiseShown);
         using var ledger = SettledRecords.From([back]);
         Usage.Count(ledger)["team"].Accepted.Should().Be(1);
+    }
+
+    [Fact]
+    public void A_promise_displayed_where_its_probability_rules_it_out_is_refused()
+    {
+        using var schema = Ticket();
+        var impossible = new Record("t-4", DateTimeOffset.UnixEpoch)
+        {
+            PromiseShown = new Dictionary<string, PromiseShown> { ["team"] = new(Shown: true, Probability: 0) },
+        };
+        FluentActions.Invoking(() => OpenRecord.Reopen(schema, impossible)).Should().Throw<ArgumentException>();
     }
 
     [Fact]
