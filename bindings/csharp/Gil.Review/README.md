@@ -15,6 +15,13 @@ Every draw uses one generator, so the same seed gives the same sample on every p
 UTF-8 bytes. Nothing is clamped or silently repaired: an assumption that does not hold is reported in `Caveats`, and an
 input that would estimate another population throws `ArgumentException`.
 
+**Scores of 0 or 1 from a system that is right most of the time** — a stratum whose reviewed items are all right is
+then the usual case, not an exception, and the estimate reports `EstimateCaveats.NoVariationInStratum`. With four strata of
+30 reviewed items each, it does so for about 85% of estimates at a precision of 0.97 in every stratum, and for almost
+all of them at 0.99 (one stratum of n items is constant with probability pⁿ + (1 − p)ⁿ). Such a stratum's variance
+takes the bound for the variation the sample has not shown, and its bootstrap collapses, so read the normal interval.
+`IsReliable` is then false, so for 0/1 scores do not use it as a go/no-go — look at the other caveats one by one.
+
 ```csharp
 using Gil.Review;
 

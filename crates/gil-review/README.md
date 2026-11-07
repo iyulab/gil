@@ -13,6 +13,13 @@ Every draw uses one generator — SplitMix64 spreading the seed into xoshiro256\
 same seed gives the same sample on every target. Nothing is clamped or silently repaired: an assumption that does not
 hold is reported in `caveats`, and an input that would estimate another population is an error.
 
+**Scores of 0 or 1 from a system that is right most of the time** — a stratum whose reviewed items are all right is
+then the usual case, not an exception, and the estimate reports `ESTIMATE_NO_VARIATION_IN_STRATUM`. With four strata of
+30 reviewed items each, it does so for about 85% of estimates at a precision of 0.97 in every stratum, and for almost
+all of them at 0.99 (one stratum of n items is constant with probability pⁿ + (1 − p)ⁿ). Such a stratum's variance
+takes the bound for the variation the sample has not shown, and its bootstrap collapses, so read the normal interval.
+`is_reliable()` is then false, so for 0/1 scores do not use it as a go/no-go — look at the other caveats one by one.
+
 ```rust
 use gil_review::{PopulationStratum, draw_pilot, PILOT_RECORDS_PER_STRATUM};
 

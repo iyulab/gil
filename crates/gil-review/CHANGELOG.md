@@ -3,6 +3,15 @@
 The Rust crate and its .NET binding share this version line; 0.1.0 is the first release of both. Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do.
 
+## Unreleased
+
+### Documentation
+
+- **The READMEs say that a constant stratum is the usual case for 0/1 scores.** Reviewing a system that is right most
+  of the time, a stratum whose reviewed items are all right is common — about 85% of estimates at a precision of 0.97
+  with four strata of 30 — so `ESTIMATE_NO_VARIATION_IN_STRATUM` (`EstimateCaveats.NoVariationInStratum`) is expected
+  there, the normal interval is the one to read, and `is_reliable()` (`IsReliable`) is no go/no-go for such scores.
+
 ## 0.2.0
 
 ### Added
