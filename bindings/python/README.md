@@ -122,7 +122,8 @@ quarter, resting on 12 corrected answers), and 1.70 times as often on public bug
 component, to which a single account filed bugs that were all moved later, is set aside — kept, the ratio is 0.22. This
 is a relative risk between two groups on two public streams, derived from what the sources changed later, not from
 records people confirmed: an unanswered attribute is not a wrong one, and the ratio does not say which unanswered record
-to look at first. The [replication kit](https://github.com/iyulab/gil-replication/tree/main/abstention-claim) rebuilds both from public data.
+to look at first. The [replication kit](https://github.com/iyulab/gil-replication/tree/main/abstention-claim) rebuilds the vulnerability-record ratio exactly from a fresh download and the bug-report ratio
+approximately, since bug histories keep changing.
 
 When the target is a share of all the attribute's answers rather than a floor under every band of them, choose both
 thresholds together with `rule="pooled"`: the pair that answers the most of the latest 5,000 lookups while all those

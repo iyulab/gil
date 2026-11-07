@@ -278,7 +278,8 @@ The attributes left unanswered are also the ones corrected more often later. Rep
 reports (the first component) once one component, to which a single account filed bugs that were all moved later, is set
 aside — kept, the ratio is 0.22. This is a relative risk between two groups on two public streams, derived from what the
 sources changed later, not from records people confirmed: an unanswered attribute is not a wrong one, and the ratio does
-not say which unanswered record to look at first. The [replication kit](https://github.com/iyulab/gil-replication/tree/main/abstention-claim) rebuilds both from public data.
+not say which unanswered record to look at first. The [replication kit](https://github.com/iyulab/gil-replication/tree/main/abstention-claim) rebuilds the vulnerability-record ratio exactly from a fresh
+download and the bug-report ratio approximately, since bug histories keep changing.
 
 `MinimumAnswered`, the fewest answers a threshold may be chosen on, is what keeps an early choice from resting on a
 handful of lucky answers. Replaying 26 public coding tasks from their first records at a target of 0.8, 30 (the value
