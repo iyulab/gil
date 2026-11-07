@@ -336,7 +336,7 @@ pub fn select_key_threshold(
             }
         }
 
-        memory.put(schema, record);
+        memory.put_for(schema, record, attribute);
     }
 
     let uncaught: Vec<Answer> = matches.iter().filter(|m| !m.caught).cloned().collect();
@@ -545,7 +545,7 @@ pub fn select_typed_key_thresholds_with(
             });
         }
 
-        memory.put(schema, record);
+        memory.put_for(schema, record, attribute);
     }
 
     for a in &mut asked {
@@ -2254,7 +2254,7 @@ pub(crate) fn carry_on(
             first: first_of_batch,
             coarse: coarse_step,
         });
-        key_memory.put(schema, record);
+        key_memory.put_for(schema, record, attribute);
 
         let case = text::normalize(&evidence);
         if let Some(earlier) = cases.get(&case) {
@@ -2749,7 +2749,7 @@ pub fn select_key_concentrations(
             }
         }
 
-        memory.put(&schema, record);
+        memory.put_for(&schema, record, attribute);
     }
 
     for (key_field, (unseen, totals)) in predictions {

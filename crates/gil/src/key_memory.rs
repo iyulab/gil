@@ -206,17 +206,40 @@ impl KeyMemory {
     /// # Panics
     /// When the record keeps an attribute where its kind does not belong ([`Schema::check_placement`]).
     pub fn put(&mut self, schema: &Schema, record: &Record) {
+        self.put_where(schema, record, None);
+    }
+
+    /// [`KeyMemory::put`] keeping only what the record settles for `attribute` — for a replay that asks about that
+    /// attribute alone, whose lookups read no other attribute's slots. The record still counts as remembered
+    /// ([`KeyMemory::count`]) whenever [`KeyMemory::put`] would count it, so the replay's steps are the same to the bit;
+    /// only the slots of the other attributes, which nothing in that replay reads, are not kept.
+    pub(crate) fn put_for(&mut self, schema: &Schema, record: &Record, attribute: &str) {
+        self.put_where(schema, record, Some(attribute));
+    }
+
+    fn put_where(&mut self, schema: &Schema, record: &Record, only: Option<&str>) {
         if let Err(misplaced) = schema.check_placement(&record.values, &record.sets) {
             panic!("record '{}': {misplaced}", record.id);
         }
         self.remove(schema.name(), &record.id);
         let id: Arc<str> = Arc::from(record.id.as_str());
         let mut tallies = Vec::new();
+        // Whether `put` would have kept anything of the record — what makes it count as remembered.
+        let mut settles_any = false;
         for attribute in schema
             .attributes()
             .iter()
             .filter(|f| f.role == AttributeRole::Decided)
         {
+            let settles = if attribute.multiple {
+                !elements(&record.sets, &attribute.name).is_empty()
+            } else {
+                record.values.contains_key(&attribute.name)
+            };
+            settles_any |= settles;
+            if only.is_some_and(|only| only != attribute.name) {
+                continue;
+            }
             if attribute.multiple {
                 let elements = elements(&record.sets, &attribute.name);
                 let keys = self.keys(schema, attribute, &record.values, &record.sets);
@@ -282,7 +305,7 @@ impl KeyMemory {
             }
         }
 
-        if tallies.is_empty() {
+        if !settles_any {
             return;
         }
 
@@ -903,4 +926,119 @@ fn elements<'a>(sets: &'a BTreeMap<String, Vec<String>>, attribute: &str) -> Vec
     elements.sort();
     elements.dedup();
     elements
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::schema::{Attribute, AttributeRole, Schema};
+
+    /// A form with two decided attributes taking one value and one taking several, records drawn so that some leave
+    /// a decided attribute out — the shape where `put_for` keeps less than `put`.
+    fn form() -> (Schema, Vec<Record>) {
+        let mut tags = Attribute::new("tags", AttributeRole::Decided);
+        tags.multiple = true;
+        let schema = Schema::new(
+            "desk",
+            vec![
+                Attribute::new("product", AttributeRole::Observed),
+                Attribute::new("channel", AttributeRole::Observed),
+                Attribute::new("team", AttributeRole::Decided),
+                Attribute::new("area", AttributeRole::Decided),
+                tags,
+            ],
+        )
+        .unwrap();
+        let mut x: u64 = 11;
+        let mut draw = |below: u64| {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            x % below
+        };
+        let records = (0..600)
+            .map(|n| {
+                let product = draw(12);
+                let mut record = Record {
+                    id: format!("r{n}"),
+                    settled_at: n / 3,
+                    ..Record::default()
+                };
+                record
+                    .values
+                    .insert("product".into(), format!("p{product}"));
+                record
+                    .values
+                    .insert("channel".into(), format!("c{}", draw(3)));
+                if draw(5) > 0 {
+                    record
+                        .values
+                        .insert("team".into(), format!("t{}", (product + draw(2)) % 6));
+                }
+                if draw(4) == 0 {
+                    record
+                        .values
+                        .insert("area".into(), format!("a{}", product % 4));
+                }
+                if draw(3) > 0 {
+                    let set: Vec<String> =
+                        (0..1 + draw(3)).map(|_| format!("g{}", draw(5))).collect();
+                    record.sets.insert("tags".into(), set);
+                }
+                record
+            })
+            .collect();
+        (schema, records)
+    }
+
+    #[test]
+    fn a_memory_kept_for_one_attribute_looks_that_attribute_up_as_the_whole_memory_does() {
+        let (schema, records) = form();
+        for attribute in ["team", "area", "tags"] {
+            let mut whole = KeyMemory::default();
+            let mut kept = KeyMemory::default();
+            for (n, record) in records.iter().enumerate() {
+                // Every tenth record is put again and every seventh taken away, as a replay going back over them does.
+                whole.put(&schema, record);
+                kept.put_for(&schema, record, attribute);
+                if n % 10 == 9 {
+                    whole.put(&schema, &records[n - 5]);
+                    kept.put_for(&schema, &records[n - 5], attribute);
+                }
+                if n % 7 == 6 {
+                    whole.remove(schema.name(), &records[n - 3].id);
+                    kept.remove(schema.name(), &records[n - 3].id);
+                }
+                assert_eq!(whole.count(schema.name()), kept.count(schema.name()));
+                let probe = &records[(n * 7 + 3) % records.len()];
+                let known: BTreeMap<String, String> = probe
+                    .values
+                    .iter()
+                    .filter(|(k, _)| k.as_str() != attribute)
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect();
+                let sets: BTreeMap<String, Vec<String>> = BTreeMap::new();
+                let lookup = Lookup::new(&schema, attribute, &known).sets(&sets);
+                assert_eq!(
+                    whole.rank(&lookup, 5),
+                    kept.rank(&lookup, 5),
+                    "{attribute} at {n}"
+                );
+                assert_eq!(
+                    whole.scored(&lookup),
+                    kept.scored(&lookup),
+                    "{attribute} at {n}"
+                );
+                assert_eq!(
+                    format!("{:?}", whole.keyed_values(&lookup)),
+                    format!("{:?}", kept.keyed_values(&lookup))
+                );
+                assert_eq!(whole.catches(&lookup), kept.catches(&lookup));
+            }
+            assert!(
+                kept.schemas[schema.name()].values.len()
+                    < whole.schemas[schema.name()].values.len()
+            );
+        }
+    }
 }

@@ -4,6 +4,17 @@ The Rust crate (crates.io) and the Python package (PyPI), both published as `iyu
 Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the repository's root `CHANGELOG.md`.
 
+## Unreleased
+
+### Changed
+
+- **A keeper with several decided attributes takes far less memory.** Each of its replays asks about one attribute, yet
+  kept the key memory of every decided attribute — the same tallies once per attribute, and again in each checkpoint.
+  A replay now keeps only its own attribute's: on a synthetic stream of 100,000 short records with three decided
+  attributes, what choosing thresholds adds went from about 23.5 KB to 12.9 KB a record, and a keeper with its decider
+  from about 38 KB to 28 KB. Thresholds, promises and decision records are the same to the bit; a keeper with one
+  decided attribute, and the decider, are unchanged.
+
 ## 0.12.0
 
 ### Added

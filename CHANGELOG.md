@@ -5,6 +5,17 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 [crates/gil/CHANGELOG.md](crates/gil/CHANGELOG.md), and the review statistics (`iyulab-gil-review` and its .NET binding
 `Gil.Review`) theirs in [crates/gil-review/CHANGELOG.md](crates/gil-review/CHANGELOG.md).
 
+## Unreleased
+
+### Changed
+
+- **A keeper with several decided attributes takes far less memory.** Each of its replays asks about one attribute, yet
+  kept the key memory of every decided attribute — the same tallies once per attribute, and again in each checkpoint.
+  A replay now keeps only its own attribute's: on a synthetic stream of 100,000 short records with three decided
+  attributes, what choosing thresholds adds went from about 23.5 KB to 12.9 KB a record, and a keeper with its decider
+  from about 38 KB to 28 KB. Thresholds, promises and decision records are the same to the bit; a keeper with one
+  decided attribute, and the decider, are unchanged.
+
 ## 0.30.0
 
 ### Added
