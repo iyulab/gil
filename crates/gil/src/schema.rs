@@ -1045,7 +1045,9 @@ pub struct Record {
     )]
     pub batch: Option<String>,
     /// For each decided attribute settled with a suggestion in view, the value suggested — this decider's answer, or what
-    /// the host showed in its place (the kind says which). For a coarse level, the class shown.
+    /// the host showed in its place (the kind says which). For a coarse level, the class shown. For a
+    /// [`SettlementKind::Check`], this decider's answer that was kept from the person who settled it, which the check is
+    /// judged against.
     #[cfg_attr(
         feature = "serde",
         serde(
@@ -1055,7 +1057,8 @@ pub struct Record {
         )
     )]
     pub suggested: BTreeMap<String, String>,
-    /// For each decided attribute settled with this decider's answer in view, the layer that gave it.
+    /// For each decided attribute settled with this decider's answer in view (for a [`SettlementKind::Check`], kept from
+    /// view), the layer that gave it.
     #[cfg_attr(
         feature = "serde",
         serde(
@@ -1065,8 +1068,8 @@ pub struct Record {
         )
     )]
     pub sources: BTreeMap<String, crate::decider::Source>,
-    /// For each decided attribute settled with this decider's answer in view, the precision promised for it when it was
-    /// shown — what [`crate::tuning::Tuning::promise_of`] gave for its layer. Each is in [0, 1].
+    /// For each decided attribute settled with this decider's answer in view (for a [`SettlementKind::Check`], kept from
+    /// view), the precision promised for it when it was given — what [`crate::tuning::Tuning::promise_of`] gave for its layer. Each is in [0, 1].
     #[cfg_attr(
         feature = "serde",
         serde(

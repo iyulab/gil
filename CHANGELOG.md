@@ -5,6 +5,16 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 [crates/gil/CHANGELOG.md](crates/gil/CHANGELOG.md), and the review statistics (`iyulab-gil-review` and its .NET binding
 `Gil.Review`) theirs in [crates/gil-review/CHANGELOG.md](crates/gil-review/CHANGELOG.md).
 
+## Unreleased
+
+### Documentation
+
+- **The settled-record format says what a check carries.** `Record.Suggested`, `Sources` and `Promises` were described
+  as what was in view when an attribute was settled, which reads as empty for a `SettlementKind.Check` — a value settled
+  by someone who did not see the answer. A check is judged against the answer kept from view (`Usage.Count` counts it
+  right when the value settled equals `Suggested`), so a host records that answer, its layer and its promise on the
+  check as on any other answer. `docs/settled-records.md` and the `Record` docs now say so.
+
 ## 0.29.0
 
 ### Added

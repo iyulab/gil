@@ -8,6 +8,12 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Documentation
 
+- **The settled-record format says what a check carries.** `suggested`, `sources` and `promises` were described as what
+  was in view when an attribute was settled, which reads as empty for a `Check` — a value settled by someone who did not
+  see the answer. A check is judged against the answer kept from view (`usage` counts it right when the value settled
+  equals `suggested`), so a host records that answer, its layer and its promise on the check as on any other answer.
+  `docs/settled-records.md` and the `Record` field docs now say so.
+
 - **The Python README names the score its embedding comparison used.** The judge that answered about 1.2 times as many
   cases as the similar record layer scored each answer by the similarity-weighted share of the value among its ten
   nearest settled cases; the README called this a nearest-neighbour score, which reads as the cosine of the nearest

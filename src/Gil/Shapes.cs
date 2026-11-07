@@ -257,14 +257,17 @@ public sealed record Record(string Id, DateTimeOffset SettledAt)
     public string? Batch { get; init; }
 
     /// <summary>For each decided attribute settled with a suggestion in view, the value suggested — this decider's answer,
-    /// or what the host showed in its place (the settlement says which). For a coarse level, the class shown.</summary>
+    /// or what the host showed in its place (the settlement says which). For a coarse level, the class shown. For a
+    /// <see cref="SettlementKind.Check"/>, this decider's answer that was kept from the person who settled it, which the
+    /// check is judged against.</summary>
     public IReadOnlyDictionary<string, string>? Suggested { get; init; }
 
-    /// <summary>For each decided attribute settled with this decider's answer in view, the layer that gave it.</summary>
+    /// <summary>For each decided attribute settled with this decider's answer in view (for a
+    /// <see cref="SettlementKind.Check"/>, kept from view), the layer that gave it.</summary>
     public IReadOnlyDictionary<string, Source>? Sources { get; init; }
 
-    /// <summary>For each decided attribute settled with this decider's answer in view, the precision promised for it when
-    /// it was shown — what <see cref="Tuning.PromiseOf"/> gave for its layer; each in [0, 1].</summary>
+    /// <summary>For each decided attribute settled with this decider's answer in view (for a
+    /// <see cref="SettlementKind.Check"/>, kept from view), the precision promised for it when it was given — what <see cref="Tuning.PromiseOf"/> gave for its layer; each in [0, 1].</summary>
     public IReadOnlyDictionary<string, double>? Promises { get; init; }
 
     /// <summary>Experimental. For each decided attribute settled with an answer from a judge outside Gil in view (its

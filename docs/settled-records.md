@@ -24,9 +24,9 @@ One JSON object per line, one line per settlement:
 | `probabilities` | object of numbers | no | For an attribute settled as a `Check`, the probability it was drawn with |
 | `arrival` | string array | no | The attributes with a value, in the order their current values arrived, oldest first |
 | `batch` | string | no | The batch the record was settled in — records settled together, several at once from one source |
-| `suggested` | object of strings | no | For each decided attribute settled with a suggestion in view, the value suggested — Gil's answer, or what the application showed in its place (the kind says which); for a coarse level, the class shown |
-| `sources` | object of layer names | no | For each decided attribute settled with Gil's answer in view, the layer that gave it: `KeyMemory`, `SimilarRecord` or `Model` |
-| `promises` | object of numbers | no | For each decided attribute settled with Gil's answer in view, the precision promised for it when it was shown (the tuning's promise for its layer), in [0, 1] |
+| `suggested` | object of strings | no | For each decided attribute settled with a suggestion in view, the value suggested — Gil's answer, or what the application showed in its place (the kind says which); for a coarse level, the class shown. For a `Check`, Gil's answer that was kept from the person who settled it, which the check is judged against |
+| `sources` | object of layer names | no | For each decided attribute settled with Gil's answer in view — or, for a `Check`, kept from view — the layer that gave it: `KeyMemory`, `SimilarRecord` or `Model` |
+| `promises` | object of numbers | no | For each decided attribute settled with Gil's answer in view — or, for a `Check`, kept from view — the precision promised for it when it was given (the tuning's promise for its layer), in [0, 1] |
 | `scores` | object of numbers | no | For each decided attribute settled with an answer from a judge outside Gil in view (its `sources` entry is `Model`), the score the judge gave that answer when it was shown, on the judge's own scale — higher means surer; it is not a probability and is read for no other layer (experimental) |
 | `settle_ms` | object of integers | no | For each decided attribute, the milliseconds from when the person reached it — its suggestion came into view, or it was reached with nothing in view — to when it was settled |
 | `open_ms` | integer | no | The milliseconds the record was open, from opening it to this settlement |
