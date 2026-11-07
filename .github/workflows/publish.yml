@@ -6,8 +6,10 @@ name: Publish
 # (IsPackable); while it is off this workflow builds and tests, finds no packages, and ends without publishing.
 # Gil and Gil.Review carry their native libraries for eight runtimes: the native workflow builds them first, and
 # its consumers must pass before anything is published. A version already on NuGet.org is skipped.
-# Pushing uses NuGet.org trusted publishing: the policy names this repository and this file (publish.yml), with
-# no environment, so renaming the file means updating the policy on NuGet.org first.
+# This repository holds no NuGet credential: the pack job uploads the packages as the artifact `nuget-packages`,
+# and the publish job asks the organization's central publish workflow (iyulab/nuget-publish) to push them.
+# The central allowlist names this repository and this file (publish.yml), so renaming the file means updating
+# that allowlist first. The release tag is created only after the central push succeeded.
 
 on:
   push:
@@ -16,7 +18,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write # the release tag
+  contents: read
 
 concurrency:
   group: publish
@@ -26,14 +28,16 @@ jobs:
   native:
     uses: ./.github/workflows/native.yml
 
-  publish:
+  pack:
     needs: native
     runs-on: ubuntu-latest
-    # A publish run takes about a minute (restore, build, test, pack, push).
+    # A pack run takes about a minute (restore, build, test, pack).
     timeout-minutes: 15
     permissions:
-      contents: write # the release tag
-      id-token: write # the OIDC token NuGet.org trusted publishing exchanges for a short-lived key
+      contents: read
+    outputs:
+      publish: ${{ steps.packages.outputs.publish }}
+      version: ${{ steps.version.outputs.version }}
     env:
       # Keeps first-run notices out of the output the version step captures.
       DOTNET_NOLOGO: true
@@ -125,30 +129,38 @@ jobs:
           [ "$missing" -eq 0 ]
           echo "publish=true" >> "$GITHUB_OUTPUT"
 
-      # Trusted publishing: the job's OIDC token is exchanged for a key valid for one hour, so it is fetched
-      # right before the push. There is no long-lived key to fall back on; a failed login fails the run.
-      - name: Log in to NuGet.org (trusted publishing)
-        id: login
+      # Only packages and their symbol packages: the central workflow refuses any other file.
+      - name: Upload the packages
         if: steps.packages.outputs.publish == 'true'
-        uses: NuGet/login@v1
+        uses: actions/upload-artifact@v7
         with:
-          user: ${{ secrets.NUGET_USER }}
+          name: nuget-packages
+          path: |
+            packages/*.nupkg
+            packages/*.snupkg
+          if-no-files-found: error
+          retention-days: 1
 
-      # Symbol packages (.snupkg) next to each package are pushed with it.
-      - name: Push to NuGet.org
-        if: steps.packages.outputs.publish == 'true'
-        env:
-          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
-        run: |
-          dotnet nuget push "packages/*.nupkg" \
-            --api-key "$NUGET_API_KEY" \
-            --source https://api.nuget.org/v3/index.json \
-            --skip-duplicate
+  # The central workflow pushes with --skip-duplicate, so a version already on NuGet.org is skipped.
+  publish:
+    needs: pack
+    if: needs.pack.outputs.publish == 'true'
+    uses: iyulab/nuget-publish/.github/workflows/request.yml@de1e58c8bcefaf88f497fcb58899a1c6e84f4e29 # main
+    permissions: {}
+    secrets: inherit
+
+  tag:
+    needs: [pack, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # the release tag
+    steps:
+      - uses: actions/checkout@v7
 
       - name: Tag the release
-        if: steps.packages.outputs.publish == 'true'
         env:
-          TAG: v${{ steps.version.outputs.version }}
+          TAG: v${{ needs.pack.outputs.version }}
         run: |
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
             echo "$TAG already exists."
