@@ -5,9 +5,9 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 [crates/gil/CHANGELOG.md](crates/gil/CHANGELOG.md), and the review statistics (`iyulab-gil-review` and its .NET binding
 `Gil.Review`) theirs in [crates/gil-review/CHANGELOG.md](crates/gil-review/CHANGELOG.md).
 
-## Unreleased
+## 0.30.1
 
-### Changed
+### Fixed
 
 - **A record whose check probability no draw can have is refused.** `Record.Probabilities` holds, for an attribute
   settled as a check, the probability it was drawn with — above 0 and at most 1. A record given 0, a negative number or
@@ -15,6 +15,8 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   one ÷ the number (infinitely many decisions at 0, fewer than none below it), while `Usage` and a keeper's
   realized-precision watch skipped only 0 and below. Such a record is now refused when Gil reads it, with a message
   naming the attribute.
+
+### Changed
 
 - **A keeper with several decided attributes takes far less memory.** Each of its replays asks about one attribute, yet
   kept the key memory of every decided attribute — the same tallies once per attribute, and again in each checkpoint.

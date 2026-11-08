@@ -4,9 +4,9 @@ The Rust crate (crates.io) and the Python package (PyPI), both published as `iyu
 Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the repository's root `CHANGELOG.md`.
 
-## Unreleased
+## 0.12.1
 
-### Changed
+### Fixed
 
 - **A record line whose check probability no draw can have is refused.** `probabilities` holds, for an attribute
   settled as a check, the probability it was drawn with — above 0 and at most 1, as `Settlement::check` already asked.
@@ -16,6 +16,8 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   with a message naming the attribute, and every reader counts a check by the same rule — a record built in code with
   such a probability has that check counted as nothing. Python reads it in a record dictionary and the C ABI in a
   record's JSON, with the same refusal.
+
+### Changed
 
 - **A keeper with several decided attributes takes far less memory.** Each of its replays asks about one attribute, yet
   kept the key memory of every decided attribute — the same tallies once per attribute, and again in each checkpoint.
