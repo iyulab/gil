@@ -731,7 +731,8 @@ impl Counts {
     }
 
     fn subtract(&mut self, settled: &Settled) {
-        let Some(at) = self.settled.iter().position(|s| s == settled) else {
+        // From the end: what is settled again is mostly what was settled last.
+        let Some(at) = self.settled.iter().rposition(|s| s == settled) else {
             return;
         };
         self.settled.remove(at);
@@ -742,7 +743,14 @@ impl Counts {
             }
         }
         self.shares = OnceLock::new();
-        self.forget_fold();
+        // Taking the latest settlement away keeps the fold, to the bit; any other has it run again on the next look.
+        let kept = self
+            .fold
+            .as_mut()
+            .is_some_and(|fold| fold.take_latest(settled));
+        if !kept {
+            self.forget_fold();
+        }
     }
 
     fn forget_fold(&mut self) {
@@ -788,7 +796,23 @@ struct Fold {
     newest: Vec<Settled>,
     raw_total: f64,
     scale: f64,
+    /// What folding the settlement before the latest changed, so taking the latest away gives back the fold before it
+    /// to the bit; `None` when there was none or the scale was folded back in on the way.
+    undo: Option<Undo>,
 }
+
+/// The fold just before the latest settlement arrived, kept as what that arrival changed: the settlement it folded in,
+/// the scale and total before, and each value's raw amount before (`None` where it had none).
+#[derive(Clone)]
+struct Undo {
+    newest: Vec<Settled>,
+    scale: f64,
+    raw_total: f64,
+    raw: Vec<(Arc<str>, Option<RawAmount>)>,
+}
+
+/// A value's raw amount under a fold and its latest settlement.
+type RawAmount = (f64, i64);
 
 impl Fold {
     fn new(recency_decay: f64) -> Self {
@@ -798,7 +822,38 @@ impl Fold {
             newest: Vec::new(),
             raw_total: 0.0,
             scale: 1.0,
+            undo: None,
         }
+    }
+
+    /// Takes `settled`, one of the latest settlement's, away. With others settled together with it the rest stay the
+    /// latest; with none, the fold goes back to what it was before the latest arrived. `false` — the fold no longer
+    /// stands — when `settled` is not of the latest, or there is nothing to go back to.
+    fn take_latest(&mut self, settled: &Settled) -> bool {
+        let Some(at) = self.newest.iter().position(|s| s == settled) else {
+            return false;
+        };
+        if self.newest.len() > 1 {
+            self.newest.remove(at);
+            return true;
+        }
+        let Some(undo) = self.undo.take() else {
+            return false;
+        };
+        for (value, before) in undo.raw {
+            match before {
+                Some(amount) => {
+                    self.raw.insert(value.to_string(), amount);
+                }
+                None => {
+                    self.raw.remove(&*value);
+                }
+            }
+        }
+        self.newest = undo.newest;
+        self.scale = undo.scale;
+        self.raw_total = undo.raw_total;
+        true
     }
 
     /// Folds the settlements in the order they are weighed in: by time, then by record id.
@@ -828,8 +883,18 @@ impl Fold {
         }
 
         if !self.newest.is_empty() {
+            let mut undo = Undo {
+                newest: self.newest.clone(),
+                scale: self.scale,
+                raw_total: self.raw_total,
+                raw: Vec::with_capacity(self.newest.len()),
+            };
             let amount = 1.0 / self.scale;
             for previous in &self.newest {
+                let before = self.raw.get(&*previous.value).copied();
+                if !undo.raw.iter().any(|(v, _)| *v == previous.value) {
+                    undo.raw.push((previous.value.clone(), before));
+                }
                 let entry = self
                     .raw
                     .entry(previous.value.to_string())
@@ -840,7 +905,9 @@ impl Fold {
 
             self.newest.clear();
             self.scale *= self.recency_decay;
+            self.undo = Some(undo);
             if self.scale < 1e-150 {
+                self.undo = None;
                 for entry in self.raw.values_mut() {
                     entry.0 *= self.scale;
                 }
@@ -932,6 +999,66 @@ fn elements<'a>(sets: &'a BTreeMap<String, Vec<String>>, attribute: &str) -> Vec
 mod tests {
     use super::*;
     use crate::schema::{Attribute, AttributeRole, Schema};
+
+    fn bits(shares: &[Share]) -> Vec<(String, u64, u64, u64, i64)> {
+        shares
+            .iter()
+            .map(|s| {
+                (
+                    s.value.clone(),
+                    s.share.to_bits(),
+                    s.weight.to_bits(),
+                    s.total.to_bits(),
+                    s.latest,
+                )
+            })
+            .collect()
+    }
+
+    /// Settlements added in order, some settled together, and taken away — mostly the latest, as settling a record
+    /// again does, sometimes an earlier one: after every step the shares are those of folding what remains afresh, to
+    /// the bit.
+    #[test]
+    fn taking_the_latest_away_keeps_the_fold_to_the_bit() {
+        let mut x: u64 = 7;
+        let mut draw = |below: u64| {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            x % below
+        };
+        let mut counts = Counts::new(0.97);
+        let mut at = 0i64;
+        let mut kept_fold = 0;
+        for n in 0..3_000 {
+            let step = draw(10);
+            if step < 6 || counts.settled.is_empty() {
+                at += 1;
+                let record: Arc<str> = format!("r{n}").into();
+                let together = if draw(5) == 0 { 2 } else { 1 };
+                for k in 0..together {
+                    counts.add(Settled {
+                        value: format!("v{}", (draw(6) + k) % 7).into(),
+                        at,
+                        record: record.clone(),
+                    });
+                }
+            } else {
+                let which = if step < 9 {
+                    counts.settled.len() - 1
+                } else {
+                    draw(counts.settled.len() as u64) as usize
+                };
+                let taken = counts.settled[which].clone();
+                counts.subtract(&taken);
+                kept_fold += usize::from(counts.fold.is_some());
+            }
+            let afresh = Fold::weigh(counts.settled.iter().collect(), 0.97).shares();
+            assert_eq!(bits(&counts.shares(None)), bits(&afresh), "step {n}");
+        }
+        // The point of it: most removals kept the fold rather than folding again.
+        assert!(kept_fold > 300, "{kept_fold}");
+    }
 
     /// A form with two decided attributes taking one value and one taking several, records drawn so that some leave
     /// a decided attribute out — the shape where `put_for` keeps less than `put`.

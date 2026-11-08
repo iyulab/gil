@@ -9,6 +9,12 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Changed
 
+- **Settling the latest record again no longer refolds its key counts.** Settling a record again, or removing it,
+  took its earlier settlement away and had the next lookup fold every settlement under the key afresh — a cost that grew
+  with the records (about 12, 49 and 309 µs a re-settle and lookup at 25,000, 100,000 and 300,000 records on one key).
+  When the settlement taken away is the latest under the key, as when a record just settled is corrected, the counts
+  now go back to what they were before it, to the bit, and the cost stays flat (about 2 µs). Answers are the same to
+  the bit; taking away an earlier settlement folds afresh as before.
 - **A keeper keeps less of each record.** Its own copy of the settled records now holds what its replays and its
   realized-precision watch read, and leaves out what only the caller's own counts read — the layers, promises and
   scores in view, the settle times, the settlers and whether the promise was displayed. Choices and staleness are the
