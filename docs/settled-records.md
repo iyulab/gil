@@ -91,7 +91,7 @@ last seven entries yet (`replay::scored_decisions` reads `suggested`, `sources` 
   `gil.usage`, `usage`) read them from the saved records. With `Check` settlements they also say how far a suggestion
   in view moves what people settle: the usage counts keep apart a check that was the decision's first settlement (the
   answer kept from view — `first_checks`) and one that came after it on the same id (an audit of the settler —
-  `audits`, counted there only — the decision was counted at its first settlement). Which came first is read from `settled_at` among the records given, so counting by period means passing
+  `audits` — not another decision, though judged against the answer it keeps like any check). Which came first is read from `settled_at` among the records given, so counting by period means passing
   the records of the decisions first settled in it, their later audits included.
 - **`scores`** — how sure a judge outside Gil was of the answer a person saw, so that a threshold and a promise for that
   judge can be chosen from the saved records alone. `replay::scored_decisions` turns the records settled with the

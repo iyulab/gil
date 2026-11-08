@@ -212,7 +212,7 @@ fn a_first_check_is_told_from_a_later_audit_by_when_the_id_was_first_settled() {
 }
 
 #[test]
-fn an_audit_that_keeps_the_answer_is_still_only_an_audit() {
+fn an_audit_that_keeps_the_answer_is_not_another_decision_but_judges_it() {
     let records = [
         at(
             d(Some("network"), Some("network"), Some(Accept), 1.0),
@@ -226,9 +226,13 @@ fn an_audit_that_keeps_the_answer_is_still_only_an_audit() {
         ),
     ];
     let team = &usage(&records)["team"];
+    // One decision, audited once; the audit judges the answer like any check: wrong, weighing 1 ÷ 0.05.
     assert_eq!((team.decisions, team.answered, team.audits), (1, 1, 1));
-    assert_eq!((team.checked, team.first_checks), (0, 0));
-    assert_eq!(team.realized(), Some(1.0));
+    assert_eq!(
+        (team.checked, team.checked_right, team.first_checks),
+        (1, 0, 0)
+    );
+    assert_eq!(team.realized(), Some(1.0 / 21.0));
 }
 
 #[test]

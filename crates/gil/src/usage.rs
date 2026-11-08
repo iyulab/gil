@@ -71,7 +71,8 @@ pub struct AttributeUsage {
     /// decider had no answer for, so it judges nothing; it should stay 0.
     pub first_checks_without_answer: usize,
     /// Checks that came after the decision's first settlement (the same id settled again, later): audits of the settler.
-    /// Counted here only — the decision was counted at its first settlement.
+    /// Not another decision — the decision was counted at its first settlement — but, like every check, judged against
+    /// the answer the record keeps (`checked`, weighted), as the threshold replays and a keeper's watch judge it.
     pub audits: usize,
     /// The answers accepted or corrected with their promise drawn at random to be displayed or not, one entry per draw
     /// probability, lowest first.
@@ -175,8 +176,20 @@ pub fn usage<'a>(
             let u = out.entry(attribute.clone()).or_default();
             if kind == Some(SettlementKind::Check) {
                 if first[&(record.id.as_str(), attribute.as_str())].1 != at {
-                    // The same decision settled again: an audit of the settler, not another decision.
+                    // The same decision settled again: an audit of the settler, not another decision. It judges the
+                    // answer it keeps like any check, so the realized precision reads checks as the replays do.
                     u.audits += 1;
+                    let suggested = record.suggested.get(attribute);
+                    if let Some(weight) = record.check_weight(attribute)
+                        && suggested.is_some()
+                    {
+                        u.checked += 1;
+                        u.judged_weight += weight;
+                        if record.values.get(attribute) == suggested {
+                            u.checked_right += 1;
+                            u.right_weight += weight;
+                        }
+                    }
                     continue;
                 }
                 if !record.suggested.contains_key(attribute) {

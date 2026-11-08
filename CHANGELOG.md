@@ -22,9 +22,10 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 ### Changed
 
 - **An audit is no longer counted as another decision.** A check of a decision already settled — the same id settled
-  again, later — was counted by `Usage.Count` as one more decision (unanswered when it kept no answer, which raised
-  `Abstained` and lowered `AnswerRate`), and as one more weighted check in `Realized` when it kept the answer. It is now
-  counted in `Audits` only. Hosts that record no audits see the same counts.
+  again, later — was counted by `Usage.Count` as one more decision, which raised `Decisions` and, when the audit kept no
+  answer, `Abstained`, and lowered `AnswerRate`. It is now counted in `Audits` instead, and still judged against the
+  answer it keeps like any check (`Checked`, `Realized`) — as choosing thresholds and a keeper's realized-precision
+  watch judge it. Hosts that record no audits see the same counts.
 
 ### Breaking
 

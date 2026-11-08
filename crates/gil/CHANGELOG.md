@@ -22,9 +22,10 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 ### Changed
 
 - **An audit is no longer counted as another decision.** A check of a decision already settled — the same id settled
-  again, later — was counted by `usage` as one more decision (unanswered when it kept no answer, which raised
-  `abstained()` and lowered `answer_rate()`), and as one more weighted check in `realized()` when it kept the answer.
-  It is now counted in `audits` only. Hosts that record no audits see the same counts.
+  again, later — was counted by `usage` as one more decision, which raised `decisions` and, when the audit kept no
+  answer, `abstained()`, and lowered `answer_rate()`. It is now counted in `audits` instead, and still judged against
+  the answer it keeps like any check (`checked`, `realized()`) — as the threshold replays and a keeper's
+  realized-precision watch judge it. Hosts that record no audits see the same counts.
 
 ### Breaking
 
