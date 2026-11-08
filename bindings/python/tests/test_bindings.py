@@ -198,6 +198,19 @@ def test_bad_input_is_a_value_error() -> None:
         gil.records([{"id": "1", "settled_at": "yesterday", "values": {}}])
     with pytest.raises(ValueError, match="neither ticks nor a time"):
         gil.records([{"id": "1", "settled_at": "2025-02-29T00:00:00.0000000+00:00"}])
+    for p in (0, -0.5, 4):
+        with pytest.raises(ValueError, match="not above 0 and at most 1"):
+            gil.records(
+                [
+                    {
+                        "id": "1",
+                        "settled_at": 1,
+                        "values": {"a": "x"},
+                        "settlements": {"a": "Check"},
+                        "probabilities": {"a": p},
+                    }
+                ]
+            )
     with pytest.raises(ValueError, match="at least one decided attribute"):
         gil.Schema.from_dict(
             {"name": "f", "attributes": [{"name": "a", "role": "observed"}]}

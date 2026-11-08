@@ -21,7 +21,7 @@ One JSON object per line, one line per settlement:
 | `values` | object of strings | no | The value of each attribute that takes one, observed and decided alike, as it was when the record was settled |
 | `sets` | object of string arrays | no | The values of each attribute that takes several |
 | `settlements` | object of kinds | no | How each decided attribute was settled — see below |
-| `probabilities` | object of numbers | no | For an attribute settled as a `Check`, the probability it was drawn with |
+| `probabilities` | object of numbers | no | For an attribute settled as a `Check`, the probability it was drawn with — above 0 and at most 1; a line with one outside that is refused |
 | `arrival` | string array | no | The attributes with a value, in the order their current values arrived, oldest first |
 | `batch` | string | no | The batch the record was settled in — records settled together, several at once from one source |
 | `suggested` | object of strings | no | For each decided attribute settled with a suggestion in view, the value suggested — Gil's answer, or what the application showed in its place (the kind says which); for a coarse level, the class shown. For a `Check`, Gil's answer that was kept from the person who settled it, which the check is judged against |

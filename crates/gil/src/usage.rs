@@ -127,10 +127,10 @@ pub fn usage<'a>(
                     u.judged_weight += 1.0;
                 }
                 Some(SettlementKind::Check) => {
-                    let probability = record.probabilities.get(attribute).copied().unwrap_or(1.0);
                     let suggested = record.suggested.get(attribute);
-                    if probability > 0.0 && suggested.is_some() {
-                        let weight = 1.0 / probability;
+                    if let Some(weight) = record.check_weight(attribute)
+                        && suggested.is_some()
+                    {
                         u.checked += 1;
                         u.judged_weight += weight;
                         if record.values.get(attribute) == suggested {

@@ -9,6 +9,13 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Changed
 
+- **A record whose check probability no draw can have is refused.** `Record.Probabilities` holds, for an attribute
+  settled as a check, the probability it was drawn with — above 0 and at most 1. A record given 0, a negative number or
+  one above 1 was taken as given, and the places that read it disagreed: choosing thresholds counted such a check as
+  one ÷ the number (infinitely many decisions at 0, fewer than none below it), while `Usage` and a keeper's
+  realized-precision watch skipped only 0 and below. Such a record is now refused when Gil reads it, with a message
+  naming the attribute.
+
 - **A keeper with several decided attributes takes far less memory.** Each of its replays asks about one attribute, yet
   kept the key memory of every decided attribute — the same tallies once per attribute, and again in each checkpoint.
   A replay now keeps only its own attribute's: on a synthetic stream of 100,000 short records with three decided

@@ -166,6 +166,21 @@ public sealed class ShapeTests
         FluentActions.Invoking(() => OpenRecord.Reopen(schema, impossible)).Should().Throw<ArgumentException>();
     }
 
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(-0.5)]
+    [InlineData(4.0)]
+    public void A_check_with_a_probability_no_draw_has_is_refused(double probability)
+    {
+        var impossible = new Record("t-5", DateTimeOffset.UnixEpoch)
+        {
+            Values = new Dictionary<string, string> { ["team"] = "billing" },
+            Settlements = new Dictionary<string, SettlementKind> { ["team"] = SettlementKind.Check },
+            Probabilities = new Dictionary<string, double> { ["team"] = probability },
+        };
+        FluentActions.Invoking(() => SettledRecords.From([impossible])).Should().Throw<ArgumentException>();
+    }
+
     [Fact]
     public void A_rejected_settlement_kept_on_a_record_counts_as_turned_down_like_one_left_unsettled()
     {

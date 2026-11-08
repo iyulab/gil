@@ -233,6 +233,23 @@ fn a_record_carries_what_was_in_view_how_long_it_took_and_who_settled_it() {
     };
     assert!(refused(json!({ "promises": { "team": 1.2 } })).contains("not in [0, 1]"));
     assert!(refused(json!({ "promises": { "team": -0.1 } })).contains("not in [0, 1]"));
+    // A check's draw probability: above 0 and at most 1, as `Settlement::check` asks.
+    for p in [0.0, -0.5, 4.0] {
+        assert!(
+            refused(json!({ "settlements": { "team": "Check" }, "probabilities": { "team": p } }))
+                .contains("not above 0 and at most 1"),
+            "{p}"
+        );
+    }
+    for p in [0.25, 1.0] {
+        let line = json!({ "id": "t4", "settled_at": 5, "settlements": { "team": "Check" }, "probabilities": { "team": p } });
+        assert_eq!(
+            serde_json::from_value::<Record>(line)
+                .unwrap()
+                .probabilities["team"],
+            p
+        );
+    }
     refused(json!({ "sources": { "team": "Key" } }));
     assert!(refused(json!({ "sources": { "team": "None" } })).contains("layer that answered"));
     refused(json!({ "open_ms": -1 }));

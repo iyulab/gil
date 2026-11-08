@@ -604,8 +604,8 @@ fn weight(record: &Record, attribute: &str, counted: Counted) -> f64 {
         return 0.0;
     }
 
-    match (kind, record.probabilities.get(attribute)) {
-        (Some(SettlementKind::Check), Some(probability)) => 1.0 / probability,
+    match kind {
+        Some(SettlementKind::Check) => record.check_weight(attribute).unwrap_or(0.0),
         _ => 1.0,
     }
 }
@@ -2920,13 +2920,7 @@ pub fn scored_decisions(records: &[Record], attribute: &str) -> Vec<ScoredDecisi
             let settled = record.values.get(attribute)?;
             let weight = match record.settlements.get(attribute)? {
                 SettlementKind::Accept | SettlementKind::Correct => 1.0,
-                SettlementKind::Check => {
-                    let drawn = record.probabilities.get(attribute).copied().unwrap_or(1.0);
-                    if !(drawn > 0.0 && drawn <= 1.0) {
-                        return None;
-                    }
-                    1.0 / drawn
-                }
+                SettlementKind::Check => record.check_weight(attribute)?,
                 _ => return None,
             };
             Some(

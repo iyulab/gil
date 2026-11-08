@@ -640,9 +640,7 @@ impl Keeper {
                 Some(SettlementKind::Accept) => true,
                 Some(SettlementKind::Correct) => false,
                 Some(SettlementKind::Check) => match record.suggested.get(attribute) {
-                    Some(shown)
-                        if record.probabilities.get(attribute).copied().unwrap_or(1.0) > 0.0 =>
-                    {
+                    Some(shown) if record.check_weight(attribute).is_some() => {
                         record.values.get(attribute) == Some(shown)
                     }
                     _ => continue,

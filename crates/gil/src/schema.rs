@@ -983,7 +983,7 @@ impl Settlement {
     /// When `probability` is not above 0 and at most 1.
     pub fn check(value: &str, probability: f64) -> Self {
         assert!(
-            probability > 0.0 && probability <= 1.0,
+            drawn(probability),
             "a check is drawn with a probability above 0 and at most 1"
         );
         Self {
@@ -1041,7 +1041,7 @@ impl Settlement {
             SettlementKind::Check => {
                 let p = probability
                     .ok_or("a Check settlement needs the probability it was drawn with")?;
-                if !(p > 0.0 && p <= 1.0) {
+                if !drawn(p) {
                     return Err(
                         "a check is drawn with a probability above 0 and at most 1".to_owned()
                     );
@@ -1077,8 +1077,9 @@ pub struct Record {
     /// How each decided attribute was settled, where known.
     #[cfg_attr(feature = "serde", serde(default, deserialize_with = "or_empty"))]
     pub settlements: BTreeMap<String, SettlementKind>,
-    /// For an attribute settled as a check, the probability it was drawn with.
-    #[cfg_attr(feature = "serde", serde(default, deserialize_with = "or_empty"))]
+    /// For an attribute settled as a check, the probability it was drawn with, above 0 and at most 1. A line that gives
+    /// one outside that is refused when read.
+    #[cfg_attr(feature = "serde", serde(default, deserialize_with = "probabilities"))]
     pub probabilities: BTreeMap<String, f64>,
     /// The attributes with a value, in the order their current values arrived, oldest first; an attribute the list leaves out
     /// counts as there from the start. `None` when the order is unknown: the observed values are then taken as there from
@@ -1192,6 +1193,14 @@ pub struct Record {
 }
 
 impl Record {
+    /// How many decisions the check `attribute` was settled with counts as: one ÷ the probability it was drawn with, 1
+    /// when the record gives none, `None` when the one it gives is not above 0 and at most 1 — a record built in code
+    /// can hold what a read line refuses, and such a check is not counted.
+    pub(crate) fn check_weight(&self, attribute: &str) -> Option<f64> {
+        let probability = self.probabilities.get(attribute).copied().unwrap_or(1.0);
+        drawn(probability).then(|| 1.0 / probability)
+    }
+
     /// The record as memory remembers it: the values (and sets) the application filled ([`SettlementKind::Fill`]) are
     /// left out, with their settlements.
     pub fn remembered(&self) -> Record {
@@ -1276,6 +1285,25 @@ fn promises<'de, D: serde::Deserializer<'de>>(
         ))),
         None => Ok(promises),
     }
+}
+
+/// A record's `probabilities`: each in (0, 1], as a check is drawn ([`Settlement::check`]).
+#[cfg(feature = "serde")]
+fn probabilities<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<BTreeMap<String, f64>, D::Error> {
+    let probabilities: BTreeMap<String, f64> = or_empty(deserializer)?;
+    match probabilities.iter().find(|(_, p)| !drawn(**p)) {
+        Some((attribute, p)) => Err(serde::de::Error::custom(format!(
+            "the probability for '{attribute}' is {p}, not above 0 and at most 1"
+        ))),
+        None => Ok(probabilities),
+    }
+}
+
+/// Whether `probability` is one a check can be drawn with: above 0 and at most 1.
+fn drawn(probability: f64) -> bool {
+    probability > 0.0 && probability <= 1.0
 }
 
 /// A record's `settled_at`: ticks, or a time as text.

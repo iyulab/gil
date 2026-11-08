@@ -146,3 +146,15 @@ fn every_kind_reads_back_from_its_name() {
     }
     assert_eq!(SettlementKind::parse("Other"), None);
 }
+
+#[test]
+fn a_check_with_a_probability_no_draw_has_is_not_judged() {
+    // A record built in code can hold what a read line refuses; such a check counts as nothing rather than as
+    // infinitely many decisions (0), fewer than none (negative) or less than one (above 1).
+    for probability in [0.0, -0.5, 4.0] {
+        let record = d(Some("network"), Some("network"), Some(Check), probability);
+        let counts = usage([&record]);
+        assert_eq!(counts["team"].checked, 0, "{probability}");
+        assert_eq!(counts["team"].realized(), None, "{probability}");
+    }
+}
