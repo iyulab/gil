@@ -293,6 +293,26 @@ struct ElementReplay {
     through: usize,
 }
 
+/// The part of `record` a keeper keeps: what its replays and its realized-precision watch read — the values, how and when
+/// they were settled, the check probabilities, the arrival order, batch and edition, and the answer kept on the record (a
+/// check is judged against it). What only a caller's own counts read — the layers, promises and scores in view, the
+/// times, the settlers and whether the promise was displayed — is left with the caller.
+fn kept(record: &Record) -> Record {
+    Record {
+        id: record.id.clone(),
+        values: record.values.clone(),
+        sets: record.sets.clone(),
+        settled_at: record.settled_at,
+        settlements: record.settlements.clone(),
+        probabilities: record.probabilities.clone(),
+        arrival: record.arrival.clone(),
+        batch: record.batch.clone(),
+        suggested: record.suggested.clone(),
+        form_version: record.form_version.clone(),
+        ..Record::default()
+    }
+}
+
 /// The settled records and the replays the thresholds are chosen on, for the decided attributes of one schema that take
 /// one value — and, experimentally, for those that take several and are answered by similar elements
 /// ([`crate::schema::Attribute::similar_elements`]). Not thread-safe.
@@ -481,7 +501,8 @@ impl Keeper {
     }
 
     /// Takes settled records: `decider` learns them ([`Decider::rebuild`]) and the next choice replays them. The keeper
-    /// keeps its own copy of them, so the caller need not keep its own. Records may
+    /// keeps its own copy of what its replays and watch read of them (not what was in view beyond the answer, the promises,
+    /// scores, times or settlers), so the caller need not keep its own. Records may
     /// come in any order; one settled before the last a replay has gone through has the next choice replay from the
     /// last checkpoint before it ([`Keeper::rechoose_with`]). With [`Keep::restart_on_form_version`], a record under a new edition starts the keeper again
     /// from nothing before it is taken — what came before it, in this call or earlier, is forgotten.
@@ -490,7 +511,7 @@ impl Keeper {
             decider.rebuild(&self.schema, records);
             let from = self.records.len();
             self.counted += records.iter().filter(|r| self.counts(r)).count();
-            self.records.extend_from_slice(records);
+            self.records.extend(records.iter().map(kept));
             self.put_in_order(from);
             return;
         }
@@ -512,7 +533,7 @@ impl Keeper {
         decider.rebuild(&self.schema, &taken);
         let from = self.records.len();
         self.counted += taken.iter().filter(|r| self.counts(r)).count();
-        self.records.extend(taken);
+        self.records.extend(taken.iter().map(kept));
         self.put_in_order(from);
     }
 
@@ -1089,6 +1110,39 @@ mod tests {
             counting_all.chosen("team").expect("chosen").key.lookups
                 > keeper.chosen("team").expect("chosen").key.lookups
         );
+    }
+
+    #[test]
+    fn what_only_a_callers_counts_read_changes_nothing_a_keeper_chooses() {
+        use crate::decider::Source;
+        use crate::schema::PromiseShown;
+        let plain = settled(600);
+        let shown: Vec<Record> = plain
+            .iter()
+            .map(|r| {
+                let mut r = r.clone();
+                r.sources.insert("team".into(), Source::KeyMemory);
+                r.promises.insert("team".into(), 0.9);
+                r.scores.insert("team".into(), 0.7);
+                r.settle_ms.insert("team".into(), 1_200);
+                r.open_ms = Some(4_000);
+                r.settled_by.insert("team".into(), "person-1".into());
+                r.promise_shown
+                    .insert("team".into(), PromiseShown::new(true, 0.5).unwrap());
+                r
+            })
+            .collect();
+        let mut one = Keeper::new(schema(), Keep::new(0.8));
+        let mut two = Keeper::new(schema(), Keep::new(0.8));
+        one.settle(&mut self::decider(), &plain);
+        two.settle(&mut self::decider(), &shown);
+        assert_eq!(one.rechoose(), two.rechoose());
+        assert_eq!(one.stale(), two.stale());
+        // The copy keeps none of it.
+        assert!(two.records.iter().all(|r| r.promises.is_empty()
+            && r.settled_by.is_empty()
+            && r.promise_shown.is_empty()
+            && r.open_ms.is_none()));
     }
 
     #[test]

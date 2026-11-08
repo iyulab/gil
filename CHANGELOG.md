@@ -5,6 +5,16 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 [crates/gil/CHANGELOG.md](crates/gil/CHANGELOG.md), and the review statistics (`iyulab-gil-review` and its .NET binding
 `Gil.Review`) theirs in [crates/gil-review/CHANGELOG.md](crates/gil-review/CHANGELOG.md).
 
+## Unreleased
+
+### Changed
+
+- **A keeper keeps less of each record.** Its own copy of the settled records now holds what its replays and its
+  realized-precision watch read, and leaves out what only the caller's own counts read — the layers, promises and
+  scores in view, the settle times, the settlers and whether the promise was displayed. Choices and staleness are the
+  same; for records that carry all of those on three decided attributes, the memory a keeper takes on when it settles
+  them falls by about a fifth (16 → 12.7 KB a record at 100,000 records). Records that carry none of them are unchanged.
+
 ## 0.31.0
 
 ### Added

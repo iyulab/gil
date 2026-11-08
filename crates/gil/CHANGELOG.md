@@ -4,6 +4,17 @@ The Rust crate (crates.io) and the Python package (PyPI), both published as `iyu
 Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the repository's root `CHANGELOG.md`.
 
+## Unreleased
+
+### Changed
+
+- **A keeper keeps less of each record.** `Keeper`'s own copy of the settled records now holds what its replays and its
+  realized-precision watch read, and leaves out what only the caller's own counts read — `sources`, `promises`,
+  `scores`, `settle_ms`, `open_ms`, `settled_by` and `promise_shown`. Choices and staleness are the same; for records
+  that carry all of those on three decided attributes, the memory a keeper takes on when it settles them falls by about
+  a fifth (16 → 12.7 KB a record at 100,000 records, measured through Python). Records that carry none of them are
+  unchanged.
+
 ## 0.13.0
 
 ### Added
