@@ -68,10 +68,10 @@ pub struct AttributeUsage {
     /// Of the first checks, those that agreed with the answer.
     pub first_checks_right: usize,
     /// First settled as a check with no answer kept on the record — such a decision cannot be told from one this
-    /// decider had no answer for, so it is in no other count but this one; it should stay 0.
+    /// decider had no answer for, so it judges nothing; it should stay 0.
     pub first_checks_without_answer: usize,
-    /// Checks that came after the decision's first settlement (the same id settled again, later): audits of the settler,
-    /// counted here whatever else they keep.
+    /// Checks that came after the decision's first settlement (the same id settled again, later): audits of the settler.
+    /// Counted here only — the decision was counted at its first settlement.
     pub audits: usize,
     /// The answers accepted or corrected with their promise drawn at random to be displayed or not, one entry per draw
     /// probability, lowest first.
@@ -173,15 +173,17 @@ pub fn usage<'a>(
         for attribute in attributes {
             let kind = record.settlements.get(attribute).copied();
             let u = out.entry(attribute.clone()).or_default();
-            u.decisions += 1;
             if kind == Some(SettlementKind::Check) {
-                let is_first = first[&(record.id.as_str(), attribute.as_str())].1 == at;
-                if !is_first {
+                if first[&(record.id.as_str(), attribute.as_str())].1 != at {
+                    // The same decision settled again: an audit of the settler, not another decision.
                     u.audits += 1;
-                } else if !record.suggested.contains_key(attribute) {
+                    continue;
+                }
+                if !record.suggested.contains_key(attribute) {
                     u.first_checks_without_answer += 1;
                 }
             }
+            u.decisions += 1;
             match kind {
                 Some(SettlementKind::AcceptOther) => u.accepted_other += 1,
                 Some(SettlementKind::CorrectOther) => u.corrected_other += 1,
@@ -231,9 +233,7 @@ pub fn usage<'a>(
                 Some(SettlementKind::Check) => {
                     let suggested = record.suggested.get(attribute);
                     let right = suggested.is_some() && record.values.get(attribute) == suggested;
-                    if suggested.is_some()
-                        && first[&(record.id.as_str(), attribute.as_str())].1 == at
-                    {
+                    if suggested.is_some() {
                         u.first_checks += 1;
                         if right {
                             u.first_checks_right += 1;

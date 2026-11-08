@@ -17,8 +17,14 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   no answer, which cannot be told from a decision with no answer and should stay 0. `PromiseDisplay` counts the answers
   accepted or corrected by their `PromiseShown` draw — one entry per draw probability, with and without the promise
   displayed. A decision's first settlement is the earliest `SettledAt` among the given records of its id, so a host that
-  counts by period passes the records of the decisions first settled in it, their later audits included. The existing
-  counts are unchanged.
+  counts by period passes the records of the decisions first settled in it, their later audits included.
+
+### Changed
+
+- **An audit is no longer counted as another decision.** A check of a decision already settled — the same id settled
+  again, later — was counted by `Usage.Count` as one more decision (unanswered when it kept no answer, which raised
+  `Abstained` and lowered `AnswerRate`), and as one more weighted check in `Realized` when it kept the answer. It is now
+  counted in `Audits` only. Hosts that record no audits see the same counts.
 
 ### Breaking
 

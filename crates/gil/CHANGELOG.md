@@ -16,8 +16,15 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   `promise_display` counts the answers accepted or corrected by their `promise_shown` draw, one `PromiseDisplay` per
   draw probability, lowest first. A decision's first settlement is the earliest `settled_at` among the given records of
   its id (the earlier given on a tie), so a host that counts by period passes the records of the decisions first
-  settled in it, their later audits included. The existing counts are unchanged. Python's `usage` returns the same keys
-  (`PromiseDisplay` is its typed entry) and the C ABI's `gil_usage` the same JSON.
+  settled in it, their later audits included. Python's `usage` returns the same keys (`PromiseDisplay` is its typed
+  entry) and the C ABI's `gil_usage` the same JSON.
+
+### Changed
+
+- **An audit is no longer counted as another decision.** A check of a decision already settled — the same id settled
+  again, later — was counted by `usage` as one more decision (unanswered when it kept no answer, which raised
+  `abstained()` and lowered `answer_rate()`), and as one more weighted check in `realized()` when it kept the answer.
+  It is now counted in `audits` only. Hosts that record no audits see the same counts.
 
 ### Breaking
 

@@ -8,15 +8,20 @@ use gil::schema::SettlementKind::{
 };
 use gil::usage::usage;
 
-/// A record settling `team` as `settled` by `settlement`, with this decider's `answer` in view when there is one.
+/// A record of its own decision settling `team` as `settled` by `settlement`, with this decider's `answer` in view when
+/// there is one.
 fn d(
     answer: Option<&str>,
     settled: Option<&str>,
     settlement: Option<SettlementKind>,
     probability: f64,
 ) -> Record {
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let mut record = Record {
-        id: "r".to_owned(),
+        id: format!(
+            "r{}",
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ),
         ..Record::default()
     };
     if let Some(value) = settled {
@@ -201,8 +206,29 @@ fn a_first_check_is_told_from_a_later_audit_by_when_the_id_was_first_settled() {
     assert_eq!((team.first_checks, team.first_checks_right), (2, 1));
     assert_eq!(team.first_checks_without_answer, 1);
     assert_eq!(team.first_checks_realized(), Some(0.5));
-    // The weighted counts are unchanged by the split: two checks judged, as before.
     assert_eq!((team.checked, team.checked_right), (2, 1));
+    // The audit is not another decision: four decisions, the one without an answer kept among them.
+    assert_eq!(team.decisions, 4);
+}
+
+#[test]
+fn an_audit_that_keeps_the_answer_is_still_only_an_audit() {
+    let records = [
+        at(
+            d(Some("network"), Some("network"), Some(Accept), 1.0),
+            "a",
+            10,
+        ),
+        at(
+            d(Some("network"), Some("security"), Some(Check), 0.05),
+            "a",
+            20,
+        ),
+    ];
+    let team = &usage(&records)["team"];
+    assert_eq!((team.decisions, team.answered, team.audits), (1, 1, 1));
+    assert_eq!((team.checked, team.first_checks), (0, 0));
+    assert_eq!(team.realized(), Some(1.0));
 }
 
 #[test]
@@ -220,7 +246,7 @@ fn of_two_settlements_at_the_same_moment_the_earlier_given_is_first() {
         ),
     ];
     let team = &usage(&records)["team"];
-    assert_eq!((team.first_checks, team.audits), (1, 1));
+    assert_eq!((team.first_checks, team.audits, team.decisions), (1, 1, 1));
 }
 
 #[test]
