@@ -228,6 +228,18 @@ automated coding in official statistics call the answered share the match rate a
 sample. Read across: the target precision is the error tolerance those fields state first, the chosen threshold is
 their cutoff, and the replay of settled records is their validation sample.
 
+When someone else has to see how the automated answers did, the pieces are already there; Gil does not bind them into a
+report. The tolerance and the cutoffs are the `Tuning`: `TargetPrecision`, each attribute's chosen thresholds with the
+promise each makes, the number of records they were chosen on (`Settled`) and the version that chose them. How the
+answers then did is `Usage.Count` over the records settled since — `Realized` beside `Promise`, per attribute. A
+hand-checked sample is `Gil.Review`: `ReviewSampler` draws and allocates it across strata, `ReviewEstimator.Estimate`
+weights it back to all the answers with an interval, and `ReviewAgreement.Compute` says how far two reviewers of the
+same items agree. When a choice stopped standing, `Stale` names the reason (with `WatchRealized`, the attribute whose
+recent answers fell below its promise). What Gil does not keep is the history: a `Keeper` holds the current choice, not
+when a promise was missed and what was done about it, so a host that must show deviations and corrective actions
+records them itself — when it rechose, why, and what changed. Every one of these numbers describes the records it was
+counted on. None is a guarantee about the records to come.
+
 While records keep arriving, a `Keeper` keeps that loop in one object. `Settle` puts records into the decider and into
 the next choice, `Stale` says when the choice no longer stands, and `Rechoose` replays only the records settled since the
 last choice — the same thresholds as `SelectLayers` on all of them, without replaying them all again:

@@ -5,6 +5,15 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 [crates/gil/CHANGELOG.md](crates/gil/CHANGELOG.md), and the review statistics (`iyulab-gil-review` and its .NET binding
 `Gil.Review`) theirs in [crates/gil-review/CHANGELOG.md](crates/gil-review/CHANGELOG.md).
 
+## Unreleased
+
+### Documentation
+
+- The README says where the numbers live when someone else has to see how the automated answers did — the
+  `Tuning` (tolerance, cutoffs, promises), `Usage` (realized beside promised), `Gil.Review` (a weighted estimate on a
+  hand-checked sample, agreement between reviewers) and `Stale` — and that the history of missed promises and what
+  was done about them is the host's to record. Gil does not bind them into a report.
+
 ## 0.30.1
 
 ### Fixed
