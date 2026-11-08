@@ -4,6 +4,26 @@ The Rust crate (crates.io) and the Python package (PyPI), both published as `iyu
 Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the repository's root `CHANGELOG.md`.
 
+## Unreleased
+
+### Added
+
+- **`usage` tells a hidden first settlement from a later audit, and counts the answers by whether their promise was
+  displayed.** `AttributeUsage::first_checks` and `first_checks_right` count, once each and unweighted, the checks that
+  were a decision's first settlement — the answer kept from view when it was first settled — read as
+  `first_checks_realized()`. `audits` counts the checks that came after the first settlement of the same id (an audit of
+  the settler), and `first_checks_without_answer` the first checks whose record kept no answer, which should stay 0.
+  `promise_display` counts the answers accepted or corrected by their `promise_shown` draw, one `PromiseDisplay` per
+  draw probability, lowest first. A decision's first settlement is the earliest `settled_at` among the given records of
+  its id (the earlier given on a tie), so a host that counts by period passes the records of the decisions first
+  settled in it, their later audits included. The existing counts are unchanged. Python's `usage` returns the same keys
+  (`PromiseDisplay` is its typed entry) and the C ABI's `gil_usage` the same JSON.
+
+### Breaking
+
+- `AttributeUsage` has five more public fields; a struct literal that names every field adds them or ends with
+  `..AttributeUsage::default()`.
+
 ## 0.12.1
 
 ### Fixed

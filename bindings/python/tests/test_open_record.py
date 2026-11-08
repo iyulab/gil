@@ -253,6 +253,31 @@ def test_usage_counts_each_settlement_by_its_meaning() -> None:
     assert team["promise_sum"] / team["promised"] == pytest.approx(0.9)
 
 
+def test_usage_tells_first_checks_from_audits_and_counts_promise_display() -> None:
+    kept = {"sources": {"team": "KeyMemory"}, "promises": {"team": 0.9}, "suggested": {"team": "network"}}
+    counts = gil.usage(
+        gil.records(
+            [
+                # first settled hidden, right; audited later by another settler
+                {"id": "h1", "settled_at": 1, "values": {"team": "network"}, "settlements": {"team": "Check"},
+                 "probabilities": {"team": 0.1}, **kept},
+                {"id": "h1", "settled_at": 9, "values": {"team": "network"}, "settlements": {"team": "Check"},
+                 "probabilities": {"team": 0.05}},
+                {"id": "s1", "settled_at": 2, "values": {"team": "network"}, "settlements": {"team": "Accept"},
+                 "promise_shown": {"team": {"shown": True, "probability": 0.5}}, **kept},
+                {"id": "s2", "settled_at": 3, "values": {"team": "security"}, "settlements": {"team": "Correct"},
+                 "promise_shown": {"team": {"shown": False, "probability": 0.5}}, **kept},
+            ]
+        )
+    )
+    team = counts["team"]
+    assert (team["first_checks"], team["first_checks_right"], team["audits"]) == (1, 1, 1)
+    assert team["first_checks_without_answer"] == 0
+    assert team["promise_display"] == [
+        {"probability": 0.5, "shown_accepted": 1, "shown_corrected": 0, "hidden_accepted": 0, "hidden_corrected": 1}
+    ]
+
+
 def test_a_reopened_record_keeps_what_was_in_view_for_usage() -> None:
     decider = gil.Decider(SCHEMA, settled())
     record = gil.OpenRecord(SCHEMA, "t9", 9 * MINUTE)

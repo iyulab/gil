@@ -81,6 +81,7 @@ __all__ = [
     "KeyState",
     "LayerThresholds",
     "OpenRecord",
+    "PromiseDisplay",
     "Records",
     "Schema",
     "SimilarLook",
@@ -1262,8 +1263,22 @@ def tuning_stale(
     return None if text is None else cast(dict[str, Any] | str, json.loads(text))
 
 
+class PromiseDisplay(TypedDict):
+    """How the answers shown under one promise-display draw were settled, with the promise displayed and without it."""
+
+    probability: float
+    shown_accepted: int
+    shown_corrected: int
+    hidden_accepted: int
+    hidden_corrected: int
+
+
 class AttributeUsage(TypedDict):
-    """One attribute's usage counts, without content."""
+    """One attribute's usage counts, without content. ``first_checks`` (and ``first_checks_right``) count the checks
+    that were a decision's first settlement — the answer kept from view, unweighted; ``audits`` the checks after it (the
+    same id settled again, later); ``first_checks_without_answer`` the first checks with no answer kept, which should
+    stay 0; ``promise_display`` the answers accepted or corrected by their promise-display draw, one entry per draw
+    probability."""
 
     decisions: int
     answered: int
@@ -1281,6 +1296,11 @@ class AttributeUsage(TypedDict):
     promise_sum: float
     right_weight: float
     judged_weight: float
+    first_checks: int
+    first_checks_right: int
+    first_checks_without_answer: int
+    audits: int
+    promise_display: list[PromiseDisplay]
 
 
 def usage(records: Records) -> dict[str, AttributeUsage]:

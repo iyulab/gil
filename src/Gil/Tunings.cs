@@ -282,6 +282,15 @@ public sealed record ElementAnswer(string Value, double Share, double? Promise);
 /// <param name="RightWeight">The weighted count of right answers among those whose rightness is known, a check weighing
 /// one ÷ its probability.</param>
 /// <param name="JudgedWeight">The weighted count of answers whose rightness is known.</param>
+/// <param name="FirstChecks">Answered and first settled as a check — the answer kept from view when the decision was
+/// first settled; counted once each, not weighted.</param>
+/// <param name="FirstChecksRight">Of the first checks, those that agreed with the answer.</param>
+/// <param name="FirstChecksWithoutAnswer">First settled as a check with no answer kept on the record — it cannot be told
+/// from a decision with no answer, so it is in no other count; it should stay 0.</param>
+/// <param name="Audits">Checks that came after the decision's first settlement (the same id settled again, later) —
+/// audits of the settler.</param>
+/// <param name="PromiseDisplay">The answers accepted or corrected with their promise drawn at random to be displayed or
+/// not, one entry per draw probability, lowest first.</param>
 public sealed record AttributeUsage(
     int Decisions,
     int Answered,
@@ -298,7 +307,12 @@ public sealed record AttributeUsage(
     int Promised,
     double PromiseSum,
     double RightWeight,
-    double JudgedWeight)
+    double JudgedWeight,
+    int FirstChecks,
+    int FirstChecksRight,
+    int FirstChecksWithoutAnswer,
+    int Audits,
+    IReadOnlyList<PromiseDisplay> PromiseDisplay)
 {
     /// <summary>The decisions not answered.</summary>
     [JsonIgnore]
@@ -315,7 +329,25 @@ public sealed record AttributeUsage(
     /// <summary>The mean promise of the answers made under one; null when none was.</summary>
     [JsonIgnore]
     public double? Promise => Promised > 0 ? PromiseSum / Promised : null;
+
+    /// <summary>The share right among the first checks; null when there are none.</summary>
+    [JsonIgnore]
+    public double? FirstChecksRealized => FirstChecks > 0 ? (double)FirstChecksRight / FirstChecks : null;
 }
+
+/// <summary>How the answers shown under one promise-display draw were settled, with the promise displayed and without
+/// it.</summary>
+/// <param name="Probability">The probability the promise was drawn to be displayed with.</param>
+/// <param name="ShownAccepted">Accepted with the promise displayed.</param>
+/// <param name="ShownCorrected">Corrected with the promise displayed.</param>
+/// <param name="HiddenAccepted">Accepted with the promise not displayed.</param>
+/// <param name="HiddenCorrected">Corrected with the promise not displayed.</param>
+public sealed record PromiseDisplay(
+    double Probability,
+    int ShownAccepted,
+    int ShownCorrected,
+    int HiddenAccepted,
+    int HiddenCorrected);
 
 /// <summary>A reason as the core writes it: <c>{"version": {"chosen"}}</c>, <c>"schema"</c> or <c>{"settled":
 /// {"chosen", "now"}}</c>.</summary>

@@ -158,3 +158,140 @@ fn a_check_with_a_probability_no_draw_has_is_not_judged() {
         assert_eq!(counts["team"].realized(), None, "{probability}");
     }
 }
+
+/// `record` as the decision `id`, settled at `at`.
+fn at(mut record: Record, id: &str, at: i64) -> Record {
+    record.id = id.to_owned();
+    record.settled_at = at;
+    record
+}
+
+#[test]
+fn a_first_check_is_told_from_a_later_audit_by_when_the_id_was_first_settled() {
+    let mut audit = at(d(None, Some("network"), Some(Check), 0.05), "a", 20);
+    audit.sources.clear();
+    let mut unanswered = at(
+        d(Some("network"), Some("network"), Some(Check), 0.1),
+        "c",
+        5,
+    );
+    unanswered.suggested.clear();
+    let records = [
+        // The audit is given before the settlement it audits: the order is `settled_at`'s, not the input's.
+        audit,
+        at(
+            d(Some("network"), Some("network"), Some(Accept), 1.0),
+            "a",
+            10,
+        ),
+        at(
+            d(Some("network"), Some("network"), Some(Check), 0.1),
+            "b",
+            10,
+        ),
+        at(
+            d(Some("network"), Some("security"), Some(Check), 0.1),
+            "d",
+            10,
+        ),
+        unanswered,
+    ];
+    let team = &usage(&records)["team"];
+    assert_eq!(team.audits, 1);
+    assert_eq!((team.first_checks, team.first_checks_right), (2, 1));
+    assert_eq!(team.first_checks_without_answer, 1);
+    assert_eq!(team.first_checks_realized(), Some(0.5));
+    // The weighted counts are unchanged by the split: two checks judged, as before.
+    assert_eq!((team.checked, team.checked_right), (2, 1));
+}
+
+#[test]
+fn of_two_settlements_at_the_same_moment_the_earlier_given_is_first() {
+    let records = [
+        at(
+            d(Some("network"), Some("network"), Some(Check), 0.1),
+            "a",
+            10,
+        ),
+        at(
+            d(Some("network"), Some("network"), Some(Check), 0.1),
+            "a",
+            10,
+        ),
+    ];
+    let team = &usage(&records)["team"];
+    assert_eq!((team.first_checks, team.audits), (1, 1));
+}
+
+#[test]
+fn answers_shown_under_a_promise_display_draw_are_counted_by_the_draw() {
+    use gil::schema::PromiseShown;
+    use gil::usage::PromiseDisplay;
+    let shown = |record: Record, displayed: bool, probability: f64| {
+        let mut record = record;
+        record.promise_shown.insert(
+            "team".to_owned(),
+            PromiseShown::new(displayed, probability).unwrap(),
+        );
+        record
+    };
+    let records = [
+        shown(
+            d(Some("network"), Some("network"), Some(Accept), 1.0),
+            true,
+            0.5,
+        ),
+        shown(
+            d(Some("network"), Some("network"), Some(Accept), 1.0),
+            false,
+            0.5,
+        ),
+        shown(
+            d(Some("network"), Some("security"), Some(Correct), 1.0),
+            false,
+            0.5,
+        ),
+        shown(
+            d(Some("network"), Some("network"), Some(Accept), 1.0),
+            true,
+            1.0,
+        ),
+        shown(
+            d(Some("network"), Some("security"), Some(Correct), 1.0),
+            false,
+            0.0,
+        ),
+        // Not accepted or corrected: no part in the display counts.
+        shown(
+            d(Some("network"), Some("network"), Some(Fill), 1.0),
+            true,
+            0.5,
+        ),
+        // Accepted with no draw kept: counted as before, in no display entry.
+        d(Some("network"), Some("network"), Some(Accept), 1.0),
+    ];
+    let team = &usage(&records)["team"];
+    assert_eq!(team.accepted, 4);
+    assert_eq!(
+        team.promise_display,
+        vec![
+            PromiseDisplay {
+                probability: 0.0,
+                hidden_corrected: 1,
+                ..PromiseDisplay::default()
+            },
+            PromiseDisplay {
+                probability: 0.5,
+                shown_accepted: 1,
+                hidden_accepted: 1,
+                hidden_corrected: 1,
+                ..PromiseDisplay::default()
+            },
+            PromiseDisplay {
+                probability: 1.0,
+                shown_accepted: 1,
+                ..PromiseDisplay::default()
+            },
+        ]
+    );
+}

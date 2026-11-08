@@ -7,6 +7,25 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ## Unreleased
 
+### Added
+
+- **`Usage.Count` tells a hidden first settlement from a later audit, and counts the answers by whether their promise
+  was displayed.** `AttributeUsage.FirstChecks` and `FirstChecksRight` count, once each and unweighted, the checks that
+  were a decision's first settlement — the answer kept from view when it was first settled — so the precision with no
+  pull from seeing the answer reads `FirstChecksRealized`. `Audits` counts the checks that came after the first
+  settlement of the same id (an audit of the settler), and `FirstChecksWithoutAnswer` the first checks whose record kept
+  no answer, which cannot be told from a decision with no answer and should stay 0. `PromiseDisplay` counts the answers
+  accepted or corrected by their `PromiseShown` draw — one entry per draw probability, with and without the promise
+  displayed. A decision's first settlement is the earliest `SettledAt` among the given records of its id, so a host that
+  counts by period passes the records of the decisions first settled in it, their later audits included. The existing
+  counts are unchanged.
+
+### Breaking
+
+- `AttributeUsage` takes five more constructor parameters (`FirstChecks`, `FirstChecksRight`,
+  `FirstChecksWithoutAnswer`, `Audits`, `PromiseDisplay`). Code that only reads it from `Usage.Count` is unaffected; code
+  that constructs one passes the new values.
+
 ### Documentation
 
 - The README says where the numbers live when someone else has to see how the automated answers did — the

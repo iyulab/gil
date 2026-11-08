@@ -10,6 +10,14 @@
 //! answer in view and no value) say nothing about whether the answer was right and are left out of the precision, as is
 //! a value settled over a suggestion that was not this decider's (kept or changed — counted on their own, answered or
 //! not, so a host sees how its other suggestions fare in the same form).
+//!
+//! Two further splits say what the counts alone cannot. A check that was a decision's **first** settlement — the answer
+//! kept from view when the decision was first settled — is told from one that came **after** it, an audit of the settler
+//! (the same id settled again, later): the first kind measures the answers with no pull from seeing them, the second the
+//! people. And an answer shown with its promise drawn at random to be displayed or not is counted by that draw, so the
+//! acceptance with the promise in view can be set against the acceptance without it. Which settlement was first is read
+//! from the records given — a host that counts by period passes all the records of a decision whose first settlement
+//! falls in that period, its later audits included.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -54,6 +62,36 @@ pub struct AttributeUsage {
     /// probability.
     pub right_weight: f64,
     pub judged_weight: f64,
+    /// Answered and first settled as a check: the answer kept from view when the decision was first settled. Counted
+    /// once each, not weighted — the share right among them is the precision with no pull from seeing the answer.
+    pub first_checks: usize,
+    /// Of the first checks, those that agreed with the answer.
+    pub first_checks_right: usize,
+    /// First settled as a check with no answer kept on the record — such a decision cannot be told from one this
+    /// decider had no answer for, so it is in no other count but this one; it should stay 0.
+    pub first_checks_without_answer: usize,
+    /// Checks that came after the decision's first settlement (the same id settled again, later): audits of the settler,
+    /// counted here whatever else they keep.
+    pub audits: usize,
+    /// The answers accepted or corrected with their promise drawn at random to be displayed or not, one entry per draw
+    /// probability, lowest first.
+    pub promise_display: Vec<PromiseDisplay>,
+}
+
+/// How the answers shown under one promise-display draw were settled, with the promise displayed and without it.
+#[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PromiseDisplay {
+    /// The probability the promise was drawn to be displayed with.
+    pub probability: f64,
+    /// Accepted with the promise displayed.
+    pub shown_accepted: usize,
+    /// Corrected with the promise displayed.
+    pub shown_corrected: usize,
+    /// Accepted with the promise not displayed.
+    pub hidden_accepted: usize,
+    /// Corrected with the promise not displayed.
+    pub hidden_corrected: usize,
 }
 
 impl AttributeUsage {
@@ -77,16 +115,56 @@ impl AttributeUsage {
     pub fn promise(&self) -> Option<f64> {
         (self.promised > 0).then(|| self.promise_sum / self.promised as f64)
     }
+
+    /// The share right among the first checks; `None` when there are none.
+    pub fn first_checks_realized(&self) -> Option<f64> {
+        (self.first_checks > 0).then(|| self.first_checks_right as f64 / self.first_checks as f64)
+    }
+
+    fn display_at(&mut self, probability: f64) -> &mut PromiseDisplay {
+        let at = match self
+            .promise_display
+            .binary_search_by(|d| d.probability.total_cmp(&probability))
+        {
+            Ok(at) => at,
+            Err(at) => {
+                self.promise_display.insert(
+                    at,
+                    PromiseDisplay {
+                        probability,
+                        ..PromiseDisplay::default()
+                    },
+                );
+                at
+            }
+        };
+        &mut self.promise_display[at]
+    }
 }
 
 /// The counts of the decisions `records` settled, by attribute. A decided attribute counts once per record: settled,
 /// or turned down with this decider's answer in view (a record that names no settlement for it, or `Reject`). It was answered when its record names the layer the answer came
-/// from, or was settled as accepted or corrected; a check is judged against the suggestion the record keeps.
+/// from, or was settled as accepted or corrected; a check is judged against the suggestion the record keeps. A
+/// decision's first settlement is the earliest `settled_at` among the records of its id that settle the attribute
+/// (the earlier given, when two tie).
 pub fn usage<'a>(
     records: impl IntoIterator<Item = &'a Record>,
 ) -> BTreeMap<String, AttributeUsage> {
+    let records: Vec<&Record> = records.into_iter().collect();
+    let mut first: BTreeMap<(&str, &str), (i64, usize)> = BTreeMap::new();
+    for (at, record) in records.iter().enumerate() {
+        for attribute in record.settlements.keys() {
+            let key = (record.id.as_str(), attribute.as_str());
+            let here = (record.settled_at, at);
+            first
+                .entry(key)
+                .and_modify(|earliest| *earliest = (*earliest).min(here))
+                .or_insert(here);
+        }
+    }
+
     let mut out: BTreeMap<String, AttributeUsage> = BTreeMap::new();
-    for record in records {
+    for (at, record) in records.iter().enumerate() {
         let attributes: BTreeSet<&String> = record
             .settlements
             .keys()
@@ -96,6 +174,14 @@ pub fn usage<'a>(
             let kind = record.settlements.get(attribute).copied();
             let u = out.entry(attribute.clone()).or_default();
             u.decisions += 1;
+            if kind == Some(SettlementKind::Check) {
+                let is_first = first[&(record.id.as_str(), attribute.as_str())].1 == at;
+                if !is_first {
+                    u.audits += 1;
+                } else if !record.suggested.contains_key(attribute) {
+                    u.first_checks_without_answer += 1;
+                }
+            }
             match kind {
                 Some(SettlementKind::AcceptOther) => u.accepted_other += 1,
                 Some(SettlementKind::CorrectOther) => u.corrected_other += 1,
@@ -121,19 +207,44 @@ pub fn usage<'a>(
                     u.accepted += 1;
                     u.right_weight += 1.0;
                     u.judged_weight += 1.0;
+                    if let Some(display) = record.promise_shown.get(attribute) {
+                        let d = u.display_at(display.probability);
+                        if display.shown {
+                            d.shown_accepted += 1;
+                        } else {
+                            d.hidden_accepted += 1;
+                        }
+                    }
                 }
                 Some(SettlementKind::Correct) => {
                     u.corrected += 1;
                     u.judged_weight += 1.0;
+                    if let Some(display) = record.promise_shown.get(attribute) {
+                        let d = u.display_at(display.probability);
+                        if display.shown {
+                            d.shown_corrected += 1;
+                        } else {
+                            d.hidden_corrected += 1;
+                        }
+                    }
                 }
                 Some(SettlementKind::Check) => {
                     let suggested = record.suggested.get(attribute);
+                    let right = suggested.is_some() && record.values.get(attribute) == suggested;
+                    if suggested.is_some()
+                        && first[&(record.id.as_str(), attribute.as_str())].1 == at
+                    {
+                        u.first_checks += 1;
+                        if right {
+                            u.first_checks_right += 1;
+                        }
+                    }
                     if let Some(weight) = record.check_weight(attribute)
                         && suggested.is_some()
                     {
                         u.checked += 1;
                         u.judged_weight += weight;
-                        if record.values.get(attribute) == suggested {
+                        if right {
                             u.checked_right += 1;
                             u.right_weight += weight;
                         }

@@ -89,7 +89,10 @@ last seven entries yet (`replay::scored_decisions` reads `suggested`, `sources` 
 - **`suggested`, `sources` and `promises`** — whether the promise held for the answers people actually saw, answer by
   answer and layer by layer, rather than for the answers a replay would have given; the usage counts (`Usage.Count`,
   `gil.usage`, `usage`) read them from the saved records. With `Check` settlements they also say how far a suggestion
-  in view moves what people settle.
+  in view moves what people settle: the usage counts keep apart a check that was the decision's first settlement (the
+  answer kept from view — `first_checks`) and one that came after it on the same id (an audit of the settler —
+  `audits`). Which came first is read from `settled_at` among the records given, so counting by period means passing
+  the records of the decisions first settled in it, their later audits included.
 - **`scores`** — how sure a judge outside Gil was of the answer a person saw, so that a threshold and a promise for that
   judge can be chosen from the saved records alone. `replay::scored_decisions` turns the records settled with the
   judge's answer in view into the decisions `select_score_threshold` takes; a case settled as `Accept`, `Correct` or
@@ -110,7 +113,9 @@ last seven entries yet (`replay::scored_decisions` reads `suggested`, `sources` 
   with "right 9 times in 10" beside it may be kept more readily than the same answer shown alone, and the promise then
   looks kept partly because it was displayed. Drawing at random, with a known probability fixed before the draw,
   whether each promise is displayed lets the two groups be compared on the same attribute; recording only the outcome
-  could not tell a random draw from an application that displays promises on some screens and not others.
+  could not tell a random draw from an application that displays promises on some screens and not others. The usage
+  counts give the accepted and corrected answers with and without the promise displayed, per draw probability
+  (`promise_display`).
 - **`form_version`** — which records were settled on which version of a form. Give it a new value when a revision
   makes a value mean something else: a code renumbered, two codes merged into one, one split into several. Do not
   change it when only a label, a description or the order of the form changes. Records settled before a revision that

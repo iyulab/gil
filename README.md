@@ -221,6 +221,13 @@ In the words operations reports use, for an attribute's `AttributeUsage`: the au
 people saw, which they lean toward; a check counts answers no one saw at their weight, so `Realized` is the one to put
 beside `Promise`.
 
+To see whether showing the answer pulls people toward it, set `FirstChecksRealized` — the answers kept from view when
+the decision was first settled, unweighted — beside the share of shown answers accepted; `Audits` are later checks of
+the settler and are kept apart. Where the promise beside an answer is shown by a random draw (`PromiseShown`),
+`PromiseDisplay` gives the accepted and corrected answers with and without it, per draw probability. Counted by period,
+pass the records of the decisions first settled in that period, their later audits included — which settlement came
+first is read from the records given.
+
 The same quantities go by other names elsewhere. Answering only above a threshold is selective prediction, whose
 coverage is the automation rate and whose selective risk is the error rate of the answers. Record linkage and
 automated coding in official statistics call the answered share the match rate and send the rest to clerical review
