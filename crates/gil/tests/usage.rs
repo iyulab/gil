@@ -212,6 +212,27 @@ fn a_first_check_is_told_from_a_later_audit_by_when_the_id_was_first_settled() {
 }
 
 #[test]
+fn a_first_check_that_keeps_the_answer_without_its_layer_is_answered() {
+    // The answer kept from view is the check's `suggested`; every reader judges the check against it, so a record
+    // that kept it and not the layer is an answered decision and a first check, as an audit of it is judged.
+    let mut kept = d(Some("network"), Some("network"), Some(Check), 0.1);
+    kept.sources.clear();
+    kept.promises.clear();
+    let team = &usage([&kept])["team"];
+    assert_eq!((team.decisions, team.answered, team.abstained()), (1, 1, 0));
+    assert_eq!(
+        (
+            team.first_checks,
+            team.first_checks_right,
+            team.first_checks_without_answer
+        ),
+        (1, 1, 0)
+    );
+    assert_eq!((team.checked, team.checked_right), (1, 1));
+    assert_eq!(team.realized(), Some(1.0));
+}
+
+#[test]
 fn an_audit_that_keeps_the_answer_is_not_another_decision_but_judges_it() {
     let records = [
         at(

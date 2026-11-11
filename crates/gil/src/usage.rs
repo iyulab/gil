@@ -145,7 +145,7 @@ impl AttributeUsage {
 
 /// The counts of the decisions `records` settled, by attribute. A decided attribute counts once per record: settled,
 /// or turned down with this decider's answer in view (a record that names no settlement for it, or `Reject`). It was answered when its record names the layer the answer came
-/// from, or was settled as accepted or corrected; a check is judged against the suggestion the record keeps. A
+/// from, or was settled as accepted or corrected, or as a check that keeps the answer; a check is judged against the suggestion the record keeps. A
 /// decision's first settlement is the earliest `settled_at` among the records of its id that settle the attribute
 /// (the earlier given, when two tie).
 pub fn usage<'a>(
@@ -202,8 +202,12 @@ pub fn usage<'a>(
                 Some(SettlementKind::CorrectOther) => u.corrected_other += 1,
                 _ => {}
             }
+            // A check keeps the answer in `suggested`, which is what every other reader judges it against (an audit
+            // above, the threshold replays, a keeper's watch), so it was answered with or without its layer.
             let answered = record.sources.contains_key(attribute)
-                || matches!(kind, Some(SettlementKind::Accept | SettlementKind::Correct));
+                || matches!(kind, Some(SettlementKind::Accept | SettlementKind::Correct))
+                || (kind == Some(SettlementKind::Check)
+                    && record.suggested.contains_key(attribute));
             if !answered {
                 if kind == Some(SettlementKind::Enter) {
                     u.entered += 1;

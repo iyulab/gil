@@ -6,6 +6,16 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ## Unreleased
 
+### Fixed
+
+- **`usage` counts a first check that kept the answer but not its layer as answered.** A first check whose record
+  kept the answer (`suggested`) and not the layer (`sources`) was counted as a decision the decider abstained on: it
+  was left out of `answered`, `first_checks` and the precision the checks give, and out of `first_checks_without_answer`
+  too, since an answer was kept. An audit of the same record, a threshold replay and a keeper's watch all judge a check
+  against `suggested` alone; now `usage` does as well, so such a decision is answered and is a first check, and
+  `first_checks_without_answer` counts only the first checks that kept no answer. Records that keep the layer, as the
+  engine's do, are counted as before.
+
 ### Changed
 
 - **Settling the latest record again no longer refolds its key counts.** Settling a record again, or removing it,
