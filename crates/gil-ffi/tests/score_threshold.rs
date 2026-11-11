@@ -70,6 +70,31 @@ fn scores_and_outcomes_in_give_a_threshold_and_a_promise_out() {
 }
 
 #[test]
+fn the_pooled_rule_answers_more_and_least_cost_is_refused() {
+    let base = json!({"target_precision": 0.9, "minimum_answered": 30});
+    let (status, text) = run(&decisions(), &base);
+    assert_eq!(status, GIL_OK, "{text}");
+    let every: Value = serde_json::from_str(&text).unwrap();
+    let pooled_options = json!({"target_precision": 0.9, "minimum_answered": 30, "rule": "pooled"});
+    let (status, text) = run(&decisions(), &pooled_options);
+    assert_eq!(status, GIL_OK, "{text}");
+    let pooled: Value = serde_json::from_str(&text).unwrap();
+    assert!(
+        pooled["chosen"]["answer_rate"].as_f64().unwrap()
+            > every["chosen"]["answer_rate"].as_f64().unwrap()
+    );
+    assert!(
+        pooled["chosen"]["threshold"].as_f64().unwrap()
+            < every["chosen"]["threshold"].as_f64().unwrap()
+    );
+    let (status, _) = run(
+        &decisions(),
+        &json!({"target_precision": 0.9, "minimum_answered": 30, "rule": "least_cost"}),
+    );
+    assert_eq!(status, GIL_INVALID_INPUT);
+}
+
+#[test]
 fn a_decision_with_no_score_is_asked_and_not_answered() {
     let mut all = decisions();
     all.as_array_mut()

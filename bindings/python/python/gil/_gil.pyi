@@ -95,9 +95,12 @@ def select_coarse_json(
     """The attribute's coarse level thresholds as JSON and, when `decisions` is true, the decision records as JSON lines."""
 
 def select_score_threshold_json(
-    decisions_json: str, target_precision: float, minimum_answered: int
+    decisions_json: str,
+    target_precision: float,
+    minimum_answered: int,
+    rule: str = "every_band",
 ) -> str:
-    """Experimental. The replay a judge outside Gil's scores and the settled outcomes give, as JSON."""
+    """Experimental. The replay a judge outside Gil's scores and the settled outcomes give, as JSON; `rule` is `every_band` or `pooled`."""
 
 def scored_decisions_json(records: Records, attribute: str) -> str:
     """Experimental. The decisions a judge outside Gil made about the attribute, read from the records, as JSON."""

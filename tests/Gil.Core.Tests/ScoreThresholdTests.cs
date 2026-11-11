@@ -18,6 +18,21 @@ public sealed class ScoreThresholdTests
     }
 
     [Fact]
+    public void ThePooledRuleAnswersMoreThanEveryBandAndLeastCostIsRefused()
+    {
+        var decisions = Calibrated(6_000, 3);
+        var every = Replay.SelectScoreThreshold(decisions, new SelectionOptions(0.9, 30)).Chosen!;
+        var pooled = Replay.SelectScoreThreshold(
+            decisions, new SelectionOptions(0.9, 30) { Rule = ThresholdRule.Pooled }).Chosen!;
+
+        pooled.Threshold.Should().BeLessThan(every.Threshold);
+        pooled.AnswerRate.Should().BeGreaterThan(every.AnswerRate);
+        var refuse = () => Replay.SelectScoreThreshold(
+            decisions, new SelectionOptions(0.9, 30) { Rule = ThresholdRule.LeastCost });
+        refuse.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
     public void ScoresAndOutcomesGiveAThresholdAndAPromise()
     {
         var replay = Replay.SelectScoreThreshold(Calibrated(4_000, 1), new SelectionOptions(0.8, 30));

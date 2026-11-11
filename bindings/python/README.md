@@ -475,10 +475,10 @@ sample. Read across: the target precision is the error tolerance those fields st
 their cutoff, and the replay of settled records is their validation sample.
 
 A judge outside Gil can have its threshold chosen the same way, from nothing but its scores and what people settled
-(experimental): `gil.select_score_threshold(decisions, target_precision, minimum_answered)` takes dicts with `id`,
+(experimental): `gil.select_score_threshold(decisions, target_precision, minimum_answered, rule="every_band")` takes dicts with `id`,
 `settled_at`, `score` (left out when the judge gave no candidate), `right` and an optional `weight`, and returns the
 replay a memory layer gets — admit the judge's answers as trusted at or above `chosen["threshold"]` and show
-`chosen["promise"]` beside them. The scores must be ones the judge gave cases it did not learn from (above). A saved record can keep the judge's score beside the answer a person saw (a `scores`
+`chosen["promise"]` beside them. `rule="pooled"` keeps the target for the answers taken together (a promise about the answers on average, not about every band of them) and answers more often than the default `"every_band"`. The scores must be ones the judge gave cases it did not learn from (above). A saved record can keep the judge's score beside the answer a person saw (a `scores`
 entry, read where `sources` is `"Model"`), and `gil.scored_decisions(records, attribute)` reads such records into
 the decisions.
 

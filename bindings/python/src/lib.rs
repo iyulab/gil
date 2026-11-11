@@ -16,7 +16,7 @@ use gil::open_record;
 use gil::replay::{
     Choice, LayerOptions, LayerThresholds, ScoredDecision, ThresholdRule, scored_decisions,
     select_coarse_with, select_key_concentrations, select_key_fields, select_layers,
-    select_score_threshold,
+    select_score_threshold_by,
 };
 use gil::schema::{Record, Schema, Settlement, SettlementKind};
 use gil::tuning::Tuning;
@@ -245,13 +245,22 @@ fn select_coarse_json(
 /// Experimental. Chooses the threshold of a judge outside Gil from its scores and what people settled, as
 /// `select_score_threshold` does. `decisions_json` is a JSON array of `{"id", "settled_at", "score", "right", "weight"}`
 /// (`score` left out or `null` when the judge gave no candidate; `right` false and `weight` 1 when left out). Returns the
-/// replay as JSON.
+/// replay as JSON. `rule` is `every_band` (the default) or `pooled`.
 #[pyfunction]
+#[pyo3(signature = (decisions_json, target_precision, minimum_answered, rule="every_band"))]
 fn select_score_threshold_json(
     decisions_json: &str,
     target_precision: f64,
     minimum_answered: usize,
+    rule: &str,
 ) -> PyResult<String> {
+    let rule = threshold_rule(rule)?;
+    if rule == ThresholdRule::LeastCost {
+        return Err(invalid(
+            "the rule least_cost is not available for a judge's scores (every_band or pooled)"
+                .to_owned(),
+        ));
+    }
     let decisions: Vec<ScoredDecision> = serde_json::from_str(decisions_json)
         .map_err(|e| invalid(format!("the decisions do not read: {e}")))?;
     let choice = Choice {
@@ -260,7 +269,7 @@ fn select_score_threshold_json(
         counting: None,
         uncounted_batches: &[],
     };
-    let replay = guarded(|| select_score_threshold(&decisions, choice))?;
+    let replay = guarded(|| select_score_threshold_by(&decisions, choice, rule))?;
     Ok(to_json(&replay))
 }
 

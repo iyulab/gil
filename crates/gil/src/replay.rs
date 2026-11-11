@@ -2846,6 +2846,28 @@ impl ScoredDecision {
 /// When `choice.target_precision` is outside (0, 1], `choice.minimum_answered` is 0, a score is not finite, or a weight
 /// is not positive and finite.
 pub fn select_score_threshold(decisions: &[ScoredDecision], choice: Choice) -> ThresholdReplay {
+    select_score_threshold_by(decisions, choice, ThresholdRule::EveryBand)
+}
+
+/// Experimental. [`select_score_threshold`] under a chosen [`ThresholdRule`]: [`ThresholdRule::EveryBand`] is what
+/// [`select_score_threshold`] does; [`ThresholdRule::Pooled`] chooses the lowest threshold at which the answers taken
+/// together — of the latest [`POOLED_RECENT_LOOKUPS`] lookups, reaching further back while they hold fewer than
+/// [`POOLED_RECENT_ANSWERS`] answers — keep the target precision at the low end of their Wilson score interval at
+/// [`POOLED_STANDARD_ERRORS`] standard errors, on at least `choice.minimum_answered` independent answers. That is a promise
+/// about the answers on average, not about every band of them, so it answers more often than `EveryBand`; the
+/// threshold's `precision`, `answer_rate` and `promise` are reported as for any chosen threshold.
+///
+/// # Panics
+/// As [`select_score_threshold`], and when `rule` is [`ThresholdRule::LeastCost`], which a judge's score does not support.
+pub fn select_score_threshold_by(
+    decisions: &[ScoredDecision],
+    choice: Choice,
+    rule: ThresholdRule,
+) -> ThresholdReplay {
+    assert!(
+        rule != ThresholdRule::LeastCost,
+        "ThresholdRule::LeastCost is not available for a judge's scores"
+    );
     choice.check();
     for decision in decisions {
         assert!(
@@ -2881,14 +2903,70 @@ pub fn select_score_threshold(decisions: &[ScoredDecision], choice: Choice) -> T
         }
     }
 
-    fit_recent(
+    let replay = fit_recent(
         &answers,
         ordered.len(),
         lookup_weight,
         ordered.len(),
         choice.target_precision,
         choice.minimum_answered,
+    );
+    if rule != ThresholdRule::Pooled {
+        return replay;
+    }
+
+    let chosen = pooled_threshold(
+        &answers,
+        ordered.len(),
+        choice.target_precision,
+        choice.minimum_answered,
     )
+    .and_then(|threshold| {
+        at(
+            &answers,
+            ordered.len(),
+            lookup_weight,
+            ordered.len(),
+            threshold,
+            choice.minimum_answered,
+        )
+    });
+    ThresholdReplay { chosen, ..replay }
+}
+
+/// [`ThresholdRule::Pooled`] for one score: of the answers among the latest [`POOLED_RECENT_LOOKUPS`] lookups, reaching
+/// back while they are fewer than [`POOLED_RECENT_ANSWERS`], the lowest score at which the answers at or above it hold the
+/// target at [`POOLED_STANDARD_ERRORS`] standard errors, on at least the minimum number of independent answers. `None`
+/// when no score does.
+fn pooled_threshold(
+    answers: &[Answer],
+    lookups: usize,
+    target_precision: f64,
+    minimum_answered: usize,
+) -> Option<f64> {
+    let mut first = lookups.saturating_sub(POOLED_RECENT_LOOKUPS) + 1;
+    if first > 1 && answers.iter().filter(|a| a.order >= first).count() < POOLED_RECENT_ANSWERS {
+        first = match answers.len().checked_sub(POOLED_RECENT_ANSWERS) {
+            Some(at) => first.min(answers[at].order),
+            None => 1,
+        };
+    }
+
+    let mut window: Vec<&Answer> = answers.iter().filter(|a| a.order >= first).collect();
+    window.sort_by(|a, b| b.score.total_cmp(&a.score));
+    let (mut weight, mut correct, mut squares) = (0.0_f64, 0.0_f64, 0.0_f64);
+    let mut best = None;
+    for (i, a) in window.iter().enumerate() {
+        weight += a.weight;
+        correct += if a.correct { a.weight } else { 0.0 };
+        squares += a.weight * a.weight;
+        let tie_ends = i == window.len() - 1 || window[i + 1].score != a.score;
+        if tie_ends && holds(weight, correct, squares, target_precision, minimum_answered) {
+            best = Some(a.score);
+        }
+    }
+
+    best
 }
 
 /// Experimental. The decisions a judge outside Gil made about `attribute`, read from settled records for

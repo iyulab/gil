@@ -35,6 +35,20 @@ def test_scores_and_outcomes_give_a_threshold_and_a_promise() -> None:
     assert chosen["lookups"] == 4_000
 
 
+def test_the_pooled_rule_answers_more_than_every_band_and_least_cost_is_refused() -> None:
+    base = decisions(6_000, 3)
+    every = gil.select_score_threshold(base, 0.9, 30)["chosen"]
+    pooled = gil.select_score_threshold(base, 0.9, 30, rule="pooled")["chosen"]
+    assert every is not None and pooled is not None
+    assert pooled["threshold"] < every["threshold"]
+    assert pooled["answer_rate"] > every["answer_rate"]
+    assert gil.select_score_threshold(base, 0.9, 30, rule="every_band") == gil.select_score_threshold(base, 0.9, 30)
+    with pytest.raises(ValueError, match="least_cost"):
+        gil.select_score_threshold(base, 0.9, 30, rule="least_cost")
+    with pytest.raises(ValueError, match="unknown threshold rule"):
+        gil.select_score_threshold(base, 0.9, 30, rule="nope")
+
+
 def test_a_decision_with_no_score_is_asked_and_not_answered() -> None:
     base = decisions(3_000, 2)
     plain = gil.select_score_threshold(base, 0.8, 30)["chosen"]
