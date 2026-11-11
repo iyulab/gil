@@ -278,6 +278,22 @@ def test_usage_tells_first_checks_from_audits_and_counts_promise_display() -> No
     ]
 
 
+def test_usage_counts_a_first_check_that_kept_the_answer_without_its_layer_as_answered() -> None:
+    counts = gil.usage(
+        gil.records(
+            [
+                {"id": "k1", "settled_at": 1, "values": {"team": "network"}, "settlements": {"team": "Check"},
+                 "probabilities": {"team": 0.1}, "suggested": {"team": "network"}},
+                {"id": "k2", "settled_at": 2, "values": {"team": "network"}, "settlements": {"team": "Check"},
+                 "probabilities": {"team": 0.1}},
+            ]
+        )
+    )
+    team = counts["team"]
+    assert (team["decisions"], team["answered"]) == (2, 1)
+    assert (team["first_checks"], team["first_checks_right"], team["first_checks_without_answer"]) == (1, 1, 1)
+
+
 def test_a_reopened_record_keeps_what_was_in_view_for_usage() -> None:
     decider = gil.Decider(SCHEMA, settled())
     record = gil.OpenRecord(SCHEMA, "t9", 9 * MINUTE)
