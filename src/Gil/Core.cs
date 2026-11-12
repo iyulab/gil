@@ -430,8 +430,9 @@ public sealed class OpenRecord : IDisposable
     /// goes on the record: <paramref name="shown"/>, the decider's answer, when it answered — its first candidate and
     /// its layer — with <paramref name="promise"/>, the precision promised for that layer
     /// (<see cref="Tuning.PromiseOf"/>); or <paramref name="suggested"/>, a value that was not the decider's.</summary>
-    /// <exception cref="ArgumentException">A part the kind needs is missing, the attribute is not decided or takes the
-    /// other kind of value, or the promise is not in [0, 1].</exception>
+    /// <exception cref="ArgumentException">A part the kind needs is missing — for <see cref="SettlementKind.Check"/>,
+    /// the <paramref name="probability"/> it was drawn with, fixed before the draw —, the attribute is not decided or takes
+    /// the other kind of value, or the promise is not in [0, 1].</exception>
     public IReadOnlyList<Answer> Settle(
         Decider decider,
         string attribute,
@@ -439,7 +440,7 @@ public sealed class OpenRecord : IDisposable
         DateTimeOffset now,
         string? value = null,
         IReadOnlyList<string>? values = null,
-        double probability = 1.0,
+        double? probability = null,
         Answer? shown = null,
         double? promise = null,
         string? suggested = null) =>
@@ -452,7 +453,7 @@ public sealed class OpenRecord : IDisposable
         DateTimeOffset now,
         string? value,
         IReadOnlyList<string>? values,
-        double probability,
+        double? probability,
         Answer? shown,
         double? promise,
         string? suggested)
@@ -496,7 +497,7 @@ public sealed class OpenRecord : IDisposable
                 return Native.Result(
                     Native.OpenRecordSettle(
                         Handle, decider.Handle, name.At(a), kindName.At(k), Time.Ticks(now), text.At(v), s,
-                        (nuint)(values?.Count ?? 0), probability, inView.At(iv), inViewSource.At(ivs), inViewPromise,
+                        (nuint)(values?.Count ?? 0), probability ?? double.NaN, inView.At(iv), inViewSource.At(ivs), inViewPromise,
                         &length),
                     changing: true);
             }

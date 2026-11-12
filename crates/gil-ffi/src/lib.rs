@@ -732,7 +732,7 @@ pub unsafe extern "C" fn gil_open_record_observe(
 /// Settles a decided attribute at `now` (ticks): `kind` by name (`Accept`, `Correct`, `Reject`, `Revert`, `Restore`,
 /// `Set`, `Enter`, `Fill`, `Check`, `AcceptOther`, `CorrectOther`), with the parts it needs — `value` for the kinds that
 /// settle one (null text when none), `values` for `Set` (and for `Restore` of an attribute that takes several, chosen by
-/// giving `values` non-null), and `probability` for `Check` (any other kind ignores it). `in_view` is the value
+/// giving `values` non-null), and `probability` for `Check` (NaN when none — a `Check` without it is refused; any other kind ignores it). `in_view` is the value
 /// suggested when it was settled (null text when nothing was in view), `in_view_source` the layer of this decider's
 /// answer it was, by name (`KeyMemory`, `SimilarRecord`, `Model`; null text for a suggestion that was not this
 /// decider's) and `in_view_promise` the precision promised for it (NaN when none) — what the record keeps. Puts the record into
@@ -783,8 +783,13 @@ pub unsafe extern "C" fn gil_open_record_settle(
                     .collect::<Result<_, _>>()?,
             )
         };
-        let mut settlement =
-            Settlement::new(kind, value, values.as_deref(), Some(probability)).map_err(input)?;
+        let mut settlement = Settlement::new(
+            kind,
+            value,
+            values.as_deref(),
+            (!probability.is_nan()).then_some(probability),
+        )
+        .map_err(input)?;
         if let Some(suggested) = unsafe { optional(in_view, "in_view") }? {
             let source = unsafe { optional(in_view_source, "in_view_source") }?
                 .map(|name| {

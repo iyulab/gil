@@ -7,6 +7,15 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ## Unreleased
 
+### Breaking
+
+- **`OpenRecord.Settle` no longer defaults the probability of a check to 1.** `probability` is now `double?` and a
+  `SettlementKind.Check` without it is refused with an `ArgumentException`, as the Rust core and the Python binding
+  already did. The default wrote a check that was certain to be drawn into the record without a word, and a check
+  counts as one over its probability, so the number belongs to the draw, which fixes it before the draw. **To migrate**:
+  pass the probability the check was drawn with (`probability: 0.05`); a call that passes none for any other kind of
+  settlement is unchanged.
+
 ### Changed
 
 - **Settling the latest record again no longer refolds its key counts.** Settling a record again, or removing it,

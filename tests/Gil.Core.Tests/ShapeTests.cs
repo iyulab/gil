@@ -127,6 +127,31 @@ public sealed class ShapeTests
     }
 
     [Fact]
+    public void A_check_without_the_probability_it_was_drawn_with_is_refused_like_in_the_other_bindings()
+    {
+        using var schema = Ticket();
+        using var decider = new Decider();
+        using (var history = SettledRecords.From(Enumerable.Range(1, 4).Select(i => new Record($"h{i}", DateTimeOffset.UnixEpoch)
+        {
+            Values = new Dictionary<string, string> { ["channel"] = "phone", ["team"] = "network" },
+        })))
+        {
+            decider.Put(schema, history);
+        }
+
+        using var ticket = OpenRecord.Open(schema, "t-1", DateTimeOffset.UnixEpoch);
+        ticket.Observe(decider, "channel", "phone");
+
+        // The probability is fixed before the draw; a check without it is not a certain check.
+        ticket.Invoking(t => t.Settle(decider, "team", SettlementKind.Check, DateTimeOffset.UnixEpoch, value: "network"))
+            .Should().Throw<ArgumentException>().WithMessage("*probability*");
+        ticket.Snapshot().Settlements.Should().NotContainKey("team");
+
+        ticket.Settle(decider, "team", SettlementKind.Check, DateTimeOffset.UnixEpoch, value: "network", probability: 0.05);
+        ticket.Snapshot().Probabilities.Should().Equal(new Dictionary<string, double> { ["team"] = 0.05 });
+    }
+
+    [Fact]
     public void A_reopened_record_carries_back_what_the_host_kept_on_it()
     {
         using var schema = Ticket();
