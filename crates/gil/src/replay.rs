@@ -130,19 +130,27 @@ impl<'a> Choice<'a> {
 }
 
 impl Choice<'_> {
+    /// Whether a threshold can be chosen for this: why not, when `target_precision` is outside (0, 1] or
+    /// `minimum_answered` is 0. The selections panic on what this refuses; a host that takes the numbers from its
+    /// configuration can ask first.
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if !(self.target_precision > 0.0 && self.target_precision <= 1.0) {
+            return Err("target_precision must be in (0, 1]");
+        }
+        if self.minimum_answered < 1 {
+            return Err("minimum_answered must be at least 1");
+        }
+        Ok(())
+    }
+
     /// Asserts that a threshold can be chosen for this.
     ///
     /// # Panics
-    /// When `target_precision` is outside (0, 1] or `minimum_answered` is 0.
+    /// When [`Choice::validate`] refuses it.
     pub(crate) fn check(&self) {
-        assert!(
-            self.target_precision > 0.0 && self.target_precision <= 1.0,
-            "target_precision must be in (0, 1]"
-        );
-        assert!(
-            self.minimum_answered >= 1,
-            "minimum_answered must be at least 1"
-        );
+        if let Err(reason) = self.validate() {
+            panic!("{reason}");
+        }
     }
 }
 
@@ -2859,6 +2867,18 @@ fn one_decision() -> f64 {
 }
 
 impl ScoredDecision {
+    /// Whether the selection can read this decision: why not, when its score is not finite or its weight is not
+    /// positive and finite. [`select_score_threshold`] panics on what this refuses.
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if !self.score.is_none_or(f64::is_finite) {
+            return Err("a score must be finite");
+        }
+        if !(self.weight > 0.0 && self.weight.is_finite()) {
+            return Err("a weight must be positive and finite");
+        }
+        Ok(())
+    }
+
     /// A decision that counts once.
     pub fn new(id: impl Into<String>, settled_at: i64, score: Option<f64>, right: bool) -> Self {
         Self {
@@ -2896,14 +2916,9 @@ impl ScoredDecision {
 pub fn select_score_threshold(decisions: &[ScoredDecision], choice: Choice) -> ThresholdReplay {
     choice.check();
     for decision in decisions {
-        assert!(
-            decision.score.is_none_or(f64::is_finite),
-            "a score must be finite"
-        );
-        assert!(
-            decision.weight > 0.0 && decision.weight.is_finite(),
-            "a weight must be positive and finite"
-        );
+        if let Err(reason) = decision.validate() {
+            panic!("{reason}");
+        }
     }
 
     let mut ordered: Vec<&ScoredDecision> = decisions.iter().collect();

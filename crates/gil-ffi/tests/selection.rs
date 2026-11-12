@@ -364,9 +364,14 @@ fn options_that_do_not_read_are_refused_and_a_broken_contract_is_a_status() {
     let extra = r#"{"target_precision":0.8,"minimum_answered":10,"precision":1}"#;
     assert_eq!(select("team", extra, &mut len), GIL_INVALID_INPUT);
 
+    // Options that read but are out of range are input too: the host took them from its configuration, and the call
+    // changes nothing.
     let out_of_range = r#"{"target_precision":1.5,"minimum_answered":10}"#;
-    assert_eq!(select("team", out_of_range, &mut len), GIL_PANIC);
+    assert_eq!(select("team", out_of_range, &mut len), GIL_INVALID_INPUT);
     assert_eq!(last_error(), "target_precision must be in (0, 1]");
+    let none = r#"{"target_precision":0.8,"minimum_answered":0}"#;
+    assert_eq!(select("team", none, &mut len), GIL_INVALID_INPUT);
+    assert_eq!(last_error(), "minimum_answered must be at least 1");
     let observed = r#"{"target_precision":0.8,"minimum_answered":10}"#;
     assert_eq!(select("product", observed, &mut len), GIL_PANIC);
     assert_eq!(last_error(), "'product' is not a decided attribute");

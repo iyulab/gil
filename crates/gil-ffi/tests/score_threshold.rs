@@ -189,3 +189,35 @@ fn records_that_keep_a_judges_score_give_the_decisions_the_threshold_takes() {
     );
     assert_eq!(status, GIL_OK);
 }
+
+#[test]
+fn a_weight_that_is_not_positive_and_options_out_of_range_are_refused_as_input() {
+    // The weight and the options are data a host passes in; the call reads them and changes nothing.
+    for weight in ["0", "-1"] {
+        let text = format!(
+            r#"[{{"id": "case-7", "settled_at": 0, "score": 0.5, "right": true, "weight": {weight}}}]"#
+        );
+        let options = json!({"target_precision": 0.8, "minimum_answered": 1}).to_string();
+        let mut len = 0usize;
+        let status = unsafe { gil_select_score_threshold(s(&text), s(&options), &mut len) };
+        assert_eq!(status, GIL_INVALID_INPUT, "weight {weight}");
+        assert_eq!(
+            copied(gil_last_error),
+            "decision 'case-7': a weight must be positive and finite"
+        );
+    }
+    for (options, message) in [
+        (
+            json!({"target_precision": 1.5, "minimum_answered": 1}),
+            "target_precision must be in (0, 1]",
+        ),
+        (
+            json!({"target_precision": 0.8, "minimum_answered": 0}),
+            "minimum_answered must be at least 1",
+        ),
+    ] {
+        let (status, _) = run(&decisions(), &options);
+        assert_eq!(status, GIL_INVALID_INPUT, "{options}");
+        assert_eq!(copied(gil_last_error), message);
+    }
+}

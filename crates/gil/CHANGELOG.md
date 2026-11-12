@@ -49,6 +49,14 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Changed
 
+- **The C ABI refuses options out of range and a weight that is not positive as input, not as a panic.** A selection or
+  keeper call whose `target_precision` is outside (0, 1] or whose `minimum_answered` is 0, and `gil_select_score_threshold`
+  with a decision whose weight is not positive and finite, now return `GIL_INVALID_INPUT` with the same message (the
+  decision named by its id) instead of `GIL_PANIC`: a host takes these from its configuration and the call changes
+  nothing. The .NET and Python bindings already raised an argument error for both. Rust: `Choice::validate` and
+  `ScoredDecision::validate` give the reason without a panic. An attribute that is not decided is still a contract
+  violation.
+
 - **Settling the latest record again no longer refolds its key counts.** Settling a record again, or removing it,
   took its earlier settlement away and had the next lookup fold every settlement under the key afresh — a cost that grew
   with the records (about 12, 49 and 309 µs a re-settle and lookup at 25,000, 100,000 and 300,000 records on one key).

@@ -1091,7 +1091,10 @@ impl Options {
 unsafe fn read_options(json: GilStr) -> Result<Options, Failure> {
     // SAFETY: forwarded from the caller.
     let json = unsafe { text(json, "options") }?;
-    serde_json::from_str(json).map_err(|e| input(format!("the options do not read: {e}")))
+    let options: Options =
+        serde_json::from_str(json).map_err(|e| input(format!("the options do not read: {e}")))?;
+    options.choice().validate().map_err(input)?;
+    Ok(options)
 }
 
 /// The handles and texts every selection takes.
@@ -1143,8 +1146,8 @@ fn keep(decisions: &mut Option<Vec<Value>>, record: &DecisionRecord) {
 /// Replays `records` in order and chooses the decided attribute's key and similar record thresholds for `options`
 /// (JSON — see the options above; `rule` picks the selection rule). Keeps as the result `{"thresholds": …}` in the
 /// core's `serde` form, with `"decisions": [ … ]` (the replay's decision records) when `options` asks for them. An
-/// attribute that is not decided, takes several values, or options out of range are contract violations
-/// (`GIL_PANIC`).
+/// attribute that is not decided or takes several values is a contract violation (`GIL_PANIC`); options out of range
+/// (`target_precision` outside (0, 1], `minimum_answered` 0) are refused as input (`GIL_INVALID_INPUT`).
 ///
 /// # Safety
 /// `schema` and `records` are live handles; the texts are valid for the call; `result_len` points to one writable
@@ -1282,7 +1285,8 @@ pub unsafe extern "C" fn gil_select_key_concentrations(
 /// out. `options` is as the selections' with `target_precision` and `minimum_answered` (only those two read, `counting`
 /// not; any other option is refused). Keeps as the result the replay in the core's `serde` form
 /// (`{"chosen": …, "absence": …, "most_precise": …, "lookups": …, "candidates": …, "keys": null}`); `chosen` is `null` when no
-/// threshold stands, and `absence` then says why (`"NothingToReplay"`, `"NoCandidate"`, `"TooFewAnswers"` or `"TargetNotMet"`). A score that is not finite or a weight that is not positive is a contract violation (`GIL_PANIC`).
+/// threshold stands, and `absence` then says why (`"NothingToReplay"`, `"NoCandidate"`, `"TooFewAnswers"` or `"TargetNotMet"`). A score that is not finite (the JSON does not read), a weight that is not positive and finite, or options out of range
+/// are refused as input (`GIL_INVALID_INPUT`), the decision named by its id.
 ///
 /// # Safety
 /// The texts are valid for the call; `result_len` points to one writable `usize`.
@@ -1301,6 +1305,11 @@ pub unsafe extern "C" fn gil_select_score_threshold(
         let options = unsafe { read_options(options) }?;
         let decisions: Vec<ScoredDecision> = serde_json::from_str(decisions)
             .map_err(|e| input(format!("the decisions do not read: {e}")))?;
+        for decision in &decisions {
+            decision
+                .validate()
+                .map_err(|m| input(format!("decision '{}': {m}", decision.id)))?;
+        }
         let replay = select_score_threshold(&decisions, options.choice());
         unsafe { result(&json!(replay), result_len) }
     })
@@ -1610,7 +1619,7 @@ pub unsafe extern "C" fn gil_tuning_stale(
 /// says (JSON — `target_precision`, `minimum_answered`, `counting`, `rule`, and `threads` for its replays, as for
 /// `gil_select_layers`, and the experimental `first_of_batch`, `restart_on_form_version`, `value_tails` and
 /// `watch_realized`), handed out
-/// through `out`. Options out of range are contract violations (`GIL_PANIC`).
+/// through `out`. Options out of range are refused as input (`GIL_INVALID_INPUT`).
 ///
 /// # Safety
 /// `schema` is a live handle; `options` is valid for the call; `out` points to one writable pointer.
