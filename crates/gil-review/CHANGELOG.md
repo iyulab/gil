@@ -8,6 +8,10 @@ with what to do.
 ### Documentation
 
 - **The README says there is no Python binding.** `iyulab-gil-review` is a Rust crate with a .NET binding, `Gil.Review`.
+- **The README example is a whole program, and the README says how to add the crate.** The example ended in a line
+  that only rustdoc hides (`# Ok::<…>`), which crates.io shows, and had no `main`, so pasted into a new project it did
+  not compile. It now has a `main` that returns the crate's error, and the README opens with `cargo add
+  iyulab-gil-review` and the import name `gil_review`.
 
 ## 0.2.1
 

@@ -3,6 +3,13 @@
 0.1.0 is the first release. This crate has its own version line, apart from the Gil crates. Versions follow `0.x`: a
 minor release may change the public API, and each such change is listed under **Breaking** with what to do.
 
+## Unreleased
+
+### Documentation
+
+- **The README example says where it goes.** It is the `src/lib.rs` of a library crate; the README now says so and
+  opens with `cargo add iyulab-ffi-support`. `scripts/check-readme-rust.py` builds it as written.
+
 ## 0.1.0
 
 ### Added

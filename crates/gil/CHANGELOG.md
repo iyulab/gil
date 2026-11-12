@@ -85,6 +85,9 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Documentation
 
+- **The README example is a whole program.** It had no `fn main`, so pasted into a new project it did not compile
+  (it only ran as a doc-test, where rustdoc adds the wrapper). The example now starts with its `use` lines and has a
+  `main`; `scripts/check-readme-rust.py` pastes each README example into a fresh project and runs it.
 - **The Rust crate has a quick start that runs.** Neither the README nor the crate documentation showed any code, so
   `cargo add iyulab-gil` left a new user with a vocabulary table and no first call. The README now has a short quick start
   (settle records, let a `Keeper` choose the thresholds, ask about a new record, read the promise), and the crate

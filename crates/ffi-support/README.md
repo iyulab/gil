@@ -20,6 +20,10 @@ own copy, so the state below is per library and per thread.
 - **Handles.** `handle` (`*const` — a read, which may run on several threads at once), `handle_mut` (`*mut` — a
   change, which needs the handle to itself), `hand_out` and `release`.
 
+Add it with `cargo add iyulab-ffi-support` (imported as `iyulab_ffi_support`). The example is the `src/lib.rs` of a
+library crate that is built as a `cdylib`:
+
+<!-- sample: lib -->
 ```rust
 use iyulab_ffi_support::{Utf8, call, input, text};
 
