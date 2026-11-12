@@ -17,7 +17,10 @@ use crate::schema::{Attribute, AttributeRole, Record, Schema, SettlementKind};
 use crate::{coarse_groups, similar_vote, text};
 
 /// How many of the latest records replayed [`ThresholdChoice::promise`] is taken over — every record in settlement
-/// order counts, whether or not it was asked about.
+/// order counts, whether or not it was asked about: a value the application filled ([`SettlementKind::Fill`]) and a
+/// record that does not name the attribute are each one place, like any other. The window is the stream's recency, not a
+/// count of the attribute's own lookups, so an attribute settled on one record in two is judged on about half as many
+/// answers as one settled on every record, and the promise says so through its interval.
 pub const RECENT_RECORDS: usize = 5_000;
 
 /// How many standard errors below the measured precision [`ThresholdRule::Pooled`] holds the target at. More than the one

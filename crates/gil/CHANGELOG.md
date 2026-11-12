@@ -85,6 +85,11 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Documentation
 
+- **The promise's window says what it counts.** The latest `RECENT_RECORDS` records a promise is taken over are the
+  stream's last places in settlement order: a value the application filled and a record that does not name the attribute
+  each take one, so an attribute settled on only some records is judged on fewer answers and its promise's interval is
+  wider for it. The `RECENT_RECORDS` docs say so; the window itself is unchanged.
+
 - **Deleting a record is the host's job in its store too.** `Keeper::remove` takes a record out of the decider and the
   replay, but the line format has no tombstone: a line left in the host's store is read, and learned, again at the next
   start. The `Keeper::remove` docs and `docs/settled-records.md` say so. The Python package now lists Python 3.12 among
