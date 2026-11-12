@@ -7,13 +7,6 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ## Unreleased
 
-### Added
-
-- **`Replay.SelectScoreThreshold` reads `SelectionOptions.Rule`.** The default `ThresholdRule.EveryBand` is what it did.
-  `ThresholdRule.Pooled` chooses the lowest score at which the answers taken together keep the target (a promise about the
-  answers on average, not about every band), which answers more often; `ThresholdRule.LeastCost` throws
-  `ArgumentException`. Needs the native library of this version.
-
 ### Changed
 
 - **Settling the latest record again no longer refolds its key counts.** Settling a record again, or removing it,

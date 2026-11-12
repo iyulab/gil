@@ -34,7 +34,7 @@ use gil::open_record::OpenRecord;
 use gil::replay::{
     Choice, LayerOptions, LayerThresholds, ScoredDecision, ThresholdRule, scored_decisions,
     select_coarse_with, select_key_concentrations, select_key_fields, select_layers,
-    select_score_threshold_by,
+    select_score_threshold,
 };
 use gil::schema::{AttributePolicy, InView, Record, Schema, Settlement, SettlementKind};
 use gil::tuning::Tuning;
@@ -1032,7 +1032,7 @@ pub unsafe extern "C" fn gil_decider_is_first_of_batch(
 /// What a threshold is chosen for, as the selections read it from JSON: `target_precision` in (0, 1] and
 /// `minimum_answered` at least 1, and optionally `counting` (the settlement kinds whose lookups count, by name; all when
 /// left out), experimental `uncounted_batches` (batch names whose records are replayed into memory but not counted; none
-/// when left out), `rule` (`every_band`, the default, or `pooled` — the layers' selection and the judge's threshold; `least_cost` for the layers' only), `decisions` (whether to keep
+/// when left out), `rule` (`every_band`, the default, or `pooled` — the layers' selection only), `decisions` (whether to keep
 /// the decision records of the replay — the layers' and the coarse level's selections), `typed_longest` (the key
 /// attributes' selection: count typing up to that many characters), experimental and the keeper's only,
 /// `first_of_batch` (choose and promise the first records of batches apart), `restart_on_form_version` (start again
@@ -1271,8 +1271,8 @@ pub unsafe extern "C" fn gil_select_key_concentrations(
 /// Experimental. Chooses the threshold of a judge outside Gil from its scores and what people settled, as the core's
 /// `select_score_threshold` does. `decisions` is a JSON array of `{"id": …, "settled_at": …, "score": …, "right": …,
 /// "weight": …}` — `score` left out or `null` when the judge gave no candidate, `right` false and `weight` 1 when left
-/// out. `options` is as the selections' with `target_precision`, `minimum_answered` and optionally `rule` (`every_band`,
-/// the default, or `pooled`; `least_cost` is refused as input) read — `counting` and the others are not. Keeps as the result the replay in the core's `serde` form
+/// out. `options` is as the selections' with `target_precision` and `minimum_answered` (only those two read, `counting`
+/// not; any other option is refused). Keeps as the result the replay in the core's `serde` form
 /// (`{"chosen": …, "most_precise": …, "lookups": …, "candidates": …, "keys": null}`); `chosen` is `null` when no
 /// threshold stands. A score that is not finite or a weight that is not positive is a contract violation (`GIL_PANIC`).
 ///
@@ -1293,12 +1293,7 @@ pub unsafe extern "C" fn gil_select_score_threshold(
         let options = unsafe { read_options(options) }?;
         let decisions: Vec<ScoredDecision> = serde_json::from_str(decisions)
             .map_err(|e| input(format!("the decisions do not read: {e}")))?;
-        if options.rule == ThresholdRule::LeastCost {
-            return Err(input(
-                "the rule least_cost is not available for a judge's scores",
-            ));
-        }
-        let replay = select_score_threshold_by(&decisions, options.choice(), options.rule);
+        let replay = select_score_threshold(&decisions, options.choice());
         unsafe { result(&json!(replay), result_len) }
     })
 }

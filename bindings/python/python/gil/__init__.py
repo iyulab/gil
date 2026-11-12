@@ -569,7 +569,6 @@ def select_score_threshold(
     decisions: Iterable[ScoredDecision],
     target_precision: float = 0.8,
     minimum_answered: int = 10,
-    rule: str = "every_band",
 ) -> ThresholdReplay:
     """Experimental. Chooses the threshold of a judge outside Gil from its scores and what people settled.
 
@@ -580,12 +579,6 @@ def select_score_threshold(
 
     ``decisions`` is a list of :class:`ScoredDecision`; the order it arrives in does not matter, they are replayed by
     ``settled_at`` and then ``id``. A JSON string goes to :func:`select_score_threshold_json`.
-
-    ``rule`` is ``"every_band"`` (the default: the lowest threshold down to which every band of answers meets the target,
-    so the judge answers less than it could while keeping its promise) or ``"pooled"`` (the lowest threshold at which the
-    answers taken together, over the latest 5,000 lookups, keep the target at the low end of their Wilson interval at 1.645
-    standard errors — a promise about the answers on average, not about every band of them, which answers more often;
-    choose it when the target is a share of all answers, not a floor under each kind of answer).
     """
     if isinstance(decisions, str | bytes | bytearray | Mapping):
         raise TypeError(
@@ -597,10 +590,7 @@ def select_score_threshold(
         ThresholdReplay,
         json.loads(
             select_score_threshold_json(
-                json.dumps(rows, allow_nan=False),
-                target_precision,
-                minimum_answered,
-                rule,
+                json.dumps(rows, allow_nan=False), target_precision, minimum_answered
             )
         ),
     )

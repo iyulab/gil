@@ -784,7 +784,7 @@ judge's `Score` for its best value (null when it gave none), whether that value 
 `Weight` (1, or one over the draw probability of a checked case) — and read the same `ThresholdReplay` a memory layer
 gets: the lowest score down to which every band of answers met the target, the answer rate, and the `Promise`. Admit the
 judge's answers as trusted at or above `Chosen.Threshold` and show the promise beside them; `Chosen` is null when no
-threshold stands. Only the target precision, the fewest answers and the `Rule` of the options are read — `EveryBand` (the default) or `Pooled`, which keeps the target for the answers taken together rather than for every band of them and answers more often; `LeastCost` is refused — and only "a higher score is
+threshold stands. Only the target precision and the fewest answers of the options are read, and only "a higher score is
 surer" is assumed of the score. It does not choose how often to check the judge or where to send what it will not answer. A saved record can keep the
 judge's score beside the answer a person saw (`Record.Scores`), and `Replay.ScoredDecisions(records, attribute)` reads
 such records into the decisions.

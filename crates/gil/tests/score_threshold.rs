@@ -1,9 +1,7 @@
 //! A threshold for a judge outside Gil, chosen from its scores and what people settled (experimental) — the same
 //! threshold, answer rate and promise a memory layer gets, from nothing but `(score, right)` in settlement order.
 
-use gil::replay::{
-    Choice, ScoredDecision, ThresholdRule, select_score_threshold, select_score_threshold_by,
-};
+use gil::replay::{Choice, ScoredDecision, select_score_threshold};
 
 /// A small deterministic generator (SplitMix64), so the decisions are the same on every run.
 struct Draws(u64);
@@ -157,104 +155,4 @@ fn a_score_that_is_not_a_number_is_refused() {
 fn a_weight_of_zero_is_refused() {
     let decisions = vec![ScoredDecision::new("a", 0, Some(0.5), true).weighted(0.0)];
     let _ = select_score_threshold(&decisions, choice(0.8));
-}
-
-#[test]
-fn every_band_is_what_the_plain_function_does() {
-    let decisions = calibrated(6_000, 5);
-    assert_eq!(
-        select_score_threshold_by(&decisions, choice(0.9), ThresholdRule::EveryBand),
-        select_score_threshold(&decisions, choice(0.9))
-    );
-}
-
-#[test]
-fn the_pooled_rule_answers_more_than_every_band_and_keeps_the_target() {
-    // A calibrated judge, so a threshold chosen on the first part keeps its target on the rest.
-    let decisions = calibrated(40_000, 11);
-    let (chosen_on, held_out) = decisions.split_at(30_000);
-    let every = select_score_threshold(chosen_on, choice(0.9))
-        .chosen
-        .unwrap();
-    let pooled = select_score_threshold_by(chosen_on, choice(0.9), ThresholdRule::Pooled)
-        .chosen
-        .unwrap();
-    assert!(
-        pooled.threshold < every.threshold,
-        "pooled reaches lower scores"
-    );
-    assert!(pooled.answer_rate > every.answer_rate);
-    assert!(pooled.promise > 0.8 && pooled.promise < 1.0);
-
-    let (mut answered, mut right) = (0_usize, 0_usize);
-    for d in held_out {
-        if d.score.is_some_and(|score| score >= pooled.threshold) {
-            answered += 1;
-            right += usize::from(d.right);
-        }
-    }
-    assert!(answered > 500);
-    assert!(
-        right as f64 / answered as f64 >= 0.9 - 0.02,
-        "{right} of {answered} answers right on decisions the threshold was not chosen on"
-    );
-}
-
-#[test]
-fn the_pooled_rule_admits_some_wrong_answers_the_every_band_rule_would_not() {
-    // 300 surely-right answers above 300 mostly-wrong ones: pooled lets the average stand while it can.
-    let mut decisions = Vec::new();
-    for i in 0..300 {
-        let score = 0.99 - 0.001 * i as f64;
-        decisions.push(ScoredDecision::new(
-            format!("a{i:04}"),
-            i,
-            Some(score),
-            true,
-        ));
-    }
-    for i in 0..300 {
-        let score = 0.6 - 0.001 * i as f64;
-        decisions.push(ScoredDecision::new(
-            format!("b{i:04}"),
-            300 + i,
-            Some(score),
-            i % 5 == 4,
-        ));
-    }
-    let every = select_score_threshold(&decisions, choice(0.9))
-        .chosen
-        .unwrap();
-    let pooled = select_score_threshold_by(&decisions, choice(0.9), ThresholdRule::Pooled)
-        .chosen
-        .unwrap();
-    assert_eq!(every.answered, 300);
-    assert!(pooled.answered > 300 && pooled.answered < 360);
-    assert!(pooled.precision >= 0.9);
-}
-
-#[test]
-fn the_pooled_rule_gives_no_threshold_when_no_score_holds_the_target() {
-    let decisions: Vec<ScoredDecision> = (0..200)
-        .map(|i| {
-            ScoredDecision::new(
-                format!("c{i:04}"),
-                i,
-                Some(0.5 + 0.001 * i as f64),
-                i % 2 == 0,
-            )
-        })
-        .collect();
-    assert!(
-        select_score_threshold_by(&decisions, choice(0.9), ThresholdRule::Pooled)
-            .chosen
-            .is_none()
-    );
-}
-
-#[test]
-#[should_panic(expected = "LeastCost")]
-fn the_least_cost_rule_is_not_available_for_a_judge() {
-    let decisions = calibrated(100, 1);
-    let _ = select_score_threshold_by(&decisions, choice(0.9), ThresholdRule::LeastCost);
 }

@@ -6,18 +6,6 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ## Unreleased
 
-### Added
-
-- **`replay::select_score_threshold_by` chooses a judge's threshold under a rule.** `select_score_threshold` chose only
-  by `ThresholdRule::EveryBand` — the lowest score down to which every band of answers meets the target — which keeps
-  the promise and answers less than it could. `select_score_threshold_by(decisions, choice, ThresholdRule::Pooled)` takes
-  the lowest score at which the answers taken together (over the latest 5,000 lookups, reaching back to hold 1,000
-  answers) keep the target at the low end of their Wilson interval at 1.645 standard errors: a promise about the answers
-  on average, not about every band, which answered 1.2–3.2 times as often as `EveryBand` on the stored scores of two
-  public collections while keeping the target. `ThresholdRule::LeastCost` is refused. `select_score_threshold` is
-  unchanged. Python: `gil.select_score_threshold(…, rule="pooled")`; the C ABI function and the .NET `SelectionOptions.Rule`
-  read the option too (`rule`, `every_band` by default).
-
 ### Fixed
 
 - **`usage` counts a first check that kept the answer but not its layer as answered.** A first check whose record
