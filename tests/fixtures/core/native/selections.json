@@ -17,6 +17,7 @@
     "result": {
       "thresholds": {
         "key": {
+          "absence": null,
           "candidates": 170,
           "chosen": {
             "answer_rate": 0.7174887892376681,
@@ -155,6 +156,7 @@
           }
         },
         "memory": {
+          "absence": "TargetNotMet",
           "candidates": 51,
           "chosen": null,
           "keys": null,
@@ -5570,6 +5572,7 @@
       ],
       "thresholds": {
         "key": {
+          "absence": "TargetNotMet",
           "candidates": 198,
           "chosen": null,
           "keys": [
@@ -6030,6 +6033,7 @@
           }
         },
         "memory": {
+          "absence": "TargetNotMet",
           "candidates": 199,
           "chosen": null,
           "keys": null,
@@ -6068,6 +6072,7 @@
     "result": {
       "thresholds": {
         "key": {
+          "absence": null,
           "candidates": 198,
           "chosen": {
             "answer_rate": 0.9377593360995851,
@@ -6097,6 +6102,7 @@
           }
         },
         "memory": {
+          "absence": "TooFewAnswers",
           "candidates": 12,
           "chosen": null,
           "keys": null,
@@ -6116,6 +6122,7 @@
     },
     "result": {
       "all_fields": {
+        "absence": null,
         "candidates": 179,
         "chosen": {
           "answer_rate": 0.695067264573991,
@@ -6389,6 +6396,7 @@
         }
       },
       "chosen": {
+        "absence": "TargetNotMet",
         "candidates": 177,
         "chosen": null,
         "keys": [
@@ -6461,6 +6469,7 @@
             "channel"
           ],
           "replay": {
+            "absence": "TargetNotMet",
             "candidates": 177,
             "chosen": null,
             "keys": [
@@ -6527,6 +6536,7 @@
           "typed": {
             "by_length": [
               {
+                "absence": null,
                 "candidates": 152,
                 "chosen": {
                   "answer_rate": 0.8430493273542601,
@@ -6556,6 +6566,7 @@
                 }
               },
               {
+                "absence": "NoCandidate",
                 "candidates": 0,
                 "chosen": null,
                 "keys": null,
@@ -6563,6 +6574,7 @@
                 "most_precise": null
               },
               {
+                "absence": "NoCandidate",
                 "candidates": 0,
                 "chosen": null,
                 "keys": null,
@@ -6577,6 +6589,7 @@
             "product"
           ],
           "replay": {
+            "absence": null,
             "candidates": 170,
             "chosen": {
               "answer_rate": 0.7174887892376681,
@@ -6717,6 +6730,7 @@
           "typed": {
             "by_length": [
               {
+                "absence": null,
                 "candidates": 36,
                 "chosen": {
                   "answer_rate": 0.5,
@@ -6746,6 +6760,7 @@
                 }
               },
               {
+                "absence": "NoCandidate",
                 "candidates": 0,
                 "chosen": null,
                 "keys": null,
@@ -6753,6 +6768,7 @@
                 "most_precise": null
               },
               {
+                "absence": "NoCandidate",
                 "candidates": 0,
                 "chosen": null,
                 "keys": null,
@@ -6767,6 +6783,7 @@
             "summary"
           ],
           "replay": {
+            "absence": "TargetNotMet",
             "candidates": 73,
             "chosen": null,
             "keys": [
@@ -7256,6 +7273,7 @@
           "typed": {
             "by_length": [
               {
+                "absence": null,
                 "candidates": 50,
                 "chosen": {
                   "answer_rate": 0.27802690582959644,
@@ -7285,6 +7303,7 @@
                 }
               },
               {
+                "absence": "NoCandidate",
                 "candidates": 0,
                 "chosen": null,
                 "keys": null,
@@ -7292,6 +7311,7 @@
                 "most_precise": null
               },
               {
+                "absence": "NoCandidate",
                 "candidates": 0,
                 "chosen": null,
                 "keys": null,
@@ -7306,6 +7326,7 @@
             "code"
           ],
           "replay": {
+            "absence": "NoCandidate",
             "candidates": 0,
             "chosen": null,
             "keys": [],
@@ -7315,6 +7336,7 @@
           "typed": {
             "by_length": [
               {
+                "absence": "NoCandidate",
                 "candidates": 0,
                 "chosen": null,
                 "keys": null,
@@ -7322,6 +7344,7 @@
                 "most_precise": null
               },
               {
+                "absence": "NoCandidate",
                 "candidates": 0,
                 "chosen": null,
                 "keys": null,
@@ -7329,6 +7352,7 @@
                 "most_precise": null
               },
               {
+                "absence": "NoCandidate",
                 "candidates": 0,
                 "chosen": null,
                 "keys": null,
@@ -7343,6 +7367,7 @@
             "tags"
           ],
           "replay": {
+            "absence": "NoCandidate",
             "candidates": 0,
             "chosen": null,
             "keys": [],
@@ -7352,6 +7377,7 @@
           "typed": {
             "by_length": [
               {
+                "absence": "NoCandidate",
                 "candidates": 0,
                 "chosen": null,
                 "keys": null,
@@ -7359,6 +7385,7 @@
                 "most_precise": null
               },
               {
+                "absence": "NoCandidate",
                 "candidates": 0,
                 "chosen": null,
                 "keys": null,
@@ -7366,6 +7393,7 @@
                 "most_precise": null
               },
               {
+                "absence": "NoCandidate",
                 "candidates": 0,
                 "chosen": null,
                 "keys": null,
@@ -7381,6 +7409,7 @@
             "product"
           ],
           "replay": {
+            "absence": null,
             "candidates": 179,
             "chosen": {
               "answer_rate": 0.7623318385650224,
@@ -7566,6 +7595,7 @@
           "typed": {
             "by_length": [
               {
+                "absence": null,
                 "candidates": 49,
                 "chosen": {
                   "answer_rate": 0.8133333333333334,
@@ -7595,6 +7625,7 @@
                 }
               },
               {
+                "absence": "NoCandidate",
                 "candidates": 0,
                 "chosen": null,
                 "keys": null,
@@ -7602,6 +7633,7 @@
                 "most_precise": null
               },
               {
+                "absence": "NoCandidate",
                 "candidates": 0,
                 "chosen": null,
                 "keys": null,
@@ -7615,6 +7647,7 @@
       "typed": {
         "by_length": [
           {
+            "absence": null,
             "candidates": 152,
             "chosen": {
               "answer_rate": 0.8430493273542601,
@@ -7644,6 +7677,7 @@
             }
           },
           {
+            "absence": "NoCandidate",
             "candidates": 0,
             "chosen": null,
             "keys": null,
@@ -7651,6 +7685,7 @@
             "most_precise": null
           },
           {
+            "absence": "NoCandidate",
             "candidates": 0,
             "chosen": null,
             "keys": null,

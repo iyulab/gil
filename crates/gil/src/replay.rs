@@ -198,12 +198,36 @@ pub struct KeyState {
     pub effective_answered: f64,
 }
 
+/// Why a replay chose no threshold — what [`ThresholdReplay::absence`] says when `chosen` is `None`. A layer with no
+/// threshold gives no answer, so this is also why it abstains whatever it is asked: the first cause that holds, in the
+/// order of the variants.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum Absence {
+    /// No lookup reached the layer: no settled record was counted, the memory held nothing when each was settled, or — for
+    /// the memory layer — the key layer's threshold answered every lookup.
+    NothingToReplay,
+    /// Lookups were made, but none found a candidate at any score.
+    NoCandidate,
+    /// Candidates were found, but even taken at the lowest score their answers are worth fewer than the fewest answers a
+    /// threshold may rest on ([`Choice::minimum_answered`]).
+    TooFewAnswers,
+    /// Answers enough to rest a threshold on were found, but none was chosen: down to the highest score that gathers them,
+    /// some band of answers fell short of [`Choice::target_precision`] — or, under a [`ThresholdRule`] other than
+    /// `EveryBand`, the rule took none.
+    TargetNotMet,
+}
+
 /// What replaying settled records found for one memory layer of an attribute.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ThresholdReplay {
     /// The lowest threshold down to which every band of answers met the target precision; `None` when none does.
     pub chosen: Option<ThresholdChoice>,
+    /// Why `chosen` is `None`; `None` when a threshold was chosen. A replay saved before this field existed reads as
+    /// `None` whatever it chose.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub absence: Option<Absence>,
     /// The highest threshold that gathers at least the minimum number of answers; `None` when no score does.
     pub most_precise: Option<ThresholdChoice>,
     /// How many lookups the replay made.
@@ -213,6 +237,25 @@ pub struct ThresholdReplay {
     /// For the key layer of an attribute that takes one value, the state under each key that backed a best value, most
     /// lookups first, then by key in scalar order.
     pub keys: Option<Vec<KeyState>>,
+}
+
+impl ThresholdReplay {
+    /// This replay with its `absence` read from what it found: why `chosen` is `None`, or `None` when it is not. Every
+    /// place that settles `chosen` ends here, so the two cannot disagree.
+    pub(crate) fn explained(self) -> Self {
+        let absence = if self.chosen.is_some() {
+            None
+        } else if self.lookups == 0 {
+            Some(Absence::NothingToReplay)
+        } else if self.candidates == 0 {
+            Some(Absence::NoCandidate)
+        } else if self.most_precise.is_none() {
+            Some(Absence::TooFewAnswers)
+        } else {
+            Some(Absence::TargetNotMet)
+        };
+        Self { absence, ..self }
+    }
 }
 
 /// One answer the layer would give at some threshold: its score, whether it matched, how many decisions it counts as,
@@ -911,11 +954,13 @@ fn fit(
 
     ThresholdReplay {
         chosen,
+        absence: None,
         most_precise,
         lookups,
         candidates: matches.len(),
         keys: None,
     }
+    .explained()
 }
 
 /// The replays of an attribute's two memory layers, in the order a suggestion consults them.
@@ -1317,7 +1362,8 @@ pub(crate) fn layers(
                 )
             }),
             ..key_replay
-        };
+        }
+        .explained();
         pooled_memory = Some(similar_threshold);
     }
 
@@ -1484,7 +1530,7 @@ fn least_cost(
                 promise_answered: effective,
             })
         });
-        ThresholdReplay { chosen, ..replay }
+        ThresholdReplay { chosen, ..replay }.explained()
     };
     let key = share(true, &key_steps, key);
     let memory = share(false, &memory_steps, memory);
@@ -2343,6 +2389,7 @@ pub(crate) fn element_layers(state: &ElementState, choice: Choice) -> LayerThres
     LayerThresholds {
         key: ThresholdReplay {
             chosen: None,
+            absence: Some(Absence::NothingToReplay),
             most_precise: None,
             lookups: 0,
             candidates: 0,
@@ -2489,7 +2536,8 @@ fn similarity(
                 )
             }),
             ..replay
-        };
+        }
+        .explained();
     }
 
     if votes == 1 {

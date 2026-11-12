@@ -15,7 +15,7 @@ use gil::decision_record::DecisionRecord;
 use gil::key_memory::KeyMemory;
 use gil::lexical_memory::LexicalMemory;
 use gil::replay::{
-    Choice, KeyState, LayerOptions, ThresholdChoice, select_key_threshold, select_layers,
+    Absence, Choice, KeyState, LayerOptions, ThresholdChoice, select_key_threshold, select_layers,
 };
 use gil::schema::{
     Attribute, AttributeRole, CoarseLevel, Record, Schema, Settlement, SettlementKind,
@@ -186,6 +186,61 @@ fn no_threshold_is_chosen_out_of_reach_or_on_too_few_answers_but_the_replay_says
     );
     assert_eq!((few.chosen, few.most_precise), (None, None));
     assert_eq!((few.lookups, few.candidates), (2, 2));
+}
+
+#[test]
+fn a_replay_that_chose_no_threshold_says_why() {
+    // Chosen: nothing to explain.
+    let chosen = replayed(
+        &scenario(&[(2, true), (1, true)]),
+        counting_accepted(0.5, 1),
+    );
+    assert!(chosen.chosen.is_some());
+    assert_eq!(chosen.absence, None);
+
+    // Answers enough, none precise enough: the target is not met.
+    let wrong = replayed(
+        &scenario(&[(2, false), (1, false)]),
+        counting_accepted(0.5, 1),
+    );
+    assert_eq!(wrong.chosen, None);
+    assert_eq!(wrong.absence, Some(Absence::TargetNotMet));
+
+    // Two answers, fewer than the three a precision may rest on.
+    let few = replayed(
+        &scenario(&[(2, true), (1, true)]),
+        counting_accepted(0.5, 3),
+    );
+    assert_eq!(few.absence, Some(Absence::TooFewAnswers));
+
+    // A lookup was made, under a key the memory had never seen: no candidate at any score.
+    let unseen = replayed(
+        &[
+            record(
+                "d",
+                1,
+                &[("component", "c0"), ("team", "a")],
+                Some(("team", SettlementKind::Enter, None)),
+            ),
+            record(
+                "d",
+                2,
+                &[("component", "c1"), ("team", "a")],
+                Some(("team", SettlementKind::Accept, None)),
+            ),
+        ],
+        counting_accepted(0.5, 1),
+    );
+    assert_eq!((unseen.lookups, unseen.candidates), (1, 0));
+    assert_eq!(unseen.absence, Some(Absence::NoCandidate));
+
+    // No record, or none the memory could be asked about: no lookup at all.
+    let empty = replayed(&[], counting_accepted(0.5, 1));
+    assert_eq!(empty.lookups, 0);
+    assert_eq!(empty.absence, Some(Absence::NothingToReplay));
+    let first = replayed(&scenario(&[(0, true)]), counting_accepted(0.5, 1));
+    assert_eq!(first.lookups, 0);
+    assert_eq!(first.absence, Some(Absence::NothingToReplay));
 }
 
 #[test]

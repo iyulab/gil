@@ -6,6 +6,22 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ## Unreleased
 
+### Breaking
+
+- **`replay::ThresholdReplay` has a new field, `absence`.** A struct literal of it no longer compiles without the field;
+  replays the crate returns are unaffected. **To migrate**: add `absence: None`, or build the replay from what a
+  selection returned (`..replay`).
+
+### Added
+
+- **A replay that chose no threshold says why.** `ThresholdReplay::absence` is `Some(`[`Absence`]`)` when `chosen` is
+  `None` — `NothingToReplay` (no lookup reached the layer), `NoCandidate` (none found a candidate at any score),
+  `TooFewAnswers` (answers worth fewer than `minimum_answered`, even at the lowest score) or `TargetNotMet` (answers
+  enough, but no threshold met what the rule asks) — and `None` when a threshold was chosen. A layer with no threshold
+  gives no answer, so this is also why it abstains. Choices are unchanged. It is in the replay's `serde` form as
+  `"absence"` (the variant's name, or `null`; a replay saved without it reads as `None`), so the C ABI, the .NET binding
+  and the Python binding carry it: Python `select_layers(…)["key"]["absence"]`.
+
 ### Fixed
 
 - **Python: `OpenRecord` and `OpenRecord.settle` take the time the documentation said they take.** The README

@@ -16,6 +16,15 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   pass the probability the check was drawn with (`probability: 0.05`); a call that passes none for any other kind of
   settlement is unchanged.
 
+### Added
+
+- **A replay that chose no threshold says why.** `ThresholdReplay.Absence` (`Absence?`) is `NothingToReplay` (no lookup
+  reached the layer), `NoCandidate` (none found a candidate at any score), `TooFewAnswers` (fewer answers than the
+  minimum, even at the lowest score) or `TargetNotMet` (answers enough, but no threshold met what the rule asks), and null
+  when a threshold was chosen. A layer with no threshold gives no answer, so this is also why it abstains. Choices are
+  unchanged; the new member is the last of the record, with a default, so a call that builds one is unchanged. A replay
+  saved before this member existed reads as null.
+
 ### Changed
 
 - **Settling the latest record again no longer refolds its key counts.** Settling a record again, or removing it,

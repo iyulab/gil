@@ -86,8 +86,14 @@ records = gil.read_records(
 thresholds, decisions = gil.select_layers(
     schema, "team", records, target_precision=0.8
 )
-print(thresholds["key"]["chosen"], len(decisions))
+print(thresholds["key"]["chosen"], thresholds["key"]["absence"], len(decisions))
 ```
+
+`chosen` is `None` when no threshold held the target, and `absence` then says why — `"NothingToReplay"` (no lookup reached
+the layer), `"NoCandidate"` (none found a candidate at any score), `"TooFewAnswers"` (fewer answers than
+`minimum_answered`, even at the lowest score) or `"TargetNotMet"` (answers enough, none precise enough) — so a layer
+that does not answer can be told from one that has not yet seen enough records. `absence` is `None` when a threshold was
+chosen.
 
 A line holds a record's `id`, `settled_at`, `values` and, for each decided attribute, how it was settled
 (`settlements`) — the form [docs/settled-records.md](https://github.com/iyulab/gil/blob/main/docs/settled-records.md) specifies, which the other bindings read too.
@@ -444,7 +450,7 @@ def tune(records):
 Path("ticket.tuning.json").write_text(json.dumps(tune(records)))
 ```
 
-A layer with no `chosen` threshold is left unset and does not answer the attribute. `capture_tuning` and
+A layer with no `chosen` threshold is left unset and does not answer the attribute (its `absence` says why). `capture_tuning` and
 `tuning_stale` take the number of settled records, not the records. At start-up, `tuning_stale` says whether the kept
 tuning still stands — the same package version, the same settings it rests on, and less than a tenth more or fewer records —
 and `apply_tuning` puts it back on the schema; otherwise choose again:

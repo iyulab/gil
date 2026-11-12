@@ -1281,8 +1281,8 @@ pub unsafe extern "C" fn gil_select_key_concentrations(
 /// "weight": …}` — `score` left out or `null` when the judge gave no candidate, `right` false and `weight` 1 when left
 /// out. `options` is as the selections' with `target_precision` and `minimum_answered` (only those two read, `counting`
 /// not; any other option is refused). Keeps as the result the replay in the core's `serde` form
-/// (`{"chosen": …, "most_precise": …, "lookups": …, "candidates": …, "keys": null}`); `chosen` is `null` when no
-/// threshold stands. A score that is not finite or a weight that is not positive is a contract violation (`GIL_PANIC`).
+/// (`{"chosen": …, "absence": …, "most_precise": …, "lookups": …, "candidates": …, "keys": null}`); `chosen` is `null` when no
+/// threshold stands, and `absence` then says why (`"NothingToReplay"`, `"NoCandidate"`, `"TooFewAnswers"` or `"TargetNotMet"`). A score that is not finite or a weight that is not positive is a contract violation (`GIL_PANIC`).
 ///
 /// # Safety
 /// The texts are valid for the call; `result_len` points to one writable `usize`.

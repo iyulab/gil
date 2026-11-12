@@ -137,6 +137,21 @@ def test_select_layers_writes_the_golden_decision_records() -> None:
         ), f"record line {i + 1}"
 
 
+def test_a_layer_that_chose_no_threshold_says_why() -> None:
+    settled = gil.records(settled_again())
+    schema = gil.Schema.from_dict(golden_form("team"))
+    # Answers are worth fewer than a million, however they are taken.
+    none, _ = gil.select_layers(
+        schema, "team", settled, 0.5, 1_000_000, counting=COUNTED, decisions=False
+    )
+    assert none["key"]["chosen"] is None and none["key"]["absence"] == "TooFewAnswers"
+    assert none["memory"]["chosen"] is None and none["memory"]["absence"] is not None
+    some, _ = gil.select_layers(schema, "team", settled, 0.5, 1, counting=COUNTED, decisions=False)
+    for layer in some.values():
+        assert (layer["chosen"] is None) == (layer["absence"] is not None)
+    assert some["key"]["chosen"] is not None or some["memory"]["chosen"] is not None
+
+
 def test_the_golden_layers_choice_comes_back() -> None:
     records = gil.read_records(CORE / "records.jsonl")
     assert len(records) == len(lines("records.jsonl"))

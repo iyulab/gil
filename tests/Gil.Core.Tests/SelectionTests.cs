@@ -86,6 +86,30 @@ public sealed class SelectionTests
     }
 
     [Fact]
+    public void A_layer_that_chose_no_threshold_says_why_and_one_that_chose_says_nothing()
+    {
+        var (schema, records) = Early();
+        using var _ = schema;
+        using var __ = records;
+        var attribute = (string)Of("layers").First()["attribute"]!;
+
+        // Answers are worth fewer than a million, however they are taken.
+        var none = Replay.SelectLayers(schema, attribute, records, new SelectionOptions(0.5, 1_000_000)).Thresholds;
+        none.Key.Chosen.Should().BeNull();
+        none.Key.Absence.Should().Be(Absence.TooFewAnswers);
+        none.Memory.Chosen.Should().BeNull();
+        none.Memory.Absence.Should().NotBeNull();
+
+        var some = Replay.SelectLayers(schema, attribute, records, new SelectionOptions(0.5, 1)).Thresholds;
+        foreach (var layer in new[] { some.Key, some.Memory })
+        {
+            (layer.Chosen is null).Should().Be(layer.Absence is not null);
+        }
+
+        (some.Key.Chosen is not null || some.Memory.Chosen is not null).Should().BeTrue();
+    }
+
+    [Fact]
     public void Typed_selections_hold_everything_the_C_ABI_gave()
     {
         var (schema, records) = Early();

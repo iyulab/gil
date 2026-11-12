@@ -48,6 +48,7 @@ fn tuned() -> Schema {
 
 fn choice(threshold: f64, promise: f64) -> ThresholdReplay {
     ThresholdReplay {
+        absence: None,
         chosen: Some(ThresholdChoice {
             threshold,
             precision: 0.9,

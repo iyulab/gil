@@ -294,6 +294,32 @@ fn the_calibration_rises_with_the_score() {
 }
 
 #[test]
+fn a_layer_has_an_absence_exactly_when_it_chose_no_threshold_under_every_rule() {
+    let mut absent = 0;
+    for rule in [
+        ThresholdRule::EveryBand,
+        ThresholdRule::Pooled,
+        ThresholdRule::LeastCost,
+    ] {
+        for n in [0, 1, 5, 60, 800] {
+            for target in [0.5, 0.8, 1.0] {
+                let layers = chosen(&records(n), target, rule, None);
+                for replay in [&layers.key, &layers.memory] {
+                    assert_eq!(
+                        replay.chosen.is_none(),
+                        replay.absence.is_some(),
+                        "{rule:?}, {n} records, target {target}"
+                    );
+                    absent += usize::from(replay.absence.is_some());
+                }
+            }
+        }
+    }
+    // The grid reaches both sides: layers that chose and layers that did not.
+    assert!(absent > 0 && absent < 3 * 5 * 3 * 2, "{absent}");
+}
+
+#[test]
 fn the_other_rules_carry_no_calibration() {
     let records = records(800);
     for rule in [ThresholdRule::EveryBand, ThresholdRule::Pooled] {

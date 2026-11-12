@@ -103,12 +103,37 @@ public sealed record BatchCheck(
 /// <param name="Candidates">How many of them found a candidate at any score.</param>
 /// <param name="Keys">For the key layer of an attribute that takes one value, the state under each key that backed a best
 /// value, most lookups first, then by key in scalar order.</param>
+/// <param name="Absence">Why <paramref name="Chosen"/> is null; null when a threshold was chosen. A replay saved before
+/// this member existed reads as null whatever it chose.</param>
 public sealed record ThresholdReplay(
     ThresholdChoice? Chosen,
     ThresholdChoice? MostPrecise,
     int Lookups,
     int Candidates,
-    IReadOnlyList<KeyState>? Keys);
+    IReadOnlyList<KeyState>? Keys,
+    Absence? Absence = null);
+
+/// <summary>Why a replay chose no threshold. A layer with no threshold gives no answer, so this is also why it abstains
+/// whatever it is asked: the first cause that holds, in the order of the members.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<Absence>))]
+public enum Absence
+{
+    /// <summary>No lookup reached the layer: no settled record was counted, the memory held nothing when each was
+    /// settled, or — for the memory layer — the key layer's threshold answered every lookup.</summary>
+    NothingToReplay,
+
+    /// <summary>Lookups were made, but none found a candidate at any score.</summary>
+    NoCandidate,
+
+    /// <summary>Candidates were found, but even taken at the lowest score their answers are worth fewer than the fewest
+    /// answers a threshold may rest on.</summary>
+    TooFewAnswers,
+
+    /// <summary>Answers enough to rest a threshold on were found, but none was chosen: down to the highest score that
+    /// gathers them, some band of answers fell short of the target precision — or, under a rule other than
+    /// <see cref="ThresholdRule.EveryBand"/>, the rule took none.</summary>
+    TargetNotMet,
+}
 
 /// <summary>A threshold chosen for one memory layer of an attribute, and how it did on the replay it was chosen on. A
 /// checked value counts as one ÷ its draw probability lookups, so <see cref="Precision"/> and <see cref="AnswerRate"/>
