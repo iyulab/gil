@@ -4,7 +4,9 @@ Gil learns from the records people have settled and chooses how far to trust its
 specifies the line those records are kept in — the form the Rust core reads with its `serde` feature, .NET's
 `SettledRecords.FromJsonLines` and Python's `gil.read_records` — and says what each entry is for, so that an
 application can start keeping them before it uses Gil at all. On the day it does, the records already kept are what
-the first thresholds are chosen from.
+the first thresholds are chosen from. A record the host deletes is deleted from its store as well as from the keeper
+(`Keeper::remove`): the format has no tombstone, so a line left in the store is read, and learned, again at the next
+start.
 
 ## The line
 

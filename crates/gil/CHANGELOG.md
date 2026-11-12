@@ -85,6 +85,11 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Documentation
 
+- **Deleting a record is the host's job in its store too.** `Keeper::remove` takes a record out of the decider and the
+  replay, but the line format has no tombstone: a line left in the host's store is read, and learned, again at the next
+  start. The `Keeper::remove` docs and `docs/settled-records.md` say so. The Python package now lists Python 3.12 among
+  its classifiers (the tests run on it; the wheel is `abi3` for 3.11 and later).
+
 - **The judge-threshold documentation says what a running system's own records cannot show.** A record keeps the
   judge's score only for an answer that was shown, and an answer is shown only at or above the threshold in use, so a
   threshold chosen from those records can stay or rise but never find that a lower one would also hold the target. The

@@ -9,6 +9,8 @@ Review statistics for checking automated decisions by hand, with no dependencies
   bootstrap interval, and a band for items the record could not settle;
 - **how far two reviewers agree** — Cohen's κ, Gwet's AC1 and the agreement specific to each outcome.
 
+It is a Rust crate with a .NET binding (`Gil.Review`); there is no Python binding.
+
 Every draw uses one generator — SplitMix64 spreading the seed into xoshiro256\*\*, integers by Lemire's method — so the
 same seed gives the same sample on every target. Nothing is clamped or silently repaired: an assumption that does not
 hold is reported in `caveats`, and an input that would estimate another population is an error.

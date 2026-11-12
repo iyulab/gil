@@ -22,6 +22,8 @@ with what to do.
 
 ### Documentation
 
+- **The README says there is no Python binding.** `iyulab-gil-review` is a Rust crate with a .NET binding, `Gil.Review`.
+
 - **The READMEs say that a constant stratum is the usual case for 0/1 scores.** Reviewing a system that is right most
   of the time, a stratum whose reviewed items are all right is common — about 85% of estimates at a precision of 0.97
   with four strata of 30 — so `ESTIMATE_NO_VARIATION_IN_STRATUM` (`EstimateCaveats.NoVariationInStratum`) is expected

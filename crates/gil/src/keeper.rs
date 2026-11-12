@@ -622,7 +622,8 @@ impl Keeper {
     }
 
     /// Takes a record the host deleted out of `decider` ([`Decider::remove`]) and out of the records; the next choice
-    /// replays without it, from the last checkpoint before it.
+    /// replays without it, from the last checkpoint before it. The line format has no tombstone, so the host deletes the
+    /// record from its own store too: a line left there is read, and learned, again at the next start.
     pub fn remove(&mut self, decider: &mut Decider, record: &str) {
         decider.remove(&self.schema, record);
         let Some(place) = self
