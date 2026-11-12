@@ -20,21 +20,26 @@ all of them at 0.99 (one stratum of n items is constant with probability pⁿ + 
 takes the bound for the variation the sample has not shown, and its bootstrap collapses, so read the normal interval.
 `is_reliable()` is then false, so for 0/1 scores do not use it as a go/no-go — look at the other caveats one by one.
 
+Add it with `cargo add iyulab-gil-review`; the library is imported as `gil_review`. The example below is a whole
+program — paste it into `src/main.rs` and `cargo run`.
+
 ```rust
 use gil_review::{PopulationStratum, draw_pilot, PILOT_RECORDS_PER_STRATUM};
 
-let answered = ["d1", "d2", "d3"];
-let abstained = ["d4", "d5"];
-let sample = draw_pilot(
-    &[
-        PopulationStratum { name: "answered", record_ids: &answered },
-        PopulationStratum { name: "abstained", record_ids: &abstained },
-    ],
-    PILOT_RECORDS_PER_STRATUM,
-    7,
-)?;
-assert_eq!(sample.selected_count(), 5); // both strata are smaller than the pilot: taken whole
-# Ok::<(), gil_review::ReviewError>(())
+fn main() -> Result<(), gil_review::ReviewError> {
+    let answered = ["d1", "d2", "d3"];
+    let abstained = ["d4", "d5"];
+    let sample = draw_pilot(
+        &[
+            PopulationStratum { name: "answered", record_ids: &answered },
+            PopulationStratum { name: "abstained", record_ids: &abstained },
+        ],
+        PILOT_RECORDS_PER_STRATUM,
+        7,
+    )?;
+    assert_eq!(sample.selected_count(), 5); // both strata are smaller than the pilot: taken whole
+    Ok(())
+}
 ```
 
 From .NET, the `Gil.Review` package binds this crate with the same results (`bindings/csharp` in the repository).
