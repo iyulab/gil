@@ -57,6 +57,13 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   `ScoredDecision::validate` give the reason without a panic. An attribute that is not decided is still a contract
   violation.
 
+- **A record line is read as RFC 3339, and one that does not read is named by its record.** `settled_at` as text takes
+  the fraction in one to seven digits or none, and `Z` for UTC, so `datetime.isoformat()` and most other tools' output
+  read as they are (the seven-digit form still does; an offset past ±14:00 and more than seven digits are refused). The
+  Python `OpenRecord` reads the same forms. A record line that does not read — in the C ABI's `gil_records_new` and
+  `gil_open_record_reopen`, and the Python binding's `records` — now says `record 'id': <reason>` instead of a position
+  inside the line's own JSON (`… at line 1 column 49`), which named nothing the host wrote.
+
 - **`usage` reads the promise display only where the answer had a promise, and a time text's offset stops at ±14:00.**
   The documentation said both; the code read `promise_shown` beside an answer that kept no promise (counting it as a
   hidden promise) and accepted offsets up to `+14:59` / `-14:59`. Records from the engine, which keep a promise wherever

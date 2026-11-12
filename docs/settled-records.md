@@ -17,7 +17,7 @@ One JSON object per line, one line per settlement:
 | Entry | Type | Required | What it is |
 |---|---|---|---|
 | `id` | string | yes | The record's id, unique within its form. A record settled again is written again, with the same id and the later time |
-| `settled_at` | integer or string | yes | When it was settled: 100-nanosecond ticks since the Unix epoch, UTC (.NET `DateTimeOffset.UtcTicks` − `DateTimeOffset.UnixEpoch.UtcTicks`), or the time as text `yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM` (.NET's round-trip `"O"` format) |
+| `settled_at` | integer or string | yes | When it was settled: 100-nanosecond ticks since the Unix epoch, UTC (.NET `DateTimeOffset.UtcTicks` − `DateTimeOffset.UnixEpoch.UtcTicks`), or the time as text `yyyy-MM-ddTHH:mm:ss[.fffffff](Z|±HH:MM)` (RFC 3339: the fraction in one to seven digits or left out, the zone as `Z` or an offset up to ±14:00 — .NET's round-trip `"O"` format and Python's `datetime.isoformat()` both read) |
 | `values` | object of strings | no | The value of each attribute that takes one, observed and decided alike, as it was when the record was settled |
 | `sets` | object of string arrays | no | The values of each attribute that takes several |
 | `settlements` | object of kinds | no | How each decided attribute was settled — see below |

@@ -288,6 +288,18 @@ fn a_record_reads_its_time_as_ticks_or_as_text_and_null_as_left_out() {
     let before_the_epoch =
         read(json!({ "id": "t1", "settled_at": "1969-12-31T23:59:59.9999999-00:00" }));
     assert_eq!(before_the_epoch.expect("a record").settled_at, -1);
+    // What other tools write is read too: the fraction in one to seven digits, or none, and `Z` for UTC.
+    for (text, ticks) in [
+        ("2025-10-22T16:00:00+00:00", 17_611_488_000_000_000_i64),
+        ("2025-10-22T16:00:00Z", 17_611_488_000_000_000),
+        ("2025-10-22T16:00:00.5Z", 17_611_488_005_000_000),
+        ("2025-10-22T16:00:00.123456+00:00", 17_611_488_001_234_560),
+        ("2025-10-22T18:00:00.123456+02:00", 17_611_488_001_234_560),
+        ("2025-10-22T16:00:00.0000001Z", 17_611_488_000_000_001),
+    ] {
+        let record = read(json!({ "id": "t1", "settled_at": text })).expect(text);
+        assert_eq!(record.settled_at, ticks, "{text}");
+    }
     // The farthest offsets a zone has are read.
     for edge in ["+14:00", "-14:00"] {
         let text = format!("2025-10-22T16:00:00.0000000{edge}");
@@ -310,7 +322,10 @@ fn a_record_reads_its_time_as_ticks_or_as_text_and_null_as_left_out() {
 
     for bad in [
         "2025-10-22 16:00:00.0000000+00:00",
-        "2025-10-22T16:00:00Z",
+        "2025-10-22T16:00:00",
+        "2025-10-22T16:00:00.Z",
+        "2025-10-22T16:00:00.00000001Z",
+        "2025-10-22T16:00:00z",
         "2025-13-01T00:00:00.0000000+00:00",
         "2025-02-29T00:00:00.0000000+00:00",
         "2025-10-22T24:00:00.0000000+00:00",

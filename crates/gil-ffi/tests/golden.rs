@@ -176,6 +176,12 @@ fn a_refusal_is_a_status_and_a_message() {
         "{}",
         last_error()
     );
+    // The record is named by its id, and the position serde reports inside the line (which names nothing the host
+    // wrote) is not in the message.
+    assert_eq!(
+        last_error(),
+        "record line 2 does not read: record 'a': missing field `settled_at`"
+    );
 
     // The next call that succeeds clears the message.
     put(decider, schema, &[]);

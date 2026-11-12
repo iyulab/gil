@@ -452,8 +452,13 @@ pub unsafe extern "C" fn gil_records_new(lines: GilStr, out: *mut *mut GilRecord
             .enumerate()
             .filter(|(_, line)| !line.trim().is_empty())
             .map(|(at, line)| {
-                serde_json::from_str(line)
-                    .map_err(|e| input(format!("record line {} does not read: {e}", at + 1)))
+                serde_json::from_str(line).map_err(|e| {
+                    input(format!(
+                        "record line {} does not read: {}",
+                        at + 1,
+                        record_error(line, &e)
+                    ))
+                })
             })
             .collect::<Result<_, _>>()?;
         // SAFETY: forwarded from the caller.
@@ -662,8 +667,12 @@ pub unsafe extern "C" fn gil_open_record_reopen(
         // SAFETY: forwarded from the caller, for every pointer below.
         let schema = unsafe { handle(schema, "schema") }?;
         let record = unsafe { text(record, "record") }?;
-        let saved: Record = serde_json::from_str(record)
-            .map_err(|e| input(format!("a record does not read: {e}")))?;
+        let saved: Record = serde_json::from_str(record).map_err(|e| {
+            input(format!(
+                "a record does not read: {}",
+                record_error(record, &e)
+            ))
+        })?;
         if saved.id.trim().is_empty() {
             return Err(input("a record needs an id"));
         }
@@ -1083,6 +1092,24 @@ impl Options {
             counting: self.counting.as_deref(),
             uncounted_batches: &self.uncounted_batches,
         }
+    }
+}
+
+/// Why a record line does not read, naming the record by its id when the line has one. The position `serde_json`
+/// reports is inside the line, which names nothing the host wrote.
+fn record_error(line: &str, error: &serde_json::Error) -> String {
+    let message = error.to_string();
+    let reason = message
+        .rsplit_once(" at line ")
+        .map_or(message.as_str(), |(reason, _)| reason);
+    match serde_json::from_str::<Value>(line)
+        .ok()
+        .as_ref()
+        .and_then(|found| found.get("id"))
+        .and_then(Value::as_str)
+    {
+        Some(id) => format!("record '{id}': {reason}"),
+        None => reason.to_owned(),
     }
 }
 

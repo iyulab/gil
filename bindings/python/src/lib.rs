@@ -45,7 +45,22 @@ fn settlement(name: &str) -> Parsed<SettlementKind> {
 
 /// A record as the core's `serde` form reads it — `settled_at` as ticks or as a time, an entry given as null left out.
 fn record(text: &str) -> Parsed<Record> {
-    serde_json::from_str(text).map_err(|e| format!("a record does not read: {e}"))
+    serde_json::from_str(text).map_err(|e| {
+        let message = e.to_string();
+        // The position serde_json reports is inside the line and names nothing the host wrote; the record's id does.
+        let reason = message
+            .rsplit_once(" at line ")
+            .map_or(message.as_str(), |(reason, _)| reason);
+        match serde_json::from_str::<Value>(text)
+            .ok()
+            .as_ref()
+            .and_then(|found| found.get("id"))
+            .and_then(Value::as_str)
+        {
+            Some(id) => format!("a record does not read: record '{id}': {reason}"),
+            None => format!("a record does not read: {reason}"),
+        }
+    })
 }
 
 // ---- writing ----

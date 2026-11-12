@@ -33,14 +33,25 @@ def test_a_time_text_reads_as_the_core_reads_it() -> None:
         "2026-11-12T19:00:00.0000001+09:00",
         "2026-11-12T01:30:00.9999999-08:30",
         "1970-01-01T00:00:00.0000000+00:00",
+        # What other tools write: no fraction, `Z`, the fraction in fewer digits (`datetime.isoformat()`).
+        "2026-11-12T10:00:00+00:00",
+        "2026-11-12T10:00:00Z",
+        "2026-11-12T19:00:00.123456+09:00",
+        "2026-11-12T10:00:00.5Z",
     ):
-        assert gil.OpenRecord(SCHEMA, "t", text).snapshot()["settled_at"] == core_ticks(text)
+        assert gil.OpenRecord(SCHEMA, "t", text).snapshot()["settled_at"] == core_ticks(
+            text
+        )
 
 
 def test_a_datetime_with_a_zone_is_the_same_instant_as_its_text() -> None:
-    moment = datetime(2026, 11, 12, 19, 0, 0, 123456, tzinfo=timezone(timedelta(hours=9)))
+    moment = datetime(
+        2026, 11, 12, 19, 0, 0, 123456, tzinfo=timezone(timedelta(hours=9))
+    )
     text = "2026-11-12T19:00:00.1234560+09:00"
-    assert gil.OpenRecord(SCHEMA, "t", moment).snapshot()["settled_at"] == core_ticks(text)
+    assert gil.OpenRecord(SCHEMA, "t", moment).snapshot()["settled_at"] == core_ticks(
+        text
+    )
 
 
 def test_ticks_go_through_unchanged() -> None:
@@ -51,7 +62,13 @@ def test_a_settlement_takes_the_same_kinds_of_time() -> None:
     decider = gil.Decider(SCHEMA, gil.records([]))
     record = gil.OpenRecord(SCHEMA, "t", TEXT)
     record.observe(decider, "component", "vpn")
-    record.settle(decider, "team", "Enter", datetime(2026, 11, 12, 10, 1, tzinfo=UTC), value="network")
+    record.settle(
+        decider,
+        "team",
+        "Enter",
+        datetime(2026, 11, 12, 10, 1, tzinfo=UTC),
+        value="network",
+    )
     assert record.snapshot()["settlements"] == {"team": "Enter"}
 
 
@@ -61,6 +78,8 @@ def test_a_settlement_takes_the_same_kinds_of_time() -> None:
         datetime(2026, 11, 12, 10, 0, 0),  # no zone: names no instant
         "2026-11-12 10:00:00",  # not the line's time format
         "2026-13-12T10:00:00.0000000+00:00",  # a month out of range
+        "2026-11-12T10:00:00.0000000+14:30",  # an offset past the farthest zone
+        "2026-11-12T10:00:00.00000001Z",  # more digits than a tick
         1.5,
         True,
     ],
@@ -68,3 +87,14 @@ def test_a_settlement_takes_the_same_kinds_of_time() -> None:
 def test_what_is_not_a_time_is_refused_with_the_reason(bad: object) -> None:
     with pytest.raises((ValueError, TypeError)):
         gil.OpenRecord(SCHEMA, "t", bad)  # type: ignore[arg-type]
+
+
+def test_a_datetime_isoformat_is_a_time_text_the_core_reads() -> None:
+    moment = datetime(
+        2026, 11, 12, 19, 0, 0, 123456, tzinfo=timezone(timedelta(hours=9))
+    )
+    assert (
+        core_ticks(moment.isoformat())
+        == gil.OpenRecord(SCHEMA, "t", moment).snapshot()["settled_at"]
+    )
+    assert gil.records([{"id": "1", "settled_at": moment.isoformat()}]) is not None

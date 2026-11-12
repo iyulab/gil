@@ -1323,52 +1323,55 @@ fn settled_at<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<i64, 
         Time::Ticks(ticks) => Ok(ticks),
         Time::Text(text) => ticks(&text).ok_or_else(|| {
             serde::de::Error::custom(format!(
-                "settled_at '{text}' is neither ticks nor a time yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM"
+                "settled_at '{text}' is neither ticks nor a time yyyy-MM-ddTHH:mm:ss[.fffffff](Z|±HH:MM)"
             ))
         }),
     }
 }
 
-/// `yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM` → 100-nanosecond ticks since the Unix epoch, UTC; `None` for any other text or a
-/// date, time or offset out of range.
+/// `yyyy-MM-ddTHH:mm:ss[.f…f](Z|±HH:MM)` (RFC 3339; the fraction in one to seven digits, the 100-nanosecond tick) →
+/// ticks since the Unix epoch, UTC; `None` for any other text or a date, time or offset out of range.
 #[cfg(feature = "serde")]
 fn ticks(text: &str) -> Option<i64> {
     let bytes = text.as_bytes();
-    if bytes.len() != 33
-        || [
-            (4, b'-'),
-            (7, b'-'),
-            (10, b'T'),
-            (13, b':'),
-            (16, b':'),
-            (19, b'.'),
-            (30, b':'),
-        ]
-        .iter()
-        .any(|&(at, separator)| bytes[at] != separator)
+    if bytes.len() < 20
+        || [(4, b'-'), (7, b'-'), (10, b'T'), (13, b':'), (16, b':')]
+            .iter()
+            .any(|&(at, separator)| bytes[at] != separator)
     {
         return None;
     }
     let number = |range: std::ops::Range<usize>| -> Option<i64> {
-        let digits = &bytes[range];
+        let digits = bytes.get(range)?;
         digits
             .iter()
             .all(u8::is_ascii_digit)
             .then(|| digits.iter().fold(0, |n, d| n * 10 + i64::from(d - b'0')))
     };
     let (year, month, day) = (number(0..4)?, number(5..7)?, number(8..10)?);
-    let (hour, minute, second, fraction) = (
-        number(11..13)?,
-        number(14..16)?,
-        number(17..19)?,
-        number(20..27)?,
-    );
-    let sign = match bytes[27] {
-        b'+' => 1,
-        b'-' => -1,
+    let (hour, minute, second) = (number(11..13)?, number(14..16)?, number(17..19)?);
+    let mut at = 19;
+    let mut fraction = 0;
+    if bytes[at] == b'.' {
+        let digits = bytes[at + 1..]
+            .iter()
+            .take_while(|b| b.is_ascii_digit())
+            .count();
+        if !(1..=7).contains(&digits) {
+            return None;
+        }
+        fraction = number(at + 1..at + 1 + digits)? * 10_i64.pow(7 - digits as u32);
+        at += 1 + digits;
+    }
+    let (sign, offset_hours, offset_minutes) = match bytes.get(at..)? {
+        b"Z" => (1, 0, 0),
+        [b'+' | b'-', ..] if bytes.len() == at + 6 && bytes[at + 3] == b':' => (
+            if bytes[at] == b'+' { 1 } else { -1 },
+            number(at + 1..at + 3)?,
+            number(at + 4..at + 6)?,
+        ),
         _ => return None,
     };
-    let (offset_hours, offset_minutes) = (number(28..30)?, number(31..33)?);
     let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
     let month_days = [
         31,

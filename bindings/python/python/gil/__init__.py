@@ -380,7 +380,7 @@ class Schema:
 def records(items: Iterable[dict[str, Any]]) -> Records:
     """Settled records from dictionaries, in settlement order.
 
-    Each has ``id``, ``settled_at`` (``yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM`` or 100-nanosecond ticks since the Unix
+    Each has ``id``, ``settled_at`` (``yyyy-MM-ddTHH:mm:ss[.fffffff](Z|±HH:MM)`` or 100-nanosecond ticks since the Unix
     epoch) and ``values``; ``sets``, ``settlements``, ``probabilities``, ``arrival`` and ``batch`` (the batch the
     record was settled in, for ``select_layers`` to count what batches do to its promise) are optional, as are what the
     host saw and timed — ``suggested``, ``sources``, ``promises``, ``settle_ms``, ``open_ms``, ``settled_by``,
@@ -851,37 +851,42 @@ class AskPlanner:
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _TIME_TEXT = re.compile(
-    r"(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{7})([+-])(\d{2}):(\d{2})"
+    r"(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,7}))?(?:(Z)|([+-])(\d{2}):(\d{2}))"
 )
 
 
 def _ticks(time: int | str | datetime) -> int:
     """A time as the 100-nanosecond ticks since the Unix epoch, UTC, the core counts in: ticks as they are, a record
-    line's time text (``yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM``) or a ``datetime`` with a zone. A ``datetime`` without a zone
-    names no instant, so it is refused rather than read as local time."""
+    line's time text (``yyyy-MM-ddTHH:mm:ss[.fffffff](Z|±HH:MM)``, RFC 3339 with the fraction in up to seven digits —
+    what ``datetime.isoformat()`` writes) or a ``datetime`` with a zone. A ``datetime`` without a zone names no instant,
+    so it is refused rather than read as local time."""
     if isinstance(time, bool):
         raise TypeError("a time is ticks, a time text or a datetime, not a bool")
     if isinstance(time, int):
         return time
     if isinstance(time, str):
         found = _TIME_TEXT.fullmatch(time)
+        invalid = ValueError(
+            f"time '{time}' is neither ticks nor a time yyyy-MM-ddTHH:mm:ss[.fffffff](Z|±HH:MM)"
+        )
         if found is None:
-            raise ValueError(
-                f"time '{time}' is neither ticks nor a time yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM"
+            raise invalid
+        year, month, day, hour, minute, second = (int(found[i]) for i in range(1, 7))
+        fraction = int(found[7].ljust(7, "0")) if found[7] else 0
+        if found[8]:  # Z
+            offset = timedelta()
+        else:
+            offset = timedelta(hours=int(found[10]), minutes=int(found[11]))
+            # The farthest a zone is from UTC, as the core reads it.
+            if int(found[11]) > 59 or offset > timedelta(hours=14):
+                raise invalid
+            offset = -offset if found[9] == "-" else offset
+        try:
+            moment = datetime(
+                year, month, day, hour, minute, second, tzinfo=timezone(offset)
             )
-        year, month, day, hour, minute, second, fraction = (
-            int(found[i]) for i in range(1, 8)
-        )
-        offset = timedelta(hours=int(found[9]), minutes=int(found[10]))
-        moment = datetime(
-            year,
-            month,
-            day,
-            hour,
-            minute,
-            second,
-            tzinfo=timezone(-offset if found[8] == "-" else offset),
-        )
+        except ValueError as error:
+            raise ValueError(f"time '{time}': {error}") from error
         return ((moment - _EPOCH) // timedelta(seconds=1)) * 10_000_000 + fraction
     if isinstance(time, datetime):
         if time.tzinfo is None or time.utcoffset() is None:
@@ -897,7 +902,7 @@ def _ticks(time: int | str | datetime) -> int:
 class OpenRecord:
     """One record of a schema while its values arrive. Each change puts the record into the decider's memory again and
     returns the answers it changes. A time is 100-nanosecond ticks since the Unix epoch (UTC), a record line's time text
-    (``yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM``) or a ``datetime`` with a time zone.
+    (``yyyy-MM-ddTHH:mm:ss[.fffffff](Z|±HH:MM)``) or a ``datetime`` with a time zone.
 
     ``settle`` takes the settlement kind by name — ``Accept``, ``Correct``, ``Enter``, ``Fill``, ``Restore``, ``Set``,
     ``Check`` (with ``probability``), ``Reject``, ``Revert``, and ``AcceptOther`` / ``CorrectOther`` for a value kept or

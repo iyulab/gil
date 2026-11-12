@@ -27,6 +27,10 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Changed
 
+- **A record line is read as RFC 3339, and one that does not read is named by its record.** `settled_at` as text takes
+  the fraction in one to seven digits or none, and `Z` for UTC (the seven-digit form of .NET's `"O"` still reads), and a
+  record line that does not read says `record 'id': <reason>` instead of a position inside the line's own JSON.
+
 - **`Usage.Count` reads the promise display only where the answer had a promise, and a time text's offset stops at
   ±14:00.** The documentation said both; the core read `promise_shown` beside an answer that kept no promise (counting
   it as a hidden promise) and accepted offsets up to ±14:59. Records that keep a promise wherever they keep a display, and

@@ -209,6 +209,15 @@ def test_bad_input_is_a_value_error() -> None:
         )
     with pytest.raises(ValueError, match="missing field `role`"):
         gil.Schema.from_dict({"name": "f", "attributes": [{"name": "a"}]})
+    # A record that does not read is named by its id, not by a position inside its JSON.
+    with pytest.raises(ValueError, match=r"line 2: .*record 'r8': invalid type: sequence") as named:
+        gil.records(
+            [
+                {"id": "r1", "settled_at": 1, "values": {}},
+                {"id": "r8", "settled_at": 2, "values": {"team": ["x"]}},
+            ]
+        )
+    assert " at line " not in str(named.value)
     with pytest.raises(ValueError, match="neither ticks nor a time"):
         gil.records([{"id": "1", "settled_at": "yesterday", "values": {}}])
     with pytest.raises(ValueError, match="neither ticks nor a time"):
