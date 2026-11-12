@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use gil::decider::Source;
 use gil::replay::{LayerThresholds, ThresholdChoice, ThresholdReplay};
-use gil::schema::{Attribute, AttributeRole, CoarseLevel, Schema};
+use gil::schema::{Attribute, AttributeRole, CoarseLevel, KeyCombine, Schema};
 use gil::tuning::{Stale, Tuning, VERSION, fingerprint};
 
 fn schema() -> Schema {
@@ -153,7 +153,9 @@ fn the_fingerprint_ignores_what_the_replays_choose_and_is_the_same_in_every_run(
         a[2].depends_on = Some(vec!["product".into()])
     });
     let from = changed(&schema(), |a| a[3].candidates_from = Some("team".into()));
-    for changed in [votes, depends, from] {
+    // How the keys' strengths combine changes every key score, so a choice made under one rule does not stand under another.
+    let combine = changed(&schema(), |a| a[2].key_combine = KeyCombine::Max);
+    for changed in [votes, depends, from, combine] {
         assert_ne!(fingerprint(&changed), fingerprint(&schema()));
     }
 

@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 
 use crate::decider::Source;
 use crate::replay::{LayerThresholds, fnv1a};
-use crate::schema::{AttributeRole, Schema};
+use crate::schema::{AttributeRole, KeyCombine, Schema};
 
 /// This crate's version — what a tuning records it was chosen with.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -252,6 +252,11 @@ impl Tuning {
     /// Why the tuning no longer stands for `schema` with `settled` records, or `None` while it does: another crate
     /// version, a changed setting the choice rests on, or a change in the settled records of a tenth or more — at least
     /// one record while fewer than ten were settled at the choice.
+    ///
+    /// The settings on the schema are compared (its fingerprint). The settings the choice was asked with — the target
+    /// precision, the fewest answers, which settlements count, which batches are left out — are not: this does not
+    /// receive them. A host that keeps a tuning across runs compares [`Tuning::target_precision`] with the target it
+    /// would choose for now, and chooses again when the others changed; a [`crate::keeper::Keeper`] holds them itself.
     pub fn stale(&self, schema: &Schema, settled: usize) -> Option<Stale> {
         if self.version != VERSION {
             return Some(Stale::Version {
@@ -272,8 +277,8 @@ impl Tuning {
 
 /// A stable fingerprint of what a schema's choice rests on: its name and, for each attribute in order, everything but
 /// the settings the replays choose (key attributes, key concentrations, thresholds, floors) and the policy — role,
-/// several values, evidence, dependencies, domain, values to catch, votes, coarse level. The same on every platform and
-/// in every run.
+/// several values, evidence, dependencies, domain, values to catch, votes, how the keys' strengths combine, coarse
+/// level. The same on every platform and in every run.
 pub fn fingerprint(schema: &Schema) -> u64 {
     // Fields are separated by U+001E and list items by U+001F; an absent setting is `-`, a present list starts with `+`.
     fn list(out: &mut String, items: Option<&Vec<String>>) {
@@ -317,6 +322,11 @@ pub fn fingerprint(schema: &Schema) -> u64 {
         text.push('\u{1e}');
         if a.similar_elements {
             text.push_str("elements\u{1e}");
+        }
+        // How the keys' strengths combine changes every key score. Written only when it is not the default, so a tuning
+        // chosen before the setting existed keeps standing.
+        if a.key_combine != KeyCombine::Sum {
+            text.push_str("key-max\u{1e}");
         }
         match &a.coarse {
             None => text.push('-'),

@@ -8,6 +8,13 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Fixed
 
+- **A tuning chosen under one `key_combine` no longer stands under another.** The schema fingerprint behind
+  `Tuning::stale` left out how the keys' strengths combine (`KeyCombine`), which changes every key score. It is written
+  into the fingerprint only when it is not the default, so a tuning stored before stays valid. The settings the choice
+  was asked with (target precision, fewest answers, which settlements count, which batches are left out) are still not
+  compared by `stale`, which does not receive them — its documentation now says so and what a host that stores a tuning
+  does instead.
+
 - **`usage` counts a first check that kept the answer but not its layer as answered.** A first check whose record
   kept the answer (`suggested`) and not the layer (`sources`) was counted as a decision the decider abstained on: it
   was left out of `answered`, `first_checks` and the precision the checks give, and out of `first_checks_without_answer`
