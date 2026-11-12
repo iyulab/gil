@@ -367,6 +367,19 @@ public sealed class SelectionTests
     }
 
     [Fact]
+    public void A_first_check_that_kept_the_answer_without_its_layer_is_an_answered_decision()
+    {
+        // The answer kept from view is the check's suggestion, and every reader judges the check against it: a record that
+        // kept it and not the layer counts as answered and as a first check, as an audit of it is judged.
+        const string kept = """{"id":"k1","settled_at":1,"values":{"team":"network"},"settlements":{"team":"Check"},"probabilities":{"team":0.1},"suggested":{"team":"network"}}""";
+        using var records = SettledRecords.FromJsonLines(kept);
+        var team = Usage.Count(records)["team"];
+        (team.Decisions, team.Answered, team.Abstained).Should().Be((1, 1, 0));
+        (team.FirstChecks, team.FirstChecksRight, team.FirstChecksWithoutAnswer).Should().Be((1, 1, 0));
+        team.Realized.Should().Be(1.0);
+    }
+
+    [Fact]
     public void A_selection_the_contract_rules_out_is_an_argument_exception()
     {
         var (schema, records) = Early();

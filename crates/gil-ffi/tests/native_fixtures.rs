@@ -185,7 +185,8 @@ fn the_selections_fixture_is_up_to_date() {
     }));
 
     // Records of every shape: accepted, corrected, checked, entered with no answer, turned down with the answer in
-    // view, settled over another suggestion with an answer in view.
+    // view, settled over another suggestion with an answer in view, and a first check that kept the answer without
+    // its layer (still an answered decision).
     let lines = [
         r#"{"id":"u1","settled_at":1,"values":{"team":"network"},"settlements":{"team":"Accept"},"suggested":{"team":"network"},"sources":{"team":"KeyMemory"},"promises":{"team":0.85}}"#,
         r#"{"id":"u2","settled_at":2,"values":{"team":"security"},"settlements":{"team":"Correct"},"suggested":{"team":"network"},"sources":{"team":"KeyMemory"},"promises":{"team":0.85}}"#,
@@ -193,6 +194,7 @@ fn the_selections_fixture_is_up_to_date() {
         r#"{"id":"u4","settled_at":4,"values":{"team":"facilities"},"settlements":{"team":"Enter"}}"#,
         r#"{"id":"u5","settled_at":5,"values":{},"suggested":{"team":"network"},"sources":{"team":"KeyMemory"},"promises":{"team":0.85}}"#,
         r#"{"id":"u6","settled_at":6,"values":{"team":"x"},"settlements":{"team":"AcceptOther"},"suggested":{"team":"x"},"sources":{"team":"KeyMemory"},"promises":{"team":0.85}}"#,
+        r#"{"id":"u7","settled_at":7,"values":{"team":"network"},"settlements":{"team":"Check"},"probabilities":{"team":0.1},"suggested":{"team":"network"}}"#,
     ]
     .join("\n");
     let mut kept = ptr::null_mut();

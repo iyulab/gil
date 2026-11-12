@@ -314,6 +314,7 @@ fn the_usage_counts_come_back_as_the_core_gives_them() {
         r#"{"id":"u4","settled_at":4,"values":{"team":"facilities"},"settlements":{"team":"Enter"}}"#,
         r#"{"id":"u5","settled_at":5,"values":{},"suggested":{"team":"network"},"sources":{"team":"KeyMemory"},"promises":{"team":0.85}}"#,
         r#"{"id":"u6","settled_at":6,"values":{"team":"x"},"settlements":{"team":"AcceptOther"},"suggested":{"team":"x"},"sources":{"team":"KeyMemory"},"promises":{"team":0.85}}"#,
+        r#"{"id":"u7","settled_at":7,"values":{"team":"network"},"settlements":{"team":"Check"},"probabilities":{"team":0.1},"suggested":{"team":"network"}}"#,
     ]
     .join("\n");
     let mut records = ptr::null_mut();
@@ -324,7 +325,14 @@ fn the_usage_counts_come_back_as_the_core_gives_them() {
         .lines()
         .map(|l| serde_json::from_str(l).unwrap())
         .collect();
-    assert_eq!(result(status, len), json!(usage(&core_records)));
+    let counts = result(status, len);
+    assert_eq!(counts, json!(usage(&core_records)));
+    // `u7` is a first check that kept the answer without its layer: an answered decision and a first check, judged against
+    // the kept answer as an audit of it is (it fell out of both when the answered condition asked for the layer).
+    let team = &counts["team"];
+    assert_eq!(team["first_checks"], json!(2), "u3 and u7: {team}");
+    assert_eq!(team["first_checks_right"], json!(2), "{team}");
+    assert_eq!(team["first_checks_without_answer"], json!(0), "{team}");
     unsafe { gil_records_free(records) };
 
     let status = unsafe { gil_usage(ptr::null(), &mut len) };

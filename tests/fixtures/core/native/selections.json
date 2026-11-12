@@ -8244,31 +8244,47 @@
         "values": {
           "team": "x"
         }
+      },
+      {
+        "id": "u7",
+        "probabilities": {
+          "team": 0.1
+        },
+        "settled_at": 7,
+        "settlements": {
+          "team": "Check"
+        },
+        "suggested": {
+          "team": "network"
+        },
+        "values": {
+          "team": "network"
+        }
       }
     ],
     "result": {
       "team": {
         "accepted": 1,
         "accepted_other": 1,
-        "answered": 5,
+        "answered": 6,
         "audits": 0,
-        "checked": 1,
-        "checked_right": 1,
+        "checked": 2,
+        "checked_right": 2,
         "corrected": 1,
         "corrected_other": 0,
-        "decisions": 6,
+        "decisions": 7,
         "entered": 1,
         "entered_over_answer": 0,
         "filled": 0,
-        "first_checks": 1,
-        "first_checks_right": 1,
+        "first_checks": 2,
+        "first_checks_right": 2,
         "first_checks_without_answer": 0,
-        "judged_weight": 6.0,
+        "judged_weight": 16.0,
         "promise_display": [],
         "promise_sum": 3.4,
         "promised": 4,
         "rejected": 1,
-        "right_weight": 5.0
+        "right_weight": 15.0
       }
     }
   }
