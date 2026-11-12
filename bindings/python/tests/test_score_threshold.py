@@ -219,3 +219,12 @@ def test_a_decision_that_is_not_a_dict_is_refused_with_its_position() -> None:
             0.9,
             1,
         )
+
+
+def test_a_scored_decision_without_right_is_refused_by_its_id() -> None:
+    missing: list[gil.ScoredDecision] = [
+        {"id": "c1", "settled_at": 1, "score": 0.9, "right": True},
+        {"id": "c2", "settled_at": 2, "score": 0.8},
+    ]
+    with pytest.raises(ValueError, match="c2.*right is missing"):
+        gil.select_score_threshold(missing, 0.8, 30)

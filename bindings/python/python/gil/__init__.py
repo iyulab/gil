@@ -22,7 +22,9 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from collections.abc import Iterable, Mapping
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal, Required, TypedDict, cast
 
@@ -538,7 +540,8 @@ class ScoredDecision(TypedDict, total=False):
     """One decision a judge outside Gil made about a case a person later settled (experimental).
 
     ``id`` and ``settled_at`` (ticks, as a record's) order the decisions; ``score`` is the judge's own, higher meaning
-    surer, left out or ``None`` when it gave no candidate; ``right`` is whether its best value was the settled one;
+    surer, left out or ``None`` when it gave no candidate; ``right`` is whether its best value was the settled one (required
+    when there is a ``score``);
     ``weight`` (default 1) is how many decisions this one counts as, one over the draw probability for a checked case.
     """
 
@@ -613,6 +616,11 @@ def _decision_row(decision: object, index: int) -> dict[str, object]:
         )
     row = {key: _plain(value) for key, value in decision.items()}
     name = repr(row.get("id", index))
+    if row.get("score") is not None and "right" not in row:
+        raise ValueError(
+            f"decision {name}: right is missing; say whether the judge's best value was the settled one "
+            "(True or False) — leaving it out would count the decision as wrong"
+        )
     for key, kinds in _DECISION_FIELDS.items():
         value = row.get(key)
         if value is None:
@@ -829,9 +837,55 @@ class AskPlanner:
         )
 
 
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+_TIME_TEXT = re.compile(
+    r"(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{7})([+-])(\d{2}):(\d{2})"
+)
+
+
+def _ticks(time: int | str | datetime) -> int:
+    """A time as the 100-nanosecond ticks since the Unix epoch, UTC, the core counts in: ticks as they are, a record
+    line's time text (``yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM``) or a ``datetime`` with a zone. A ``datetime`` without a zone
+    names no instant, so it is refused rather than read as local time."""
+    if isinstance(time, bool):
+        raise TypeError("a time is ticks, a time text or a datetime, not a bool")
+    if isinstance(time, int):
+        return time
+    if isinstance(time, str):
+        found = _TIME_TEXT.fullmatch(time)
+        if found is None:
+            raise ValueError(
+                f"time '{time}' is neither ticks nor a time yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM"
+            )
+        year, month, day, hour, minute, second, fraction = (
+            int(found[i]) for i in range(1, 8)
+        )
+        offset = timedelta(hours=int(found[9]), minutes=int(found[10]))
+        moment = datetime(
+            year,
+            month,
+            day,
+            hour,
+            minute,
+            second,
+            tzinfo=timezone(-offset if found[8] == "-" else offset),
+        )
+        return ((moment - _EPOCH) // timedelta(seconds=1)) * 10_000_000 + fraction
+    if isinstance(time, datetime):
+        if time.tzinfo is None or time.utcoffset() is None:
+            raise ValueError(
+                "a datetime without a time zone names no instant; give it one (tzinfo=timezone.utc)"
+            )
+        return ((time - _EPOCH) // timedelta(microseconds=1)) * 10
+    raise TypeError(
+        f"a time is ticks, a time text or a datetime, not a {type(time).__name__}"
+    )
+
+
 class OpenRecord:
     """One record of a schema while its values arrive. Each change puts the record into the decider's memory again and
-    returns the answers it changes. Times are 100-nanosecond ticks since the Unix epoch, UTC.
+    returns the answers it changes. A time is 100-nanosecond ticks since the Unix epoch (UTC), a record line's time text
+    (``yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM``) or a ``datetime`` with a time zone.
 
     ``settle`` takes the settlement kind by name — ``Accept``, ``Correct``, ``Enter``, ``Fill``, ``Restore``, ``Set``,
     ``Check`` (with ``probability``), ``Reject``, ``Revert``, and ``AcceptOther`` / ``CorrectOther`` for a value kept or
@@ -843,13 +897,17 @@ class OpenRecord:
     __slots__ = ("_inner",)
 
     def __init__(
-        self, schema: Schema, id: str, settled_at: int, batch: str | None = None
+        self,
+        schema: Schema,
+        id: str,
+        settled_at: int | str | datetime,
+        batch: str | None = None,
     ) -> None:
         """Experimental: ``batch`` names the batch the record is one of — records settled together, several at once
         from one source. When the schema holds thresholds for the first record of a batch (``first_of_batch``), a
         record whose batch has no other settled record in the decider is answered at those; one that names no batch
         always is."""
-        self._inner = _OpenRecord(schema.json, id, settled_at, batch)
+        self._inner = _OpenRecord(schema.json, id, _ticks(settled_at), batch)
 
     @classmethod
     def reopen(cls, schema: Schema, saved: dict[str, Any]) -> OpenRecord:
@@ -888,7 +946,7 @@ class OpenRecord:
         decider: Decider,
         attribute: str,
         kind: str,
-        now: int,
+        now: int | str | datetime,
         value: str | None = None,
         values: Iterable[str] | None = None,
         probability: float | None = None,
@@ -913,7 +971,7 @@ class OpenRecord:
                     decider._inner,
                     attribute,
                     kind,
-                    now,
+                    _ticks(now),
                     value,
                     None if values is None else list(values),
                     probability,

@@ -8,6 +8,14 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Fixed
 
+- **Python: `OpenRecord` and `OpenRecord.settle` take the time the documentation said they take.** The README
+  promised ticks or "the line's time text", but only ticks were accepted: a time text raised `TypeError: 'str' object
+  cannot be interpreted as an integer`. A time text (`yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM`) and a `datetime` with a time
+  zone are now read; a `datetime` without one is refused, as it names no instant.
+- **Python: `select_score_threshold` refuses a decision that has a `score` but no `right`.** The missing `right` was
+  counted as wrong without a word, so a typo in the key showed up as a precision of 0 and a threshold that never
+  stands. The refusal names the decision, like the other input checks do.
+
 - **A tuning chosen under one `key_combine` no longer stands under another.** The schema fingerprint behind
   `Tuning::stale` left out how the keys' strengths combine (`KeyCombine`), which changes every key score. It is written
   into the fingerprint only when it is not the default, so a tuning stored before stays valid. The settings the choice
