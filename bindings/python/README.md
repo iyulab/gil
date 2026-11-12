@@ -319,7 +319,7 @@ share of the records still to come will settle a value no earlier record had —
 ## Answering a record while its values arrive
 
 A decider holds the settled records; an open record asks it each time a value arrives or is settled, and hands back
-the answers that changed. Times are 100-nanosecond ticks since the Unix epoch, UTC, or the line's time text; `now` in
+the answers that changed. A time is 100-nanosecond ticks since the Unix epoch (UTC), the line's time text, or a `datetime` with a time zone (one without is refused: it names no instant); `now` in
 the examples below is the time the value was settled.
 
 ```python
