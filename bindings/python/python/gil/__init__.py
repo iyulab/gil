@@ -1238,7 +1238,10 @@ def promise_of(tuning: dict[str, Any], attribute: str, source: str) -> float | N
     ``source`` is ``"KeyMemory"``, the similar record layer's for ``"SimilarRecord"``; ``None`` for no answer, an
     outside judgement, an attribute the tuning does not name, or a promise it did not record (:func:`record_promise`).
     It reads the value's layers only: a coarse class offered instead (the answer's ``coarse``) names the layer that backs
-    the class, and its promise is :func:`coarse_promise_of`'s."""
+    the class, and its promise is :func:`coarse_promise_of`'s.
+
+    Ask it about an answer that is ``answered``. An unanswered lookup still carries the ``source`` of its best candidate,
+    and this returns that layer's promise — which the layer did not make for this answer, since it did not trust it."""
     field = {"KeyMemory": "key_promise", "SimilarRecord": "memory_promise"}.get(source)
     tuned = next(
         (a for a in tuning["attributes"] if a["attribute"] == attribute), None
