@@ -549,7 +549,10 @@ A judge outside Gil can have its threshold chosen the same way, from nothing but
 replay a memory layer gets — admit the judge's answers as trusted at or above `chosen["threshold"]` and show
 `chosen["promise"]` beside them. The scores must be ones the judge gave cases it did not learn from (above). A saved record can keep the judge's score beside the answer a person saw (a `scores`
 entry, read where `sources` is `"Model"`), and `gil.scored_decisions(records, attribute)` reads such records into
-the decisions.
+the decisions. A system's own records hold no score below the threshold it runs on — an answer is shown only at or
+above it — so a threshold chosen from them can stay or rise but never find that a lower one would also hold the target.
+To let it go lower, keep the judge's candidate and score on a sample of the cases it gave below the threshold too,
+settled by a person who saw it or drawn as checks (with the probability they were drawn with).
 
 **Status: early.** The API may change within 0.x — each change is listed in
 [CHANGELOG.md](https://github.com/iyulab/gil/blob/main/crates/gil/CHANGELOG.md) with what to do about it.

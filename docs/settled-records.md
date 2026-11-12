@@ -97,7 +97,11 @@ last seven entries yet (`replay::scored_decisions` reads `suggested`, `sources` 
   judge can be chosen from the saved records alone. `replay::scored_decisions` turns the records settled with the
   judge's answer in view into the decisions `select_score_threshold` takes; a case settled as `Accept`, `Correct` or
   `Check` counts, a check as one over the probability it was drawn with. The score is kept as the judge gave it, on its
-  own scale, because a record cannot be given it afterwards.
+  own scale, because a record cannot be given it afterwards. Only an answer that was shown has a score, and the judge's
+  answers are shown only at or above the threshold in use, so a threshold chosen from these records can stay or rise but
+  never find that a lower one would also hold the target: to let it go lower, keep the judge's candidate and score
+  (`suggested`, `sources`, `scores`) on a sample of the cases it gave below the threshold too — settled by a person who
+  saw it, or drawn as `Check`s with their probability.
 - **`settle_ms` and `open_ms`** — what settling costs a person, and whether it falls as settled records accumulate and
   more is left to Gil. A monotonic clock's difference is enough; the wall clock is `settled_at`.
 - **`settled_by`** — whether settlers differ in how often they are right, which a promise counted over everyone hides.

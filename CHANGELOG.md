@@ -39,6 +39,14 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   same; for records that carry all of those on three decided attributes, the memory a keeper takes on when it settles
   them falls by about a fifth (16 → 12.7 KB a record at 100,000 records). Records that carry none of them are unchanged.
 
+### Documentation
+
+- **The README says what a running system's own records cannot show to the judge-threshold selection.** A record keeps
+  the judge's score only for an answer that was shown, and an answer is shown only at or above the threshold in use, so a
+  threshold chosen from those records can stay or rise but never find that a lower one would also hold the target. Keep
+  the judge's candidate and score on a sample of the cases it gave below the threshold too, settled by a person who saw
+  it or drawn as checks with their probability.
+
 ## 0.31.0
 
 ### Added

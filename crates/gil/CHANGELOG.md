@@ -64,6 +64,13 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Documentation
 
+- **The judge-threshold documentation says what a running system's own records cannot show.** A record keeps the
+  judge's score only for an answer that was shown, and an answer is shown only at or above the threshold in use, so a
+  threshold chosen from those records can stay or rise but never find that a lower one would also hold the target. The
+  Rust docs of `replay::scored_decisions` and `Record::scores`, `docs/settled-records.md` and the crate and Python
+  READMEs now say so, and what to do about it: keep the judge's candidate and score on a sample of the cases it gave
+  below the threshold too, settled by a person who saw it or drawn as checks with their probability.
+
 - **The Python README opens with a first run from start to end, and says what a promise is.** One sample takes settled
   records through a `Keeper`, an answer with its promise, the person's settlement and `gil.usage`, with nothing to
   download. It also warns that `gil.promise_of` belongs to an answer that is `answered` (an unanswered lookup still

@@ -787,7 +787,9 @@ judge's answers as trusted at or above `Chosen.Threshold` and show the promise b
 threshold stands. Only the target precision and the fewest answers of the options are read, and only "a higher score is
 surer" is assumed of the score. It does not choose how often to check the judge or where to send what it will not answer. A saved record can keep the
 judge's score beside the answer a person saw (`Record.Scores`), and `Replay.ScoredDecisions(records, attribute)` reads
-such records into the decisions.
+such records into the decisions. A system's own records hold no score below the threshold it runs on, so a threshold
+chosen from them can stay or rise but not go lower: keep the judge's candidate and score on a sample of the cases it gave
+below the threshold too (settled by a person who saw it, or drawn as checks with their probability).
 
 **Asking first** (experimental, `GIL0005`). When no layer answers a decided attribute, one more observed value from the
 person — the component a ticket is about, the part a fault was found on — may let one answer, or a class be trusted.

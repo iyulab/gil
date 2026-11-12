@@ -2953,6 +2953,12 @@ pub fn select_score_threshold(decisions: &[ScoredDecision], choice: Choice) -> T
 /// and gave no candidate for leaves no trace in a record, so the answer rate the threshold reports is among answered
 /// cases unless the caller adds those as `ScoredDecision::new(id, settled_at, None, false)`. A record settled again
 /// under the same id appears once for each time it was written: pass the records that count.
+///
+/// A record keeps the judge's score only for an answer that was shown, and an answer is shown only at or above the
+/// threshold in use — so the records of a system running on a threshold hold no score below it, and a threshold chosen
+/// from them can stay or rise but never find that a lower one would also hold the target. To let it go lower, keep the
+/// judge's candidate and score on a sample of the cases it gave below the threshold too, settled by a person who saw
+/// it or drawn as checks with the probability they were drawn with: a record written so counts like any other.
 pub fn scored_decisions(records: &[Record], attribute: &str) -> Vec<ScoredDecision> {
     records
         .iter()

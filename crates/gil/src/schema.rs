@@ -1131,7 +1131,9 @@ pub struct Record {
     /// Experimental. For each decided attribute settled with an answer from a judge outside Gil in view (its source is
     /// [`crate::decider::Source::External`]), the score the judge gave that answer when it was shown, on the judge's own
     /// scale: a number, higher meaning surer. [`crate::replay::scored_decisions`] reads it for
-    /// [`crate::replay::select_score_threshold`]; for an attribute whose source is another layer it is not read.
+    /// [`crate::replay::select_score_threshold`]; for an attribute whose source is another layer it is not read. An
+    /// answer the judge gave below the threshold in use is not shown and has no score here — see
+    /// [`crate::replay::scored_decisions`] for what that means for a threshold chosen from these records.
     #[cfg_attr(
         feature = "serde",
         serde(
