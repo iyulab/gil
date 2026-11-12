@@ -315,7 +315,8 @@ fn kept(record: &Record) -> Record {
 
 /// The settled records and the replays the thresholds are chosen on, for the decided attributes of one schema that take
 /// one value — and, experimentally, for those that take several and are answered by similar elements
-/// ([`crate::schema::Attribute::similar_elements`]). Not thread-safe.
+/// ([`crate::schema::Attribute::similar_elements`]). A shared reference only reads, so a keeper may be shared across
+/// threads while nothing changes it (it is `Sync`); a change takes exclusive access.
 pub struct Keeper {
     schema: Schema,
     keep: Keep,
@@ -339,6 +340,12 @@ pub struct Keeper {
     form_version: Option<String>,
     left: BTreeSet<String>,
 }
+
+// The claim above, kept by the compiler: a field that is not `Sync` fails the build here.
+const _: () = {
+    const fn shared<T: Sync>() {}
+    shared::<Keeper>();
+};
 
 impl Keeper {
     /// A keeper of `schema` with nothing settled, choosing for every decided attribute that takes one value — and,

@@ -13,8 +13,10 @@
 //! same handle; one that takes it as `*mut` changes it, and needs it to itself — a caller that shares a handle across
 //! threads holds a reader–writer lock, shared for the first kind and exclusive for the second.
 //!
-//! Every function returns a status — `GIL_OK`, or a code whose message `gil_last_error` copies out — and no panic
-//! crosses the boundary. A function with a text result keeps it on the calling thread for `gil_last_result` and writes
+//! Every function that can fail returns a status — `GIL_OK`, or a code whose message `gil_last_error` copies out — and no
+//! panic crosses the boundary. The few that return a plain value cannot fail: the versions, the frees, the lengths
+//! (`gil_records_len`) and the keeper's counts (`gil_keeper_settled`, `gil_keeper_counted` — a field read, answered even
+//! for a keeper a defect broke, since it says only how many records were taken). A function with a text result keeps it on the calling thread for `gil_last_result` and writes
 //! its length to `result_len`. A call the core's contract rules out comes back as `GIL_INVALID_INPUT` when the call
 //! changes a handle — it is refused before anything changes — and as `GIL_PANIC` when it only reads one (asking about an
 //! attribute that is not decided, say). A `GIL_PANIC` from a call that changes a handle is a defect that may have stopped
@@ -128,6 +130,7 @@ const _: () = {
     shared::<GilDecider>();
     shared::<GilOpenRecord>();
     shared::<GilAskPlanner>();
+    shared::<GilKeeper>();
     shared::<GilLexicalMemory>();
 };
 

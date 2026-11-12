@@ -31,6 +31,12 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   a fifth (16 → 12.7 KB a record at 100,000 records, measured through Python). Records that carry none of them are
   unchanged.
 
+### Documentation
+
+- **`Keeper` is `Sync`, and the build keeps it so.** Its documentation said "not thread-safe"; a shared reference only reads, so
+  readers may share a keeper while nothing changes it, and a change takes exclusive access. The C ABI header says the same
+  for `GilKeeper`, and both are now checked at compile time.
+
 ## 0.13.0
 
 ### Added
