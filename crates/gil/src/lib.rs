@@ -1,11 +1,4 @@
-//! The decision core of Gil: answers the decided attributes of a record from how settled records were filled, and
-//! replays those records to choose how far each answer can be trusted. No I/O — a host feeds it settled records and
-//! asks it about new ones.
-//!
-//! The vocabulary: a [`schema::Schema`] lists the [`schema::Attribute`]s of a record, each observed or decided; a
-//! [`schema::Record`] holds settled values; the [`decider::Decider`] answers a record's decided attributes layer by
-//! layer ([`decider::Answer`]); [`replay`] chooses each layer's threshold. Its tests write the language-neutral goldens
-//! (`tests/fixtures/core`) that every binding reproduces to the bit.
+#![doc = include_str!("../README.md")]
 
 pub mod ask_planner;
 pub mod coarse_groups;

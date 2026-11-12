@@ -12,6 +12,70 @@ that the .NET library on NuGet, `Gil`, is checked against — `Gil` runs on this
 **Status: early.** The API may still change within 0.x — each change is listed in
 [CHANGELOG.md](https://github.com/iyulab/gil/blob/main/crates/gil/CHANGELOG.md) with what to do about it.
 
+## Quick start
+
+Settle records people have filled in, let a `Keeper` choose how far each answer can be trusted, then ask about a new
+record. This runs as a test of the crate (`cargo test --doc`), so it stays true:
+
+```rust
+use std::collections::BTreeMap;
+
+use gil::decider::Decider;
+use gil::key_memory::KeyMemory;
+use gil::keeper::{Keep, Keeper};
+use gil::lexical_memory::LexicalMemory;
+use gil::schema::{Attribute, AttributeRole, Record, Schema};
+
+// A ticket has a `source` and a `summary` that are read, and a `team` that is answered.
+let schema = Schema::new(
+    "ticket",
+    vec![
+        Attribute::new("source", AttributeRole::Observed),
+        Attribute::new("summary", AttributeRole::Observed),
+        Attribute::new("team", AttributeRole::Decided),
+    ],
+)
+.expect("a valid schema");
+
+// 600 tickets people already settled: each source usually goes to the same team. `settled_at` is in 100-nanosecond
+// ticks; records are replayed in the order they were settled.
+const MINUTE: i64 = 60 * 10_000_000;
+const TEAMS: [&str; 3] = ["network", "desk", "billing"];
+let settled: Vec<Record> = (0..600)
+    .map(|i| {
+        let source = i % 6;
+        Record {
+            id: format!("t{i}"),
+            values: BTreeMap::from([
+                ("source".to_owned(), format!("s{source}")),
+                ("summary".to_owned(), format!("ticket {i} about {}", TEAMS[source % 3])),
+                ("team".to_owned(), TEAMS[source % 3].to_owned()),
+            ]),
+            settled_at: i as i64 * MINUTE,
+            ..Record::default()
+        }
+    })
+    .collect();
+
+// The decider learns the records; the keeper chooses how far to trust the answers, aiming at a precision of 0.8.
+let mut decider = Decider::new(KeyMemory::default(), Some(LexicalMemory::default()));
+let mut keeper = Keeper::new(schema, Keep::new(0.8));
+keeper.settle(&mut decider, &settled);
+keeper.rechoose();
+
+// Ask about a ticket nobody has settled. The answer carries the value, its chance of being right and whether it is
+// trusted enough to fill in on its own.
+let values = BTreeMap::from([("source".to_owned(), "s4".to_owned())]);
+let answers = decider.answer(keeper.schema(), "new-ticket", &values, &BTreeMap::new());
+let best = &answers[0].candidates[0];
+assert_eq!(best.value, "desk");
+assert!(answers[0].answered());
+
+// What the key layer promises: the precision to expect of the answers it gives.
+let chosen = keeper.chosen("team").and_then(|layers| layers.key.chosen.as_ref());
+assert!(chosen.is_some_and(|choice| choice.promise >= 0.8));
+```
+
 ## Vocabulary
 
 | Type | What it is |

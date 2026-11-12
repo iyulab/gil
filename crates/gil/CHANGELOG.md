@@ -85,6 +85,11 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Documentation
 
+- **The Rust crate has a quick start that runs.** Neither the README nor the crate documentation showed any code, so
+  `cargo add iyulab-gil` left a new user with a vocabulary table and no first call. The README now has a short quick start
+  (settle records, let a `Keeper` choose the thresholds, ask about a new record, read the promise), and the crate
+  documentation on docs.rs is the README, so the example is compiled and run by `cargo test --doc`.
+
 - **The promise's window says what it counts.** The latest `RECENT_RECORDS` records a promise is taken over are the
   stream's last places in settlement order: a value the application filled and a record that does not name the attribute
   each take one, so an attribute settled on only some records is judged on fewer answers and its promise's interval is
