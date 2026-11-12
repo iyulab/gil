@@ -14,6 +14,59 @@ pip install iyulab-gil
 
 Python 3.11 or later. `gil.__version__` is the installed package's version.
 
+### A first run, start to end
+
+Settled records in, a trusted answer with its promise out, the person's settlement back in, and what the answers were
+worth — in one piece, with nothing to download:
+
+```python
+import gil
+
+schema = gil.Schema.from_dict(
+    {
+        "name": "ticket",
+        "attributes": [
+            {"name": "product", "role": "observed"},
+            {"name": "summary", "role": "observed"},
+            {"name": "team", "role": "decided"},
+        ],
+    }
+)
+teams = {"vpn": "network", "mail": "messaging", "invoice": "billing"}
+lines = [  # what people have settled so far, oldest first
+    {
+        "id": f"t{i}",
+        "settled_at": i,  # ticks, the line's time text, or a datetime with a zone; here only the order matters
+        "values": {"product": product, "summary": f"{product} problem {i}", "team": team},
+        "settlements": {"team": "Enter"},  # a person typed it, with nothing suggested
+    }
+    for i, (product, team) in enumerate(list(teams.items()) * 20)
+]
+
+keeper = gil.Keeper(schema, target_precision=0.9)  # chooses how far to trust each layer, again as records arrive
+decider = gil.Decider(keeper.schema)
+keeper.settle(decider, gil.records(lines))
+keeper.rechoose()
+
+record = gil.OpenRecord(keeper.schema, "t999", settled_at=1_000)  # a new ticket, its values arriving
+record.observe(decider, "product", "vpn")
+(team,) = record.observe(decider, "summary", "vpn problem again")
+if team["answered"]:  # trusted: show it, with what its layer promised
+    promise = gil.promise_of(keeper.tuning, "team", team["source"])
+    print("suggest", team["candidates"][0]["value"], "- promised", promise)
+    record.settle(decider, "team", "Accept", 1_001, value=team["candidates"][0]["value"], shown=team, promise=promise)
+else:  # nothing trusted: the person decides, with nothing in view
+    record.settle(decider, "team", "Enter", 1_001, value="network")
+
+counts = gil.usage(gil.records([*lines, record.snapshot()]))["team"]
+print(counts["answered"], "answered of", counts["decisions"])
+```
+
+An answer is `answered` only when its layer trusts it; an unanswered lookup still names a `source` and candidates, but its
+layer promised nothing for it, so read the promise (`gil.promise_of`) for an answer that is `answered` and not otherwise.
+The `promise` is the lower end of an interval over the latest answers, not the precision they measured, so it can sit
+below the `target_precision` you asked for; `promise_answered` says how many answers it rests on.
+
 ```python
 import gil
 

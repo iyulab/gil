@@ -48,6 +48,12 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Documentation
 
+- **The Python README opens with a first run from start to end, and says what a promise is.** One sample takes settled
+  records through a `Keeper`, an answer with its promise, the person's settlement and `gil.usage`, with nothing to
+  download. It also warns that `gil.promise_of` belongs to an answer that is `answered` (an unanswered lookup still
+  names a `source`, whose layer promised nothing for it), and that a promise is the lower end of an interval over the
+  latest answers, so it can sit below `target_precision`.
+
 - **Every sample in the Python README now runs as written, and a check keeps it so.** `scripts/check-readme-samples.py`
   runs the README's samples in the order a reader meets them, against the installed package, and runs in this
   repository's CI. Fixing the samples: the text-sorting section no longer rebinds `schema` and `records` (it reads
