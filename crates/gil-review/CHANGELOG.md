@@ -3,6 +3,12 @@
 The Rust crate and its .NET binding share this version line; 0.1.0 is the first release of both. Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do.
 
+## Unreleased
+
+### Documentation
+
+- **The README says there is no Python binding.** `iyulab-gil-review` is a Rust crate with a .NET binding, `Gil.Review`.
+
 ## 0.2.1
 
 ### Fixed
@@ -36,8 +42,6 @@ with what to do.
   `UnobservedVariationBound(long)` is the same.
 
 ### Documentation
-
-- **The README says there is no Python binding.** `iyulab-gil-review` is a Rust crate with a .NET binding, `Gil.Review`.
 
 - **The READMEs say that a constant stratum is the usual case for 0/1 scores.** Reviewing a system that is right most
   of the time, a stratum whose reviewed items are all right is common — about 85% of estimates at a precision of 0.97
