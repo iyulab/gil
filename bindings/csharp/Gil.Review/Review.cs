@@ -144,12 +144,15 @@ public static class ReviewEstimator
     public const int BootstrapDraws = 2000;
 
     /// <summary>The variance an unvarying stratum of <paramref name="reviewed"/> items is given: p(1 − p) at
-    /// p = 1 − 0.025^(1/n), the most the sample still allows.</summary>
-    public static double UnobservedVariationBound(long reviewed)
+    /// p = 1 − 0.025^(1/n), the most the sample still allows. A stratum with no reviewed items has no bound.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="reviewed"/> is less than 1.</exception>
+    public static unsafe double UnobservedVariationBound(long reviewed)
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(reviewed);
+        ArgumentOutOfRangeException.ThrowIfLessThan(reviewed, 1);
         Native.EnsureCompatible();
-        return Native.UnobservedVariationBound((ulong)reviewed);
+        double variance;
+        Native.Check(Native.UnobservedVariationBound((ulong)reviewed, &variance));
+        return variance;
     }
 
     /// <summary>The stratified estimate of the population's mean score, weighted by each stratum's share of the

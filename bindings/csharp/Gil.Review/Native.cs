@@ -14,7 +14,7 @@ internal static unsafe partial class Native
     internal const int Panic = 3;
 
     /// <summary>The version of the C ABI this binding was built for (<c>GIL_REVIEW_ABI_VERSION</c>).</summary>
-    internal const uint AbiVersion = 2;
+    internal const uint AbiVersion = 3;
 
     private static volatile bool _compatible;
 
@@ -159,7 +159,7 @@ internal static unsafe partial class Native
     internal static partial double MinimumDesignDeviation();
 
     [LibraryImport(Library, EntryPoint = "gil_review_unobserved_variation_bound")]
-    internal static partial double UnobservedVariationBound(ulong reviewed);
+    internal static partial int UnobservedVariationBound(ulong reviewed, double* variance);
 
     [LibraryImport(Library, EntryPoint = "gil_review_estimate")]
     internal static partial int Estimate_(

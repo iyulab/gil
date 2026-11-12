@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use gil_review::{Estimate, PopulationStratum, ScoredItem, Stratum, StratumSpread, Verdict};
-use iyulab_ffi_support::{Failure, Utf8, argument, call, slice, slice_mut, write};
+use iyulab_ffi_support::{Failure, Utf8, argument, call, input, slice, slice_mut, write};
 
 /// The call succeeded.
 pub const GIL_REVIEW_OK: i32 = iyulab_ffi_support::OK;
@@ -19,7 +19,7 @@ pub const GIL_REVIEW_PANIC: i32 = iyulab_ffi_support::PANIC;
 
 /// The version of this interface — its functions, structures and statuses. It changes whenever a binding built for one
 /// version would misread the library of another.
-pub const GIL_REVIEW_ABI_VERSION: u32 = 2;
+pub const GIL_REVIEW_ABI_VERSION: u32 = 3;
 
 /// The version of this interface the library speaks ([`GIL_REVIEW_ABI_VERSION`]) — what a binding checks before its
 /// first call.
@@ -297,10 +297,32 @@ pub extern "C" fn gil_review_minimum_design_deviation() -> f64 {
     gil_review::minimum_design_deviation()
 }
 
-/// `gil_review::unobserved_variation_bound`.
+/// `gil_review::unobserved_variation_bound`, written to `variance`. A stratum with no reviewed items has no bound: that is
+/// refused as input ([`GIL_REVIEW_INVALID_INPUT`]) rather than reaching the computation's assertion, and the output is
+/// left alone.
+///
+/// # Safety
+/// `variance` is null or points to one writable `f64`.
 #[unsafe(no_mangle)]
-pub extern "C" fn gil_review_unobserved_variation_bound(reviewed: u64) -> f64 {
-    gil_review::unobserved_variation_bound(reviewed)
+pub unsafe extern "C" fn gil_review_unobserved_variation_bound(
+    reviewed: u64,
+    variance: *mut f64,
+) -> i32 {
+    call(|| {
+        if reviewed == 0 {
+            return Err(input(
+                "a stratum with scores has at least one reviewed item",
+            ));
+        }
+        // SAFETY: forwarded from the caller.
+        unsafe {
+            write(
+                variance,
+                gil_review::unobserved_variation_bound(reviewed),
+                "variance",
+            )
+        }
+    })
 }
 
 /// # Safety

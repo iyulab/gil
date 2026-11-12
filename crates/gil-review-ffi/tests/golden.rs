@@ -180,9 +180,11 @@ fn lines() -> Vec<String> {
 
     // The bound.
     for n in [1u64, 2, 3, 15, 30, 300, 4_096, 1_000_000] {
+        let mut variance = f64::NAN;
+        ok(unsafe { gil_review_unobserved_variation_bound(n, &mut variance) });
         out.push(format!(
             "{{\"kind\":\"bound\",\"n\":{n},\"variance\":{}}}",
-            num(gil_review_unobserved_variation_bound(n))
+            num(variance)
         ));
     }
 
@@ -431,7 +433,7 @@ fn a_malformed_call_is_refused_before_the_computation() {
 #[test]
 fn the_library_says_which_interface_it_speaks() {
     assert_eq!(gil_review_abi_version(), GIL_REVIEW_ABI_VERSION);
-    assert_eq!(GIL_REVIEW_ABI_VERSION, 2);
+    assert_eq!(GIL_REVIEW_ABI_VERSION, 3);
 }
 
 #[test]
