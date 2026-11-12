@@ -114,5 +114,7 @@ jobs:
       - run: pip install maturin==1.15.0 pytest mypy==2.4.0
       - run: maturin build --release --locked -m bindings/python/Cargo.toml -o dist
       - run: pip install dist/*.whl && pytest -q bindings/python/tests
+      # Every sample in the Python README runs as written — a first user copies them.
+      - run: python scripts/check-readme-samples.py
       # The extension module's type stubs match what it exports.
       - run: python -m mypy.stubtest gil
