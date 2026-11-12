@@ -1389,8 +1389,9 @@ fn ticks(text: &str) -> Option<i64> {
         || hour > 23
         || minute > 59
         || second > 59
-        || offset_hours > 14
         || offset_minutes > 59
+        || offset_hours * 60 + offset_minutes > 14 * 60
+    // the farthest a zone is from UTC: ±14:00
     {
         return None;
     }

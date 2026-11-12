@@ -288,6 +288,11 @@ fn a_record_reads_its_time_as_ticks_or_as_text_and_null_as_left_out() {
     let before_the_epoch =
         read(json!({ "id": "t1", "settled_at": "1969-12-31T23:59:59.9999999-00:00" }));
     assert_eq!(before_the_epoch.expect("a record").settled_at, -1);
+    // The farthest offsets a zone has are read.
+    for edge in ["+14:00", "-14:00"] {
+        let text = format!("2025-10-22T16:00:00.0000000{edge}");
+        read(json!({ "id": "t1", "settled_at": text })).expect(edge);
+    }
     // A leap day, and the fraction in ticks.
     let leap = read(json!({ "id": "t1", "settled_at": "2024-02-29T00:00:00.0000001+00:00" }))
         .expect("a record");
@@ -310,6 +315,9 @@ fn a_record_reads_its_time_as_ticks_or_as_text_and_null_as_left_out() {
         "2025-02-29T00:00:00.0000000+00:00",
         "2025-10-22T24:00:00.0000000+00:00",
         "2025-10-22T16:00:00.0000000+15:00",
+        // Past the farthest offset a zone has, ±14:00, by minutes.
+        "2025-10-22T16:00:00.0000000+14:01",
+        "2025-10-22T16:00:00.0000000-14:30",
         "2025-10-22T16:00:00.00000x0+00:00",
     ] {
         let refused = read(json!({ "id": "t1", "settled_at": bad })).expect_err(bad);

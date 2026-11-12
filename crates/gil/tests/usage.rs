@@ -346,3 +346,29 @@ fn answers_shown_under_a_promise_display_draw_are_counted_by_the_draw() {
         ]
     );
 }
+
+#[test]
+fn a_promise_display_is_read_only_where_the_answer_had_a_promise() {
+    use gil::schema::PromiseShown;
+    // The display is whether a promise was drawn to be shown beside the answer; an answer with no promise has none to
+    // show, so a draw kept beside it is no arm of the comparison — hidden "because there was nothing" is not hidden.
+    let mut unpromised = d(Some("network"), Some("network"), Some(Accept), 1.0);
+    unpromised.promises.clear();
+    unpromised
+        .promise_shown
+        .insert("team".to_owned(), PromiseShown::new(false, 0.5).unwrap());
+    let mut promised = d(Some("network"), Some("network"), Some(Accept), 1.0);
+    promised
+        .promise_shown
+        .insert("team".to_owned(), PromiseShown::new(true, 0.5).unwrap());
+    let team = &usage(&[unpromised, promised])["team"];
+    assert_eq!((team.accepted, team.promised), (2, 1));
+    assert_eq!(team.promise_display.len(), 1);
+    assert_eq!(
+        (
+            team.promise_display[0].shown_accepted,
+            team.promise_display[0].hidden_accepted
+        ),
+        (1, 0)
+    );
+}

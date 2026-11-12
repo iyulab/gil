@@ -27,6 +27,11 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Changed
 
+- **`Usage.Count` reads the promise display only where the answer had a promise, and a time text's offset stops at
+  ±14:00.** The documentation said both; the core read `promise_shown` beside an answer that kept no promise (counting
+  it as a hidden promise) and accepted offsets up to ±14:59. Records that keep a promise wherever they keep a display, and
+  offsets a zone has, are counted and read as before.
+
 - **Settling the latest record again no longer refolds its key counts.** Settling a record again, or removing it,
   took its earlier settlement away and had the next lookup fold every settlement under the key afresh — a cost that grew
   with the records (about 12, 49 and 309 µs a re-settle and lookup at 25,000, 100,000 and 300,000 records on one key).

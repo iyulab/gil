@@ -220,13 +220,19 @@ pub fn usage<'a>(
                 u.promised += 1;
                 u.promise_sum += p;
             }
+            // Whether the promise was displayed is an arm of the comparison only where there was a promise to display.
+            let displayed = record
+                .promises
+                .contains_key(attribute)
+                .then(|| record.promise_shown.get(attribute))
+                .flatten();
 
             match kind {
                 Some(SettlementKind::Accept) => {
                     u.accepted += 1;
                     u.right_weight += 1.0;
                     u.judged_weight += 1.0;
-                    if let Some(display) = record.promise_shown.get(attribute) {
+                    if let Some(display) = displayed {
                         let d = u.display_at(display.probability);
                         if display.shown {
                             d.shown_accepted += 1;
@@ -238,7 +244,7 @@ pub fn usage<'a>(
                 Some(SettlementKind::Correct) => {
                     u.corrected += 1;
                     u.judged_weight += 1.0;
-                    if let Some(display) = record.promise_shown.get(attribute) {
+                    if let Some(display) = displayed {
                         let d = u.display_at(display.probability);
                         if display.shown {
                             d.shown_corrected += 1;
