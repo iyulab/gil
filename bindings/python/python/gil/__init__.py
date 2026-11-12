@@ -61,7 +61,6 @@ __all__ = [
     "POOLED_RECENT_LOOKUPS",
     "POOLED_STANDARD_ERRORS",
     "RECENT_RECORDS",
-    "Absence",
     "Answer",
     "Answered",
     "AskAdvice",
@@ -142,21 +141,17 @@ class KeyState(TypedDict):
     effective_answered: float
 
 
-Absence = Literal["NothingToReplay", "NoCandidate", "TooFewAnswers", "TargetNotMet"]
-"""Why a replay chose no threshold, the first cause that holds: no lookup reached the layer (``NothingToReplay``), none
-found a candidate at any score (``NoCandidate``), the answers are worth fewer than ``minimum_answered`` even at the
-lowest score (``TooFewAnswers``), or answers enough were found but some band fell short of ``target_precision`` — or,
-under another rule than ``every_band``, the rule took none (``TargetNotMet``). A layer with no threshold gives no answer,
-so this is also why it abstains."""
-
-
 class ThresholdReplay(TypedDict):
     """One layer's replay: the chosen and most precise thresholds, and for a key layer the state under each key.
 
-    ``absence`` says why ``chosen`` is ``None`` (``None`` when a threshold was chosen)."""
+    ``absence`` says why ``chosen`` is ``None``, the first cause that holds: no lookup reached the layer
+    (``"NothingToReplay"``), none found a candidate at any score (``"NoCandidate"``), the answers are worth fewer than
+    ``minimum_answered`` even at the lowest score (``"TooFewAnswers"``), or answers enough were found but some band fell
+    short of ``target_precision`` — or, under another rule than ``every_band``, the rule took none (``"TargetNotMet"``).
+    A layer with no threshold gives no answer, so this is also why it abstains. ``None`` when a threshold was chosen."""
 
     chosen: ThresholdChoice | None
-    absence: Absence | None
+    absence: Literal["NothingToReplay", "NoCandidate", "TooFewAnswers", "TargetNotMet"] | None
     most_precise: ThresholdChoice | None
     lookups: int
     candidates: int
