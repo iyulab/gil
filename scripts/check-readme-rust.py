@@ -32,6 +32,14 @@ FENCE = re.compile(r"^```(\w*)\s*$")
 NAME = re.compile(r'^name\s*=\s*"([^"]+)"', re.MULTILINE)
 
 
+def shown(readme: Path) -> str:
+    """The README's path from the repository root, or the path as given when it lies elsewhere."""
+    try:
+        return str(readme.relative_to(ROOT))
+    except ValueError:
+        return str(readme)
+
+
 def rust_blocks(readme: Path) -> list[tuple[int, str, str | None, bool]]:
     """(line of the opening fence, the block as written, the skip reason or None, library?) for every ```rust block."""
     blocks: list[tuple[int, str, str | None, bool]] = []
@@ -64,7 +72,7 @@ def run(readme: Path, target_dir: str) -> int:
     edition = EDITION.search((ROOT / "Cargo.toml").read_text(encoding="utf-8")).group(1)
     failures = 0
     for line, source, skip, library in rust_blocks(readme):
-        label = f"{readme.relative_to(ROOT)}:{line}"
+        label = f"{shown(readme)}:{line}"
         target = "lib" if library else "main"
         if skip is not None:
             print(f"skip  {label} — {skip}")
