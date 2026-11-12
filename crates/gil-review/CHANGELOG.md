@@ -5,6 +5,21 @@ with what to do.
 
 ## Unreleased
 
+### Fixed
+
+- **`UnobservedVariationBound(0)` no longer ends the host process.** The C export returned the bound as a bare `f64`
+  and reached the computation's assertion for a stratum with no reviewed items; a panic cannot cross `extern "C"`, so
+  the process aborted — a `try`/`catch` around the call did not help. The export now returns a status and writes the
+  bound through a pointer, like every other call, and a stratum with no reviewed items is refused as input.
+  `ReviewEstimator.UnobservedVariationBound` throws `ArgumentOutOfRangeException` for a count below 1.
+
+### Breaking
+
+- **The C ABI is version 3** (`gil_review_abi_version`): `gil_review_unobserved_variation_bound(reviewed, variance)`
+  returns an `i32` status and writes the bound to `variance`. A binding built for version 2 refuses to load the library
+  (the version check) — use the native library built with the binding. Nothing else changes; the .NET signature
+  `UnobservedVariationBound(long)` is the same.
+
 ### Documentation
 
 - **The READMEs say that a constant stratum is the usual case for 0/1 scores.** Reviewing a system that is right most

@@ -17,6 +17,17 @@ public sealed class RefusalTests
         ReviewSampler.AllocateNeyman(strata, 9).Sum().Should().Be(9);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void A_bound_for_no_reviewed_items_is_refused_and_the_binding_keeps_working(long reviewed)
+    {
+        var refuse = () => ReviewEstimator.UnobservedVariationBound(reviewed);
+        refuse.Should().Throw<ArgumentOutOfRangeException>();
+
+        ReviewEstimator.UnobservedVariationBound(5).Should().BeGreaterThan(0).And.BeLessThan(0.25);
+    }
+
     [Fact]
     public void A_record_in_two_strata_is_refused_by_name()
     {
