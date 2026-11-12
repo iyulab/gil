@@ -48,6 +48,23 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Documentation
 
+- **Every sample in the Python README now runs as written, and a check keeps it so.** `scripts/check-readme-samples.py`
+  runs the README's samples in the order a reader meets them, against the installed package, and runs in this
+  repository's CI. Fixing the samples: the text-sorting section no longer rebinds `schema` and `records` (it reads
+  `inbox.jsonl` and keeps its own names), the batch sample no longer passes a stray `import_id` field to the records, the
+  "which field to ask for first" sample asks only for attributes the schema has, the open-record samples define `now`,
+  and the usage sample no longer reuses `saved` for a list. The one sample that stands for the reader's own model is
+  marked as skipped with its reason.
+
+- **Every sample in the Python README now runs as written, and a check keeps it so.** `scripts/check-readme-samples.py`
+  runs the README's samples in the order a reader meets them, against the installed package, and runs in this
+  repository's CI. Fixing the samples: the text-sorting section no longer rebinds `schema` and `records` (it reads
+  `inbox.jsonl` and keeps its own names), the batch sample no longer passes a stray `import_id` field to the records, the
+  "which field to ask for first" sample asks only for attributes the schema has, the open-record samples define `now`,
+  and the usage sample no longer reuses `saved` for a list. The one sample that stands for the reader's own model is
+  marked as skipped with its reason.
+
+
 - **`Keeper` is `Sync`, and the build keeps it so.** Its documentation said "not thread-safe"; a shared reference only reads, so
   readers may share a keeper while nothing changes it, and a change takes exclusive access. The C ABI header says the same
   for `GilKeeper`, and both are now checked at compile time.

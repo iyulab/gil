@@ -228,8 +228,8 @@ in its place most often (`given_instead`). On public food inspections and public
 candidate for the attribute's `must_catch`. The report moves no threshold. A value settled on fewer records is not reported: on six public streams, the rarest third of the values were answered for 1 to 14% of their records; on five of them every such answer was another value, on the sixth (food inspections, 60 values) 0.14 of them.
 
 ```python
-records = gil.records({**r, "batch": r["import_id"]} for r in rows)
-thresholds, _ = gil.select_layers(schema, "team", records, target_precision=0.8)
+bulk = gil.records({**line, "batch": "import-2026-01"} for line in lines)  # `lines` from the table above, here one import
+thresholds, _ = gil.select_layers(schema, "team", bulk, target_precision=0.8)
 check = thresholds.get("batches")
 ```
 
@@ -243,31 +243,31 @@ attribute to agree on, so it has nothing to say here.
 ```python
 import gil
 
-definition = {
+inbox_definition = {
     "name": "inbox",
     "attributes": [
         {"name": "text", "role": "observed"},
         {"name": "category", "role": "decided"},
     ],
 }
-records = gil.read_records("settled.jsonl")  # one line per message a person sorted, in the order they did it
+inbox = gil.read_records("inbox.jsonl")  # one line per message a person sorted, in the order they did it
 layers, _ = gil.select_layers(
-    gil.Schema.from_dict(definition), "category", records, target_precision=0.9, decisions=False
+    gil.Schema.from_dict(inbox_definition), "category", inbox, target_precision=0.9, decisions=False
 )
 similar = layers["memory"]["chosen"]  # None when no threshold held the target
 print(similar["answer_rate"] if similar else None)  # the share of lookups it answered at that precision
 
-category = next(a for a in definition["attributes"] if a["name"] == "category")
+category = next(a for a in inbox_definition["attributes"] if a["name"] == "category")
 category["memory_threshold"] = similar["threshold"]
 category["memory_floor"] = similar["similarity_floor"]
-schema = gil.Schema.from_dict(definition)
+inbox_schema = gil.Schema.from_dict(inbox_definition)
 
-decider = gil.Decider(schema, records)
-answer = decider.answer(schema, "m9000", "category", {"text": "i want my money back for the last order"})
+inbox_decider = gil.Decider(inbox_schema, inbox)
+answer = inbox_decider.answer(inbox_schema, "m9000", "category", {"text": "i want my money back for the last order"})
 print(answer["answered"], answer["candidates"][0]["value"] if answer["answered"] else None, answer["source"])
 ```
 
-A line of `settled.jsonl` is `{"id": "m1", "settled_at": "2026-09-01T09:00:00.0000000+00:00", "values": {"text": "where is my refund", "category": "billing"}, "settlements": {"category": "Enter"}}`
+A line of `inbox.jsonl` is `{"id": "m1", "settled_at": "2026-09-01T09:00:00.0000000+00:00", "values": {"text": "where is my refund", "category": "billing"}, "settlements": {"category": "Enter"}}`
 — a settlement kind is a string; the person typed the category, so `Enter`. A message whose text is not near any settled
 one, or whose category has never been settled before, is left to the person; Gil answers only with values people have
 settled. When the category values share a leading part, `"coarse": {"prefix": 2}` lets it give the group when it cannot
@@ -278,6 +278,7 @@ reads meaning can answer more cases. Gil does not carry such a model; if you hav
 where to trust it. Score each case the judge answered, mark whether its best value was the one a person settled, and
 hand over the list in the order they settled (experimental):
 
+<!-- sample: skip — judge_score, judge_value and settled_cases stand for the reader's own model and cases -->
 ```python
 decisions = [
     {"id": case["id"], "settled_at": i, "score": judge_score(case), "right": judge_value(case) == case["category"]}
@@ -323,6 +324,9 @@ the answers that changed. A time is 100-nanosecond ticks since the Unix epoch (U
 the examples below is the time the value was settled.
 
 ```python
+from datetime import UTC, datetime
+
+now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f0+00:00")  # the line's time text
 decider = gil.Decider(schema, records)
 record = gil.OpenRecord(schema, "t9", settled_at=now)
 (team,) = record.observe(decider, "summary", "vpn drops every hour")
@@ -351,7 +355,7 @@ typed, and advises an open record's missing attributes within a budget — a sha
 take. The decider it learns beside may hold the record learned, but none settled after it.
 
 ```python
-planner = gil.AskPlanner(schema, "team", ["product", "channel"], budget=0.3)
+planner = gil.AskPlanner(schema, "team", ["product", "summary"], budget=0.3)
 for settled in later:  # in settlement order, after the records the decider was made with
     decider.put(schema, gil.records([settled]))
     planner.learn(decider, settled)
@@ -414,7 +418,13 @@ keeper.settle(decider, records)
 keeper.rechoose()
 
 # ... as records are settled ...
-keeper.settle(decider, gil.records([saved]))
+arrived = {
+    "id": "t9999",
+    "settled_at": now,
+    "values": {"product": "vpn", "summary": "drops again", "team": "network"},
+    "settlements": {"team": "Enter"},
+}
+keeper.settle(decider, gil.records([arrived]))
 if keeper.stale() is not None:
     keeper.rechoose()
 schema = keeper.schema  # answer with this and the decider
@@ -443,7 +453,7 @@ decider = gil.Decider(schema, records)
 values = {"product": "vpn", "summary": "drops again"}
 answer = decider.answer(schema, "t9", "team", values)
 shown = answer["candidates"][0]["value"] if answer["answered"] else None
-# ... the person settles `settled` ...
+settled = "network"  # what the person settled
 record = {
     "id": "t9",
     "settled_at": now,
@@ -454,9 +464,9 @@ if shown is not None:
     record |= {"suggested": {"team": shown}, "sources": {"team": answer["source"]}}
     if (promise := gil.promise_of(tuning, "team", answer["source"])) is not None:
         record["promises"] = {"team": promise}
-saved.append(record)
+lines.append(record)
 
-counts = gil.usage(gil.records(saved))["team"]
+counts = gil.usage(gil.records(lines))["team"]
 print(counts["right_weight"] / counts["judged_weight"], "against", counts["promise_sum"] / counts["promised"])
 ```
 
