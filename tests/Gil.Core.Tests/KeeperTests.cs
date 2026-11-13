@@ -91,7 +91,7 @@ public sealed class KeeperTests
             put.Put(schema, records);
         }
 
-        var removed = JsonDocument.Parse(lines[5]).RootElement.GetProperty("id").GetString()!;
+        var removed = JsonElement.Parse(lines[5]).GetProperty("id").GetString()!;
         keeper.Remove(through, removed);
         put.Remove(schema, removed);
         var choice = keeper.Rechoose(decisions: true);
