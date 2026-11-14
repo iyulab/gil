@@ -372,6 +372,20 @@ class Schema:
         return Schema(schema_for_first_of_batch_json(self._json))
 
 
+def _schema_json(schema: object) -> str:
+    """The JSON of ``schema``; anything but a :class:`Schema` is named by its kind, not by a missing attribute."""
+    if not isinstance(schema, Schema):
+        raise TypeError(f"expected Schema, got {type(schema).__name__}")
+    return schema.json
+
+
+def _decider_inner(decider: object) -> _Decider:
+    """The core decider behind ``decider``; anything but a :class:`Decider` is named by its kind."""
+    if not isinstance(decider, Decider):
+        raise TypeError(f"expected Decider, got {type(decider).__name__}")
+    return decider._inner
+
+
 def records(items: Iterable[dict[str, Any]]) -> Records:
     """Settled records from dictionaries, in settlement order.
 
@@ -438,7 +452,7 @@ def select_layers(
     settled, so ``counting`` is untouched and records of other batches settled the same way still count.
     """
     thresholds, lines = select_layers_json(
-        schema.json,
+        _schema_json(schema),
         attribute,
         records,
         target_precision,
@@ -486,7 +500,7 @@ def select_key_fields(
         KeyFieldsChoice,
         json.loads(
             select_key_fields_json(
-                schema.json,
+                _schema_json(schema),
                 attribute,
                 records,
                 target_precision,
@@ -525,7 +539,7 @@ def select_coarse(
     settled, so ``counting`` is untouched and records of other batches settled the same way still count.
     """
     thresholds, lines = select_coarse_json(
-        schema.json,
+        _schema_json(schema),
         attribute,
         records,
         target_precision,
@@ -677,7 +691,7 @@ def select_key_concentrations(
     """
     return cast(
         dict[str, float],
-        json.loads(select_key_concentrations_json(schema.json, attribute, records)),
+        json.loads(select_key_concentrations_json(_schema_json(schema), attribute, records)),
     )
 
 
@@ -729,17 +743,17 @@ class Decider:
         similar_records: bool = True,
         threads: int | None = None,
     ) -> None:
-        self._inner = _Decider(schema.json, records, similar_records, threads)
+        self._inner = _Decider(_schema_json(schema), records, similar_records, threads)
 
     def put(self, schema: Schema, records: Records) -> None:
         """Puts ``records`` — settled later than those the memories hold, in settlement order — into the memories."""
-        self._inner.put(schema.json, records)
+        self._inner.put(_schema_json(schema), records)
 
     def remove(self, schema: Schema, record_id: str) -> None:
         """Takes record ``record_id`` out of the memories — a record the host deleted; nothing happens when they do not
         hold it. The key memory is then as if the record had never been put, and the similar record memory never offers
         it again."""
-        self._inner.remove(schema.json, record_id)
+        self._inner.remove(_schema_json(schema), record_id)
 
     def is_first_of_batch(self, batch: str | None, excluding: str | None = None) -> bool:
         """Experimental. Whether a record of ``batch`` now is the first of its batch: the memories hold no settled
@@ -782,7 +796,7 @@ class Decider:
         decisions: bool,
     ) -> str:
         return self._inner.answer(
-            schema.json,
+            _schema_json(schema),
             id,
             attribute,
             json.dumps(dict(values), ensure_ascii=False),
@@ -824,11 +838,11 @@ class AskPlanner:
     def __init__(
         self, schema: Schema, attribute: str, askable: Iterable[str], budget: float
     ) -> None:
-        self._inner = _AskPlanner(schema.json, attribute, list(askable), budget)
+        self._inner = _AskPlanner(_schema_json(schema), attribute, list(askable), budget)
 
     def learn(self, decider: Decider, record: dict[str, Any]) -> None:
         """Learns from a settled record. ``decider``'s memories may hold it, but none settled after it."""
-        self._inner.learn(decider._inner, json.dumps(record, ensure_ascii=False))
+        self._inner.learn(_decider_inner(decider), json.dumps(record, ensure_ascii=False))
 
     def advise(self, answer: Answer, values: Mapping[str, str]) -> list[AskAdvice]:
         """Advice for an open record: every askable attribute it has no value for, by gain per character, highest first
@@ -919,14 +933,14 @@ class OpenRecord:
         from one source. When the schema holds thresholds for the first record of a batch (``first_of_batch``), a
         record whose batch has no other settled record in the decider is answered at those; one that names no batch
         always is."""
-        self._inner = _OpenRecord(schema.json, id, _ticks(settled_at), batch)
+        self._inner = _OpenRecord(_schema_json(schema), id, _ticks(settled_at), batch)
 
     @classmethod
     def reopen(cls, schema: Schema, saved: dict[str, Any]) -> OpenRecord:
         """A saved record — as :meth:`snapshot` gave it — reopened as it was left."""
         record = cls.__new__(cls)
         record._inner = _OpenRecord.reopen(
-            schema.json, json.dumps(saved, ensure_ascii=False)
+            _schema_json(schema), json.dumps(saved, ensure_ascii=False)
         )
         return record
 
@@ -942,7 +956,7 @@ class OpenRecord:
     def is_first_of_batch(self, decider: Decider) -> bool:
         """Experimental. Whether the record is answered as the first of its batch now; its answers' promises are then
         :func:`first_of_batch_promise_of`'s."""
-        return self._inner.is_first_of_batch(decider._inner)
+        return self._inner.is_first_of_batch(_decider_inner(decider))
 
     def observe(
         self, decider: Decider, attribute: str, value: str | None
@@ -950,7 +964,7 @@ class OpenRecord:
         """Sets (or with ``None`` clears) an observed attribute's value."""
         return cast(
             list[Answer],
-            json.loads(self._inner.observe(decider._inner, attribute, value)),
+            json.loads(self._inner.observe(_decider_inner(decider), attribute, value)),
         )
 
     def settle(
@@ -980,7 +994,7 @@ class OpenRecord:
             list[Answer],
             json.loads(
                 self._inner.settle(
-                    decider._inner,
+                    _decider_inner(decider),
                     attribute,
                     kind,
                     _ticks(now),
@@ -994,13 +1008,13 @@ class OpenRecord:
 
     def answer(self, decider: Decider) -> list[Answer]:
         """Answers for every open decided attribute."""
-        return cast(list[Answer], json.loads(self._inner.answer(decider._inner)))
+        return cast(list[Answer], json.loads(self._inner.answer(_decider_inner(decider))))
 
     def answer_with_decisions(self, decider: Decider) -> list[tuple[Answer, DecisionRecord]]:
         """As :meth:`answer`, each with its lookup's decision record — what the key layer and the similar record layer
         found whatever the thresholds, and what was answered — for a host that keeps them to recount its thresholds
         later."""
-        found = json.loads(self._inner.answer(decider._inner, True))
+        found = json.loads(self._inner.answer(_decider_inner(decider), True))
         return [(cast(Answer, a), cast(DecisionRecord, a.pop("decision"))) for a in found]
 
     def answer_partial(
@@ -1009,7 +1023,7 @@ class OpenRecord:
         """The answer for one open decided attribute alone — with ``partial``, the text typed into it so far."""
         return cast(
             Answer,
-            json.loads(self._inner.answer_partial(decider._inner, attribute, partial)),
+            json.loads(self._inner.answer_partial(_decider_inner(decider), attribute, partial)),
         )
 
     def offer_external(
@@ -1021,7 +1035,7 @@ class OpenRecord:
             Answer,
             json.loads(
                 self._inner.offer_external(
-                    decider._inner,
+                    _decider_inner(decider),
                     attribute,
                     json.dumps(list(ranked), ensure_ascii=False),
                 )
@@ -1111,7 +1125,7 @@ class Keeper:
         uncounted_batches: Iterable[str] | None = None,
     ) -> None:
         self._inner = _Keeper(
-            schema.json,
+            _schema_json(schema),
             target_precision,
             minimum_answered,
             None if counting is None else list(counting),
@@ -1129,14 +1143,14 @@ class Keeper:
         the last a replay has gone through has the next choice go on from where the records before it ended: the first
         time it happens the keeper replays from the start and keeps checkpoints on the way, and from then on a late
         record costs the replay of the records settled after it. The choice is the same either way."""
-        self._inner.settle(decider._inner, records)
+        self._inner.settle(_decider_inner(decider), records)
 
     def remove(self, decider: Decider, record_id: str) -> None:
         """Takes record ``record_id``, which the host deleted, out of ``decider`` and out of the records; the next
         choice goes on from where the records before it ended, as for a record settled out of order (see ``settle``).
         The choice is the same as without the record, but the decider's similar record scores can differ slightly from
         those of a decider that never held it."""
-        self._inner.remove(decider._inner, record_id)
+        self._inner.remove(_decider_inner(decider), record_id)
 
     def stale(self) -> dict[str, Any] | str | None:
         """Why the last choice no longer stands — ``{"settled": {"chosen": ..., "now": ...}}`` once a tenth more or fewer
@@ -1170,7 +1184,7 @@ class Keeper:
         the elements offered that the record settles, not the chance that a whole set is right. What ``sets`` holds for
         ``attribute`` is not evidence. Raises ``ValueError`` for an attribute that is not answered that way."""
         found = self._inner.similar_elements(
-            decider._inner,
+            _decider_inner(decider),
             id,
             attribute,
             json.dumps(dict(values), ensure_ascii=False),
@@ -1229,7 +1243,7 @@ def capture_tuning(
     replay's promises with :func:`record_promise`."""
     return cast(
         dict[str, Any],
-        json.loads(tuning_capture_json(schema.json, settled, target_precision)),
+        json.loads(tuning_capture_json(_schema_json(schema), settled, target_precision)),
     )
 
 
@@ -1324,7 +1338,7 @@ def apply_tuning(tuning: dict[str, Any], schema: Schema) -> Schema:
     """``schema`` with the tuning's chosen settings put back on its attributes of the same names; raises ``ValueError``
     when the result breaks a schema rule — a tuning chosen for another schema may name key attributes this one does not
     have."""
-    return Schema(tuning_apply_json(json.dumps(tuning), schema.json))
+    return Schema(tuning_apply_json(json.dumps(tuning), _schema_json(schema)))
 
 
 def tuning_stale(
@@ -1332,7 +1346,7 @@ def tuning_stale(
 ) -> dict[str, Any] | str | None:
     """Why the tuning no longer stands for ``schema`` now that ``settled`` records (the number of them) are settled — ``{"version": {"chosen": ...}}``,
     ``"schema"`` or ``{"settled": {"chosen": ..., "now": ...}}`` — or ``None`` while it does."""
-    text = tuning_stale_json(json.dumps(tuning), schema.json, settled)
+    text = tuning_stale_json(json.dumps(tuning), _schema_json(schema), settled)
     return None if text is None else cast(dict[str, Any] | str, json.loads(text))
 
 

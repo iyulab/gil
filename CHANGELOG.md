@@ -27,6 +27,11 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Changed
 
+- **Python: a schema or decider argument of the wrong kind is named by its kind.** `gil.Decider(gil.records(lines))`,
+  `gil.Keeper({...})` and `keeper.settle(records, decider)` raise `TypeError: expected Schema, got Records` /
+  `expected Decider, got Records` instead of an `AttributeError` about the binding's own `json` or `_inner` attribute.
+  A records argument of the wrong kind already said `... is not an instance of 'Records'`.
+
 - **A record line is read as RFC 3339, and one that does not read is named by its record.** `settled_at` as text takes
   the fraction in one to seven digits or none, and `Z` for UTC (the seven-digit form of .NET's `"O"` still reads), and a
   record line that does not read says `record 'id': <reason>` instead of a position inside the line's own JSON.
