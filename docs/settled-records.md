@@ -42,6 +42,14 @@ table does not name does not read, and neither does a time out of range (`2025-0
 displayed at probability 0 (or not displayed at 1): the line is refused
 rather than half understood. Lines are written back with `settled_at` in ticks.
 
+That is about the line's own entries. The attribute names inside `values`, `sets` and `settlements` are kept as written and are
+not checked against a schema: a record outlives the form it was settled on, and one settled on an older edition may hold
+an attribute the current schema no longer has. A name the schema does not hold is read by nothing — settling, choosing
+thresholds and answering skip it — and nothing says so, which is how a misspelt name (`Team` for `team`) shows up only as
+an attribute with no decisions to replay. To check, compare the names the records hold with the schema's: in Python,
+`set(gil.usage(records))` against the `name` of each attribute in the schema's JSON; `usage` counts under every name a
+settlement carries.
+
 The last seven entries are read from `Gil` 0.27.0 and `iyulab-gil` 0.9.0; earlier versions refuse a line that carries
 them, so write them for a reader that knows them. `scores` is newer still: it is read from `Gil` 0.28.0 and `iyulab-gil` 0.10.0,
 and earlier versions refuse a line that carries it. `promise_shown` is read from `Gil` 0.30.0 and `iyulab-gil` 0.12.0;
