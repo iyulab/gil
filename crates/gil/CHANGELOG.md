@@ -4,6 +4,31 @@ The Rust crate (crates.io) and the Python package (PyPI), both published as `iyu
 Versions follow `0.x`: a minor release may change the public API, and each such change is listed under **Breaking**
 with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the repository's root `CHANGELOG.md`.
 
+## 0.13.1
+
+A patch on 0.13.0: two Python input fixes and the documentation a first user follows. The core, the C ABI and the .NET
+library are unchanged.
+
+### Fixed
+
+- **Python: `OpenRecord` and `settle` read a record line's time text and a `datetime` with a zone.** The documentation
+  said a time is ticks or the time text of a record line, but only ticks were read: a text, a `float` or a `datetime`
+  raised `TypeError`. `settled_at` and `now` now take ticks as before, the line's `yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM`
+  text, or a `datetime` that has a time zone; a `datetime` without one names no instant and is refused.
+- **Python: `select_score_threshold` refuses a scored decision that leaves out `right`.** Such a decision was counted
+  as wrong without a word, so a mistake in the input read as a precision of 0.0 and a threshold that could not be set.
+  It now raises `ValueError` naming the decision. **To migrate**: say whether the judge's best value was the settled one
+  (`right: True` or `False`) on every decision that has a `score`; a call that gives `right` is unchanged.
+
+### Documentation
+
+- **The Python README's samples run as written**, in the order a reader meets them, and a script
+  (`scripts/check-readme-samples.py`) keeps it so. The README opens with a first run from a table to `usage`, and says
+  what a promise is counted over and where `promise_of` applies.
+- **The Rust crate's README is its documentation** (docs.rs opens on it) and starts with a quick start that runs as a
+  doc-test. The Rust examples of the three crates' READMEs compile as pasted, which `scripts/check-readme-rust.py`
+  checks in a fresh project.
+
 ## 0.13.0
 
 ### Added
