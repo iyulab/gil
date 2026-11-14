@@ -24,14 +24,6 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Fixed
 
-- **Python: `OpenRecord` and `OpenRecord.settle` take the time the documentation said they take.** The README
-  promised ticks or "the line's time text", but only ticks were accepted: a time text raised `TypeError: 'str' object
-  cannot be interpreted as an integer`. A time text (`yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM`) and a `datetime` with a time
-  zone are now read; a `datetime` without one is refused, as it names no instant.
-- **Python: `select_score_threshold` refuses a decision that has a `score` but no `right`.** The missing `right` was
-  counted as wrong without a word, so a typo in the key showed up as a precision of 0 and a threshold that never
-  stands. The refusal names the decision, like the other input checks do.
-
 - **A tuning chosen under one `key_combine` no longer stands under another.** The schema fingerprint behind
   `Tuning::stale` left out how the keys' strengths combine (`KeyCombine`), which changes every key score. It is written
   into the fingerprint only when it is not the default, so a tuning stored before stays valid. The settings the choice
@@ -85,14 +77,6 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Documentation
 
-- **The README example is a whole program.** It had no `fn main`, so pasted into a new project it did not compile
-  (it only ran as a doc-test, where rustdoc adds the wrapper). The example now starts with its `use` lines and has a
-  `main`; `scripts/check-readme-rust.py` pastes each README example into a fresh project and runs it.
-- **The Rust crate has a quick start that runs.** Neither the README nor the crate documentation showed any code, so
-  `cargo add iyulab-gil` left a new user with a vocabulary table and no first call. The README now has a short quick start
-  (settle records, let a `Keeper` choose the thresholds, ask about a new record, read the promise), and the crate
-  documentation on docs.rs is the README, so the example is compiled and run by `cargo test --doc`.
-
 - **The promise's window says what it counts.** The latest `RECENT_RECORDS` records a promise is taken over are the
   stream's last places in settlement order: a value the application filled and a record that does not name the attribute
   each take one, so an attribute settled on only some records is judged on fewer answers and its promise's interval is
@@ -110,32 +94,34 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   READMEs now say so, and what to do about it: keep the judge's candidate and score on a sample of the cases it gave
   below the threshold too, settled by a person who saw it or drawn as checks with their probability.
 
-- **The Python README opens with a first run from start to end, and says what a promise is.** One sample takes settled
-  records through a `Keeper`, an answer with its promise, the person's settlement and `gil.usage`, with nothing to
-  download. It also warns that `gil.promise_of` belongs to an answer that is `answered` (an unanswered lookup still
-  names a `source`, whose layer promised nothing for it), and that a promise is the lower end of an interval over the
-  latest answers, so it can sit below `target_precision`.
-
-- **Every sample in the Python README now runs as written, and a check keeps it so.** `scripts/check-readme-samples.py`
-  runs the README's samples in the order a reader meets them, against the installed package, and runs in this
-  repository's CI. Fixing the samples: the text-sorting section no longer rebinds `schema` and `records` (it reads
-  `inbox.jsonl` and keeps its own names), the batch sample no longer passes a stray `import_id` field to the records, the
-  "which field to ask for first" sample asks only for attributes the schema has, the open-record samples define `now`,
-  and the usage sample no longer reuses `saved` for a list. The one sample that stands for the reader's own model is
-  marked as skipped with its reason.
-
-- **Every sample in the Python README now runs as written, and a check keeps it so.** `scripts/check-readme-samples.py`
-  runs the README's samples in the order a reader meets them, against the installed package, and runs in this
-  repository's CI. Fixing the samples: the text-sorting section no longer rebinds `schema` and `records` (it reads
-  `inbox.jsonl` and keeps its own names), the batch sample no longer passes a stray `import_id` field to the records, the
-  "which field to ask for first" sample asks only for attributes the schema has, the open-record samples define `now`,
-  and the usage sample no longer reuses `saved` for a list. The one sample that stands for the reader's own model is
-  marked as skipped with its reason.
-
-
 - **`Keeper` is `Sync`, and the build keeps it so.** Its documentation said "not thread-safe"; a shared reference only reads, so
   readers may share a keeper while nothing changes it, and a change takes exclusive access. The C ABI header says the same
   for `GilKeeper`, and both are now checked at compile time.
+
+## 0.13.1
+
+A patch on 0.13.0: two Python input fixes and the documentation a first user follows. The core, the C ABI and the .NET
+library are unchanged.
+
+### Fixed
+
+- **Python: `OpenRecord` and `settle` read a record line's time text and a `datetime` with a zone.** The documentation
+  said a time is ticks or the time text of a record line, but only ticks were read: a text, a `float` or a `datetime`
+  raised `TypeError`. `settled_at` and `now` now take ticks as before, the line's `yyyy-MM-ddTHH:mm:ss.fffffff±HH:MM`
+  text, or a `datetime` that has a time zone; a `datetime` without one names no instant and is refused.
+- **Python: `select_score_threshold` refuses a scored decision that leaves out `right`.** Such a decision was counted
+  as wrong without a word, so a mistake in the input read as a precision of 0.0 and a threshold that could not be set.
+  It now raises `ValueError` naming the decision. **To migrate**: say whether the judge's best value was the settled one
+  (`right: True` or `False`) on every decision that has a `score`; a call that gives `right` is unchanged.
+
+### Documentation
+
+- **The Python README's samples run as written**, in the order a reader meets them, and a script
+  (`scripts/check-readme-samples.py`) keeps it so. The README opens with a first run from a table to `usage`, and says
+  what a promise is counted over and where `promise_of` applies.
+- **The Rust crate's README is its documentation** (docs.rs opens on it) and starts with a quick start that runs as a
+  doc-test. The Rust examples of the three crates' READMEs compile as pasted, which `scripts/check-readme-rust.py`
+  checks in a fresh project.
 
 ## 0.13.0
 
