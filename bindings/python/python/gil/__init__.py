@@ -707,9 +707,14 @@ class Candidate(TypedDict):
 
 
 class Answer(TypedDict):
-    """One attribute's answer: its candidates, best first, whether the first is trusted (``answered``), the layer of the
-    first, the coarse class offered when no layer answered the value, the attribute's policy, and — when neither memory
-    had evidence — the (attribute, value) pairs an external judgement would read."""
+    """One attribute's answer: its candidates, whether the first is trusted (``answered``), the layer of the first, the
+    coarse class offered when no layer answered the value, the attribute's policy, and — when neither memory had
+    evidence — the (attribute, value) pairs an external judgement would read.
+
+    The candidates are ordered by layer priority, not by score: the values the key and similar-record layers trust come
+    first, then what an external judgement offered, then the values those layers do not trust. A score is on its own
+    layer's scale, so scores of different candidates are not comparable. When ``answered`` is false, ``candidates[0]``
+    is a layer's fallback value, not a suggestion."""
 
     attribute: str
     answered: bool

@@ -73,8 +73,13 @@ pub struct Candidate {
     pub trusted: bool,
 }
 
-/// One attribute's suggestion: its candidates, best first, the layer of the first, and — when no layer answered the value
-/// and the attribute has a coarse level — the class offered instead.
+/// One attribute's suggestion: its candidates, the layer of the first, and — when no layer answered the value and the
+/// attribute has a coarse level — the class offered instead.
+///
+/// The candidates are ordered by layer priority, not by score: the values the key and similar-record layers trust come
+/// first, then what an external judgement offered, then the values those layers do not trust. A score is on its own
+/// layer's scale, so scores of different candidates are not comparable. Whether the first candidate is trusted is
+/// [`Answer::answered`]; when it is not, the first candidate is a layer's fallback value, not a suggestion.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Answer {

@@ -61,6 +61,12 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
   the judge's candidate and score on a sample of the cases it gave below the threshold too, settled by a person who saw
   it or drawn as checks with their probability.
 
+- **`Answer.Candidates` is documented as ordered by layer, not by score.** The docs said "best first", which reads as a
+  score order. The order is the layers' priority — the values the key and similar-record layers trust, then what an
+  external judgement offered, then the values they do not trust — and a score is on its own layer's scale, so scores of
+  different candidates are not comparable. `Answered` says whether the first candidate is trusted; when it is not, that
+  candidate is a layer's fallback value, not a suggestion. Behavior is unchanged.
+
 ## 0.31.0
 
 ### Added

@@ -69,7 +69,7 @@ public readonly record struct Candidate(string Value, double Score, Source Sourc
 
 /// <summary>The answer for one attribute while a person types into it: the layer of the first candidate, how it is
 /// offered, whether it is answered (its first candidate trusted), whether it wants an external judgement, the candidates
-/// best first, and the coarse class offered instead when there is one — read without JSON, so it leaves out what backs each
+/// (ordered by layer priority, not by score), and the coarse class offered instead when there is one — read without JSON, so it leaves out what backs each
 /// candidate, which <see cref="Answer"/> has.</summary>
 public sealed record PartialAnswer(
     Source Source,

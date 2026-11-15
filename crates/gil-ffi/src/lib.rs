@@ -853,7 +853,7 @@ pub unsafe extern "C" fn gil_open_record_answer(
 }
 
 /// The answer for one open decided attribute alone — with `partial` (null text when none), the text typed into it so
-/// far — written flat: the header to `answer`, the candidates best first to `candidates`, and their values (and the
+/// far — written flat: the header to `answer`, the candidates (ordered by layer priority, not by score) to `candidates`, and their values (and the
 /// coarse class's) back to back to `value_bytes`. When `candidates_capacity` or `value_bytes_capacity` is too small,
 /// only the header is written — with the counts the answer needs — and the call returns `GIL_BUFFER_TOO_SMALL`. No JSON
 /// either way. An attribute that is not open (not decided, off, settled or rejected) is a contract violation

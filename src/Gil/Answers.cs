@@ -3,11 +3,14 @@ using System.Text.Json.Serialization;
 
 namespace Gil;
 
-/// <summary>One attribute's answer: its candidates, best first, the layer of the first, the coarse class offered instead
+/// <summary>One attribute's answer: its candidates, the layer of the first, the coarse class offered instead
 /// when no layer answered the value and the attribute has a coarse level, how it is offered, and — when neither memory had
 /// evidence and nothing is typed — what an external judgement would read.</summary>
 /// <param name="Attribute">The attribute answered.</param>
-/// <param name="Candidates">The values offered, best first.</param>
+/// <param name="Candidates">The values offered, ordered by layer priority, not by score: the values the key and
+/// similar-record layers trust come first, then what an external judgement offered, then the values those layers do not
+/// trust. A score is on its own layer's scale, so scores of different candidates are not comparable. When
+/// <paramref name="Answered"/> is false, the first candidate is a layer's fallback value, not a suggestion.</param>
 /// <param name="Source">The layer of the first candidate.</param>
 /// <param name="Coarse">The class offered instead, when no layer answered the value and the attribute has a coarse
 /// level.</param>

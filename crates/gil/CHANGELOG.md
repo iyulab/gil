@@ -98,6 +98,12 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   readers may share a keeper while nothing changes it, and a change takes exclusive access. The C ABI header says the same
   for `GilKeeper`, and both are now checked at compile time.
 
+- **`Answer::candidates` is documented as ordered by layer, not by score.** The docs said "best first", which reads as a
+  score order. The order is the layers' priority — the values the key and similar-record layers trust, then what an
+  external judgement offered, then the values they do not trust — and a score is on its own layer's scale, so scores of
+  different candidates are not comparable. `answered` says whether the first candidate is trusted; when it is not, that
+  candidate is a layer's fallback value, not a suggestion. The Rust, Python and C ABI docs say so; behavior is unchanged.
+
 ## 0.13.1
 
 A patch on 0.13.0: two Python input fixes and the documentation a first user follows. The core, the C ABI and the .NET
