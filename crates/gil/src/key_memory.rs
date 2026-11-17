@@ -218,7 +218,7 @@ impl KeyMemory {
     }
 
     fn put_where(&mut self, schema: &Schema, record: &Record, only: Option<&str>) {
-        if let Err(misplaced) = schema.check_placement(&record.values, &record.sets) {
+        if let Err(misplaced) = schema.check_record(record) {
             panic!("record '{}': {misplaced}", record.id);
         }
         self.remove(schema.name(), &record.id);

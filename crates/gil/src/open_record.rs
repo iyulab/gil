@@ -83,7 +83,7 @@ impl OpenRecord {
     /// When the record's id is blank, or it keeps an attribute where its kind does not belong: a value for an attribute
     /// that takes several, or a set for one that takes one.
     pub fn reopen(schema: Schema, saved: &Record) -> Self {
-        if let Err(misplaced) = schema.check_placement(&saved.values, &saved.sets) {
+        if let Err(misplaced) = schema.check_record(saved) {
             panic!("{misplaced}");
         }
 
@@ -435,6 +435,17 @@ impl OpenRecord {
             } else {
                 format!("'{attribute}' takes one value; settle it with a single value")
             }));
+        }
+        let blank = settlement
+            .value
+            .as_deref()
+            .is_some_and(|v| v.trim().is_empty())
+            || settlement
+                .values
+                .as_ref()
+                .is_some_and(|set| set.iter().any(|e| e.trim().is_empty()));
+        if !clears && blank {
+            return Err(ContractViolation(crate::schema::blank_settled(attribute)));
         }
         Ok(())
     }

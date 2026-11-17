@@ -651,6 +651,36 @@ impl Schema {
         Ok(())
     }
 
+    /// [`Schema::check_placement`] for a saved record, and that no decided attribute is settled as a blank: a value of only
+    /// white space, or an element of a set that is. A blank cell read as a value is learned as one more team and keeps
+    /// the thresholds from being chosen; a record that settled nothing leaves the attribute out of `values` (and of
+    /// `settlements`) instead. Observed attributes may be blank, and a question's `known` values are not checked here —
+    /// an unfilled field is ordinary mid-form. The error names the first fault.
+    pub fn check_record(&self, record: &Record) -> Result<(), String> {
+        self.check_placement(&record.values, &record.sets)?;
+        for a in self
+            .attributes
+            .iter()
+            .filter(|a| a.role == AttributeRole::Decided)
+        {
+            let blank = if a.multiple {
+                record
+                    .sets
+                    .get(&a.name)
+                    .is_some_and(|set| set.iter().any(|e| e.trim().is_empty()))
+            } else {
+                record
+                    .values
+                    .get(&a.name)
+                    .is_some_and(|v| v.trim().is_empty())
+            };
+            if blank {
+                return Err(blank_settled(&a.name));
+            }
+        }
+        Ok(())
+    }
+
     /// The attribute named `name`.
     ///
     /// # Panics
@@ -1308,25 +1338,45 @@ fn drawn(probability: f64) -> bool {
     probability > 0.0 && probability <= 1.0
 }
 
+/// What a decided attribute settled as a blank is told: the value was not settled, so it is left out.
+pub(crate) fn blank_settled(attribute: &str) -> String {
+    format!(
+        "'{attribute}' is settled as an empty text; leave it out of values (and settlements) when nothing was settled"
+    )
+}
+
 /// A record's `settled_at`: ticks, or a time as text.
 #[cfg(feature = "serde")]
 fn settled_at<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<i64, D::Error> {
-    #[derive(serde::Deserialize)]
-    #[serde(untagged)]
-    enum Time {
-        Ticks(i64),
-        Text(String),
+    use serde::de::{Error, Visitor};
+
+    struct Time;
+
+    impl Visitor<'_> for Time {
+        type Value = i64;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("ticks (an integer) or a time yyyy-MM-ddTHH:mm:ss[.fffffff](Z|±HH:MM)")
+        }
+
+        fn visit_i64<E: Error>(self, ticks: i64) -> Result<i64, E> {
+            Ok(ticks)
+        }
+
+        fn visit_u64<E: Error>(self, ticks: u64) -> Result<i64, E> {
+            i64::try_from(ticks).map_err(|_| E::custom("settled_at ticks are out of range"))
+        }
+
+        fn visit_str<E: Error>(self, text: &str) -> Result<i64, E> {
+            ticks(text).ok_or_else(|| {
+                E::custom(format!(
+                    "settled_at '{text}' is neither ticks nor a time yyyy-MM-ddTHH:mm:ss[.fffffff](Z|±HH:MM)"
+                ))
+            })
+        }
     }
 
-    use serde::Deserialize;
-    match Time::deserialize(deserializer)? {
-        Time::Ticks(ticks) => Ok(ticks),
-        Time::Text(text) => ticks(&text).ok_or_else(|| {
-            serde::de::Error::custom(format!(
-                "settled_at '{text}' is neither ticks nor a time yyyy-MM-ddTHH:mm:ss[.fffffff](Z|±HH:MM)"
-            ))
-        }),
-    }
+    deserializer.deserialize_any(Time)
 }
 
 /// `yyyy-MM-ddTHH:mm:ss[.f…f](Z|±HH:MM)` (RFC 3339; the fraction in one to seven digits, the 100-nanosecond tick) →

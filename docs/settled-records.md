@@ -42,6 +42,12 @@ table does not name does not read, and neither does a time out of range (`2025-0
 displayed at probability 0 (or not displayed at 1): the line is refused
 rather than half understood. Lines are written back with `settled_at` in ticks.
 
+A decided attribute settled as an empty or white-space text — a blank cell read as a value, or an empty element of a set —
+is refused too, naming the record: an empty text is not a team, and learned as one it keeps the thresholds from being
+chosen with nothing to say why. A record that settled nothing leaves the attribute out of `values` (or `sets`) and of
+`settlements`. An observed attribute may be blank. `settled_at` is required: `null` or a missing time is refused with the
+forms it takes, and records that share one time replay in `id` order.
+
 That is about the line's own entries. The attribute names inside `values`, `sets` and `settlements` are kept as written and are
 not checked against a schema: a record outlives the form it was settled on, and one settled on an older edition may hold
 an attribute the current schema no longer has. A name the schema does not hold is read by nothing — settling, choosing

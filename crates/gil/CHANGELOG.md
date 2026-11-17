@@ -8,6 +8,14 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Breaking
 
+- **A decided attribute settled as a blank is refused.** `Schema::check_record` — which `KeyMemory::put`,
+  `OpenRecord::reopen` and the Python and C ABI record reads now call in place of `check_placement` — refuses a record
+  whose decided value is empty or white space, or whose set holds such an element: `record '<id>': '<attribute>' is
+  settled as an empty text; leave it out of values (and settlements) when nothing was settled`. `OpenRecord::check_settle`
+  refuses a blank settlement the same way. A blank cell read as a value was learned as one more value and, with enough
+  of them, kept every threshold from being chosen with nothing to say why. **To migrate**: leave the attribute out of
+  `values` and `settlements` for a record that settled nothing. `check_placement`, which serves the questions a host asks
+  mid-form, and observed attributes are unchanged.
 - **`replay::ThresholdReplay` has a new field, `absence`.** A struct literal of it no longer compiles without the field;
   replays the crate returns are unaffected. **To migrate**: add `absence: None`, or build the replay from what a
   selection returned (`..replay`).
@@ -41,13 +49,9 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Changed
 
-- **The C ABI refuses options out of range and a weight that is not positive as input, not as a panic.** A selection or
-  keeper call whose `target_precision` is outside (0, 1] or whose `minimum_answered` is 0, and `gil_select_score_threshold`
-  with a decision whose weight is not positive and finite, now return `GIL_INVALID_INPUT` with the same message (the
-  decision named by its id) instead of `GIL_PANIC`: a host takes these from its configuration and the call changes
-  nothing. The .NET and Python bindings already raised an argument error for both. Rust: `Choice::validate` and
-  `ScoredDecision::validate` give the reason without a panic. An attribute that is not decided is still a contract
-  violation.
+- **A `settled_at` that cannot be read says what it takes.** `null`, a boolean, a fraction or a list gave the serde phrase
+  `data did not match any variant of untagged enum Time`; it now says it expected ticks (an integer) or a time
+  `yyyy-MM-ddTHH:mm:ss`, with an optional fraction and `Z` or an offset, as a text that is not a time already did.
 
 - **A record line is read as RFC 3339, and one that does not read is named by its record.** `settled_at` as text takes
   the fraction in one to seven digits or none, and `Z` for UTC, so `datetime.isoformat()` and most other tools' output

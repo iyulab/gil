@@ -204,6 +204,15 @@ public sealed class CoreTests(ITestOutputHelper output)
         FluentActions.Invoking(() => decider.Put(schema, misplaced))
             .Should().Throw<ArgumentException>().WithMessage($"record 'bad': '{decided}' takes one value*");
 
+        // A blank cell read as a settled value is refused where it sits, not learned as one more value.
+        using var blank = SettledRecords.From([new Record("blank", DateTimeOffset.UnixEpoch.AddDays(10))
+        {
+            Values = new Dictionary<string, string> { [decided] = " " },
+        }]);
+        FluentActions.Invoking(() => decider.Put(schema, blank))
+            .Should().Throw<ArgumentException>()
+            .WithMessage($"record 'blank': '{decided}' is settled as an empty text; leave it out*");
+
         // The binding goes on working after a refusal: a changing call refuses before it changes anything.
         record.AnswerPartial(decider, decided).Candidates.Should().NotBeEmpty();
         record.Observe(decider, Observed().First(), "x");

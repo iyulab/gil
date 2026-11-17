@@ -9,6 +9,13 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Breaking
 
+- **A decided attribute settled as a blank is refused.** A record whose decided value is empty or white space (a blank
+  cell read as a value), or whose set holds a blank element, is refused where it is read or put into a decider, with
+  `record '<id>': '<attribute>' is settled as an empty text; leave it out of values (and settlements) when nothing was
+  settled`; `OpenRecord.Settle` with a blank value is refused the same way. Before, the blank was learned as one more
+  value and, when many cells were empty, no threshold was chosen and nothing said why. **To migrate**: leave the
+  attribute out of `Values` and `Settlements` for a record that settled nothing, or skip the row. Observed attributes may
+  still be blank, and a question's known values are not checked.
 - **`OpenRecord.Settle` no longer defaults the probability of a check to 1.** `probability` is now `double?` and a
   `SettlementKind.Check` without it is refused with an `ArgumentException`, as the Rust core and the Python binding
   already did. The default wrote a check that was certain to be drawn into the record without a word, and a check
@@ -27,10 +34,9 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Changed
 
-- **Python: a schema or decider argument of the wrong kind is named by its kind.** `gil.Decider(gil.records(lines))`,
-  `gil.Keeper({...})` and `keeper.settle(records, decider)` raise `TypeError: expected Schema, got Records` /
-  `expected Decider, got Records` instead of an `AttributeError` about the binding's own `json` or `_inner` attribute.
-  A records argument of the wrong kind already said `... is not an instance of 'Records'`.
+- **A `settled_at` that cannot be read says what it takes.** `null`, a boolean, a fraction or a list gave the serde phrase
+  `data did not match any variant of untagged enum Time`; it now says it expected ticks (an integer) or a time
+  `yyyy-MM-ddTHH:mm:ss`, with an optional fraction and `Z` or an offset, as a text that is not a time already did.
 
 - **A record line is read as RFC 3339, and one that does not read is named by its record.** `settled_at` as text takes
   the fraction in one to seven digits or none, and `Z` for UTC (the seven-digit form of .NET's `"O"` still reads), and a

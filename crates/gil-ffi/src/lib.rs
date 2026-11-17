@@ -1149,7 +1149,7 @@ fn placed<'a>(
 ) -> Result<(), Failure> {
     for record in records {
         schema
-            .check_placement(&record.values, &record.sets)
+            .check_record(record)
             .map_err(|m| input(format!("record '{}': {m}", record.id)))?;
     }
     Ok(())

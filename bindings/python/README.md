@@ -104,7 +104,12 @@ Records kept in it before Gil is in use are what the first thresholds are chosen
 Decisions people already made — a spreadsheet, a database export — become records one row at a time. Each row is a
 dict in the line's form: the time it was settled, every value it held, and how each decided attribute was settled. A
 person who picked the value with no suggestion in view settled it as `Enter`. A day with no time of day is given as
-midnight in the line's time format; rows settled on the same day are then ordered by `id`.
+midnight in the line's time format; rows settled on the same day are then ordered by `id` — and a table with no time at
+all, or one import time for every row, replays in `id` order, so give a column that orders the rows or the thresholds are
+chosen on an arbitrary order (a batch you cannot order is marked with `batch` and left out of the promise with
+`uncounted_batches`, as in [Choosing what to trust](https://github.com/iyulab/gil/blob/main/README.md#choosing-what-to-trust)). A row whose decided cell is empty settled nothing: leave the
+attribute out of `values` and `settlements`, or skip the row. A blank value is refused with a `ValueError` naming the
+record rather than learned as one more team.
 
 ```python
 import csv
@@ -112,6 +117,8 @@ import csv
 lines = []
 with open("tickets.csv", encoding="utf-8") as f:
     for row in csv.DictReader(f):  # oldest first
+        if not row["team"].strip():
+            continue  # nothing was settled for this row
         lines.append(
             {
                 "id": row["ticket_id"],
@@ -528,6 +535,11 @@ lines.append(record)
 counts = gil.usage(gil.records(lines))["team"]
 print(counts["right_weight"] / counts["judged_weight"], "against", counts["promise_sum"] / counts["promised"])
 ```
+
+`gil.usage` counts the records it is given and nothing else: over no records — a day with no tickets — it returns `{}`, so
+read an attribute with `.get("team")`, and over a handful of records it gives ratios over a handful, with no interval
+and no warning (the promise it is read against is an interval; the realized ratio is not). Pick the period so each
+attribute has decisions enough to read.
 
 In operations terms: the automation rate is `answered / decisions`, the error rate of the answers one minus the
 realized precision above, the acceptance rate `accepted / answered` and the override rate `(corrected + rejected) /
