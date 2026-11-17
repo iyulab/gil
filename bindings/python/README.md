@@ -409,9 +409,68 @@ shown, `AcceptOther` / `CorrectOther` when the suggestion shown was not the deci
 answer that was in view as `shown=` (with `promise=`, its layer's promise from the tuning) — or `suggested=` for a value
 that was not the decider's — and the snapshot keeps them for `gil.usage`.
 
-When an answer carries `needs_external`, no memory had evidence: ask your model about those (attribute, value) pairs
+When an answer carries `needs_external`, no memory had evidence: ask your judge about those (attribute, value) pairs
 and pass its ranked values back with `record.offer_external(decider, "team", [{"value": ..., "probability": ...,
-"trusted": ...}])`.
+"trusted": ...}])`. A judge is anything that ranks values from the evidence — an embedding model, a classifier, a rule
+engine; here a keyword rule stands in for it. Ask Gil first, call the judge only when it has nothing, and when the judge
+fails keep the answer Gil already gave — the judge is outside Gil, so its errors and time-outs are yours to catch:
+
+```python
+inbox_schema = gil.Schema.from_dict(
+    {
+        "name": "inbox",
+        "attributes": [
+            {"name": "text", "role": "observed"},
+            {"name": "category", "role": "decided"},
+        ],
+    }
+)
+past = [
+    ("where is my parcel", "shipping"),
+    ("my parcel arrived broken", "shipping"),
+    ("password reset fails", "account"),
+    ("cannot login after password change", "account"),
+] * 10
+inbox = gil.Decider(
+    inbox_schema,
+    gil.records(
+        [
+            {
+                "id": f"m{i}",
+                "settled_at": 1_000 + i,
+                "values": {"text": f"{message} {i}", "category": category},
+                "settlements": {"category": "Enter"},
+            }
+            for i, (message, category) in enumerate(past)
+        ]
+    ),
+)
+
+RULES = {"refund": "billing", "charge": "billing", "invoice": "billing"}
+
+
+def judge(message: str) -> list[dict]:
+    """Ranked values for `category`, best first; empty to abstain."""
+    found = dict.fromkeys(c for word, c in RULES.items() if word in message.lower())
+    return [{"value": c, "probability": 1.0, "trusted": True} for c in found]
+
+
+message = "a refund for the extra charge"
+record = gil.OpenRecord(inbox_schema, "m900", settled_at=2_000)
+(answer,) = record.observe(inbox, "text", message)
+if not answer["answered"] and answer["needs_external"]:
+    try:
+        ranked = judge(message)
+    except Exception:  # the service is down or too slow: keep what Gil already gave
+        ranked = []
+    if ranked:
+        answer = record.offer_external(inbox, "category", ranked)
+print(answer["source"], answer["candidates"][0]["value"], answer["candidates"][0]["trusted"])  # Model billing True
+```
+
+The judge's candidates come back in `answer["candidates"]`, and the answer's `source` is `Model` — settle the record with
+that answer in view (`shown=`) so `gil.usage` counts how it was settled; a threshold on the judge's own score is chosen
+in «Sorting text into categories» above.
 
 ## Which field to ask for first (experimental)
 

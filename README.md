@@ -179,6 +179,44 @@ var judge = new ResolverJudge(resolver, new Dictionary<string, TaskDefinition> {
 var judged = await ticket.AnswerAsync(decider, judge);
 ```
 
+Any judge is a class with one method that ranks the values from the evidence it is given — best first, empty to abstain.
+This one is a keyword rule; a model or a service takes the same place. Ask Gil first and call the judge only for an answer
+that asks for one, and when the judge throws or its token runs out keep the answer Gil already gave — `AnswerAsync`
+passes the judge's exception on:
+
+```csharp
+using Gil;
+
+sealed class KeywordJudge : IExternalJudge
+{
+    static readonly Dictionary<string, string> Rules = new() { ["refund"] = "billing", ["invoice"] = "billing" };
+
+    public ValueTask<IReadOnlyList<ExternalCandidate>> JudgeAsync(
+        AttributeDefinition attribute, IReadOnlyList<ObservedValue> evidence, CancellationToken cancellationToken)
+    {
+        var text = string.Join(' ', evidence.Select(e => e.Value)).ToLowerInvariant();
+        IReadOnlyList<ExternalCandidate> ranked = Rules.Where(r => text.Contains(r.Key)).Select(r => r.Value).Distinct()
+            .Select(category => new ExternalCandidate(category, 1.0, true)).ToList();
+        return ValueTask.FromResult(ranked);
+    }
+}
+
+// `inbox` has an observed "text" and a decided "category"; `decider` has learned the settled records of other categories.
+var answer = ticket.Observe(decider, "text", "a refund for the extra charge").Single(a => a.Attribute == "category");
+if (!answer.Answered && answer.NeedsExternal is not null)
+{
+    try
+    {
+        using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        answer = (await ticket.AnswerAsync(decider, new KeywordJudge(), limit.Token)).Single(a => a.Attribute == "category");
+    }
+    catch (Exception e) when (e is not OutOfMemoryException)
+    {
+        // the service is down or too slow: `answer` is still Gil's own
+    }
+}
+```
+
 How far to trust each layer is chosen by replaying the settled records in settlement order, for the precision you
 want. Put the choice on the schema, and keep it as a `Tuning`: at start-up, `Stale` says whether it still stands — the
 same core version, the same settings it rests on, about as many records — and `Apply` puts it back.
