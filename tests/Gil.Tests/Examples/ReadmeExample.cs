@@ -46,6 +46,42 @@ internal static class ReadmeExample
         var judge = new ResolverJudge(resolver, new Dictionary<string, TaskDefinition> { ["team"] = task });
         var judged = await ticket.AnswerAsync(decider, judge);
 
+        await KeepingAJudgeAsync(schema, saved, savedRecords, decider, ticket, team);
+    }
+
+    // A judge of your own (README "Usage"). A class cannot sit inside a method, so the README's lines run on in the next one.
+    sealed class KeywordJudge : IExternalJudge
+    {
+        static readonly Dictionary<string, string> Rules = new() { ["refund"] = "billing", ["invoice"] = "billing" };
+
+        public ValueTask<IReadOnlyList<ExternalCandidate>> JudgeAsync(
+            AttributeDefinition attribute, IReadOnlyList<ObservedValue> evidence, CancellationToken cancellationToken)
+        {
+            var text = string.Join(' ', evidence.Select(e => e.Value)).ToLowerInvariant();
+            IReadOnlyList<ExternalCandidate> ranked = Rules.Where(r => text.Contains(r.Key)).Select(r => r.Value).Distinct()
+                .Select(category => new ExternalCandidate(category, 1.0, true)).ToList();
+            return ValueTask.FromResult(ranked);
+        }
+    }
+
+    static async Task KeepingAJudgeAsync(Schema schema, SettledRecords saved, IReadOnlyList<Record> savedRecords,
+        Decider decider, OpenRecord ticket, Answer team)
+    {
+        // `inbox` has an observed "text" and a decided "category"; `decider` has learned the settled records of other categories.
+        var answer = ticket.Observe(decider, "text", "a refund for the extra charge").Single(a => a.Attribute == "category");
+        if (!answer.Answered && answer.NeedsExternal is not null)
+        {
+            try
+            {
+                using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                answer = (await ticket.AnswerAsync(decider, new KeywordJudge(), limit.Token)).Single(a => a.Attribute == "category");
+            }
+            catch (Exception e) when (e is not OutOfMemoryException)
+            {
+                // the service is down or too slow: `answer` is still Gil's own
+            }
+        }
+
         var options = new SelectionOptions(TargetPrecision: 0.9, MinimumAnswered: 30);
         var keyFields = Replay.SelectKeyFields(schema, "team", saved, options);
         using var keyed = new Schema(schema.Name, schema.Attributes.Select(a => a.Name != "team" ? a : a with
