@@ -254,6 +254,13 @@ silent. Choosing again does not mend a revision: name the new edition. On public
 injury reports, a window of 100 at a target of 0.9 fell under 0.75 within 54 and 163 records of the revision, with no
 edition named; on thirteen public streams with no revision it never did. On public device recalls with no revision it said so once, on a nine-day run of recalls from one firm that the memory answered wrongly; look at what the window holds before naming an edition.
 
+The alarm is advice, not a demotion. It names the attribute but not the cause — a changed meaning and a run of mistyped
+entries raise it alike — and it takes no trust away: an answer already trusted keeps its promise, and keeps being offered
+as trusted, until the memory has learned the new settlements or the new edition is named. In a made-up stream where one
+attribute's values changed meaning, trusted answers for it went on being wrong for about a hundred more records after the
+alarm. A host that wants a stronger response acts on `keeper.stale()` itself: stop showing the attribute's answers as
+trusted, or name the edition.
+
 Answers never offer a value no record settled yet, so where new values keep coming the answers stay right and fewer
 records are answered. `keeper.unseen_mass(attribute)` (experimental) says how much — `{"once": ..., "settled": ...,
 "mass": ...}`, the values settled on exactly one record over the records that settled one (the Good-Turing estimate),
