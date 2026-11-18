@@ -9,6 +9,11 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Breaking
 
+- **`Tuning` records the score scale and the native library is ABI 7.** `Tuning.Scale` (init-only, 0 for a tuning
+  written before it existed) is part of the tuning's JSON, and `Stale` has a new case, `Stale.Scale`, so a `switch` over
+  it needs an arm. The native library the binding loads must be the one built with it (ABI version 7; a mismatch is
+  refused at the first call). **To migrate**: handle `Stale.Scale(Chosen, Now)` and update the package and its native
+  library together.
 - **A decided attribute settled as a blank is refused.** A record whose decided value is empty or white space (a blank
   cell read as a value), or whose set holds a blank element, is refused where it is read or put into a decider, with
   `record '<id>': '<attribute>' is settled as an empty text; leave it out of values (and settlements) when nothing was
@@ -25,6 +30,12 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Added
 
+- **`Tuning.StaleCarried(schema)` — whether a tuning chosen on records kept elsewhere still stands.** `Tuning.Stale`
+  says stale for another core version or a different count of records, which is right for a tuning chosen on the host's
+  own records and wrong for thresholds measured in another store (a sample shipped with a form): those cannot be chosen
+  again where they are used. `StaleCarried` returns `Stale.Scale` when the score scale changed (`Tuning.Scale`) and
+  `Stale.Schema` when a setting the choice rests on changed, and null otherwise. The scale is raised only by a release
+  that changes how a score is computed or the range scores live in.
 - **A replay that chose no threshold says why.** `ThresholdReplay.Absence` (`Absence?`) is `NothingToReplay` (no lookup
   reached the layer), `NoCandidate` (none found a candidate at any score), `TooFewAnswers` (fewer answers than the
   minimum, even at the lowest score) or `TargetNotMet` (answers enough, but no threshold met what the rule asks), and null

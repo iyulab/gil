@@ -319,6 +319,24 @@ internal static class TuningJson
 
         return found == "null" ? null : found;
     }
+
+    /// <summary>Why a tuning carried from elsewhere no longer stands for <paramref name="schema"/>, as JSON — <c>null</c>
+    /// while it does.</summary>
+    /// <exception cref="ArgumentException">The tuning does not read.</exception>
+    internal static unsafe string? StaleCarriedJson(string tuningJson, Schema schema)
+    {
+        ArgumentNullException.ThrowIfNull(tuningJson);
+        ArgumentNullException.ThrowIfNull(schema);
+        var tuning = new Utf8(tuningJson);
+        nuint length;
+        string found;
+        fixed (byte* t = &tuning.Pin())
+        {
+            found = Native.Result(Native.TuningStaleCarried(tuning.At(t), schema.Handle, &length));
+        }
+
+        return found == "null" ? null : found;
+    }
 }
 
 /// <summary>Counts of how a decided attribute's answers fared — content-free, for a host to report.</summary>

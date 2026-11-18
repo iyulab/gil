@@ -152,6 +152,16 @@ def test_a_tuning_captures_applies_and_goes_stale() -> None:
     )
     assert gil.tuning_stale(tuning, other, 100) == "schema"
 
+    # A tuning carried from elsewhere: another version of the package or any count of records here is no reason; the score
+    # scale and the settings it rests on are.
+    assert tuning["scale"] >= 1
+    assert gil.tuning_stale_carried(tuning, SCHEMA) is None
+    assert gil.tuning_stale_carried({**tuning, "version": "0.0.1"}, SCHEMA) is None
+    assert gil.tuning_stale_carried({**tuning, "scale": 0}, SCHEMA) == {
+        "scale": {"chosen": 0, "now": tuning["scale"]}
+    }
+    assert gil.tuning_stale_carried(tuning, other) == "schema"
+
 
 def _replay(threshold: float | None, floor: float | None = None) -> gil.ThresholdReplay:
     chosen: gil.ThresholdChoice | None = None

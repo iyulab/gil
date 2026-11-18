@@ -8,6 +8,11 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Breaking
 
+- **`tuning::Tuning` has a new field, `scale`, and `tuning::Stale` a new variant, `Scale`.** A struct literal of
+  `Tuning` no longer compiles without the field, and an exhaustive `match` on `Stale` needs the arm; tunings the crate
+  returns, and a tuning written before the field existed (it reads back with `scale` 0), are unaffected. **To migrate**:
+  add `scale: gil::tuning::SCALE` to a literal and an arm for `Stale::Scale { chosen, now }`. The C ABI version is now 7
+  (a new function; no existing one changed), so a binding and its native library must be built together.
 - **A decided attribute settled as a blank is refused.** `Schema::check_record` — which `KeyMemory::put`,
   `OpenRecord::reopen` and the Python and C ABI record reads now call in place of `check_placement` — refuses a record
   whose decided value is empty or white space, or whose set holds such an element: `record '<id>': '<attribute>' is
@@ -22,6 +27,15 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Added
 
+- **A tuning chosen on records kept elsewhere can outlive a release: `Tuning::stale_carried` and the score scale.**
+  `Tuning::stale` says a tuning is stale whenever the crate version or the count of settled records moved — right for a
+  tuning a host chose on its own records and can choose again, wrong for thresholds measured on records kept in another
+  store (a sample shipped with a form), which cannot be chosen again where they are used. `Tuning::stale_carried(schema)`
+  asks only what decides whether such a threshold still means anything: the **score scale** (`tuning::SCALE`, recorded
+  as `Tuning::scale`) and the settings the choice rests on. `SCALE` is raised only by a release that changes how a score
+  is computed or the range scores live in; a golden test (`tests/scale.rs`) fails when the golden scores change while it
+  does not, so a release that leaves every score as it was keeps every carried threshold valid. Available as
+  `gil_tuning_stale_carried` (C ABI), `tuning_stale_carried` (Python) and `Tuning.StaleCarried` (.NET).
 - **A replay that chose no threshold says why.** `ThresholdReplay::absence` is `Some(`[`Absence`]`)` when `chosen` is
   `None` — `NothingToReplay` (no lookup reached the layer), `NoCandidate` (none found a candidate at any score),
   `TooFewAnswers` (answers worth fewer than `minimum_answered`, even at the lowest score) or `TargetNotMet` (answers

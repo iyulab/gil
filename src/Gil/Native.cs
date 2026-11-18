@@ -165,6 +165,9 @@ internal static unsafe partial class Native
     [LibraryImport(Library, EntryPoint = "gil_tuning_stale")]
     internal static partial int TuningStale(Str tuning, SchemaHandle schema, nuint settled, nuint* resultLen);
 
+    [LibraryImport(Library, EntryPoint = "gil_tuning_stale_carried")]
+    internal static partial int TuningStaleCarried(Str tuning, SchemaHandle schema, nuint* resultLen);
+
     [LibraryImport(Library, EntryPoint = "gil_keeper_new")]
     internal static partial int KeeperNew(SchemaHandle schema, Str options, nint* output);
 

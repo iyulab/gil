@@ -19,6 +19,10 @@ public sealed record Tuning(
     double TargetPrecision,
     IReadOnlyList<AttributeTuning> Attributes)
 {
+    /// <summary>The score scale the settings were chosen on; 0 for a tuning written before the scale was recorded.</summary>
+    [JsonPropertyName("scale")]
+    public uint Scale { get; init; }
+
     /// <summary>The chosen settings as <paramref name="schema"/>'s decided attributes now hold them, chosen on
     /// <paramref name="settled"/> records for <paramref name="targetPrecision"/>; the promises are left unrecorded —
     /// <see cref="Promise"/> records a layers selection's.</summary>
@@ -140,6 +144,16 @@ public sealed record Tuning(
             ? JsonSerializer.Deserialize(found, CoreJson.Default.Stale)
             : null;
 
+    /// <summary>Why a tuning <b>carried from elsewhere</b> — thresholds chosen on records kept in another store, which
+    /// cannot be chosen again here — no longer stands for <paramref name="schema"/>: another score scale
+    /// (<see cref="Stale.Scale"/>) or a changed setting the choice rests on (<see cref="Stale.Schema"/>); null while it
+    /// does. Another version of the core, or a different number of settled records here, is no reason —
+    /// <see cref="Stale(Schema, int)"/> says those for a tuning chosen on this store's own records.</summary>
+    public Stale? StaleCarried(Schema schema) =>
+        TuningJson.StaleCarriedJson(ToJson(), schema) is { } found
+            ? JsonSerializer.Deserialize(found, CoreJson.Default.Stale)
+            : null;
+
     private static Tuning Read(string json) => JsonSerializer.Deserialize(json, CoreJson.Default.Tuning)!;
 }
 
@@ -224,6 +238,12 @@ public abstract record Stale
     /// <summary>Chosen by another version of the core.</summary>
     /// <param name="Chosen">The version that chose it.</param>
     public sealed record Version(string Chosen) : Stale;
+
+    /// <summary>A tuning carried from elsewhere (<see cref="Tuning.StaleCarried(Gil.Schema)"/>) was chosen on another score
+    /// scale: its thresholds are on scores that mean something else here.</summary>
+    /// <param name="Chosen">The scale it was chosen on; 0 when it did not record one.</param>
+    /// <param name="Now">The scale of this core.</param>
+    public sealed record Scale(uint Chosen, uint Now) : Stale;
 
     /// <summary>A setting the choice rests on changed.</summary>
     public sealed record Schema : Stale;
@@ -359,7 +379,7 @@ internal sealed class StaleConverter : JsonConverter<Stale>
         {
             return reader.GetString() == "schema"
                 ? new Stale.Schema()
-                : throw new JsonException($"a stale reason is version, schema, settled or realized, not {reader.GetString()}");
+                : throw new JsonException($"a stale reason is version, scale, schema, settled or realized, not {reader.GetString()}");
         }
 
         using var document = JsonDocument.ParseValue(ref reader);
@@ -367,13 +387,15 @@ internal sealed class StaleConverter : JsonConverter<Stale>
         return reason.Name switch
         {
             "version" => new Stale.Version(reason.Value.GetProperty("chosen").GetString()!),
+            "scale" => new Stale.Scale(
+                reason.Value.GetProperty("chosen").GetUInt32(), reason.Value.GetProperty("now").GetUInt32()),
             "settled" => new Stale.Settled(
                 reason.Value.GetProperty("chosen").GetInt32(), reason.Value.GetProperty("now").GetInt32()),
             "realized" => new Stale.Realized(
                 reason.Value.GetProperty("attribute").GetString()!,
                 reason.Value.GetProperty("right").GetInt32(),
                 reason.Value.GetProperty("judged").GetInt32()),
-            _ => throw new JsonException($"a stale reason is version, schema, settled or realized, not {reason.Name}"),
+            _ => throw new JsonException($"a stale reason is version, scale, schema, settled or realized, not {reason.Name}"),
         };
     }
 
@@ -388,6 +410,14 @@ internal sealed class StaleConverter : JsonConverter<Stale>
                 writer.WriteStartObject();
                 writer.WriteStartObject("version");
                 writer.WriteString("chosen", version.Chosen);
+                writer.WriteEndObject();
+                writer.WriteEndObject();
+                break;
+            case Stale.Scale scale:
+                writer.WriteStartObject();
+                writer.WriteStartObject("scale");
+                writer.WriteNumber("chosen", scale.Chosen);
+                writer.WriteNumber("now", scale.Now);
                 writer.WriteEndObject();
                 writer.WriteEndObject();
                 break;

@@ -52,6 +52,7 @@ from gil._gil import (
     tuning_apply_json,
     tuning_capture_json,
     tuning_promise_json,
+    tuning_stale_carried_json,
     tuning_stale_json,
     usage_json,
 )
@@ -110,6 +111,7 @@ __all__ = [
     "select_layers",
     "select_score_threshold",
     "tuning_stale",
+    "tuning_stale_carried",
     "usage",
 ]
 
@@ -1350,8 +1352,19 @@ def tuning_stale(
     tuning: dict[str, Any], schema: Schema, settled: int
 ) -> dict[str, Any] | str | None:
     """Why the tuning no longer stands for ``schema`` now that ``settled`` records (the number of them) are settled — ``{"version": {"chosen": ...}}``,
-    ``"schema"`` or ``{"settled": {"chosen": ..., "now": ...}}`` — or ``None`` while it does."""
+    ``"schema"`` or ``{"settled": {"chosen": ..., "now": ...}}`` — or ``None`` while it does. A tuning chosen on records
+    kept elsewhere is asked with :func:`tuning_stale_carried` instead."""
     text = tuning_stale_json(json.dumps(tuning), _schema_json(schema), settled)
+    return None if text is None else cast(dict[str, Any] | str, json.loads(text))
+
+
+def tuning_stale_carried(tuning: dict[str, Any], schema: Schema) -> dict[str, Any] | str | None:
+    """Why a tuning **carried from elsewhere** — thresholds chosen on records kept in another store, which cannot be
+    chosen again here — no longer stands for ``schema``: ``{"scale": {"chosen": ..., "now": ...}}`` (the score scale
+    changed; ``chosen`` 0 is a tuning that did not record one) or ``"schema"`` (a setting the choice rests on changed).
+    ``None`` while it does. Another version of this package, or a different number of settled records here, is no
+    reason — :func:`tuning_stale` says those for a tuning chosen on this store's own records."""
+    text = tuning_stale_carried_json(json.dumps(tuning), _schema_json(schema))
     return None if text is None else cast(dict[str, Any] | str, json.loads(text))
 
 

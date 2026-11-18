@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use gil::decider::Source;
 use gil::replay::{LayerThresholds, ThresholdChoice, ThresholdReplay};
 use gil::schema::{Attribute, AttributeRole, CoarseLevel, KeyCombine, Schema};
-use gil::tuning::{Stale, Tuning, VERSION, fingerprint};
+use gil::tuning::{SCALE, Stale, Tuning, VERSION, fingerprint};
 
 fn schema() -> Schema {
     let mut team = Attribute::new("team", AttributeRole::Decided);
@@ -334,4 +334,43 @@ fn a_coarse_class_reads_its_promise_from_the_level_not_the_value() {
     );
     assert_eq!(tuning.coarse_promise_of("team", Source::External), None);
     assert_eq!(tuning.promise_of("team", Source::KeyMemory), Some(0.86));
+}
+
+#[test]
+fn a_tuning_carried_from_elsewhere_is_stale_for_its_scale_and_settings_only() {
+    let chosen = tuned();
+    let tuning = Tuning::capture(&chosen, 1_000, 0.9);
+    assert_eq!(tuning.scale, SCALE);
+    assert_eq!(tuning.stale_carried(&chosen), None);
+
+    // Another crate version, and any count of records here, are no reason: the records it was chosen on are not here.
+    let mut other = tuning.clone();
+    other.version = "0.0.1".into();
+    assert_eq!(other.stale_carried(&chosen), None);
+    assert!(other.stale(&chosen, 1_000).is_some());
+    assert_eq!(tuning.stale_carried(&chosen), None);
+    assert!(tuning.stale(&chosen, 5_000).is_some());
+
+    // Another score scale is, and so is a tuning that did not record one.
+    let mut older = tuning.clone();
+    older.scale = SCALE + 1;
+    assert_eq!(
+        older.stale_carried(&chosen),
+        Some(Stale::Scale {
+            chosen: SCALE + 1,
+            now: SCALE
+        })
+    );
+    older.scale = 0;
+    assert_eq!(
+        older.stale_carried(&chosen),
+        Some(Stale::Scale {
+            chosen: 0,
+            now: SCALE
+        })
+    );
+
+    // A changed setting the choice rests on is, as for a tuning of the host's own.
+    let narrowed = changed(&chosen, |a| a[2].candidates = Some(vec!["network".into()]));
+    assert_eq!(tuning.stale_carried(&narrowed), Some(Stale::Schema));
 }

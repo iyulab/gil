@@ -63,7 +63,7 @@ pub const GIL_BROKEN: i32 = iyulab_ffi_support::BROKEN;
 
 /// The version of this interface — its functions, structures and statuses. It changes whenever a binding built for one
 /// version would misread the library of another.
-pub const GIL_ABI_VERSION: u32 = 6;
+pub const GIL_ABI_VERSION: u32 = 7;
 
 /// [`GilCandidate::source`]: no layer.
 pub const GIL_SOURCE_NONE: u8 = 0;
@@ -1637,6 +1637,31 @@ pub unsafe extern "C" fn gil_tuning_stale(
         let schema = unsafe { handle(schema, "schema") }?;
         let value =
             serde_json::to_value(tuned.stale(&schema.0, settled)).expect("a reason serializes");
+        unsafe { result(&value, result_len) }
+    })
+}
+
+/// Keeps as the result why a tuning **carried from elsewhere** no longer stands for `schema` — JSON in the core's `serde`
+/// form — or `null` while it does: another score scale or a changed setting the choice rests on, not another version of
+/// the core nor the count of records here (`Tuning::stale_carried`).
+///
+/// # Safety
+/// `tuning_json` is valid for the call; `schema` is a live handle; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gil_tuning_stale_carried(
+    tuning_json: GilStr,
+    schema: *const GilSchema,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        if result_len.is_null() {
+            return Err(argument("result_len is null"));
+        }
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let tuned = unsafe { tuning(tuning_json) }?;
+        let schema = unsafe { handle(schema, "schema") }?;
+        let value =
+            serde_json::to_value(tuned.stale_carried(&schema.0)).expect("a reason serializes");
         unsafe { result(&value, result_len) }
     })
 }

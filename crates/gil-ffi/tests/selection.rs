@@ -300,6 +300,18 @@ fn the_other_selections_and_a_tuning_come_back_as_the_core_gives_them() {
         stale(early.len() * 11 / 10, &mut len),
         serde_json::to_value(core_tuning.stale(&schema, early.len() * 11 / 10)).unwrap()
     );
+    // A tuning carried from elsewhere: the count of records here is no reason; the score scale and the settings are.
+    let carried = |tuning: &str, len: &mut usize| {
+        let status = unsafe { gil_tuning_stale_carried(s(tuning), handles.schema, len) };
+        result(status, *len)
+    };
+    assert_eq!(carried(&promised.to_string(), &mut len), Value::Null);
+    let mut other_scale = promised.clone();
+    other_scale["scale"] = serde_json::json!(0);
+    assert_eq!(
+        carried(&other_scale.to_string(), &mut len),
+        serde_json::json!({"scale": {"chosen": 0, "now": gil::tuning::SCALE}})
+    );
     unsafe { gil_schema_free(applied) };
 }
 

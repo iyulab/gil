@@ -27,6 +27,7 @@ __all__ = [
     "tuning_capture_json",
     "tuning_promise_json",
     "tuning_stale_json",
+    "tuning_stale_carried_json",
     "usage_json",
 ]
 
@@ -294,6 +295,10 @@ def tuning_apply_json(tuning_json: str, schema_json: str) -> str:
 
 def tuning_stale_json(tuning_json: str, schema_json: str, settled: int) -> str | None:
     """Why the tuning no longer stands for the schema with `settled` records, as JSON — `None` while it does."""
+
+def tuning_stale_carried_json(tuning_json: str, schema_json: str) -> str | None:
+    """Why a tuning carried from elsewhere no longer stands for the schema — another score scale or a changed setting the
+    choice rests on — as JSON; `None` while it does."""
 
 def usage_json(records: Records) -> str:
     """The usage counts of the decisions the records settled, by attribute, as JSON."""

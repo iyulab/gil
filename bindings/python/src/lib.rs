@@ -1086,6 +1086,16 @@ fn tuning_stale_json(
         .map(|s| serde_json::to_string(&s).expect("a reason serializes")))
 }
 
+/// Why a tuning carried from elsewhere no longer stands for the schema — another score scale or a changed setting the
+/// choice rests on — as JSON; `None` while it does.
+#[pyfunction]
+fn tuning_stale_carried_json(tuning_json: &str, schema_json: &str) -> PyResult<Option<String>> {
+    let schema = schema(schema_json).map_err(invalid)?;
+    Ok(tuning(tuning_json)?
+        .stale_carried(&schema)
+        .map(|s| serde_json::to_string(&s).expect("a reason serializes")))
+}
+
 /// The usage counts of the decisions the records settled, by attribute, as JSON.
 #[pyfunction]
 fn usage_json(records: &Records) -> String {
@@ -1110,6 +1120,7 @@ fn _gil(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tuning_apply_json, m)?)?;
     m.add_function(wrap_pyfunction!(tuning_promise_json, m)?)?;
     m.add_function(wrap_pyfunction!(tuning_stale_json, m)?)?;
+    m.add_function(wrap_pyfunction!(tuning_stale_carried_json, m)?)?;
     m.add_function(wrap_pyfunction!(usage_json, m)?)?;
     m.add_function(wrap_pyfunction!(check_schema, m)?)?;
     m.add_function(wrap_pyfunction!(select_layers_json, m)?)?;

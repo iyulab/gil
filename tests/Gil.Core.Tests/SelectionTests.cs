@@ -344,6 +344,13 @@ public sealed class SelectionTests
         stale.Should().BeOfType<Stale.Settled>().Which.Now.Should().Be((int)call["stale_at"]!);
         Same(JsonSerializer.Serialize(stale, CoreJson.Default.Stale), call["stale"], "stale");
         (promised with { Version = "0.0.1" }).Stale(schema, Chosen).Should().Be(new Stale.Version("0.0.1"));
+
+        // A tuning carried from elsewhere: another version of the core or any count of records here is no reason; the
+        // score scale is.
+        promised.Scale.Should().BeGreaterThan(0u);
+        promised.StaleCarried(schema).Should().BeNull();
+        (promised with { Version = "0.0.1" }).StaleCarried(schema).Should().BeNull();
+        (promised with { Scale = 0 }).StaleCarried(schema).Should().Be(new Stale.Scale(0, promised.Scale));
         FluentActions.Invoking(() => Tuning.FromJson("{"))
             .Should().Throw<ArgumentException>().WithMessage("a tuning does not read*");
         FluentActions.Invoking(() => captured.Promise("nowhere", layers.Thresholds))

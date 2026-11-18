@@ -536,6 +536,12 @@ if gil.tuning_stale(tuning, base, len(records)) is not None:
 schema = gil.apply_tuning(tuning, base)
 ```
 
+A tuning chosen on records kept in another store — thresholds measured elsewhere and shipped with a form — cannot be
+chosen again where it is used, so the checks above would call it stale at every release. Ask `tuning_stale_carried(tuning,
+base)` instead: it says `{"scale": ...}` only when this package scores differently from the one that chose it (the score
+scale changed) and `"schema"` when a setting the choice rests on changed; another package version or a different number
+of records here is no reason.
+
 While records keep arriving, `gil.Keeper` keeps the loop in one object. `settle` puts records into the decider and into
 the next choice, `stale` says when the choice no longer stands, and `rechoose` replays only the records settled since the
 last choice — the same thresholds as `select_layers` on all of them, without replaying them all again. `stale()` is

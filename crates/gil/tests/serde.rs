@@ -369,6 +369,7 @@ fn a_settlement_reads_back_with_its_kind_and_probability() {
 fn a_tuning_and_its_staleness_read_back() {
     let tuning = Tuning {
         version: "0.5.0".into(),
+        scale: 1,
         schema: u64::MAX - 7,
         settled: 1_200,
         target_precision: 0.9,
@@ -392,6 +393,7 @@ fn a_tuning_and_its_staleness_read_back() {
             chosen: 1_200,
             now: 1_400,
         },
+        Stale::Scale { chosen: 1, now: 2 },
     ] {
         let (_, read) = round_trip(&stale);
         assert_eq!(read, stale);

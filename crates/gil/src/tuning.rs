@@ -7,7 +7,9 @@
 //! [`Tuning::apply`] at start-up, and asks [`Tuning::stale`] whether the choice still stands: it does not once this crate's
 //! version changed (a new version may score differently), once a setting the choice rests on changed (an attribute's
 //! domain, its dependencies, its votes …), or once the settled records grew or shrank by a tenth since the choice — the
-//! rule the first consuming application chose by.
+//! rule the first consuming application chose by. A tuning chosen on records kept elsewhere cannot be chosen again here:
+//! [`Tuning::stale_carried`] asks only whether the score scale ([`SCALE`]) and the settings the choice rests on still
+//! hold.
 
 use std::collections::BTreeMap;
 
@@ -17,6 +19,12 @@ use crate::schema::{AttributeRole, KeyCombine, Schema};
 
 /// This crate's version — what a tuning records it was chosen with.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// The score scale of this crate: what a score means and the range it lives on. A release raises it only when it changes
+/// how a score is computed or the range scores live in — never for a release that leaves every score as it was — so a
+/// threshold chosen under one scale holds under every release of the same scale. `tests/scale.rs` fails when the golden
+/// scores change while this number does not.
+pub const SCALE: u32 = 1;
 
 /// One decided attribute's chosen settings, with the promises the replays made for them.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -62,6 +70,9 @@ pub struct AttributeTuning {
 pub struct Tuning {
     /// The crate version that chose them ([`VERSION`]).
     pub version: String,
+    /// The score scale they were chosen on ([`SCALE`]); 0 when a tuning written before the scale was recorded is read.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub scale: u32,
     /// The fingerprint of the settings the choice rests on ([`fingerprint`]).
     pub schema: u64,
     /// How many records the choice counted when they were chosen — those settled, less the ones of a batch left
@@ -79,6 +90,9 @@ pub struct Tuning {
 pub enum Stale {
     /// Chosen by another version of this crate.
     Version { chosen: String },
+    /// A tuning carried from elsewhere ([`Tuning::stale_carried`]) was chosen on another score scale ([`SCALE`]): its
+    /// thresholds are on scores that mean something else here. 0 is a tuning that did not record its scale.
+    Scale { chosen: u32, now: u32 },
     /// A setting the choice rests on changed.
     Schema,
     /// The records the choice counts grew or shrank by a tenth or more since the choice.
@@ -126,6 +140,7 @@ impl Tuning {
             .collect();
         Self {
             version: VERSION.to_owned(),
+            scale: SCALE,
             schema: fingerprint(schema),
             settled,
             target_precision,
@@ -272,6 +287,25 @@ impl Tuning {
             chosen: self.settled,
             now: settled,
         })
+    }
+
+    /// Why a tuning **carried from elsewhere** no longer stands for `schema`, or `None` while it does: another score
+    /// scale ([`SCALE`]) or a changed setting the choice rests on (the fingerprint).
+    ///
+    /// A tuning chosen on records kept in another store — a sample shipped with a form — cannot be chosen again where it
+    /// is used: the records are not there. So it is not stale for being chosen by another version of this crate
+    /// ([`Tuning::stale`] says so for a host's own tuning, which it can choose again), nor for the count of records
+    /// here differing from the count it was chosen on: a threshold stays good while the scores it is a threshold on
+    /// mean the same, and the scale says when they stop.
+    pub fn stale_carried(&self, schema: &Schema) -> Option<Stale> {
+        if self.scale != SCALE {
+            return Some(Stale::Scale {
+                chosen: self.scale,
+                now: SCALE,
+            });
+        }
+
+        (self.schema != fingerprint(schema)).then_some(Stale::Schema)
     }
 }
 
