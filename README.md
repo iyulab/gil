@@ -219,7 +219,8 @@ if (!answer.Answered && answer.NeedsExternal is not null)
 
 How far to trust each layer is chosen by replaying the settled records in settlement order, for the precision you
 want. Put the choice on the schema, and keep it as a `Tuning`: at start-up, `Stale` says whether it still stands — the
-same core version, the same settings it rests on, about as many records — and `Apply` puts it back.
+same core version, the same settings it rests on, the same settings it was asked with (the options you pass to
+`Capture` and `Stale`), about as many records — and `Apply` puts it back.
 
 ```csharp
 var options = new SelectionOptions(TargetPrecision: 0.9, MinimumAnswered: 30);
@@ -230,11 +231,11 @@ using var keyed = new Schema(schema.Name, schema.Attributes.Select(a => a.Name !
 }));
 var layers = Replay.SelectLayers(keyed, "team", saved, options);
 using var tuned = keyed.WithLayers("team", layers.Thresholds);
-var tuning = Tuning.Capture(tuned, saved.Count, options.TargetPrecision).Promise("team", layers.Thresholds);
+var tuning = Tuning.Capture(tuned, saved.Count, options).Promise("team", layers.Thresholds);
 File.WriteAllText("ticket.tuning.json", tuning.ToJson());
 
 var kept = Tuning.FromJson(File.ReadAllText("ticket.tuning.json"));
-using var current = kept.Stale(schema, saved.Count) is null ? kept.Apply(schema) : null;
+using var current = kept.Stale(schema, saved.Count, options) is null ? kept.Apply(schema) : null;
 ```
 
 `WithLayers` puts the key threshold, the memory threshold and its similarity floor on the attribute, leaving a layer

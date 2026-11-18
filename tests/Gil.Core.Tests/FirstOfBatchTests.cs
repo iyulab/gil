@@ -51,7 +51,7 @@ public sealed class FirstOfBatchTests
         using var with = schema.WithFirstOfBatch("team", first);
         with.Find("team")!.FirstOfBatch.Should().Be(chosen.Find("team")!.FirstOfBatch);
 
-        var byHand = Tuning.Capture(chosen, keeper.Settled, 0.5).PromiseFirstOfBatch("team", first);
+        var byHand = Tuning.Capture(chosen, keeper.Settled, new SelectionOptions(0.5, 5) { FirstOfBatch = true }).PromiseFirstOfBatch("team", first);
         byHand.FirstOfBatchPromiseOf("team", Source.KeyMemory).Should().Be(first.Key.Chosen.Promise);
         Tuning.FromJson(byHand.ToJson()).Should().BeEquivalentTo(byHand);
 

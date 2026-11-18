@@ -245,9 +245,17 @@ fn the_other_selections_and_a_tuning_come_back_as_the_core_gives_them() {
     assert_eq!(result(status, len), json!(core_concentrations));
 
     // A tuning: captured, given the pooled replay's promise, applied, and stale once the records grow by a tenth.
-    let status = unsafe { gil_tuning_capture(handles.schema, early.len(), 0.8, &mut len) };
+    let asked = r#"{"target_precision":0.8,"minimum_answered":10}"#;
+    let core_asked = Choice {
+        target_precision: 0.8,
+        minimum_answered: 10,
+        counting: None,
+        uncounted_batches: &[],
+    };
+    let status = unsafe { gil_tuning_capture(handles.schema, early.len(), s(asked), &mut len) };
     let captured = result(status, len);
-    let mut core_tuning = Tuning::capture(&schema, early.len(), 0.8);
+    let mut core_tuning =
+        Tuning::capture(&schema, early.len(), &core_asked, ThresholdRule::EveryBand);
     assert_eq!(captured, serde_json::to_value(&core_tuning).unwrap());
 
     let thresholds = pooled["thresholds"].to_string();
@@ -291,15 +299,72 @@ fn the_other_selections_and_a_tuning_come_back_as_the_core_gives_them() {
     assert!(last_error().contains("no coarse level"), "{}", last_error());
 
     let stale = |settled: usize, len: &mut usize| {
-        let status =
-            unsafe { gil_tuning_stale(s(&promised.to_string()), handles.schema, settled, len) };
+        let status = unsafe {
+            gil_tuning_stale(
+                s(&promised.to_string()),
+                handles.schema,
+                settled,
+                s(asked),
+                len,
+            )
+        };
         result(status, *len)
     };
     assert_eq!(stale(early.len(), &mut len), Value::Null);
     assert_eq!(
         stale(early.len() * 11 / 10, &mut len),
-        serde_json::to_value(core_tuning.stale(&schema, early.len() * 11 / 10)).unwrap()
+        serde_json::to_value(core_tuning.stale(
+            &schema,
+            early.len() * 11 / 10,
+            &core_asked,
+            ThresholdRule::EveryBand
+        ))
+        .unwrap()
     );
+    // What it was asked with: another target, another rule, or an options text out of range.
+    let asked_now = |options: &str, len: &mut usize| {
+        let status = unsafe {
+            gil_tuning_stale(
+                s(&promised.to_string()),
+                handles.schema,
+                early.len(),
+                s(options),
+                len,
+            )
+        };
+        result(status, *len)
+    };
+    assert_eq!(
+        asked_now(
+            r#"{"target_precision":0.9,"minimum_answered":10}"#,
+            &mut len
+        ),
+        json!("choice")
+    );
+    assert_eq!(
+        asked_now(
+            r#"{"target_precision":0.8,"minimum_answered":10,"rule":"pooled"}"#,
+            &mut len
+        ),
+        json!("choice")
+    );
+    assert_eq!(
+        asked_now(
+            r#"{"target_precision":0.8,"minimum_answered":10,"counting":["Accept","Accept"]}"#,
+            &mut len
+        ),
+        json!("choice")
+    );
+    let refused = unsafe {
+        gil_tuning_stale(
+            s(&promised.to_string()),
+            handles.schema,
+            early.len(),
+            s(r#"{"target_precision":1.5,"minimum_answered":10}"#),
+            &mut len,
+        )
+    };
+    assert_eq!(refused, GIL_INVALID_INPUT);
     // A tuning carried from elsewhere: the count of records here is no reason; the score scale and the settings are.
     let carried = |tuning: &str, len: &mut usize| {
         let status = unsafe { gil_tuning_stale_carried(s(tuning), handles.schema, len) };

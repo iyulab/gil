@@ -136,7 +136,7 @@ internal static unsafe partial class Native
         SchemaHandle schema, Str attribute, RecordsHandle records, nuint* resultLen);
 
     [LibraryImport(Library, EntryPoint = "gil_tuning_capture")]
-    internal static partial int TuningCapture(SchemaHandle schema, nuint settled, double targetPrecision, nuint* resultLen);
+    internal static partial int TuningCapture(SchemaHandle schema, nuint settled, Str options, nuint* resultLen);
 
     [LibraryImport(Library, EntryPoint = "gil_tuning_promise")]
     internal static partial int TuningPromise(Str tuning, Str attribute, Str thresholds, nuint* resultLen);
@@ -163,7 +163,7 @@ internal static unsafe partial class Native
     internal static partial int TuningApply(Str tuning, SchemaHandle schema, nint* output);
 
     [LibraryImport(Library, EntryPoint = "gil_tuning_stale")]
-    internal static partial int TuningStale(Str tuning, SchemaHandle schema, nuint settled, nuint* resultLen);
+    internal static partial int TuningStale(Str tuning, SchemaHandle schema, nuint settled, Str options, nuint* resultLen);
 
     [LibraryImport(Library, EntryPoint = "gil_tuning_stale_carried")]
     internal static partial int TuningStaleCarried(Str tuning, SchemaHandle schema, nuint* resultLen);

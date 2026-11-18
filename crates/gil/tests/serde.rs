@@ -371,6 +371,7 @@ fn a_tuning_and_its_staleness_read_back() {
         version: "0.5.0".into(),
         scale: 1,
         schema: u64::MAX - 7,
+        choice: u64::MAX - 3,
         settled: 1_200,
         target_precision: 0.9,
         attributes: vec![AttributeTuning {
@@ -389,6 +390,7 @@ fn a_tuning_and_its_staleness_read_back() {
             chosen: "0.4.0".into(),
         },
         Stale::Schema,
+        Stale::Choice,
         Stale::Settled {
             chosen: 1_200,
             now: 1_400,
@@ -398,6 +400,26 @@ fn a_tuning_and_its_staleness_read_back() {
         let (_, read) = round_trip(&stale);
         assert_eq!(read, stale);
     }
+}
+
+#[test]
+fn a_tuning_written_before_the_choice_was_recorded_reads_with_none() {
+    let mut value = serde_json::json!({
+        "version": "0.5.0",
+        "schema": 7,
+        "settled": 1_200,
+        "target_precision": 0.9,
+        "attributes": [],
+    });
+    let read: Tuning = serde_json::from_value(value.clone()).expect("an older tuning reads");
+    assert_eq!((read.scale, read.choice), (0, 0));
+    value["choice"] = serde_json::json!(5);
+    assert_eq!(
+        serde_json::from_value::<Tuning>(value)
+            .expect("reads")
+            .choice,
+        5
+    );
 }
 
 #[test]

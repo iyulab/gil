@@ -143,7 +143,8 @@ fn a_keeper_chooses_the_first_records_apart_and_the_schema_and_tuning_carry_them
     );
 
     let mut len = 0;
-    let captured = result(unsafe { gil_tuning_capture(with, 400, 0.5, &mut len) }).to_string();
+    let asked = r#"{"target_precision":0.5,"minimum_answered":10}"#;
+    let captured = result(unsafe { gil_tuning_capture(with, 400, s(asked), &mut len) }).to_string();
     let promised = result(unsafe {
         gil_tuning_promise_first_of_batch(s(&captured), s("team"), s(&thresholds), &mut len)
     });

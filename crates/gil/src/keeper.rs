@@ -140,7 +140,8 @@ impl Keep {
         }
     }
 
-    fn choice(&self) -> Choice<'_> {
+    /// What this keep asks a choice with — what [`Tuning::capture`] and [`Tuning::stale`] take with [`Keep::rule`].
+    pub fn choice(&self) -> Choice<'_> {
         Choice {
             target_precision: self.target_precision,
             minimum_answered: self.minimum_answered,
@@ -357,7 +358,7 @@ impl Keeper {
     /// When `keep` asks for a target outside (0, 1] or fewer than one answer.
     pub fn new(schema: Schema, keep: Keep) -> Self {
         keep.choice().check();
-        let tuning = Tuning::capture(&schema, 0, keep.target_precision);
+        let tuning = Tuning::capture(&schema, 0, &keep.choice(), keep.rule);
         let mut keeper = Self {
             schema,
             keep,
@@ -617,7 +618,7 @@ impl Keeper {
         self.chosen.clear();
         self.first.clear();
         self.coarse.clear();
-        self.tuning = Tuning::capture(&self.schema, 0, self.keep.target_precision);
+        self.tuning = Tuning::capture(&self.schema, 0, &self.keep.choice(), self.keep.rule);
         self.restart();
     }
 
@@ -653,7 +654,12 @@ impl Keeper {
         {
             return Some(reason);
         }
-        self.tuning.stale(&self.schema, self.counted)
+        self.tuning.stale(
+            &self.schema,
+            self.counted,
+            &self.keep.choice(),
+            self.keep.rule,
+        )
     }
 
     /// [`Stale::Realized`] for `attribute` when its last [`REALIZED_WINDOW`] judged answers fall under the target less
@@ -839,7 +845,8 @@ impl Keeper {
             chosen.insert(attribute.clone(), thresholds);
         }
 
-        let mut tuning = Tuning::capture(&schema, self.counted, self.keep.target_precision);
+        let mut tuning =
+            Tuning::capture(&schema, self.counted, &self.keep.choice(), self.keep.rule);
         for (attribute, thresholds) in &chosen {
             tuning.promise(attribute, thresholds);
         }

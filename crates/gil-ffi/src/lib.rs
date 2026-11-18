@@ -1476,25 +1476,28 @@ unsafe fn tuning(json: GilStr) -> Result<Tuning, Failure> {
     serde_json::from_str(json).map_err(|e| input(format!("a tuning does not read: {e}")))
 }
 
-/// Keeps as the result the chosen settings of the schema's decided attributes, chosen on `settled` records for
-/// `target_precision` — a tuning, as JSON in the core's `serde` form, its promises unrecorded.
+/// Keeps as the result the chosen settings of the schema's decided attributes, chosen on `settled` records as `options`
+/// asked (JSON — `target_precision`, `minimum_answered`, `counting`, `uncounted_batches` and `rule`, as for
+/// `gil_select_layers`; the rest are not read) — a tuning, as JSON in the core's `serde` form, its promises unrecorded.
+/// Options out of range are refused as input (`GIL_INVALID_INPUT`).
 ///
 /// # Safety
-/// `schema` is a live handle; `result_len` points to one writable `usize`.
+/// `schema` is a live handle; `options` is valid for the call; `result_len` points to one writable `usize`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn gil_tuning_capture(
     schema: *const GilSchema,
     settled: usize,
-    target_precision: f64,
+    options: GilStr,
     result_len: *mut usize,
 ) -> i32 {
     call(|| {
         if result_len.is_null() {
             return Err(argument("result_len is null"));
         }
-        // SAFETY: forwarded from the caller.
+        // SAFETY: forwarded from the caller, for every pointer below.
         let schema = unsafe { handle(schema, "schema") }?;
-        let tuned = Tuning::capture(&schema.0, settled, target_precision);
+        let options = unsafe { read_options(options) }?;
+        let tuned = Tuning::capture(&schema.0, settled, &options.choice(), options.rule);
         let value = serde_json::to_value(tuned).expect("a tuning serializes");
         unsafe { result(&value, result_len) }
     })
@@ -1620,16 +1623,18 @@ pub unsafe extern "C" fn gil_tuning_apply(
     })
 }
 
-/// Keeps as the result why the tuning no longer stands for `schema` with `settled` records — JSON in the core's `serde`
-/// form — or `null` while it does.
+/// Keeps as the result why the tuning no longer stands for `schema` with `settled` records, were it chosen now as
+/// `options` asks (JSON, as for `gil_tuning_capture`) — JSON in the core's `serde` form — or `null` while it does.
 ///
 /// # Safety
-/// `tuning_json` is valid for the call; `schema` is a live handle; `result_len` points to one writable `usize`.
+/// `tuning_json` and `options` are valid for the call; `schema` is a live handle; `result_len` points to one writable
+/// `usize`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn gil_tuning_stale(
     tuning_json: GilStr,
     schema: *const GilSchema,
     settled: usize,
+    options: GilStr,
     result_len: *mut usize,
 ) -> i32 {
     call(|| {
@@ -1639,15 +1644,17 @@ pub unsafe extern "C" fn gil_tuning_stale(
         // SAFETY: forwarded from the caller, for every pointer below.
         let tuned = unsafe { tuning(tuning_json) }?;
         let schema = unsafe { handle(schema, "schema") }?;
+        let options = unsafe { read_options(options) }?;
         let value =
-            serde_json::to_value(tuned.stale(&schema.0, settled)).expect("a reason serializes");
+            serde_json::to_value(tuned.stale(&schema.0, settled, &options.choice(), options.rule))
+                .expect("a reason serializes");
         unsafe { result(&value, result_len) }
     })
 }
 
 /// Keeps as the result why a tuning **carried from elsewhere** no longer stands for `schema` — JSON in the core's `serde`
 /// form — or `null` while it does: another score scale or a changed setting the choice rests on, not another version of
-/// the core nor the count of records here (`Tuning::stale_carried`).
+/// the core, nor what it was asked with, nor the count of records here (`Tuning::stale_carried`).
 ///
 /// # Safety
 /// `tuning_json` is valid for the call; `schema` is a live handle; `result_len` points to one writable `usize`.

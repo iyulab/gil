@@ -23,11 +23,19 @@ public sealed record Tuning(
     [JsonPropertyName("scale")]
     public uint Scale { get; init; }
 
+    /// <summary>The fingerprint of what the choice was asked with: the target, the fewest answers, the kinds counted, the
+    /// batches left out and the rule; 0 for a tuning written before it was recorded. <see cref="Stale(Schema, int,
+    /// SelectionOptions)"/> compares it.</summary>
+    [JsonPropertyName("choice")]
+    public ulong Choice { get; init; }
+
     /// <summary>The chosen settings as <paramref name="schema"/>'s decided attributes now hold them, chosen on
-    /// <paramref name="settled"/> records for <paramref name="targetPrecision"/>; the promises are left unrecorded —
-    /// <see cref="Promise"/> records a layers selection's.</summary>
-    public static Tuning Capture(Schema schema, int settled, double targetPrecision) =>
-        Read(TuningJson.CaptureJson(schema, settled, targetPrecision));
+    /// <paramref name="settled"/> records as <paramref name="options"/> asked — the target, the fewest answers, the kinds
+    /// counted, the batches left out and the rule, as the selections that chose them were given them; the promises are
+    /// left unrecorded — <see cref="Promise"/> records a layers selection's.</summary>
+    /// <exception cref="ArgumentException">The options are out of range.</exception>
+    public static Tuning Capture(Schema schema, int settled, SelectionOptions options) =>
+        Read(TuningJson.CaptureJson(schema, settled, options));
 
     /// <summary>A tuning kept as JSON in the core's form.</summary>
     /// <exception cref="ArgumentException">The JSON does not read as a tuning.</exception>
@@ -136,19 +144,21 @@ public sealed record Tuning(
     /// may name key attributes this one does not have.</exception>
     public Schema Apply(Schema schema) => TuningJson.Apply(ToJson(), schema);
 
-    /// <summary>Why the tuning no longer stands for <paramref name="schema"/> with <paramref name="settled"/> records —
-    /// another version of the core, a changed setting it rests on, or a tenth more or fewer records — or null while it
-    /// does.</summary>
-    public Stale? Stale(Schema schema, int settled) =>
-        TuningJson.StaleJson(ToJson(), schema, settled) is { } found
+    /// <summary>Why the tuning no longer stands for <paramref name="schema"/> with <paramref name="settled"/> records, were
+    /// it chosen now as <paramref name="options"/> ask — another version of the core, a changed setting it rests on, what
+    /// it was asked with changed (<see cref="Stale.Choice"/>), or a tenth more or fewer records — or null while it does.</summary>
+    /// <exception cref="ArgumentException">The options are out of range.</exception>
+    public Stale? Stale(Schema schema, int settled, SelectionOptions options) =>
+        TuningJson.StaleJson(ToJson(), schema, settled, options) is { } found
             ? JsonSerializer.Deserialize(found, CoreJson.Default.Stale)
             : null;
 
     /// <summary>Why a tuning <b>carried from elsewhere</b> — thresholds chosen on records kept in another store, which
     /// cannot be chosen again here — no longer stands for <paramref name="schema"/>: another score scale
     /// (<see cref="Stale.Scale"/>) or a changed setting the choice rests on (<see cref="Stale.Schema"/>); null while it
-    /// does. Another version of the core, or a different number of settled records here, is no reason —
-    /// <see cref="Stale(Schema, int)"/> says those for a tuning chosen on this store's own records.</summary>
+    /// does. Another version of the core, what it was asked with, or a different number of settled records here, is no
+    /// reason — <see cref="Stale(Schema, int, SelectionOptions)"/> says those for a tuning chosen on this store's own
+    /// records.</summary>
     public Stale? StaleCarried(Schema schema) =>
         TuningJson.StaleCarriedJson(ToJson(), schema) is { } found
             ? JsonSerializer.Deserialize(found, CoreJson.Default.Stale)
@@ -247,6 +257,10 @@ public abstract record Stale
 
     /// <summary>A setting the choice rests on changed.</summary>
     public sealed record Schema : Stale;
+
+    /// <summary>What the choice was asked with changed — the target, the fewest answers, the kinds counted, the batches left
+    /// out or the rule — or the tuning did not record it (written before it was).</summary>
+    public sealed record Choice : Stale;
 
     /// <summary>The settled records grew or shrank by a tenth or more since the choice.</summary>
     /// <param name="Chosen">How many were settled when it was chosen.</param>
@@ -395,17 +409,20 @@ public sealed record PromiseDisplay(
     int HiddenAccepted,
     int HiddenCorrected);
 
-/// <summary>A reason as the core writes it: <c>{"version": {"chosen"}}</c>, <c>"schema"</c> or <c>{"settled":
-/// {"chosen", "now"}}</c>.</summary>
+/// <summary>A reason as the core writes it: <c>{"version": {"chosen"}}</c>, <c>"schema"</c>, <c>"choice"</c> or
+/// <c>{"settled": {"chosen", "now"}}</c>.</summary>
 internal sealed class StaleConverter : JsonConverter<Stale>
 {
     public override Stale Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if (reader.TokenType == JsonTokenType.String)
         {
-            return reader.GetString() == "schema"
-                ? new Stale.Schema()
-                : throw new JsonException($"a stale reason is version, scale, schema, settled or realized, not {reader.GetString()}");
+            return reader.GetString() switch
+            {
+                "schema" => new Stale.Schema(),
+                "choice" => new Stale.Choice(),
+                var other => throw new JsonException($"a stale reason is version, scale, schema, choice, settled or realized, not {other}"),
+            };
         }
 
         using var document = JsonDocument.ParseValue(ref reader);
@@ -421,7 +438,7 @@ internal sealed class StaleConverter : JsonConverter<Stale>
                 reason.Value.GetProperty("attribute").GetString()!,
                 reason.Value.GetProperty("right").GetInt32(),
                 reason.Value.GetProperty("judged").GetInt32()),
-            _ => throw new JsonException($"a stale reason is version, scale, schema, settled or realized, not {reason.Name}"),
+            _ => throw new JsonException($"a stale reason is version, scale, schema, choice, settled or realized, not {reason.Name}"),
         };
     }
 
@@ -431,6 +448,9 @@ internal sealed class StaleConverter : JsonConverter<Stale>
         {
             case Stale.Schema:
                 writer.WriteStringValue("schema");
+                break;
+            case Stale.Choice:
+                writer.WriteStringValue("choice");
                 break;
             case Stale.Version version:
                 writer.WriteStartObject();

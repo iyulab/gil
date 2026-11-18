@@ -27,6 +27,7 @@ public sealed class SelectionTests
     private static SelectionOptions Options(JsonNode o) => new((double)o["target_precision"]!, (int)o["minimum_answered"]!)
     {
         Counting = o["counting"]?.AsArray().Select(k => Enum.Parse<SettlementKind>((string)k!)).ToArray(),
+        UncountedBatches = o["uncounted_batches"]?.AsArray().Select(b => (string)b!).ToArray(),
         Rule = (string?)o["rule"] == "pooled" ? ThresholdRule.Pooled : ThresholdRule.EveryBand,
         Decisions = (bool?)o["decisions"] ?? false,
         TypedLongest = (int?)o["typed_longest"] ?? 0,
@@ -311,7 +312,8 @@ public sealed class SelectionTests
         var call = Of("tuning").Single();
         var thresholds = Of("layers").First()["result"]!["thresholds"]!.ToJsonString();
 
-        var captured = Tuning.Capture(schema, (int)call["settled"]!, (double)call["target_precision"]!);
+        var asked = Options(call["options"]!);
+        var captured = Tuning.Capture(schema, (int)call["settled"]!, asked);
         Same(captured.ToJson(), Versioned(call["captured"], captured.Version), "captured");
         Tuning.FromJson(captured.ToJson()).Should().BeEquivalentTo(captured);
         var layers = Replay.SelectLayers(schema, (string)call["attribute"]!, records, Options(Of("layers").First()["options"]!));
@@ -339,11 +341,19 @@ public sealed class SelectionTests
         promised.PromiseOf(attribute, Source.External).Should().BeNull();
         promised.PromiseOf("nowhere", Source.KeyMemory).Should().BeNull();
 
-        promised.Stale(schema, Chosen).Should().BeNull();
-        var stale = promised.Stale(schema, (int)call["stale_at"]!);
+        promised.Stale(schema, Chosen, asked).Should().BeNull();
+        var stale = promised.Stale(schema, (int)call["stale_at"]!, asked);
         stale.Should().BeOfType<Stale.Settled>().Which.Now.Should().Be((int)call["stale_at"]!);
         Same(JsonSerializer.Serialize(stale, CoreJson.Default.Stale), call["stale"], "stale");
-        (promised with { Version = "0.0.1" }).Stale(schema, Chosen).Should().Be(new Stale.Version("0.0.1"));
+        (promised with { Version = "0.0.1" }).Stale(schema, Chosen, asked).Should().Be(new Stale.Version("0.0.1"));
+
+        // What it was asked with: another target says so, as the C ABI gave it; so does a tuning that recorded none.
+        var other = promised.Stale(schema, Chosen, Options(call["options_other"]!));
+        other.Should().Be(new Stale.Choice());
+        Same(JsonSerializer.Serialize(other, CoreJson.Default.Stale), call["stale_other"], "stale other");
+        (promised with { Choice = 0 }).Stale(schema, Chosen, asked).Should().Be(new Stale.Choice());
+        FluentActions.Invoking(() => promised.Stale(schema, Chosen, asked with { TargetPrecision = 1.5 }))
+            .Should().Throw<ArgumentException>().WithMessage("target_precision must be in (0, 1]");
 
         // A tuning carried from elsewhere: another version of the core or any count of records here is no reason; the
         // score scale is.
@@ -351,6 +361,7 @@ public sealed class SelectionTests
         promised.StaleCarried(schema).Should().BeNull();
         (promised with { Version = "0.0.1" }).StaleCarried(schema).Should().BeNull();
         (promised with { Scale = 0 }).StaleCarried(schema).Should().Be(new Stale.Scale(0, promised.Scale));
+        (promised with { Choice = 0 }).StaleCarried(schema).Should().BeNull();
         FluentActions.Invoking(() => Tuning.FromJson("{"))
             .Should().Throw<ArgumentException>().WithMessage("a tuning does not read*");
         FluentActions.Invoking(() => captured.Promise("nowhere", layers.Thresholds))

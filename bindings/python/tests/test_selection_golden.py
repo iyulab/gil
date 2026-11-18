@@ -121,3 +121,31 @@ def test_a_filled_value_is_neither_learned_nor_asked_by_a_selection(
     )
     assert alone["key"]["chosen"] is not None or alone["memory"]["chosen"] is not None
     assert same(mixed) == same(alone)
+
+
+def test_a_tuning_asked_the_same_has_the_choice_the_c_abi_wrote(
+    schema: gil.Schema,
+) -> None:
+    """The fingerprint of what a choice was asked with is the same from every binding, and the reasons agree."""
+    (call,) = [c for c in calls() if c["call"] == "tuning"]
+
+    def asked(given: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "target_precision": given["target_precision"],
+            "minimum_answered": given["minimum_answered"],
+            "counting": given.get("counting"),
+            "rule": given.get("rule", "every_band"),
+            "uncounted_batches": given.get("uncounted_batches"),
+        }
+
+    tuning = gil.capture_tuning(schema, call["settled"], **asked(call["options"]))
+    assert tuning["choice"] == call["captured"]["choice"]
+    assert (
+        gil.tuning_stale(tuning, schema, call["settled"], **asked(call["options"]))
+        is None
+    )
+    other = gil.tuning_stale(
+        tuning, schema, call["settled"], **asked(call["options_other"])
+    )
+    assert other == "choice"
+    assert other == call["stale_other"]

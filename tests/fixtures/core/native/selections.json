@@ -7914,11 +7914,44 @@
           "typed_key_thresholds": null
         }
       ],
+      "choice": 12983283514192091307,
       "scale": 1,
       "schema": 12584556226891677434,
       "settled": 200,
       "target_precision": 0.8,
       "version": "{version}"
+    },
+    "options": {
+      "counting": [
+        "Enter",
+        "Accept",
+        "Correct",
+        "Check",
+        "AcceptOther",
+        "CorrectOther"
+      ],
+      "minimum_answered": 10,
+      "rule": "pooled",
+      "target_precision": 0.8,
+      "uncounted_batches": [
+        "bulk"
+      ]
+    },
+    "options_other": {
+      "counting": [
+        "Enter",
+        "Accept",
+        "Correct",
+        "Check",
+        "AcceptOther",
+        "CorrectOther"
+      ],
+      "minimum_answered": 10,
+      "rule": "pooled",
+      "target_precision": 0.85,
+      "uncounted_batches": [
+        "bulk"
+      ]
     },
     "promised": {
       "attributes": [
@@ -7993,6 +8026,7 @@
           "typed_key_thresholds": null
         }
       ],
+      "choice": 12983283514192091307,
       "scale": 1,
       "schema": 12584556226891677434,
       "settled": 200,
@@ -8007,7 +8041,7 @@
       }
     },
     "stale_at": 220,
-    "target_precision": 0.8,
+    "stale_other": "choice",
     "with_layers": {
       "attributes": [
         {

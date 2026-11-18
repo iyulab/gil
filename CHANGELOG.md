@@ -9,6 +9,16 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Breaking
 
+- **`Tuning.Capture` and `Tuning.Stale` take the `SelectionOptions` the choice was asked with.** `Capture(schema, settled,
+  targetPrecision)` is now `Capture(schema, settled, options)` and `Stale(schema, settled)` is `Stale(schema, settled,
+  options)`: the tuning records what it was asked with (`Tuning.Choice`, init-only, part of the tuning's JSON; 0 for a
+  tuning written before it existed) — the target, the fewest answers, the kinds counted, the batches left out and the
+  rule — and `Stale` has a new case, `Stale.Choice`, when they differ or the tuning recorded none. Before, only the target
+  could be compared, by the host, and a changed minimum, counting or rule left the stored thresholds standing. The native
+  entries `gil_tuning_capture` and `gil_tuning_stale` take an options text in place of the target (ABI 7, library built
+  alongside). `StaleCarried` does not read it: a tuning chosen on records kept in another store was asked with its
+  sender's settings, and nothing here could ask again. **To migrate**: pass the options you chose with, handle
+  `Stale.Choice`, and choose again for it.
 - **`OpenRecord.OfferExternal` refuses a blank value.** A ranked value that is empty or white space is refused with an
   exception (`an external judgement offered a blank value for '<attribute>'`); it was kept as an answer for an attribute with
   no declared values. **To migrate**: leave a blank out of the ranked values.

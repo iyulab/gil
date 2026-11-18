@@ -144,7 +144,16 @@ fn the_selections_fixture_is_up_to_date() {
 
     // A tuning: captured, given the first layers selection's promise, applied, and stale once the records grow by a
     // tenth; and that selection put on the schema.
-    let captured = result(unsafe { gil_tuning_capture(schema, CHOSEN, 0.8, &mut len) });
+    // Asked with every setting the fingerprint reads, and another rule than the default: the bindings follow all of it.
+    let asked = json!({
+        "target_precision": 0.8,
+        "minimum_answered": 10,
+        "counting": COUNTING,
+        "uncounted_batches": ["bulk"],
+        "rule": "pooled",
+    });
+    let asked_text = asked.to_string();
+    let captured = result(unsafe { gil_tuning_capture(schema, CHOSEN, s(&asked_text), &mut len) });
     let thresholds = calls[0]["result"]["thresholds"].to_string();
     let promised = result(unsafe {
         gil_tuning_promise(
@@ -169,19 +178,43 @@ fn the_selections_fixture_is_up_to_date() {
     let with_layers_json = result(unsafe { gil_schema_json(with_layers, &mut len) });
     unsafe { gil_schema_free(with_layers) };
     let stale = result(unsafe {
-        gil_tuning_stale(s(&promised.to_string()), schema, CHOSEN * 11 / 10, &mut len)
+        gil_tuning_stale(
+            s(&promised.to_string()),
+            schema,
+            CHOSEN * 11 / 10,
+            s(&asked_text),
+            &mut len,
+        )
+    });
+    let asked_other = json!({
+        "target_precision": 0.85,
+        "minimum_answered": 10,
+        "counting": COUNTING,
+        "uncounted_batches": ["bulk"],
+        "rule": "pooled",
+    });
+    let stale_other = result(unsafe {
+        gil_tuning_stale(
+            s(&promised.to_string()),
+            schema,
+            CHOSEN,
+            s(&asked_other.to_string()),
+            &mut len,
+        )
     });
     calls.push(json!({
         "call": "tuning",
         "attribute": "team",
         "settled": CHOSEN,
-        "target_precision": 0.8,
+        "options": asked,
         "captured": versionless(captured),
         "promised": versionless(promised),
         "applied": applied_json,
         "with_layers": with_layers_json,
         "stale_at": CHOSEN * 11 / 10,
         "stale": stale,
+        "options_other": asked_other,
+        "stale_other": stale_other,
     }));
 
     // Records of every shape: accepted, corrected, checked, entered with no answer, turned down with the answer in

@@ -143,14 +143,44 @@ def test_a_tuning_captures_applies_and_goes_stale() -> None:
         gil.capture_tuning(applied, 100, 0.8)["attributes"][0]["key_threshold"] == 0.1
     )
 
-    assert gil.tuning_stale(tuning, SCHEMA, 105) is None
-    assert gil.tuning_stale(tuning, SCHEMA, 110) == {
+    assert gil.tuning_stale(tuning, SCHEMA, 105, 0.8) is None
+    assert gil.tuning_stale(tuning, SCHEMA, 110, 0.8) == {
         "settled": {"chosen": 100, "now": 110}
     }
     other = gil.Schema.from_dict(
         {"name": "ticket", "attributes": [{"name": "team", "role": "decided"}]}
     )
-    assert gil.tuning_stale(tuning, other, 100) == "schema"
+    assert gil.tuning_stale(tuning, other, 100, 0.8) == "schema"
+
+    # What it was asked with: each setting on its own, and the kinds and batches as sets.
+    for changed in (
+        {"target_precision": 0.85},
+        {"minimum_answered": 20},
+        {"counting": ["Accept"]},
+        {"uncounted_batches": ["bulk"]},
+        {"rule": "pooled"},
+    ):
+        asked = {"target_precision": 0.8, **changed}
+        assert gil.tuning_stale(tuning, SCHEMA, 100, **asked) == "choice", changed
+    both = gil.capture_tuning(
+        SCHEMA, 100, 0.8, counting=["Correct", "Accept"], uncounted_batches=["b", "a"]
+    )
+    assert (
+        gil.tuning_stale(
+            both,
+            SCHEMA,
+            100,
+            0.8,
+            counting=["Accept", "Correct", "Accept"],
+            uncounted_batches=["a", "b", "a"],
+        )
+        is None
+    )
+    assert gil.tuning_stale({**tuning, "choice": 0}, SCHEMA, 100, 0.8) == "choice"
+    with pytest.raises(ValueError, match="target_precision must be in"):
+        gil.tuning_stale(tuning, SCHEMA, 100, 1.5)
+    with pytest.raises(ValueError, match="minimum_answered must be at least 1"):
+        gil.capture_tuning(SCHEMA, 100, 0.8, minimum_answered=0)
 
     # A tuning carried from elsewhere: another version of the package or any count of records here is no reason; the score
     # scale and the settings it rests on are.
@@ -161,6 +191,7 @@ def test_a_tuning_captures_applies_and_goes_stale() -> None:
         "scale": {"chosen": 0, "now": tuning["scale"]}
     }
     assert gil.tuning_stale_carried(tuning, other) == "schema"
+    assert gil.tuning_stale_carried({**tuning, "choice": 0}, SCHEMA) is None
 
 
 def _replay(threshold: float | None, floor: float | None = None) -> gil.ThresholdReplay:

@@ -81,7 +81,7 @@ def test_settle_with_its_arguments_swapped_names_the_decider() -> None:
         ),
         pytest.param(lambda: gil.capture_tuning("ticket", 3, 0.8), id="capture_tuning"),
         pytest.param(lambda: gil.apply_tuning({}, "ticket"), id="apply_tuning"),
-        pytest.param(lambda: gil.tuning_stale({}, "ticket", 3), id="tuning_stale"),
+        pytest.param(lambda: gil.tuning_stale({}, "ticket", 3, 0.8), id="tuning_stale"),
         pytest.param(
             lambda: gil.tuning_stale_carried({}, "ticket"), id="tuning_stale_carried"
         ),

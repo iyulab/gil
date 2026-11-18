@@ -1254,14 +1254,32 @@ class Keeper:
 
 
 def capture_tuning(
-    schema: Schema, settled: int, target_precision: float
+    schema: Schema,
+    settled: int,
+    target_precision: float,
+    minimum_answered: int = 10,
+    counting: Iterable[str] | None = None,
+    rule: Literal["every_band", "pooled", "least_cost"] = "every_band",
+    uncounted_batches: Iterable[str] | None = None,
 ) -> dict[str, Any]:
     """The chosen settings of ``schema``'s decided attributes as they now stand, chosen when ``settled`` records — the
     number of them, ``len(records)`` — had been settled, for ``target_precision``: the core's ``Tuning``. Add each layer
-    replay's promises with :func:`record_promise`."""
+    replay's promises with :func:`record_promise`. Give ``minimum_answered``, ``counting``, ``rule`` and
+    ``uncounted_batches`` as the replays that chose the thresholds were given them (:func:`select_layers`): the tuning
+    records what the choice was asked with, and :func:`tuning_stale` says when it no longer is."""
     return cast(
         dict[str, Any],
-        json.loads(tuning_capture_json(_schema_json(schema), settled, target_precision)),
+        json.loads(
+            tuning_capture_json(
+                _schema_json(schema),
+                settled,
+                target_precision,
+                minimum_answered,
+                None if counting is None else list(counting),
+                rule,
+                None if uncounted_batches is None else list(uncounted_batches),
+            )
+        ),
     )
 
 
@@ -1360,12 +1378,30 @@ def apply_tuning(tuning: dict[str, Any], schema: Schema) -> Schema:
 
 
 def tuning_stale(
-    tuning: dict[str, Any], schema: Schema, settled: int
+    tuning: dict[str, Any],
+    schema: Schema,
+    settled: int,
+    target_precision: float,
+    minimum_answered: int = 10,
+    counting: Iterable[str] | None = None,
+    rule: Literal["every_band", "pooled", "least_cost"] = "every_band",
+    uncounted_batches: Iterable[str] | None = None,
 ) -> dict[str, Any] | str | None:
-    """Why the tuning no longer stands for ``schema`` now that ``settled`` records (the number of them) are settled — ``{"version": {"chosen": ...}}``,
-    ``"schema"`` or ``{"settled": {"chosen": ..., "now": ...}}`` — or ``None`` while it does. A tuning chosen on records
-    kept elsewhere is asked with :func:`tuning_stale_carried` instead."""
-    text = tuning_stale_json(json.dumps(tuning), _schema_json(schema), settled)
+    """Why the tuning no longer stands for ``schema`` now that ``settled`` records (the number of them) are settled, were it
+    chosen now for ``target_precision``, ``minimum_answered``, ``counting``, ``rule`` and ``uncounted_batches`` (as for
+    :func:`capture_tuning`) — ``{"version": {"chosen": ...}}``, ``"schema"``, ``"choice"`` (what it was asked with
+    changed, or the tuning did not record it) or ``{"settled": {"chosen": ..., "now": ...}}`` — or ``None`` while it
+    does. A tuning chosen on records kept elsewhere is asked with :func:`tuning_stale_carried` instead."""
+    text = tuning_stale_json(
+        json.dumps(tuning),
+        _schema_json(schema),
+        settled,
+        target_precision,
+        minimum_answered,
+        None if counting is None else list(counting),
+        rule,
+        None if uncounted_batches is None else list(uncounted_batches),
+    )
     return None if text is None else cast(dict[str, Any] | str, json.loads(text))
 
 
@@ -1374,7 +1410,8 @@ def tuning_stale_carried(tuning: dict[str, Any], schema: Schema) -> dict[str, An
     chosen again here — no longer stands for ``schema``: ``{"scale": {"chosen": ..., "now": ...}}`` (the score scale
     changed; ``chosen`` 0 is a tuning that did not record one) or ``"schema"`` (a setting the choice rests on changed).
     ``None`` while it does. Another version of this package, or a different number of settled records here, is no
-    reason — :func:`tuning_stale` says those for a tuning chosen on this store's own records."""
+    reason, and neither is what it was asked with — :func:`tuning_stale` says those for a tuning chosen on this store's own
+    records."""
     text = tuning_stale_carried_json(json.dumps(tuning), _schema_json(schema))
     return None if text is None else cast(dict[str, Any] | str, json.loads(text))
 

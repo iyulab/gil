@@ -8,6 +8,19 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Breaking
 
+- **`Tuning::capture` and `Tuning::stale` take the choice they were asked with, and `Tuning` records it.**
+  `Tuning::capture(schema, settled, &choice, rule)` replaces the target-precision argument and
+  `Tuning::stale(schema, settled, &choice, rule)` receives the settings the next choice would be asked with: the target,
+  the fewest answers, the kinds counted, the batches left out, and the rule. `Tuning` has a new field, `choice`
+  ([`tuning::choice_fingerprint`], 0 when a tuning written before it is read), `tuning::Stale` a new variant, `Choice`
+  (the order of the reasons is version, schema, choice, settled records), and `Keep::choice` is public. A changed minimum,
+  counting or rule used to leave the stored thresholds standing; only the target could be compared, by the host.
+  `Tuning::stale_carried` does not read it. The C ABI `gil_tuning_capture` and `gil_tuning_stale` take an options text
+  (as `gil_select_layers` reads it) in place of the target (still version 7). Python: `capture_tuning` and `tuning_stale`
+  take `minimum_answered`, `counting`, `rule` and `uncounted_batches` beside the target (`tuning_stale` requires the
+  target; it returns `"choice"` for the new reason). **To migrate**: pass the choice you chose with (`Keep::choice()`
+  and `Keep::rule` for a `Keep`), add `choice: tuning::choice_fingerprint(&choice, rule)` to a `Tuning` literal and an
+  arm for `Stale::Choice`, and choose again when it says so.
 - **Python: `Answer["source"]` is `None` when no layer had a candidate.** It was the string `"None"` (the core's name for
   "no layer"), which is true in `if answer["source"]:`. The type is `str | None`, and `promise_of`,
   `first_of_batch_promise_of` and `coarse_promise_of` take `None`. **To migrate**: compare with `None` instead of

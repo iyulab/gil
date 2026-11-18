@@ -3,9 +3,19 @@
 use std::collections::BTreeMap;
 
 use gil::decider::Source;
-use gil::replay::{LayerThresholds, ThresholdChoice, ThresholdReplay};
-use gil::schema::{Attribute, AttributeRole, CoarseLevel, KeyCombine, Schema};
-use gil::tuning::{SCALE, Stale, Tuning, VERSION, fingerprint};
+use gil::replay::{Choice, LayerThresholds, ThresholdChoice, ThresholdReplay, ThresholdRule};
+use gil::schema::{Attribute, AttributeRole, CoarseLevel, KeyCombine, Schema, SettlementKind};
+use gil::tuning::{SCALE, Stale, Tuning, VERSION, choice_fingerprint, fingerprint};
+
+/// What a choice is asked with: `target` and the defaults of a host that sets nothing else.
+fn asked(target_precision: f64) -> Choice<'static> {
+    Choice {
+        target_precision,
+        minimum_answered: 10,
+        counting: None,
+        uncounted_batches: &[],
+    }
+}
 
 fn schema() -> Schema {
     let mut team = Attribute::new("team", AttributeRole::Decided);
@@ -71,7 +81,7 @@ fn choice(threshold: f64, promise: f64) -> ThresholdReplay {
 #[test]
 fn a_tuning_puts_back_on_a_fresh_schema_exactly_what_was_chosen() {
     let chosen = tuned();
-    let mut tuning = Tuning::capture(&chosen, 1_000, 0.8);
+    let mut tuning = Tuning::capture(&chosen, 1_000, &asked(0.8), ThresholdRule::EveryBand);
     tuning.promise(
         "team",
         &LayerThresholds {
@@ -112,37 +122,53 @@ fn a_tuning_puts_back_on_a_fresh_schema_exactly_what_was_chosen() {
 #[test]
 fn the_choice_stands_until_the_version_the_schema_or_the_settled_records_move() {
     let chosen = tuned();
-    let tuning = Tuning::capture(&chosen, 1_000, 0.8);
-    assert_eq!(tuning.stale(&chosen, 1_000), None);
-    assert_eq!(tuning.stale(&chosen, 1_099), None);
+    let tuning = Tuning::capture(&chosen, 1_000, &asked(0.8), ThresholdRule::EveryBand);
     assert_eq!(
-        tuning.stale(&chosen, 1_100),
+        tuning.stale(&chosen, 1_000, &asked(0.8), ThresholdRule::EveryBand),
+        None
+    );
+    assert_eq!(
+        tuning.stale(&chosen, 1_099, &asked(0.8), ThresholdRule::EveryBand),
+        None
+    );
+    assert_eq!(
+        tuning.stale(&chosen, 1_100, &asked(0.8), ThresholdRule::EveryBand),
         Some(Stale::Settled {
             chosen: 1_000,
             now: 1_100
         })
     );
     assert!(matches!(
-        tuning.stale(&chosen, 900),
+        tuning.stale(&chosen, 900, &asked(0.8), ThresholdRule::EveryBand),
         Some(Stale::Settled { .. })
     ));
 
     // Few records: any change is a tenth.
-    let early = Tuning::capture(&chosen, 5, 0.8);
-    assert_eq!(early.stale(&chosen, 5), None);
-    assert!(early.stale(&chosen, 6).is_some());
+    let early = Tuning::capture(&chosen, 5, &asked(0.8), ThresholdRule::EveryBand);
+    assert_eq!(
+        early.stale(&chosen, 5, &asked(0.8), ThresholdRule::EveryBand),
+        None
+    );
+    assert!(
+        early
+            .stale(&chosen, 6, &asked(0.8), ThresholdRule::EveryBand)
+            .is_some()
+    );
 
     let mut other = tuning.clone();
     other.version = "0.0.1".into();
     assert_eq!(
-        other.stale(&chosen, 1_000),
+        other.stale(&chosen, 1_000, &asked(0.8), ThresholdRule::EveryBand),
         Some(Stale::Version {
             chosen: "0.0.1".into()
         })
     );
 
     let narrowed = changed(&chosen, |a| a[2].candidates = Some(vec!["network".into()]));
-    assert_eq!(tuning.stale(&narrowed, 1_000), Some(Stale::Schema));
+    assert_eq!(
+        tuning.stale(&narrowed, 1_000, &asked(0.8), ThresholdRule::EveryBand),
+        Some(Stale::Schema)
+    );
 }
 
 #[test]
@@ -166,7 +192,7 @@ fn the_fingerprint_ignores_what_the_replays_choose_and_is_the_same_in_every_run(
 
 #[test]
 fn a_tuning_that_would_break_the_schema_is_refused() {
-    let tuning = Tuning::capture(&tuned(), 1_000, 0.8);
+    let tuning = Tuning::capture(&tuned(), 1_000, &asked(0.8), ThresholdRule::EveryBand);
     let elsewhere = changed(&schema(), |a| a[0].name = "model".into());
 
     assert_eq!(
@@ -281,7 +307,7 @@ fn putting_a_choice_on_an_attribute_that_cannot_take_it_is_refused() {
 
 #[test]
 fn an_answer_reads_its_promise_from_the_layer_it_came_from() {
-    let mut tuning = Tuning::capture(&schema(), 1_000, 0.8);
+    let mut tuning = Tuning::capture(&schema(), 1_000, &asked(0.8), ThresholdRule::EveryBand);
     assert_eq!(tuning.promise_of("team", Source::KeyMemory), None);
     tuning.promise(
         "team",
@@ -302,7 +328,7 @@ fn an_answer_reads_its_promise_from_the_layer_it_came_from() {
 
 #[test]
 fn a_coarse_class_reads_its_promise_from_the_level_not_the_value() {
-    let mut tuning = Tuning::capture(&schema(), 1_000, 0.8);
+    let mut tuning = Tuning::capture(&schema(), 1_000, &asked(0.8), ThresholdRule::EveryBand);
     tuning.promise(
         "team",
         &LayerThresholds {
@@ -339,7 +365,7 @@ fn a_coarse_class_reads_its_promise_from_the_level_not_the_value() {
 #[test]
 fn a_tuning_carried_from_elsewhere_is_stale_for_its_scale_and_settings_only() {
     let chosen = tuned();
-    let tuning = Tuning::capture(&chosen, 1_000, 0.9);
+    let tuning = Tuning::capture(&chosen, 1_000, &asked(0.9), ThresholdRule::EveryBand);
     assert_eq!(tuning.scale, SCALE);
     assert_eq!(tuning.stale_carried(&chosen), None);
 
@@ -347,9 +373,25 @@ fn a_tuning_carried_from_elsewhere_is_stale_for_its_scale_and_settings_only() {
     let mut other = tuning.clone();
     other.version = "0.0.1".into();
     assert_eq!(other.stale_carried(&chosen), None);
-    assert!(other.stale(&chosen, 1_000).is_some());
+    assert!(
+        other
+            .stale(&chosen, 1_000, &asked(0.9), ThresholdRule::EveryBand)
+            .is_some()
+    );
     assert_eq!(tuning.stale_carried(&chosen), None);
-    assert!(tuning.stale(&chosen, 5_000).is_some());
+    assert!(
+        tuning
+            .stale(&chosen, 5_000, &asked(0.9), ThresholdRule::EveryBand)
+            .is_some()
+    );
+
+    // What it was asked with is no reason either: the records to ask again are not here, and a host that carries a
+    // tuning does not choose with the settings its sender did.
+    let mut elsewhere = tuning.clone();
+    elsewhere.choice = choice_fingerprint(&asked(0.5), ThresholdRule::Pooled);
+    assert_eq!(elsewhere.stale_carried(&chosen), None);
+    elsewhere.choice = 0;
+    assert_eq!(elsewhere.stale_carried(&chosen), None);
 
     // Another score scale is, and so is a tuning that did not record one.
     let mut older = tuning.clone();
@@ -373,4 +415,131 @@ fn a_tuning_carried_from_elsewhere_is_stale_for_its_scale_and_settings_only() {
     // A changed setting the choice rests on is, as for a tuning of the host's own.
     let narrowed = changed(&chosen, |a| a[2].candidates = Some(vec!["network".into()]));
     assert_eq!(tuning.stale_carried(&narrowed), Some(Stale::Schema));
+}
+
+#[test]
+fn the_choice_stands_until_what_it_was_asked_with_changes() {
+    let chosen = tuned();
+    let every = ThresholdRule::EveryBand;
+    let tuning = Tuning::capture(&chosen, 1_000, &asked(0.8), every);
+    assert_eq!(tuning.target_precision, 0.8);
+    assert_eq!(tuning.stale(&chosen, 1_000, &asked(0.8), every), None);
+
+    // Each setting the choice was asked with, changed on its own.
+    let accepted = [SettlementKind::Accept];
+    let bulk = ["bulk".to_owned()];
+    let changes: [(&str, Choice, ThresholdRule); 6] = [
+        ("target", asked(0.85), every),
+        (
+            "fewest answers",
+            Choice {
+                minimum_answered: 20,
+                ..asked(0.8)
+            },
+            every,
+        ),
+        (
+            "kinds counted",
+            Choice {
+                counting: Some(&accepted),
+                ..asked(0.8)
+            },
+            every,
+        ),
+        (
+            "batches left out",
+            Choice {
+                uncounted_batches: &bulk,
+                ..asked(0.8)
+            },
+            every,
+        ),
+        ("rule", asked(0.8), ThresholdRule::Pooled),
+        ("rule least cost", asked(0.8), ThresholdRule::LeastCost),
+    ];
+    for (name, choice, rule) in changes {
+        assert_eq!(
+            tuning.stale(&chosen, 1_000, &choice, rule),
+            Some(Stale::Choice),
+            "{name}"
+        );
+    }
+
+    // The order the reasons are given in: the version, then the schema, then what it was asked with, then the records.
+    let narrowed = changed(&chosen, |a| a[2].candidates = Some(vec!["network".into()]));
+    assert_eq!(
+        tuning.stale(&narrowed, 5_000, &asked(0.85), every),
+        Some(Stale::Schema)
+    );
+    assert_eq!(
+        tuning.stale(&chosen, 5_000, &asked(0.85), every),
+        Some(Stale::Choice)
+    );
+    let mut other = tuning.clone();
+    other.version = "0.0.1".into();
+    assert!(matches!(
+        other.stale(&narrowed, 5_000, &asked(0.85), every),
+        Some(Stale::Version { .. })
+    ));
+}
+
+#[test]
+fn the_fingerprint_of_a_choice_reads_kinds_and_batches_as_sets_and_keeps_them_apart() {
+    let every = ThresholdRule::EveryBand;
+    let kinds = |counting: Option<&[SettlementKind]>| {
+        choice_fingerprint(
+            &Choice {
+                counting,
+                ..asked(0.8)
+            },
+            every,
+        )
+    };
+    let batches = |uncounted_batches: &[String]| {
+        choice_fingerprint(
+            &Choice {
+                uncounted_batches,
+                ..asked(0.8)
+            },
+            every,
+        )
+    };
+    let s = |text: &str| text.to_owned();
+
+    // The kinds are a set: order and repeats say nothing.
+    use SettlementKind::{Accept, Correct};
+    assert_eq!(
+        kinds(Some(&[Accept, Correct])),
+        kinds(Some(&[Correct, Accept, Accept]))
+    );
+    assert_ne!(kinds(Some(&[Accept])), kinds(Some(&[Accept, Correct])));
+    // Every settlement counted is not the same as naming every kind: the kinds a later version adds would count.
+    assert_ne!(kinds(None), kinds(Some(&[])));
+
+    // So are the batches, and one name is not two: the texts are the host's own.
+    assert_eq!(
+        batches(&[s("b"), s("a")]),
+        batches(&[s("a"), s("b"), s("a")])
+    );
+    assert_ne!(batches(&[s("a:b")]), batches(&[s("a"), s("b")]));
+    assert_ne!(batches(&[s("ab")]), batches(&[s("a"), s("b")]));
+    assert_ne!(batches(&[]), batches(&[s("")]));
+
+    // Pinned: a change makes every stored tuning stale at once, so it must be deliberate.
+    assert_eq!(
+        choice_fingerprint(&asked(0.8), every),
+        0x2cf6_a319_8b77_2b0e
+    );
+}
+
+#[test]
+fn a_tuning_that_recorded_no_choice_does_not_stand() {
+    // Written before what it was asked with was recorded: nothing says it still stands, as for a scale.
+    let chosen = tuned();
+    let mut old = Tuning::capture(&chosen, 1_000, &asked(0.8), ThresholdRule::EveryBand);
+    old.choice = 0;
+    assert_eq!(
+        old.stale(&chosen, 1_000, &asked(0.8), ThresholdRule::EveryBand),
+        Some(Stale::Choice)
+    );
 }

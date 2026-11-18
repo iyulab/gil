@@ -530,14 +530,16 @@ Path("ticket.tuning.json").write_text(json.dumps(tune(records)))
 ```
 
 A layer with no `chosen` threshold is left unset and does not answer the attribute (its `absence` says why). `capture_tuning` and
-`tuning_stale` take the number of settled records, not the records. At start-up, `tuning_stale` says whether the kept
-tuning still stands — the same package version, the same settings it rests on, and less than a tenth more or fewer records —
-and `apply_tuning` puts it back on the schema; otherwise choose again:
+`tuning_stale` take the number of settled records, not the records, and what the choice is asked with: the target, and as
+for `select_layers` the fewest answers, the kinds counted, the batches left out and the rule. At start-up, `tuning_stale`
+says whether the kept tuning still stands — the same package version, the same settings it rests on, the same settings it
+was asked with (`"choice"` when they changed), and less than a tenth more or fewer records — and `apply_tuning` puts it back
+on the schema; otherwise choose again:
 
 ```python
 tuning = json.loads(Path("ticket.tuning.json").read_text())
 base = gil.Schema.from_dict(definition)
-if gil.tuning_stale(tuning, base, len(records)) is not None:
+if gil.tuning_stale(tuning, base, len(records), TARGET) is not None:
     tuning = tune(records)
 schema = gil.apply_tuning(tuning, base)
 ```
@@ -545,8 +547,8 @@ schema = gil.apply_tuning(tuning, base)
 A tuning chosen on records kept in another store — thresholds measured elsewhere and shipped with a form — cannot be
 chosen again where it is used, so the checks above would call it stale at every release. Ask `tuning_stale_carried(tuning,
 base)` instead: it says `{"scale": ...}` only when this package scores differently from the one that chose it (the score
-scale changed) and `"schema"` when a setting the choice rests on changed; another package version or a different number
-of records here is no reason. Answers made under such a tuning settle with `promise_carried=True` beside their `promise`; the
+scale changed) and `"schema"` when a setting the choice rests on changed; another package version, what it was asked
+with or a different number of records here is no reason. Answers made under such a tuning settle with `promise_carried=True` beside their `promise`; the
 record keeps which promises were carried, and `usage` counts them again apart (`carried_promised`, `carried_promise_sum`,
 `carried_right_weight`, `carried_judged_weight`), so you can tell whether the promises measured on your own records held
 from whether the shipped sample's did.

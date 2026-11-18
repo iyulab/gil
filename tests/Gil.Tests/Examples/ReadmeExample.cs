@@ -90,11 +90,11 @@ internal static class ReadmeExample
         }));
         var layers = Replay.SelectLayers(keyed, "team", saved, options);
         using var tuned = keyed.WithLayers("team", layers.Thresholds);
-        var tuning = Tuning.Capture(tuned, saved.Count, options.TargetPrecision).Promise("team", layers.Thresholds);
+        var tuning = Tuning.Capture(tuned, saved.Count, options).Promise("team", layers.Thresholds);
         File.WriteAllText("ticket.tuning.json", tuning.ToJson());
 
         var kept = Tuning.FromJson(File.ReadAllText("ticket.tuning.json"));
-        using var current = kept.Stale(schema, saved.Count) is null ? kept.Apply(schema) : null;
+        using var current = kept.Stale(schema, saved.Count, options) is null ? kept.Apply(schema) : null;
 
         var promise = team.Answered ? tuning.PromiseOf("team", team.Source) : null;
         // What was in view goes on the record it is settled on; the saved records are what the counts read.

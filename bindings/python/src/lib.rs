@@ -976,17 +976,63 @@ fn tuning(text: &str) -> PyResult<Tuning> {
     serde_json::from_str(text).map_err(|e| invalid(format!("a tuning does not read: {e}")))
 }
 
-/// The chosen settings of the schema's decided attributes, chosen on `settled` records for `target_precision`, as JSON.
+/// Runs `then` with the choice the arguments name, refused when the target or the fewest answers are out of range.
+fn with_asked<T>(
+    target_precision: f64,
+    minimum_answered: usize,
+    counting: Option<Vec<String>>,
+    uncounted_batches: Option<Vec<String>>,
+    rule: &str,
+    then: impl FnOnce(&Choice, ThresholdRule) -> PyResult<T>,
+) -> PyResult<T> {
+    let rule = threshold_rule(rule)?;
+    let counting = counting
+        .map(|kinds| {
+            kinds
+                .iter()
+                .map(|k| settlement(k))
+                .collect::<Parsed<Vec<_>>>()
+        })
+        .transpose()
+        .map_err(invalid)?;
+    let uncounted_batches = batches(uncounted_batches);
+    let choice = Choice {
+        target_precision,
+        minimum_answered,
+        counting: counting.as_deref(),
+        uncounted_batches: &uncounted_batches,
+    };
+    choice.validate().map_err(|e| invalid(e.to_owned()))?;
+    then(&choice, rule)
+}
+
+/// The chosen settings of the schema's decided attributes, chosen on `settled` records as the arguments asked
+/// (`target_precision`, `minimum_answered`, `counting`, `rule`, `uncounted_batches`, as `select_layers_json` reads them),
+/// as JSON.
 #[pyfunction]
+#[pyo3(signature = (schema_json, settled, target_precision, minimum_answered=10, counting=None, rule="every_band", uncounted_batches=None))]
 fn tuning_capture_json(
     schema_json: &str,
     settled: usize,
     target_precision: f64,
+    minimum_answered: usize,
+    counting: Option<Vec<String>>,
+    rule: &str,
+    uncounted_batches: Option<Vec<String>>,
 ) -> PyResult<String> {
     let schema = schema(schema_json).map_err(invalid)?;
-    Ok(
-        serde_json::to_string(&Tuning::capture(&schema, settled, target_precision))
-            .expect("a tuning serializes"),
+    with_asked(
+        target_precision,
+        minimum_answered,
+        counting,
+        uncounted_batches,
+        rule,
+        |choice, rule| {
+            Ok(
+                serde_json::to_string(&Tuning::capture(&schema, settled, choice, rule))
+                    .expect("a tuning serializes"),
+            )
+        },
     )
 }
 
@@ -1073,21 +1119,39 @@ fn tuning_apply_json(tuning_json: &str, schema_json: &str) -> PyResult<String> {
     Ok(serde_json::to_string(&schema).expect("a schema serializes"))
 }
 
-/// Why the tuning no longer stands for the schema with `settled` records, as JSON — `None` while it does.
+/// Why the tuning no longer stands for the schema with `settled` records, were it chosen now as the arguments ask (as
+/// `tuning_capture_json`), as JSON — `None` while it does.
 #[pyfunction]
+#[pyo3(signature = (tuning_json, schema_json, settled, target_precision, minimum_answered=10, counting=None, rule="every_band", uncounted_batches=None))]
+#[allow(clippy::too_many_arguments)]
 fn tuning_stale_json(
     tuning_json: &str,
     schema_json: &str,
     settled: usize,
+    target_precision: f64,
+    minimum_answered: usize,
+    counting: Option<Vec<String>>,
+    rule: &str,
+    uncounted_batches: Option<Vec<String>>,
 ) -> PyResult<Option<String>> {
     let schema = schema(schema_json).map_err(invalid)?;
-    Ok(tuning(tuning_json)?
-        .stale(&schema, settled)
-        .map(|s| serde_json::to_string(&s).expect("a reason serializes")))
+    let tuning = tuning(tuning_json)?;
+    with_asked(
+        target_precision,
+        minimum_answered,
+        counting,
+        uncounted_batches,
+        rule,
+        |choice, rule| {
+            Ok(tuning
+                .stale(&schema, settled, choice, rule)
+                .map(|s| serde_json::to_string(&s).expect("a reason serializes")))
+        },
+    )
 }
 
 /// Why a tuning carried from elsewhere no longer stands for the schema — another score scale or a changed setting the
-/// choice rests on — as JSON; `None` while it does.
+/// choice rests on, not what it was asked with — as JSON; `None` while it does.
 #[pyfunction]
 fn tuning_stale_carried_json(tuning_json: &str, schema_json: &str) -> PyResult<Option<String>> {
     let schema = schema(schema_json).map_err(invalid)?;

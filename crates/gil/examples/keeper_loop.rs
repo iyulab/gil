@@ -40,7 +40,7 @@ fn main() {
     let mut keeper = Keeper::new(schema.clone(), keep.clone());
     let mut kept = Decider::new(KeyMemory::default(), Some(LexicalMemory::default()));
     let mut by_hand = Decider::new(KeyMemory::default(), Some(LexicalMemory::default()));
-    let mut tuning = Tuning::capture(&schema, 0, keep.target_precision);
+    let mut tuning = Tuning::capture(&schema, 0, &keep.choice(), keep.rule);
     let (mut start_total, mut keeper_total, mut settle_total) = (0.0, 0.0, 0.0);
 
     println!("records\tfrom_start_s\tkeeper_s\tsame");
@@ -54,7 +54,10 @@ fn main() {
         keeper.settle(&mut kept, part);
         done = next;
 
-        if tuning.stale(&schema, done).is_none() {
+        if tuning
+            .stale(&schema, done, &keep.choice(), keep.rule)
+            .is_none()
+        {
             continue;
         }
         let t = Instant::now();
@@ -73,7 +76,7 @@ fn main() {
             LayerOptions::default(),
         );
         let from_start = t.elapsed().as_secs_f64();
-        tuning = Tuning::capture(&schema, done, keep.target_precision);
+        tuning = Tuning::capture(&schema, done, &keep.choice(), keep.rule);
 
         let t = Instant::now();
         keeper.rechoose();

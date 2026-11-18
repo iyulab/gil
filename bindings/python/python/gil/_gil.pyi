@@ -265,8 +265,17 @@ class OpenRecord:
     def snapshot(self) -> str:
         """The record as it stands, to save — JSON in the form records are read in."""
 
-def tuning_capture_json(schema_json: str, settled: int, target_precision: float) -> str:
-    """The chosen settings of the schema's decided attributes, chosen on `settled` records for `target_precision`, as JSON."""
+def tuning_capture_json(
+    schema_json: str,
+    settled: int,
+    target_precision: float,
+    minimum_answered: int = 10,
+    counting: list[str] | None = None,
+    rule: str = "every_band",
+    uncounted_batches: list[str] | None = None,
+) -> str:
+    """The chosen settings of the schema's decided attributes, chosen on `settled` records as the arguments asked
+    (`target_precision`, `minimum_answered`, `counting`, `rule`, `uncounted_batches`, as `select_layers_json` reads them), as JSON."""
 
 def tuning_promise_json(
     tuning_json: str,
@@ -293,8 +302,18 @@ def schema_for_first_of_batch_json(schema_json: str) -> str:
 def tuning_apply_json(tuning_json: str, schema_json: str) -> str:
     """The schema with the tuning's settings put back on its attributes, as JSON."""
 
-def tuning_stale_json(tuning_json: str, schema_json: str, settled: int) -> str | None:
-    """Why the tuning no longer stands for the schema with `settled` records, as JSON — `None` while it does."""
+def tuning_stale_json(
+    tuning_json: str,
+    schema_json: str,
+    settled: int,
+    target_precision: float,
+    minimum_answered: int = 10,
+    counting: list[str] | None = None,
+    rule: str = "every_band",
+    uncounted_batches: list[str] | None = None,
+) -> str | None:
+    """Why the tuning no longer stands for the schema with `settled` records, were it chosen now as the arguments ask (as
+    `tuning_capture_json`), as JSON — `None` while it does."""
 
 def tuning_stale_carried_json(tuning_json: str, schema_json: str) -> str | None:
     """Why a tuning carried from elsewhere no longer stands for the schema — another score scale or a changed setting the

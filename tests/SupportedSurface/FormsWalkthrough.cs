@@ -76,9 +76,9 @@ public static class FormsWalkthrough
             KeyFields = narrowed.KeyFields,
             TypedKeyThresholds = narrowed.Typed?.Thresholds,
         }));
-        var kept = Tuning.Capture(tuned, saved.Count, options.TargetPrecision).Promise("team", layers.Thresholds).ToJson();
+        var kept = Tuning.Capture(tuned, saved.Count, options).Promise("team", layers.Thresholds).ToJson();
         var tuning = Tuning.FromJson(kept);
-        using var applied = tuning.Stale(schema, saved.Count) is null ? tuning.Apply(schema) : null;
+        using var applied = tuning.Stale(schema, saved.Count, options) is null ? tuning.Apply(schema) : null;
 
         // A coarse level: the class of a coded value, offered when no layer answers the value itself.
         using var coded = new Schema("ticket-coded",

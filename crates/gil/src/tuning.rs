@@ -6,15 +6,16 @@
 //! [`Tuning::promise_of`] reads back for an answer by its source. It stores the record however it likes (the fields are plain data), puts it back with
 //! [`Tuning::apply`] at start-up, and asks [`Tuning::stale`] whether the choice still stands: it does not once this crate's
 //! version changed (a new version may score differently), once a setting the choice rests on changed (an attribute's
-//! domain, its dependencies, its votes …), or once the settled records grew or shrank by a tenth since the choice — the
-//! rule the first consuming application chose by. A tuning chosen on records kept elsewhere cannot be chosen again here:
-//! [`Tuning::stale_carried`] asks only whether the score scale ([`SCALE`]) and the settings the choice rests on still
-//! hold.
+//! domain, its dependencies, its votes …), once what it was asked with changed (the target, the fewest answers, which
+//! settlements count, which batches are left out, the rule — [`choice_fingerprint`]), or once the settled records grew or
+//! shrank by a tenth since the choice — the rule the first consuming application chose by. A tuning chosen on records
+//! kept elsewhere cannot be chosen again here: [`Tuning::stale_carried`] asks only whether the score scale ([`SCALE`])
+//! and the settings the choice rests on still hold.
 
 use std::collections::BTreeMap;
 
 use crate::decider::Source;
-use crate::replay::{LayerThresholds, fnv1a};
+use crate::replay::{Choice, LayerThresholds, ThresholdRule, fnv1a};
 use crate::schema::{AttributeRole, KeyCombine, Schema};
 
 /// This crate's version — what a tuning records it was chosen with.
@@ -75,6 +76,11 @@ pub struct Tuning {
     pub scale: u32,
     /// The fingerprint of the settings the choice rests on ([`fingerprint`]).
     pub schema: u64,
+    /// The fingerprint of what the choice was asked with ([`choice_fingerprint`]): the target, the fewest answers, which
+    /// settlements count, which batches are left out, and the rule. 0 when a tuning written before it was recorded is
+    /// read.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub choice: u64,
     /// How many records the choice counted when they were chosen — those settled, less the ones of a batch left
     /// uncounted ([`crate::replay::Choice::uncounted_batches`]).
     pub settled: usize,
@@ -95,6 +101,9 @@ pub enum Stale {
     Scale { chosen: u32, now: u32 },
     /// A setting the choice rests on changed.
     Schema,
+    /// What the choice was asked with changed — the target, the fewest answers, which settlements count, which batches
+    /// are left out, or the rule — or the tuning did not record it (a tuning written before it was).
+    Choice,
     /// The records the choice counts grew or shrank by a tenth or more since the choice.
     Settled { chosen: usize, now: usize },
     /// Experimental. Of `attribute`'s last `judged` answers whose rightness came back, only `right` were — under the
@@ -108,9 +117,9 @@ pub enum Stale {
 }
 
 impl Tuning {
-    /// The chosen settings as `schema`'s decided attributes now hold them, chosen on `settled` records for
-    /// `target_precision`. The promises are left unrecorded; [`Tuning::promise`] records a layer replay's.
-    pub fn capture(schema: &Schema, settled: usize, target_precision: f64) -> Self {
+    /// The chosen settings as `schema`'s decided attributes now hold them, chosen on `settled` records as `choice` asked
+    /// and `rule` chose. The promises are left unrecorded; [`Tuning::promise`] records a layer replay's.
+    pub fn capture(schema: &Schema, settled: usize, choice: &Choice, rule: ThresholdRule) -> Self {
         let attributes = schema
             .attributes()
             .iter()
@@ -142,8 +151,9 @@ impl Tuning {
             version: VERSION.to_owned(),
             scale: SCALE,
             schema: fingerprint(schema),
+            choice: choice_fingerprint(choice, rule),
             settled,
-            target_precision,
+            target_precision: choice.target_precision,
             attributes,
         }
     }
@@ -265,14 +275,21 @@ impl Tuning {
     }
 
     /// Why the tuning no longer stands for `schema` with `settled` records, or `None` while it does: another crate
-    /// version, a changed setting the choice rests on, or a change in the settled records of a tenth or more — at least
-    /// one record while fewer than ten were settled at the choice.
+    /// version, a changed setting the choice rests on, what the choice would be asked with now (`choice` and `rule`)
+    /// differing from what it was asked with, or a change in the settled records of a tenth or more — at least one
+    /// record while fewer than ten were settled at the choice. They are told in that order.
     ///
-    /// The settings on the schema are compared (its fingerprint). The settings the choice was asked with — the target
-    /// precision, the fewest answers, which settlements count, which batches are left out — are not: this does not
-    /// receive them. A host that keeps a tuning across runs compares [`Tuning::target_precision`] with the target it
-    /// would choose for now, and chooses again when the others changed; a [`crate::keeper::Keeper`] holds them itself.
-    pub fn stale(&self, schema: &Schema, settled: usize) -> Option<Stale> {
+    /// The settings on the schema are compared (its fingerprint), and so are the settings the choice is asked with
+    /// ([`choice_fingerprint`]): the target precision, the fewest answers, which settlements count, which batches are
+    /// left out, and the rule. A host that keeps a tuning across runs gives the ones it would choose with now; a
+    /// [`crate::keeper::Keeper`] holds them itself. A tuning written before they were recorded does not stand.
+    pub fn stale(
+        &self,
+        schema: &Schema,
+        settled: usize,
+        choice: &Choice,
+        rule: ThresholdRule,
+    ) -> Option<Stale> {
         if self.version != VERSION {
             return Some(Stale::Version {
                 chosen: self.version.clone(),
@@ -281,6 +298,10 @@ impl Tuning {
 
         if self.schema != fingerprint(schema) {
             return Some(Stale::Schema);
+        }
+
+        if self.choice != choice_fingerprint(choice, rule) {
+            return Some(Stale::Choice);
         }
 
         (settled.abs_diff(self.settled) * 10 >= self.settled.max(10)).then_some(Stale::Settled {
@@ -296,7 +317,8 @@ impl Tuning {
     /// is used: the records are not there. So it is not stale for being chosen by another version of this crate
     /// ([`Tuning::stale`] says so for a host's own tuning, which it can choose again), nor for the count of records
     /// here differing from the count it was chosen on: a threshold stays good while the scores it is a threshold on
-    /// mean the same, and the scale says when they stop.
+    /// mean the same, and the scale says when they stop. Nor is it stale for what it was asked with ([`Tuning::choice`]):
+    /// that is the sender's setting for records the receiver does not have, and nothing here could ask again.
     pub fn stale_carried(&self, schema: &Schema) -> Option<Stale> {
         if self.scale != SCALE {
             return Some(Stale::Scale {
@@ -307,6 +329,63 @@ impl Tuning {
 
         (self.schema != fingerprint(schema)).then_some(Stale::Schema)
     }
+}
+
+/// A stable fingerprint of what a choice is asked with: the target precision (its bits), the fewest answers, which
+/// settlements count, which batches are left out, and the rule. The kinds counted and the batches left out are sets —
+/// their order and repeats say nothing — and counting every settlement (`None`) is not naming every kind: the kinds a
+/// later version adds would count. A batch is a text of the host's own, so each is written with its length. The same on
+/// every platform and in every run.
+pub fn choice_fingerprint(choice: &Choice, rule: ThresholdRule) -> u64 {
+    use crate::schema::SettlementKind as Kind;
+
+    let mut text = String::new();
+    text.push_str(&choice.target_precision.to_bits().to_string());
+    text.push('\u{1e}');
+    text.push_str(&choice.minimum_answered.to_string());
+    text.push('\u{1e}');
+    match choice.counting {
+        None => text.push('-'),
+        Some(kinds) => {
+            let mut names = kinds
+                .iter()
+                .map(|kind| match kind {
+                    Kind::Accept => "accept",
+                    Kind::Correct => "correct",
+                    Kind::Reject => "reject",
+                    Kind::Revert => "revert",
+                    Kind::Restore => "restore",
+                    Kind::Set => "set",
+                    Kind::Enter => "enter",
+                    Kind::Fill => "fill",
+                    Kind::Check => "check",
+                    Kind::AcceptOther => "accept_other",
+                    Kind::CorrectOther => "correct_other",
+                })
+                .collect::<Vec<_>>();
+            names.sort_unstable();
+            names.dedup();
+            text.push('+');
+            text.push_str(&names.join("\u{1f}"));
+        }
+    }
+    text.push('\u{1e}');
+    let mut batches = choice.uncounted_batches.iter().collect::<Vec<_>>();
+    batches.sort_unstable();
+    batches.dedup();
+    for batch in batches {
+        text.push_str(&batch.len().to_string());
+        text.push(':');
+        text.push_str(batch);
+    }
+    text.push('\u{1e}');
+    text.push_str(match rule {
+        ThresholdRule::EveryBand => "every_band",
+        ThresholdRule::Pooled => "pooled",
+        ThresholdRule::LeastCost => "least_cost",
+    });
+
+    fnv1a(&text)
 }
 
 /// A stable fingerprint of what a schema's choice rests on: its name and, for each attribute in order, everything but

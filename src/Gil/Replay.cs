@@ -249,14 +249,20 @@ public static class Replay
 /// <summary>A tuning through the C ABI, as JSON in the core's form.</summary>
 internal static class TuningJson
 {
-    /// <summary>The chosen settings of the schema's decided attributes, chosen on <paramref name="settled"/> records for
-    /// <paramref name="targetPrecision"/>.</summary>
-    internal static unsafe string CaptureJson(Schema schema, int settled, double targetPrecision)
+    /// <summary>The chosen settings of the schema's decided attributes, chosen on <paramref name="settled"/> records as
+    /// <paramref name="options"/> asked (the target, the fewest answers, the kinds counted, the batches left out and the
+    /// rule; the rest are not read).</summary>
+    internal static unsafe string CaptureJson(Schema schema, int settled, SelectionOptions options)
     {
         ArgumentNullException.ThrowIfNull(schema);
+        ArgumentNullException.ThrowIfNull(options);
         ArgumentOutOfRangeException.ThrowIfNegative(settled);
+        var json = new Utf8(Replay.Options(options));
         nuint length;
-        return Native.Result(Native.TuningCapture(schema.Handle, (nuint)settled, targetPrecision, &length));
+        fixed (byte* o = &json.Pin())
+        {
+            return Native.Result(Native.TuningCapture(schema.Handle, (nuint)settled, json.At(o), &length));
+        }
     }
 
     /// <summary>The tuning with what <paramref name="attribute"/>'s layers selection promised — its
@@ -301,20 +307,23 @@ internal static class TuningJson
         return Schema.Own(output);
     }
 
-    /// <summary>Why the tuning no longer stands for <paramref name="schema"/> with <paramref name="settled"/> records, as
-    /// JSON — <c>null</c> while it does.</summary>
-    /// <exception cref="ArgumentException">The tuning does not read.</exception>
-    internal static unsafe string? StaleJson(string tuningJson, Schema schema, int settled)
+    /// <summary>Why the tuning no longer stands for <paramref name="schema"/> with <paramref name="settled"/> records, were
+    /// it chosen now as <paramref name="options"/> ask, as JSON — <c>null</c> while it does.</summary>
+    /// <exception cref="ArgumentException">The tuning does not read, or the options are out of range.</exception>
+    internal static unsafe string? StaleJson(string tuningJson, Schema schema, int settled, SelectionOptions options)
     {
         ArgumentNullException.ThrowIfNull(tuningJson);
         ArgumentNullException.ThrowIfNull(schema);
+        ArgumentNullException.ThrowIfNull(options);
         ArgumentOutOfRangeException.ThrowIfNegative(settled);
         var tuning = new Utf8(tuningJson);
+        var asked = new Utf8(Replay.Options(options));
         nuint length;
         string found;
         fixed (byte* t = &tuning.Pin())
+        fixed (byte* o = &asked.Pin())
         {
-            found = Native.Result(Native.TuningStale(tuning.At(t), schema.Handle, (nuint)settled, &length));
+            found = Native.Result(Native.TuningStale(tuning.At(t), schema.Handle, (nuint)settled, asked.At(o), &length));
         }
 
         return found == "null" ? null : found;

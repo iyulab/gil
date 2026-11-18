@@ -58,7 +58,7 @@ public sealed class KeeperTests
                     // The tuning carries the level's promises, apart from the value's.
                     keeper.Tuning.CoarsePromiseOf(attribute, Source.SimilarRecord).Should().Be(coarse.Memory.Chosen?.Promise);
                     keeper.Tuning.CoarsePromiseOf(attribute, Source.KeyMemory).Should().Be(coarse.Key.Chosen?.Promise);
-                    var promised = Gil.Tuning.Capture(schema, at, 0.8).PromiseCoarse(attribute, coarse);
+                    var promised = Gil.Tuning.Capture(schema, at, options).PromiseCoarse(attribute, coarse);
                     promised.CoarsePromiseOf(attribute, Source.SimilarRecord).Should().Be(coarse.Memory.Chosen?.Promise);
                     promised.PromiseOf(attribute, Source.SimilarRecord).Should().BeNull();
                 }
