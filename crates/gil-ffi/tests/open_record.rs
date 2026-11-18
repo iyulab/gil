@@ -289,6 +289,7 @@ fn open_records_through_the_c_abi_answer_as_the_core_does() {
                     NONE,
                     NONE,
                     f64::NAN,
+                    0,
                     &mut len,
                 )
             };
@@ -496,6 +497,7 @@ fn refused_settlements_and_contract_violations_come_back_as_statuses() {
             NONE,
             NONE,
             f64::NAN,
+            0,
             len,
         )
     };
@@ -533,6 +535,7 @@ fn refused_settlements_and_contract_violations_come_back_as_statuses() {
             NONE,
             NONE,
             f64::NAN,
+            0,
             &mut len,
         )
     };

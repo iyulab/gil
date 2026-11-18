@@ -8,6 +8,12 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Breaking
 
+- **`schema::InView` and `schema::Record` have a new field, and `usage::AttributeUsage` four.** `InView::carried`,
+  `Record::promises_carried` and `AttributeUsage::{carried_promised, carried_promise_sum, carried_right_weight,
+  carried_judged_weight}` break a struct literal of those types; values the crate returns are unaffected, and an old
+  record line reads back unchanged. A line that carries `promises_carried` is refused by versions before this one.
+  **To migrate**: add `carried: false` to an `InView` literal and `..Default::default()` (or the new fields) elsewhere.
+  `gil_open_record_settle` (C ABI 7) takes one more argument, `in_view_carried` (0 for none).
 - **`tuning::Tuning` has a new field, `scale`, and `tuning::Stale` a new variant, `Scale`.** A struct literal of
   `Tuning` no longer compiles without the field, and an exhaustive `match` on `Stale` needs the arm; tunings the crate
   returns, and a tuning written before the field existed (it reads back with `scale` 0), are unaffected. **To migrate**:
@@ -27,6 +33,13 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Added
 
+- **A promise measured on records kept in another store is kept apart and counted apart.** Mark the settlement
+  (`Settlement::with_carried_promise`; `promise_carried` in Python; `promiseCarried` in .NET) when the promise in view
+  came from a tuning carried from elsewhere (`Tuning::stale_carried`): the record keeps the attribute in
+  `Record::promises_carried` — refused with no promise to carry — and `usage` counts those answers again apart
+  (`carried_promised`, `carried_promise_sum`, `carried_right_weight`, `carried_judged_weight`, with `carried_promise()`
+  and `carried_realized()`), so whether the promises measured on this store's own records held can be told from whether a
+  sample shipped with a form did: its own are the whole less the carried.
 - **A tuning chosen on records kept elsewhere can outlive a release: `Tuning::stale_carried` and the score scale.**
   `Tuning::stale` says a tuning is stale whenever the crate version or the count of settled records moved — right for a
   tuning a host chose on its own records and can choose again, wrong for thresholds measured on records kept in another

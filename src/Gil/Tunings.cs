@@ -334,6 +334,32 @@ public sealed record AttributeUsage(
     int Audits,
     IReadOnlyList<PromiseDisplay> PromiseDisplay)
 {
+    /// <summary>Of <see cref="Promised"/>, the answers whose promise was measured on records kept in another store
+    /// (<see cref="Record.PromisesCarried"/>); what was measured on this store's own records is the whole less these.</summary>
+    [JsonPropertyName("carried_promised")]
+    public int CarriedPromised { get; init; }
+
+    /// <summary>The promises' sum over <see cref="CarriedPromised"/>.</summary>
+    [JsonPropertyName("carried_promise_sum")]
+    public double CarriedPromiseSum { get; init; }
+
+    /// <summary>The right weight of the answers made under a carried promise, as <see cref="RightWeight"/>.</summary>
+    [JsonPropertyName("carried_right_weight")]
+    public double CarriedRightWeight { get; init; }
+
+    /// <summary>The right-or-wrong weight of the answers made under a carried promise, as <see cref="JudgedWeight"/>.</summary>
+    [JsonPropertyName("carried_judged_weight")]
+    public double CarriedJudgedWeight { get; init; }
+
+    /// <summary>The mean promise of the answers made under a promise carried from another store; null when none was.</summary>
+    [JsonIgnore]
+    public double? CarriedPromise => CarriedPromised > 0 ? CarriedPromiseSum / CarriedPromised : null;
+
+    /// <summary>The precision the answers made under a carried promise realized, among those whose rightness is known;
+    /// null when none is.</summary>
+    [JsonIgnore]
+    public double? CarriedRealized => CarriedJudgedWeight > 0 ? CarriedRightWeight / CarriedJudgedWeight : null;
+
     /// <summary>The decisions not answered.</summary>
     [JsonIgnore]
     public int Abstained => Decisions - Answered;

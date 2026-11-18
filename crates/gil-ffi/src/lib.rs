@@ -744,7 +744,9 @@ pub unsafe extern "C" fn gil_open_record_observe(
 /// giving `values` non-null), and `probability` for `Check` (NaN when none — a `Check` without it is refused; any other kind ignores it). `in_view` is the value
 /// suggested when it was settled (null text when nothing was in view), `in_view_source` the layer of this decider's
 /// answer it was, by name (`KeyMemory`, `SimilarRecord`, `Model`; null text for a suggestion that was not this
-/// decider's) and `in_view_promise` the precision promised for it (NaN when none) — what the record keeps. Puts the record into
+/// decider's), `in_view_promise` the precision promised for it (NaN when none) and `in_view_carried` (non-zero) that the
+/// promise was measured on records kept in another store (a tuning carried from elsewhere; refused with no promise) — what
+/// the record keeps. Puts the record into
 /// `decider`'s memory again and keeps as the result the fresh answers it causes (a JSON array). A kind or part that
 /// does not fit, an attribute that is not decided, and a settlement of the other kind of attribute are refused
 /// (`GIL_INVALID_INPUT`) before anything changes.
@@ -767,6 +769,7 @@ pub unsafe extern "C" fn gil_open_record_settle(
     in_view: GilStr,
     in_view_source: GilStr,
     in_view_promise: f64,
+    in_view_carried: u8,
     result_len: *mut usize,
 ) -> i32 {
     let status = call(|| {
@@ -812,6 +815,7 @@ pub unsafe extern "C" fn gil_open_record_settle(
                 value: suggested.to_owned(),
                 source,
                 promise: (!in_view_promise.is_nan()).then_some(in_view_promise),
+                carried: in_view_carried != 0,
             });
         }
         open.check_settle(attribute, &settlement)?;

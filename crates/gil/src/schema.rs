@@ -1,6 +1,6 @@
 //! Schemas and settled records, in the decision core's vocabulary.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::replay::{Calibration, LayerThresholds};
 
@@ -678,6 +678,15 @@ impl Schema {
                 return Err(blank_settled(&a.name));
             }
         }
+        if let Some(name) = record
+            .promises_carried
+            .iter()
+            .find(|name| !record.promises.contains_key(*name))
+        {
+            return Err(format!(
+                "'{name}' is marked as carrying a promise from another store but kept no promise; mark only an attribute that has one"
+            ));
+        }
         Ok(())
     }
 
@@ -861,6 +870,14 @@ pub struct InView {
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub promise: Option<f64>,
+    /// Whether the promise was measured on records kept in another store — a tuning carried from elsewhere
+    /// ([`crate::tuning::Tuning::stale_carried`]) — rather than on this store's own. Only where there is a promise; the
+    /// record keeps it in [`Record::promises_carried`] so [`crate::usage::usage`] can count the two apart.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "std::ops::Not::not")
+    )]
+    pub carried: bool,
 }
 
 /// Whether a promise was displayed beside the answer it was given for, drawn at random with a known probability.
@@ -921,6 +938,7 @@ impl Settlement {
                 value: answer.candidates[0].value.clone(),
                 source: Some(answer.source),
                 promise,
+                carried: false,
             });
         }
         self
@@ -933,7 +951,17 @@ impl Settlement {
             value: value.to_owned(),
             source: None,
             promise: None,
+            carried: false,
         });
+        self
+    }
+
+    /// The settlement with the promise in view marked as measured on records kept in another store (a tuning carried
+    /// from elsewhere); unchanged when no promise is in view.
+    pub fn with_carried_promise(mut self) -> Self {
+        if let Some(in_view) = self.in_view.as_mut().filter(|v| v.promise.is_some()) {
+            in_view.carried = true;
+        }
         self
     }
 
@@ -1158,6 +1186,18 @@ pub struct Record {
         )
     )]
     pub promises: BTreeMap<String, f64>,
+    /// The attributes whose promise in [`Record::promises`] was measured on records kept in another store — a tuning
+    /// carried from elsewhere ([`crate::tuning::Tuning::stale_carried`]) — rather than on this store's own. Each names an
+    /// attribute with a promise; [`crate::usage::usage`] counts these apart.
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            default,
+            deserialize_with = "or_empty",
+            skip_serializing_if = "BTreeSet::is_empty"
+        )
+    )]
+    pub promises_carried: BTreeSet<String>,
     /// Experimental. For each decided attribute settled with an answer from a judge outside Gil in view (its source is
     /// [`crate::decider::Source::External`]), the score the judge gave that answer when it was shown, on the judge's own
     /// scale: a number, higher meaning surer. [`crate::replay::scored_decisions`] reads it for

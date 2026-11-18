@@ -327,6 +327,25 @@ def test_a_reopened_record_keeps_what_was_in_view_for_usage() -> None:
         record.settle(decider, "team", "Accept", 11 * MINUTE, value=value, shown=team, promise=1.5)
 
 
+def test_a_promise_carried_from_another_store_is_kept_apart_and_counted_apart() -> None:
+    decider = gil.Decider(SCHEMA, settled())
+    record = gil.OpenRecord(SCHEMA, "t9", 9 * MINUTE)
+    (team,) = record.observe(decider, "component", "vpn")
+    value = team["candidates"][0]["value"]
+    record.settle(decider, "team", "Accept", 9 * MINUTE, value=value, shown=team, promise=0.8, promise_carried=True)
+    saved = record.snapshot()
+    assert saved["promises_carried"] == ["team"]
+    assert gil.OpenRecord.reopen(SCHEMA, saved).snapshot()["promises_carried"] == ["team"]
+    counts = gil.usage(gil.records([saved]))["team"]
+    assert (counts["promised"], counts["carried_promised"], counts["carried_judged_weight"]) == (1, 1, 1.0)
+
+    # Settled again without the mark, the earlier one is gone; the mark needs a promise.
+    record.settle(decider, "team", "Accept", 10 * MINUTE, value=value, shown=team, promise=0.8)
+    assert "promises_carried" not in record.snapshot()
+    with pytest.raises(ValueError, match="carried promise is a promise"):
+        record.settle(decider, "team", "Accept", 11 * MINUTE, value=value, shown=team, promise_carried=True)
+
+
 def test_answers_and_counts_carry_exactly_the_typed_keys() -> None:
     decider = gil.Decider(SCHEMA, settled())
     record = gil.OpenRecord(SCHEMA, "t9", 9 * MINUTE)

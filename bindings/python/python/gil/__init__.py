@@ -986,15 +986,22 @@ class OpenRecord:
         shown: Answer | None = None,
         promise: float | None = None,
         suggested: str | None = None,
+        promise_carried: bool = False,
     ) -> list[Answer]:
         """Settles a decided attribute at ``now``. What was in view goes on the record: ``shown``, the decider's answer,
         when it answered — its first candidate and its ``source`` — with ``promise``, the precision promised for its
-        layer (:func:`promise_of`); or ``suggested``, a value that was not the decider's."""
+        layer (:func:`promise_of`), and ``promise_carried`` when that promise was measured on records kept in another
+        store (a tuning whose :func:`tuning_stale_carried` the host asks) — the record keeps which, and :func:`usage`
+        counts the two apart; or ``suggested``, a value that was not the decider's."""
         in_view: dict[str, Any] | None = None
         if shown is not None and shown["answered"]:
             in_view = {"value": shown["candidates"][0]["value"], "source": shown["source"]}
             if promise is not None:
                 in_view["promise"] = promise
+                if promise_carried:
+                    in_view["carried"] = True
+            elif promise_carried:
+                raise ValueError("a carried promise is a promise: pass promise= with promise_carried=True")
         elif suggested is not None:
             in_view = {"value": suggested}
         return cast(
@@ -1399,6 +1406,10 @@ class AttributeUsage(TypedDict):
     corrected_other: int
     promised: int
     promise_sum: float
+    carried_promised: int
+    carried_promise_sum: float
+    carried_right_weight: float
+    carried_judged_weight: float
     right_weight: float
     judged_weight: float
     first_checks: int
@@ -1413,5 +1424,8 @@ def usage(records: Records) -> dict[str, AttributeUsage]:
     settled — ``suggested``, ``sources`` and ``promises`` — beside how each attribute was settled; an attribute counts as
     answered when its record names the layer the answer came from, or was accepted or corrected, and as turned down when
     the answer was in view and nothing was settled. The realized precision is ``right_weight / judged_weight``; it
-    should be read against ``promise_sum / promised``."""
+    should be read against ``promise_sum / promised``. The answers whose promise was measured on records kept in another
+    store (``promise_carried`` at settling) are counted again apart — ``carried_promised``, ``carried_promise_sum``,
+    ``carried_right_weight`` and ``carried_judged_weight`` — so what was measured on this store's own records is the
+    whole less these."""
     return cast(dict[str, AttributeUsage], json.loads(usage_json(records)))

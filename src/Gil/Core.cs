@@ -429,7 +429,10 @@ public sealed class OpenRecord : IDisposable
     /// several), the probability a check was drawn with — and returns the fresh answers it causes. What was in view
     /// goes on the record: <paramref name="shown"/>, the decider's answer, when it answered — its first candidate and
     /// its layer — with <paramref name="promise"/>, the precision promised for that layer
-    /// (<see cref="Tuning.PromiseOf"/>); or <paramref name="suggested"/>, a value that was not the decider's.</summary>
+    /// (<see cref="Tuning.PromiseOf"/>), and <paramref name="promiseCarried"/> when that promise was measured on records
+    /// kept in another store (a tuning whose <see cref="Tuning.StaleCarried(Schema)"/> the host asks) — the record keeps
+    /// which, and <see cref="Usage"/> counts the two apart; or <paramref name="suggested"/>, a value that was not the
+    /// decider's.</summary>
     /// <exception cref="ArgumentException">A part the kind needs is missing — for <see cref="SettlementKind.Check"/>,
     /// the <paramref name="probability"/> it was drawn with, fixed before the draw —, the attribute is not decided or takes
     /// the other kind of value, or the promise is not in [0, 1].</exception>
@@ -443,8 +446,10 @@ public sealed class OpenRecord : IDisposable
         double? probability = null,
         Answer? shown = null,
         double? promise = null,
-        string? suggested = null) =>
-        Answers.Read(SettleJson(decider, attribute, kind, now, value, values, probability, shown, promise, suggested));
+        string? suggested = null,
+        bool promiseCarried = false) =>
+        Answers.Read(SettleJson(
+            decider, attribute, kind, now, value, values, probability, shown, promise, suggested, promiseCarried));
 
     private unsafe string SettleJson(
         Decider decider,
@@ -456,7 +461,8 @@ public sealed class OpenRecord : IDisposable
         double? probability,
         Answer? shown,
         double? promise,
-        string? suggested)
+        string? suggested,
+        bool promiseCarried)
     {
         ArgumentNullException.ThrowIfNull(decider);
         ArgumentNullException.ThrowIfNull(attribute);
@@ -467,6 +473,7 @@ public sealed class OpenRecord : IDisposable
         var inView = new Utf8(answered ? shown!.Candidates[0].Value : suggested);
         var inViewSource = new Utf8(answered ? (shown!.Source == Source.External ? "Model" : shown.Source.ToString()) : null);
         var inViewPromise = answered && promise is { } p ? p : double.NaN;
+        var inViewCarried = promiseCarried && !double.IsNaN(inViewPromise);
         var block = values is null ? null : Encoding.UTF8.GetBytes(string.Concat(values));
         // Never empty when given, so that an empty list pins to a real address: null is no values, a pointer to none
         // is an empty set.
@@ -498,7 +505,7 @@ public sealed class OpenRecord : IDisposable
                     Native.OpenRecordSettle(
                         Handle, decider.Handle, name.At(a), kindName.At(k), Time.Ticks(now), text.At(v), s,
                         (nuint)(values?.Count ?? 0), probability ?? double.NaN, inView.At(iv), inViewSource.At(ivs), inViewPromise,
-                        &length),
+                        (byte)(inViewCarried ? 1 : 0), &length),
                     changing: true);
             }
         }

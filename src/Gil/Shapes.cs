@@ -270,6 +270,11 @@ public sealed record Record(string Id, DateTimeOffset SettledAt)
     /// <see cref="SettlementKind.Check"/>, kept from view), the precision promised for it when it was given — what <see cref="Tuning.PromiseOf"/> gave for its layer; each in [0, 1].</summary>
     public IReadOnlyDictionary<string, double>? Promises { get; init; }
 
+    /// <summary>The attributes whose promise in <see cref="Promises"/> was measured on records kept in another store — a
+    /// tuning carried from elsewhere (<see cref="Tuning.StaleCarried(Schema)"/>) — rather than on this store's own. Each
+    /// names an attribute with a promise; <see cref="Usage"/> counts these apart.</summary>
+    public IReadOnlyList<string>? PromisesCarried { get; init; }
+
     /// <summary>Experimental. For each decided attribute settled with an answer from a judge outside Gil in view (its
     /// <see cref="Sources"/> entry is <see cref="Source.External"/>), the score the judge gave that answer when it was
     /// shown, on the judge's own scale — higher means surer; it is not a probability and is read for no other layer.

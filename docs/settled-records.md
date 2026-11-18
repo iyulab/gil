@@ -34,6 +34,7 @@ One JSON object per line, one line per settlement:
 | `open_ms` | integer | no | The milliseconds the record was open, from opening it to this settlement |
 | `settled_by` | object of strings | no | For each decided attribute, who settled it, as an opaque id the application gives — one person, one id; never a name |
 | `promise_shown` | object of objects | no | For each decided attribute settled with Gil's answer and its promise given, `{"shown": …, "probability": …}`: whether the promise was displayed beside the answer, and the probability it was drawn to be displayed with — fixed before the draw; 1 for an application that always displays it, 0 for one that never does. Read only where the attribute has a promise and was not settled as a `Check` |
+| `promises_carried` | array of texts | no | The attributes whose `promises` entry was measured on records kept in another store — a tuning carried from elsewhere (`Tuning::stale_carried`, `Tuning.StaleCarried`, `tuning_stale_carried`) — rather than on this store's own. Each names an attribute that has a promise; a line that names one that has none is refused. Left out when none were. The usage counts keep these apart (`carried_promised`, `carried_promise_sum`, `carried_right_weight`, `carried_judged_weight`), so a host can tell whether the promises measured on its own records held from whether a sample shipped with a form did. |
 | `form_version` | string | no | The version of the form the record was settled on: the edition of the code lists its decided attributes are settled from, as the application identifies it |
 
 An entry left out, or given as `null`, reads as empty (`arrival`, `batch` and the last seven as unknown). An entry the
@@ -59,7 +60,7 @@ settlement carries.
 The last seven entries are read from `Gil` 0.27.0 and `iyulab-gil` 0.9.0; earlier versions refuse a line that carries
 them, so write them for a reader that knows them. `scores` is newer still: it is read from `Gil` 0.28.0 and `iyulab-gil` 0.10.0,
 and earlier versions refuse a line that carries it. `promise_shown` is read from `Gil` 0.30.0 and `iyulab-gil` 0.12.0;
-earlier versions refuse a line that carries it.
+earlier versions refuse a line that carries it. `promises_carried` is newer still and is refused by every version before the one that adds it.
 
 Lines may come in any order: a replay orders them by `settled_at`, then by `id`. A blank line is skipped.
 

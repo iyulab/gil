@@ -133,6 +133,7 @@ impl OpenRecord {
             suggested: saved.suggested.clone(),
             sources: saved.sources.clone(),
             promises: saved.promises.clone(),
+            promises_carried: saved.promises_carried.clone(),
             scores: saved.scores.clone(),
             settle_ms: saved.settle_ms.clone(),
             open_ms: saved.open_ms,
@@ -258,6 +259,7 @@ impl OpenRecord {
         self.kept.suggested.remove(attribute);
         self.kept.sources.remove(attribute);
         self.kept.promises.remove(attribute);
+        self.kept.promises_carried.remove(attribute);
         self.kept.scores.remove(attribute);
         self.kept.settle_ms.remove(attribute);
         self.kept.settled_by.remove(attribute);
@@ -273,6 +275,9 @@ impl OpenRecord {
             }
             if let Some(promise) = in_view.promise {
                 self.kept.promises.insert(attribute.to_owned(), promise);
+                if in_view.carried {
+                    self.kept.promises_carried.insert(attribute.to_owned());
+                }
             }
         }
         if clears || settlement.kind == SettlementKind::Restore || !self.has(attribute) {
@@ -426,6 +431,12 @@ impl OpenRecord {
             if in_view.promise.is_some_and(|p| !(0.0..=1.0).contains(&p)) {
                 return Err(ContractViolation(
                     "a promise in view is a precision in [0, 1]".to_owned(),
+                ));
+            }
+            if in_view.carried && in_view.promise.is_none() {
+                return Err(ContractViolation(
+                    "a carried promise is a promise: mark the suggestion in view as carried only where it has one"
+                        .to_owned(),
                 ));
             }
         }

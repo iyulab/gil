@@ -58,6 +58,14 @@ pub struct AttributeUsage {
     /// Answered with a promise: their number and the promises' sum.
     pub promised: usize,
     pub promise_sum: f64,
+    /// Of those, the answers whose promise was measured on records kept in another store
+    /// ([`Record::promises_carried`]): their number, the promises' sum and the weighted counts their realized precision
+    /// rests on. What was measured on this store's own records is the whole less these — so a host can tell whether the
+    /// promises measured here held from whether those that came with a form did.
+    pub carried_promised: usize,
+    pub carried_promise_sum: f64,
+    pub carried_right_weight: f64,
+    pub carried_judged_weight: f64,
     /// The weighted counts the realized precision rests on: right and right-or-wrong, a check weighing one ÷ its
     /// probability.
     pub right_weight: f64,
@@ -115,6 +123,18 @@ impl AttributeUsage {
     /// The mean promise of the answers made under one; `None` when none was.
     pub fn promise(&self) -> Option<f64> {
         (self.promised > 0).then(|| self.promise_sum / self.promised as f64)
+    }
+
+    /// The mean promise of the answers made under one measured on records kept in another store; `None` when none was.
+    pub fn carried_promise(&self) -> Option<f64> {
+        (self.carried_promised > 0).then(|| self.carried_promise_sum / self.carried_promised as f64)
+    }
+
+    /// The precision the answers made under a promise carried from another store realized, among those whose rightness
+    /// is known; `None` when none is.
+    pub fn carried_realized(&self) -> Option<f64> {
+        (self.carried_judged_weight > 0.0)
+            .then(|| self.carried_right_weight / self.carried_judged_weight)
     }
 
     /// The share right among the first checks; `None` when there are none.
@@ -216,10 +236,16 @@ pub fn usage<'a>(
             }
 
             u.answered += 1;
+            let carried = record.promises_carried.contains(attribute);
             if let Some(p) = record.promises.get(attribute) {
                 u.promised += 1;
                 u.promise_sum += p;
+                if carried {
+                    u.carried_promised += 1;
+                    u.carried_promise_sum += p;
+                }
             }
+            let weights = (u.right_weight, u.judged_weight);
             // Whether the promise was displayed is an arm of the comparison only where there was a promise to display.
             let displayed = record
                 .promises
@@ -277,6 +303,10 @@ pub fn usage<'a>(
                 Some(SettlementKind::Fill) => u.filled += 1,
                 Some(SettlementKind::Enter) => u.entered_over_answer += 1,
                 _ => {}
+            }
+            if carried {
+                u.carried_right_weight += u.right_weight - weights.0;
+                u.carried_judged_weight += u.judged_weight - weights.1;
             }
         }
     }

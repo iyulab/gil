@@ -124,6 +124,20 @@ public sealed class ShapeTests
         ticket.Snapshot().Suggested.Should().Equal(new Dictionary<string, string> { ["team"] = "facilities" });
         ticket.Invoking(t => t.Settle(decider, "team", SettlementKind.Accept, DateTimeOffset.UnixEpoch, value: "network", shown: team, promise: 1.5))
             .Should().Throw<ArgumentException>();
+
+        // A promise measured on records kept in another store is kept apart and counted apart; settling again without
+        // the mark clears it.
+        ticket.Settle(decider, "team", SettlementKind.Accept, DateTimeOffset.UnixEpoch, value: "network", shown: team, promise: 0.8, promiseCarried: true);
+        var carried = ticket.Snapshot();
+        carried.PromisesCarried.Should().Equal("team");
+        using (var records = SettledRecords.From([carried]))
+        {
+            var counts = Usage.Count(records)["team"];
+            (counts.Promised, counts.CarriedPromised, counts.CarriedJudgedWeight).Should().Be((1, 1, 1.0));
+        }
+
+        ticket.Settle(decider, "team", SettlementKind.Accept, DateTimeOffset.UnixEpoch, value: "network", shown: team, promise: 0.8);
+        ticket.Snapshot().PromisesCarried.Should().BeNull();
     }
 
     [Fact]

@@ -540,7 +540,10 @@ A tuning chosen on records kept in another store — thresholds measured elsewhe
 chosen again where it is used, so the checks above would call it stale at every release. Ask `tuning_stale_carried(tuning,
 base)` instead: it says `{"scale": ...}` only when this package scores differently from the one that chose it (the score
 scale changed) and `"schema"` when a setting the choice rests on changed; another package version or a different number
-of records here is no reason.
+of records here is no reason. Answers made under such a tuning settle with `promise_carried=True` beside their `promise`; the
+record keeps which promises were carried, and `usage` counts them again apart (`carried_promised`, `carried_promise_sum`,
+`carried_right_weight`, `carried_judged_weight`), so you can tell whether the promises measured on your own records held
+from whether the shipped sample's did.
 
 While records keep arriving, `gil.Keeper` keeps the loop in one object. `settle` puts records into the decider and into
 the next choice, `stale` says when the choice no longer stands, and `rechoose` replays only the records settled since the

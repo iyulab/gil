@@ -476,3 +476,24 @@ fn an_answer_reads_back_with_its_evidence() {
     assert_eq!(written["policy"], "confirm_required");
     assert_eq!(written["needs_external"], json!([["summary", "vpn drops"]]));
 }
+
+#[test]
+fn a_record_keeps_which_promises_were_carried_and_says_nothing_when_none_were() {
+    let mut record = Record {
+        id: "t1".into(),
+        ..Record::default()
+    };
+    record.promises.insert("team".into(), 0.9);
+    let (text, read) = round_trip(&record);
+    assert!(text.get("promises_carried").is_none(), "{text}");
+    assert!(read.promises_carried.is_empty());
+
+    record.promises_carried.insert("team".into());
+    let (text, read) = round_trip(&record);
+    assert_eq!(
+        text["promises_carried"],
+        serde_json::json!(["team"]),
+        "{text}"
+    );
+    assert_eq!(read.promises_carried, record.promises_carried);
+}

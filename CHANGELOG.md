@@ -9,6 +9,9 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Breaking
 
+- **`Record.PromisesCarried`, `AttributeUsage.Carried*` and `OpenRecord.Settle(…, promiseCarried)` are new** and the
+  native entry `gil_open_record_settle` takes one more argument (ABI 7, with the library built alongside). A record line
+  that carries `promises_carried` is refused by versions before this one; an old line reads back unchanged.
 - **`Tuning` records the score scale and the native library is ABI 7.** `Tuning.Scale` (init-only, 0 for a tuning
   written before it existed) is part of the tuning's JSON, and `Stale` has a new case, `Stale.Scale`, so a `switch` over
   it needs an arm. The native library the binding loads must be the one built with it (ABI version 7; a mismatch is
@@ -30,6 +33,11 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Added
 
+- **A promise measured on records kept in another store is kept apart and counted apart.** Pass `promiseCarried: true`
+  to `OpenRecord.Settle` when the promise in view came from a tuning carried from elsewhere (`Tuning.StaleCarried`):
+  the record keeps the attribute in `Record.PromisesCarried`, and `Usage.Count` gives `CarriedPromised`, `CarriedPromise`,
+  `CarriedRealized` (and the sums behind them) for those answers, so whether the promises measured on the store's own
+  records held can be told from whether a sample shipped with a form did.
 - **`Tuning.StaleCarried(schema)` — whether a tuning chosen on records kept elsewhere still stands.** `Tuning.Stale`
   says stale for another core version or a different count of records, which is right for a tuning chosen on the host's
   own records and wrong for thresholds measured in another store (a sample shipped with a form): those cannot be chosen
