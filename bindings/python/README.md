@@ -477,7 +477,13 @@ print(answer["source"], answer["candidates"][0]["value"], answer["candidates"][0
 
 The judge's candidates come back in `answer["candidates"]`, and the answer's `source` is `Model` — settle the record with
 that answer in view (`shown=`) so `gil.usage` counts how it was settled; a threshold on the judge's own score is chosen
-in «Sorting text into categories» above.
+in «Sorting text into categories» above. The score is on the judge's own scale, so `probability` may be outside [0, 1];
+a candidate with a blank `value` is a defect in the judge and `offer_external` raises `ValueError` for it. When no layer
+had any candidate (a decider with no records yet), `answer["source"]` is `None`.
+
+A `Decider`, a `Keeper` and an `OpenRecord` are used from the thread that made them; another thread's call raises
+`PanicException: … is unsendable, but sent to another thread`. A web app that answers from a request thread pool does its
+settling and answering on one thread of its own.
 
 ## Which field to ask for first (experimental)
 

@@ -9,6 +9,9 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Breaking
 
+- **`OpenRecord.OfferExternal` refuses a blank value.** A ranked value that is empty or white space is refused with an
+  exception (`an external judgement offered a blank value for '<attribute>'`); it was kept as an answer for an attribute with
+  no declared values. **To migrate**: leave a blank out of the ranked values.
 - **`Record.PromisesCarried`, `AttributeUsage.Carried*` and `OpenRecord.Settle(…, promiseCarried)` are new** and the
   native entry `gil_open_record_settle` takes one more argument (ABI 7, with the library built alongside). A record line
   that carries `promises_carried` is refused by versions before this one; an old line reads back unchanged.

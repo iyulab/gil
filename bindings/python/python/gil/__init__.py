@@ -716,12 +716,12 @@ class Answer(TypedDict):
     The candidates are ordered by layer priority, not by score: the values the key and similar-record layers trust come
     first, then what an external judgement offered, then the values those layers do not trust. A score is on its own
     layer's scale, so scores of different candidates are not comparable. When ``answered`` is false, ``candidates[0]``
-    is a layer's fallback value, not a suggestion."""
+    is a layer's fallback value, not a suggestion. ``source`` is ``None`` when no layer had a candidate at all."""
 
     attribute: str
     answered: bool
     candidates: list[Candidate]
-    source: str
+    source: str | None
     coarse: Candidate | None
     policy: str
     needs_external: list[tuple[str, str]] | None
@@ -733,6 +733,18 @@ class ExternalCandidate(TypedDict):
     value: str
     probability: float
     trusted: bool
+
+
+def _read_answer(found: dict[str, Any]) -> Answer:
+    """An answer as the core writes it, with ``source`` ``None`` when no layer had a candidate (the core's name for that is
+    ``"None"``, which would be a true string in an ``if answer["source"]:``)."""
+    if found.get("source") == "None":
+        found["source"] = None
+    return cast(Answer, found)
+
+
+def _read_answers(text: str) -> list[Answer]:
+    return [_read_answer(found) for found in json.loads(text)]
 
 
 class Decider:
@@ -777,7 +789,7 @@ class Decider:
     ) -> Answer:
         """The answer for one open decided attribute of record ``id`` from the ``values`` (and ``sets``) given, writing
         nothing to memory. The saved version of the record, if the memories hold one, is not evidence for itself."""
-        return cast(Answer, json.loads(self._answer(schema, id, attribute, values, sets, False)))
+        return _read_answer(json.loads(self._answer(schema, id, attribute, values, sets, False)))
 
     def answer_with_decision(
         self,
@@ -791,7 +803,7 @@ class Decider:
         whatever the thresholds, and what was answered — for a host that keeps them to recount its thresholds later."""
         found = json.loads(self._answer(schema, id, attribute, values, sets, True))
         record = found.pop("decision")
-        return cast(Answer, found), cast(DecisionRecord, record)
+        return _read_answer(found), cast(DecisionRecord, record)
 
     def _answer(
         self,
@@ -969,10 +981,7 @@ class OpenRecord:
         self, decider: Decider, attribute: str, value: str | None
     ) -> list[Answer]:
         """Sets (or with ``None`` clears) an observed attribute's value."""
-        return cast(
-            list[Answer],
-            json.loads(self._inner.observe(_decider_inner(decider), attribute, value)),
-        )
+        return _read_answers(self._inner.observe(_decider_inner(decider), attribute, value))
 
     def settle(
         self,
@@ -1004,40 +1013,36 @@ class OpenRecord:
                 raise ValueError("a carried promise is a promise: pass promise= with promise_carried=True")
         elif suggested is not None:
             in_view = {"value": suggested}
-        return cast(
-            list[Answer],
-            json.loads(
-                self._inner.settle(
-                    _decider_inner(decider),
-                    attribute,
-                    kind,
-                    _ticks(now),
-                    value,
-                    None if values is None else list(values),
-                    probability,
-                    None if in_view is None else json.dumps(in_view, ensure_ascii=False),
-                )
-            ),
+        return _read_answers(
+            self._inner.settle(
+                _decider_inner(decider),
+                attribute,
+                kind,
+                _ticks(now),
+                value,
+                None if values is None else list(values),
+                probability,
+                None if in_view is None else json.dumps(in_view, ensure_ascii=False),
+            )
         )
 
     def answer(self, decider: Decider) -> list[Answer]:
         """Answers for every open decided attribute."""
-        return cast(list[Answer], json.loads(self._inner.answer(_decider_inner(decider))))
+        return _read_answers(self._inner.answer(_decider_inner(decider)))
 
     def answer_with_decisions(self, decider: Decider) -> list[tuple[Answer, DecisionRecord]]:
         """As :meth:`answer`, each with its lookup's decision record — what the key layer and the similar record layer
         found whatever the thresholds, and what was answered — for a host that keeps them to recount its thresholds
         later."""
         found = json.loads(self._inner.answer(_decider_inner(decider), True))
-        return [(cast(Answer, a), cast(DecisionRecord, a.pop("decision"))) for a in found]
+        return [(_read_answer(a), cast(DecisionRecord, a.pop("decision"))) for a in found]
 
     def answer_partial(
         self, decider: Decider, attribute: str, partial: str | None = None
     ) -> Answer:
         """The answer for one open decided attribute alone — with ``partial``, the text typed into it so far."""
-        return cast(
-            Answer,
-            json.loads(self._inner.answer_partial(_decider_inner(decider), attribute, partial)),
+        return _read_answer(
+            json.loads(self._inner.answer_partial(_decider_inner(decider), attribute, partial))
         )
 
     def offer_external(
@@ -1045,15 +1050,14 @@ class OpenRecord:
     ) -> Answer:
         """The answer for an open decided attribute with an external judgement's ranked values in it — what the host's
         model made of the evidence an earlier answer asked for (``needs_external``)."""
-        return cast(
-            Answer,
+        return _read_answer(
             json.loads(
                 self._inner.offer_external(
                     _decider_inner(decider),
                     attribute,
                     json.dumps(list(ranked), ensure_ascii=False),
                 )
-            ),
+            )
         )
 
     def snapshot(self) -> dict[str, Any]:
@@ -1273,7 +1277,7 @@ def record_promise(
     )
 
 
-def promise_of(tuning: dict[str, Any], attribute: str, source: str) -> float | None:
+def promise_of(tuning: dict[str, Any], attribute: str, source: str | None) -> float | None:
     """What the layer an answer came from promised for ``attribute``: the key layer's promise for an answer whose
     ``source`` is ``"KeyMemory"``, the similar record layer's for ``"SimilarRecord"``; ``None`` for no answer, an
     outside judgement, an attribute the tuning does not name, or a promise it did not record (:func:`record_promise`).
@@ -1282,7 +1286,7 @@ def promise_of(tuning: dict[str, Any], attribute: str, source: str) -> float | N
 
     Ask it about an answer that is ``answered``. An unanswered lookup still carries the ``source`` of its best candidate,
     and this returns that layer's promise — which the layer did not make for this answer, since it did not trust it."""
-    field = {"KeyMemory": "key_promise", "SimilarRecord": "memory_promise"}.get(source)
+    field = {"KeyMemory": "key_promise", "SimilarRecord": "memory_promise"}.get(source or "")
     tuned = next(
         (a for a in tuning["attributes"] if a["attribute"] == attribute), None
     )
@@ -1304,13 +1308,13 @@ def record_first_of_batch_promise(
 
 
 def first_of_batch_promise_of(
-    tuning: dict[str, Any], attribute: str, source: str
+    tuning: dict[str, Any], attribute: str, source: str | None
 ) -> float | None:
     """Experimental. What the layer an answer came from promised for ``attribute`` when the record was answered as the
     first of its batch (:meth:`OpenRecord.is_first_of_batch`); ``None`` as for :func:`promise_of`, and when no
     thresholds for first records were chosen apart — the answer's promise is then :func:`promise_of`'s."""
     field = {"KeyMemory": "first_key_promise", "SimilarRecord": "first_memory_promise"}.get(
-        source
+        source or ""
     )
     tuned = next(
         (a for a in tuning["attributes"] if a["attribute"] == attribute), None
@@ -1333,14 +1337,14 @@ def record_coarse_promise(
 
 
 def coarse_promise_of(
-    tuning: dict[str, Any], attribute: str, source: str
+    tuning: dict[str, Any], attribute: str, source: str | None
 ) -> float | None:
     """What the coarse level promised for a class it offered for ``attribute``, by the layer that backs the class (the
     coarse candidate's ``source``): the level's key promise for ``"KeyMemory"``, its memory promise for
     ``"SimilarRecord"``; ``None`` as for :func:`promise_of` (:func:`record_coarse_promise` records them). A class offered
     as a guess — not trusted — was not promised anything."""
     field = {"KeyMemory": "coarse_key_promise", "SimilarRecord": "coarse_memory_promise"}.get(
-        source
+        source or ""
     )
     tuned = next(
         (a for a in tuning["attributes"] if a["attribute"] == attribute), None

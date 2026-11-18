@@ -8,6 +8,13 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Breaking
 
+- **Python: `Answer["source"]` is `None` when no layer had a candidate.** It was the string `"None"` (the core's name for
+  "no layer"), which is true in `if answer["source"]:`. The type is `str | None`, and `promise_of`,
+  `first_of_batch_promise_of` and `coarse_promise_of` take `None`. **To migrate**: compare with `None` instead of
+  `"None"`. The core's JSON, the C ABI and .NET (`Source.None`) are unchanged.
+- **`Decider::offer_external` refuses a blank value.** A ranked value that is empty or white space panics (a contract
+  violation: `ValueError` in Python, `GIL_PANIC` in the C ABI) with `an external judgement offered a blank value for '<attribute>'`;
+  it was kept as an answer for an attribute with no declared values. **To migrate**: leave a blank out of the ranked values.
 - **`schema::InView` and `schema::Record` have a new field, and `usage::AttributeUsage` four.** `InView::carried`,
   `Record::promises_carried` and `AttributeUsage::{carried_promised, carried_promise_sum, carried_right_weight,
   carried_judged_weight}` break a struct literal of those types; values the crate returns are unaffected, and an old

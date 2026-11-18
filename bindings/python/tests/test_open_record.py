@@ -346,6 +346,33 @@ def test_a_promise_carried_from_another_store_is_kept_apart_and_counted_apart() 
         record.settle(decider, "team", "Accept", 11 * MINUTE, value=value, shown=team, promise_carried=True)
 
 
+def test_an_answer_with_no_candidate_has_no_source() -> None:
+    decider = gil.Decider(SCHEMA)
+    record = gil.OpenRecord(SCHEMA, "t9", 9 * MINUTE)
+    (team,) = record.observe(decider, "component", "vpn")
+    assert team["candidates"] == [] and not team["answered"]
+    assert team["source"] is None
+    assert gil.promise_of({"attributes": []}, "team", team["source"]) is None
+
+
+def test_a_blank_value_offered_by_a_judge_outside_gil_is_refused() -> None:
+    schema = gil.Schema.from_dict(
+        {
+            "name": "ticket",
+            "attributes": [
+                {"name": "summary", "role": "observed"},
+                {"name": "note", "role": "decided"},
+            ],
+        }
+    )
+    decider = gil.Decider(schema)
+    record = gil.OpenRecord(schema, "t1", MINUTE)
+    ok = record.offer_external(decider, "note", [{"value": "high", "probability": 0.9, "trusted": True}])
+    assert ok["answered"] and ok["source"] == "Model"
+    with pytest.raises(ValueError, match="offered a blank value for 'note'"):
+        record.offer_external(decider, "note", [{"value": "", "probability": 0.9, "trusted": True}])
+
+
 def test_answers_and_counts_carry_exactly_the_typed_keys() -> None:
     decider = gil.Decider(SCHEMA, settled())
     record = gil.OpenRecord(SCHEMA, "t9", 9 * MINUTE)

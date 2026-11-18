@@ -87,6 +87,10 @@ public sealed class AnswerTests
         asking.Should().NotBeNull("with no known value nothing backs an answer");
         asking!.NeedsExternal!.Select(v => v.Attribute).Should().BeSubsetOf(CoreTests.Observed());
 
+        // A judge that offers a blank value has a defect worth telling of, wherever the value ranks.
+        record.Invoking(r => r.OfferExternal(decider, asking.Attribute, [new ExternalCandidate("judged", 0.9, true), new ExternalCandidate(" ", 0.8, true)]))
+            .Should().Throw<Exception>().WithMessage("*blank value*");
+
         var offered = record.OfferExternal(decider, asking.Attribute, [new ExternalCandidate("judged", 0.9, true)]);
         offered.Attribute.Should().Be(asking.Attribute);
         offered.Source.Should().Be(Source.External);

@@ -546,7 +546,8 @@ impl Decider {
     /// As [`Decider::offer_external`], handing `sink` the lookup's decision record.
     ///
     /// # Panics
-    /// As [`Decider::answer_one`].
+    /// As [`Decider::answer_one`], and when a ranked value is blank (empty or white space): a judge that offers no value
+    /// is a defect to be told of, not an answer — as a settled blank is refused ([`Schema::check_record`]).
     pub fn offer_external_with(
         &self,
         q: &Lookup,
@@ -554,6 +555,11 @@ impl Decider {
         sink: &mut dyn FnMut(&DecisionRecord),
     ) -> Answer {
         let definition = Self::open_attribute(q);
+        assert!(
+            ranked.iter().all(|e| !e.value.trim().is_empty()),
+            "an external judgement offered a blank value for '{}'; leave it out of the ranked values",
+            q.attribute
+        );
         self.answer_attribute(q, definition, Some(ranked), sink)
     }
 
