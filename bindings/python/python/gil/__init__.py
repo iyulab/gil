@@ -1266,7 +1266,8 @@ def capture_tuning(
     number of them, ``len(records)`` — had been settled, for ``target_precision``: the core's ``Tuning``. Add each layer
     replay's promises with :func:`record_promise`. Give ``minimum_answered``, ``counting``, ``rule`` and
     ``uncounted_batches`` as the replays that chose the thresholds were given them (:func:`select_layers`): the tuning
-    records what the choice was asked with, and :func:`tuning_stale` says when it no longer is."""
+    records what the choice was asked with, and :func:`tuning_stale` says when it no longer is. Its ``"schema"`` and
+    ``"choice"`` are fingerprints, 16 hexadecimal digits as text: keep them whole and compare them for equality only."""
     return cast(
         dict[str, Any],
         json.loads(

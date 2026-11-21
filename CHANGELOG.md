@@ -9,6 +9,12 @@ with what to do. The Rust crate and Python package `iyulab-gil` keep their own l
 
 ### Breaking
 
+- **A tuning's fingerprints are 16 hexadecimal digits of text in its JSON.** `Tuning.SchemaFingerprint` and `Tuning.Choice`
+  stay `ulong`; `ToJson` writes them as text and `FromJson` reads text or the number they were written as (and `0` for a
+  tuning that recorded no choice). A JSON number above 2^53 is rounded by a reader that holds numbers as doubles (a
+  JavaScript `JSON.parse`), which made a tuning that went through one look stale. A version before this one does not read
+  the new form. **To migrate**: keep and pass the two on whole and compare them for equality only. A tuning already stored
+  needs no rewrite.
 - **`Tuning.Capture` and `Tuning.Stale` take the `SelectionOptions` the choice was asked with.** `Capture(schema, settled,
   targetPrecision)` is now `Capture(schema, settled, options)` and `Stale(schema, settled)` is `Stale(schema, settled,
   options)`: the tuning records what it was asked with (`Tuning.Choice`, init-only, part of the tuning's JSON; 0 for a

@@ -27,6 +27,54 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// scores change while this number does not.
 pub const SCALE: u32 = 1;
 
+/// How a fingerprint is written in JSON: 16 lowercase hexadecimal digits. A fingerprint is a 64-bit equality token, and a
+/// JSON number above 2^53 is rounded by a reader that holds numbers as doubles — a tuning that went through one would
+/// no longer match the schema it was chosen for. Reading takes the text and the number it was written as before.
+#[cfg(feature = "serde")]
+mod fingerprint_text {
+    use std::fmt;
+
+    use serde::de::{self, Visitor};
+    use serde::{Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(value: &u64, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(&format_args!("{value:016x}"))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u64, D::Error> {
+        struct Fingerprint;
+
+        impl Visitor<'_> for Fingerprint {
+            type Value = u64;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("a fingerprint: up to 16 hexadecimal digits, or a non-negative integer")
+            }
+
+            fn visit_u64<E: de::Error>(self, value: u64) -> Result<u64, E> {
+                Ok(value)
+            }
+
+            fn visit_i64<E: de::Error>(self, value: i64) -> Result<u64, E> {
+                u64::try_from(value)
+                    .map_err(|_| E::invalid_value(de::Unexpected::Signed(value), &self))
+            }
+
+            fn visit_str<E: de::Error>(self, text: &str) -> Result<u64, E> {
+                if text.is_empty()
+                    || text.len() > 16
+                    || !text.bytes().all(|b| b.is_ascii_hexdigit())
+                {
+                    return Err(E::invalid_value(de::Unexpected::Str(text), &self));
+                }
+                u64::from_str_radix(text, 16).map_err(E::custom)
+            }
+        }
+
+        deserializer.deserialize_any(Fingerprint)
+    }
+}
+
 /// One decided attribute's chosen settings, with the promises the replays made for them.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -74,12 +122,15 @@ pub struct Tuning {
     /// The score scale they were chosen on ([`SCALE`]); 0 when a tuning written before the scale was recorded is read.
     #[cfg_attr(feature = "serde", serde(default))]
     pub scale: u32,
-    /// The fingerprint of the settings the choice rests on ([`fingerprint`]).
+    /// The fingerprint of the settings the choice rests on ([`fingerprint`]). In JSON it is 16 lowercase hexadecimal
+    /// digits, a text: a number above 2^53 does not survive a JSON reader that holds numbers as doubles, and a
+    /// fingerprint is only ever compared for equality. A fingerprint written as a number still reads.
+    #[cfg_attr(feature = "serde", serde(with = "fingerprint_text"))]
     pub schema: u64,
     /// The fingerprint of what the choice was asked with ([`choice_fingerprint`]): the target, the fewest answers, which
     /// settlements count, which batches are left out, and the rule. 0 when a tuning written before it was recorded is
-    /// read.
-    #[cfg_attr(feature = "serde", serde(default))]
+    /// read. Written as `schema` is, in JSON, as 16 hexadecimal digits.
+    #[cfg_attr(feature = "serde", serde(default, with = "fingerprint_text"))]
     pub choice: u64,
     /// How many records the choice counted when they were chosen — those settled, less the ones of a batch left
     /// uncounted ([`crate::replay::Choice::uncounted_batches`]).

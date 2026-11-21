@@ -543,3 +543,57 @@ fn a_tuning_that_recorded_no_choice_does_not_stand() {
         Some(Stale::Choice)
     );
 }
+
+#[cfg(feature = "serde")]
+#[test]
+fn the_fingerprints_are_hex_text_in_json_and_survive_a_reader_that_holds_numbers_as_doubles() {
+    let chosen = tuned();
+    let tuning = Tuning::capture(&chosen, 1_000, &asked(0.8), ThresholdRule::EveryBand);
+    let written = serde_json::to_value(&tuning).expect("a tuning serializes");
+
+    // 16 lowercase hexadecimal digits, so a reader that reads a number into a double cannot round them.
+    assert_eq!(
+        written["schema"],
+        format!("{:016x}", fingerprint(&chosen)).as_str()
+    );
+    assert_eq!(
+        written["choice"],
+        format!(
+            "{:016x}",
+            choice_fingerprint(&asked(0.8), ThresholdRule::EveryBand)
+        )
+        .as_str()
+    );
+    assert!(
+        fingerprint(&chosen) > (1 << 53),
+        "the pinned value is one a double would round"
+    );
+    let again: Tuning = serde_json::from_value(written).expect("a tuning reads");
+    assert_eq!(again, tuning);
+    assert_eq!(
+        again.stale_carried(&chosen),
+        None,
+        "the choice still stands after the round trip"
+    );
+
+    // A fingerprint written as a number — before they were text — still reads, as does 0 for the one not recorded.
+    let mut old = serde_json::to_value(&tuning).unwrap();
+    old["schema"] = serde_json::json!(fingerprint(&chosen));
+    old["choice"] = serde_json::json!(0);
+    let old: Tuning = serde_json::from_value(old).expect("numbers still read");
+    assert_eq!(old.schema, fingerprint(&chosen));
+    assert_eq!(old.choice, 0);
+
+    // The text is not guessed at: a text that is not up to 16 hexadecimal digits does not read.
+    for bad in ["", "xyz", "+1", "-1", "0x10", "10000000000000000", " 1"] {
+        let mut broken = serde_json::to_value(&tuning).unwrap();
+        broken["schema"] = serde_json::json!(bad);
+        assert!(
+            serde_json::from_value::<Tuning>(broken).is_err(),
+            "{bad:?} reads as a fingerprint"
+        );
+    }
+    let mut negative = serde_json::to_value(&tuning).unwrap();
+    negative["choice"] = serde_json::json!(-1);
+    assert!(serde_json::from_value::<Tuning>(negative).is_err());
+}

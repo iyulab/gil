@@ -45,6 +45,36 @@ internal sealed class TicksConverter : JsonConverter<DateTimeOffset>
         writer.WriteNumberValue(Time.Ticks(value));
 }
 
+/// <summary>A fingerprint as the core writes it: 16 lowercase hexadecimal digits, a text — a number above 2^53 does not
+/// survive a JSON reader that holds numbers as doubles, and a fingerprint is only compared for equality. A fingerprint
+/// written as a number (before they were text) still reads.</summary>
+internal sealed class FingerprintConverter : JsonConverter<ulong>
+{
+    public override ulong Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Number)
+        {
+            return reader.GetUInt64();
+        }
+
+        if (reader.TokenType == JsonTokenType.String)
+        {
+            var text = reader.GetString()!;
+            if (text.Length is >= 1 and <= 16 && text.All(Uri.IsHexDigit) &&
+                ulong.TryParse(text, System.Globalization.NumberStyles.AllowHexSpecifier,
+                    System.Globalization.CultureInfo.InvariantCulture, out var value))
+            {
+                return value;
+            }
+        }
+
+        throw new JsonException("a fingerprint is up to 16 hexadecimal digits, or a non-negative integer");
+    }
+
+    public override void Write(Utf8JsonWriter writer, ulong value, JsonSerializerOptions options) =>
+        writer.WriteStringValue(value.ToString("x16", System.Globalization.CultureInfo.InvariantCulture));
+}
+
 /// <summary>The core's time: 100-nanosecond ticks since the Unix epoch, UTC.</summary>
 internal static class Time
 {

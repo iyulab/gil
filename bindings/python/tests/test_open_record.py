@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import gil
 import pytest
 
@@ -192,6 +194,33 @@ def test_a_tuning_captures_applies_and_goes_stale() -> None:
     }
     assert gil.tuning_stale_carried(tuning, other) == "schema"
     assert gil.tuning_stale_carried({**tuning, "choice": 0}, SCHEMA) is None
+
+
+def test_the_fingerprints_of_a_tuning_are_text_a_double_reading_json_cannot_round() -> None:
+    tuning = gil.capture_tuning(SCHEMA, 100, 0.8)
+    for key in ("schema", "choice"):
+        assert isinstance(tuning[key], str)
+        assert len(tuning[key]) == 16
+        int(tuning[key], 16)
+
+    # A reader that holds JSON numbers as doubles (a JavaScript `JSON.parse`) rounds an integer above 2^53.
+    def as_doubles(text: str) -> dict[str, object]:
+        return json.loads(text, parse_int=lambda digits: int(float(digits)))  # type: ignore[no-any-return]
+
+    through = as_doubles(json.dumps(tuning))
+    assert through == tuning
+    assert gil.tuning_stale_carried(through, SCHEMA) is None  # type: ignore[arg-type]
+    assert gil.tuning_stale(through, SCHEMA, 100, 0.8) is None  # type: ignore[arg-type]
+
+    # A tuning an earlier version wrote, with the fingerprints as numbers, still reads — and is what a double rounds.
+    numbers = {**tuning, "schema": int(tuning["schema"], 16), "choice": int(tuning["choice"], 16)}
+    assert gil.tuning_stale_carried(numbers, SCHEMA) is None
+    assert gil.tuning_stale(numbers, SCHEMA, 100, 0.8) is None
+    assert gil.tuning_stale_carried(as_doubles(json.dumps(numbers)), SCHEMA) == "schema"  # type: ignore[arg-type]
+
+    for bad in ("", "xyz", "+1", "0x10", "10000000000000000", -1, 1.5, True):
+        with pytest.raises(ValueError, match="does not read"):
+            gil.tuning_stale_carried({**tuning, "schema": bad}, SCHEMA)
 
 
 def _replay(threshold: float | None, floor: float | None = None) -> gil.ThresholdReplay:

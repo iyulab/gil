@@ -8,13 +8,14 @@ namespace Gil;
 /// host keeps between runs (<see cref="ToJson"/>, <see cref="FromJson"/>), puts back at start-up (<see cref="Apply"/>)
 /// and asks whether it still stands (<see cref="Stale"/>).</summary>
 /// <param name="Version">The core's version that chose them.</param>
-/// <param name="SchemaFingerprint">The fingerprint of the settings the choice rests on.</param>
+/// <param name="SchemaFingerprint">The fingerprint of the settings the choice rests on. In the tuning's JSON it is 16
+/// hexadecimal digits, a text — keep it whole and compare it; do not read it as a number.</param>
 /// <param name="Settled">How many records were settled when they were chosen.</param>
 /// <param name="TargetPrecision">The precision the replays were asked to meet.</param>
 /// <param name="Attributes">Each decided attribute's chosen settings.</param>
 public sealed record Tuning(
     string Version,
-    [property: JsonPropertyName("schema")] ulong SchemaFingerprint,
+    [property: JsonPropertyName("schema"), JsonConverter(typeof(FingerprintConverter))] ulong SchemaFingerprint,
     int Settled,
     double TargetPrecision,
     IReadOnlyList<AttributeTuning> Attributes)
@@ -26,7 +27,7 @@ public sealed record Tuning(
     /// <summary>The fingerprint of what the choice was asked with: the target, the fewest answers, the kinds counted, the
     /// batches left out and the rule; 0 for a tuning written before it was recorded. <see cref="Stale(Schema, int,
     /// SelectionOptions)"/> compares it.</summary>
-    [JsonPropertyName("choice")]
+    [JsonPropertyName("choice"), JsonConverter(typeof(FingerprintConverter))]
     public ulong Choice { get; init; }
 
     /// <summary>The chosen settings as <paramref name="schema"/>'s decided attributes now hold them, chosen on

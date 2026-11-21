@@ -8,6 +8,13 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Breaking
 
+- **A tuning's fingerprints, `schema` and `choice`, are 16 hexadecimal digits of text in JSON.** They were JSON numbers: 64-bit
+  values above 2^53, which a JSON reader that holds numbers as doubles (a JavaScript `JSON.parse`) rounds — a tuning that
+  went through one no longer matched its schema, so `tuning_stale_carried` said `"schema"` for a tuning that had not
+  changed. The fields stay `u64` in Rust and `ulong` in .NET; only the `serde` form changed, and a tuning written with
+  numbers (including `0` for a tuning that recorded no choice) still reads. A version before this one does not read the new
+  form. Python: `tuning["schema"]` and `tuning["choice"]` are `str`. **To migrate**: keep and pass the two on whole and
+  compare them for equality only; replace a comparison against an integer. A tuning already stored needs no rewrite.
 - **`Tuning::capture` and `Tuning::stale` take the choice they were asked with, and `Tuning` records it.**
   `Tuning::capture(schema, settled, &choice, rule)` replaces the target-precision argument and
   `Tuning::stale(schema, settled, &choice, rule)` receives the settings the next choice would be asked with: the target,

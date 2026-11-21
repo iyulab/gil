@@ -7914,9 +7914,9 @@
           "typed_key_thresholds": null
         }
       ],
-      "choice": 12983283514192091307,
+      "choice": "b42de391599ad8ab",
       "scale": 1,
-      "schema": 12584556226891677434,
+      "schema": "aea5533667cefefa",
       "settled": 200,
       "target_precision": 0.8,
       "version": "{version}"
@@ -8026,9 +8026,9 @@
           "typed_key_thresholds": null
         }
       ],
-      "choice": 12983283514192091307,
+      "choice": "b42de391599ad8ab",
       "scale": 1,
-      "schema": 12584556226891677434,
+      "schema": "aea5533667cefefa",
       "settled": 200,
       "target_precision": 0.8,
       "version": "{version}"

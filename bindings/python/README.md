@@ -553,6 +553,11 @@ record keeps which promises were carried, and `usage` counts them again apart (`
 `carried_right_weight`, `carried_judged_weight`), so you can tell whether the promises measured on your own records held
 from whether the shipped sample's did.
 
+A tuning's `"schema"` and `"choice"` are fingerprints: 16 lowercase hexadecimal digits, as text. Keep and pass them on
+whole and compare them for equality only — do not read them as numbers. A fingerprint is a 64-bit value, and a JSON reader
+that holds numbers as doubles (a JavaScript `JSON.parse`, for one) rounds anything above 2^53, which would make a tuning that
+went through it look stale. A tuning written with numbers in their place (an earlier version's) still reads.
+
 While records keep arriving, `gil.Keeper` keeps the loop in one object. `settle` puts records into the decider and into
 the next choice, `stale` says when the choice no longer stands, and `rechoose` replays only the records settled since the
 last choice — the same thresholds as `select_layers` on all of them, without replaying them all again. `stale()` is
