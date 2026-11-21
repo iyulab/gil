@@ -232,6 +232,7 @@ pub enum Absence {
 /// What replaying settled records found for one memory layer of an attribute.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub struct ThresholdReplay {
     /// The lowest threshold down to which every band of answers met the target precision; `None` when none does.
     pub chosen: Option<ThresholdChoice>,

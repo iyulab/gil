@@ -116,6 +116,7 @@ pub struct AttributeTuning {
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[non_exhaustive]
 pub struct Tuning {
     /// The crate version that chose them ([`VERSION`]).
     pub version: String,

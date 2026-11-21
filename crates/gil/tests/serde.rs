@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 
 use gil::decider::Source;
+use gil::replay::{Choice, ThresholdRule};
 use gil::schema::{
     Attribute, AttributePolicy, AttributeRole, CoarseLevel, PromiseShown, Record, Schema,
     Settlement, SettlementKind,
@@ -367,21 +368,30 @@ fn a_settlement_reads_back_with_its_kind_and_probability() {
 
 #[test]
 fn a_tuning_and_its_staleness_read_back() {
-    let tuning = Tuning {
-        version: "0.5.0".into(),
-        scale: 1,
-        schema: u64::MAX - 7,
-        choice: u64::MAX - 3,
-        settled: 1_200,
+    // A tuning is built by `capture` (it grows fields), then set to what the round trip should carry.
+    let schema = Schema::new(
+        "tickets",
+        vec![Attribute::new("team", AttributeRole::Decided)],
+    )
+    .expect("a valid schema");
+    let asked = Choice {
         target_precision: 0.9,
-        attributes: vec![AttributeTuning {
-            attribute: "team".into(),
-            key_threshold: Some(0.83),
-            key_promise: Some(0.912),
-            typed_key_thresholds: Some(vec![None, Some(0.7)]),
-            ..AttributeTuning::default()
-        }],
+        minimum_answered: 10,
+        counting: None,
+        uncounted_batches: &[],
     };
+    let mut tuning = Tuning::capture(&schema, 1_200, &asked, ThresholdRule::EveryBand);
+    tuning.version = "0.5.0".into();
+    tuning.scale = 1;
+    tuning.schema = u64::MAX - 7;
+    tuning.choice = u64::MAX - 3;
+    tuning.attributes = vec![AttributeTuning {
+        attribute: "team".into(),
+        key_threshold: Some(0.83),
+        key_promise: Some(0.912),
+        typed_key_thresholds: Some(vec![None, Some(0.7)]),
+        ..AttributeTuning::default()
+    }];
     let (_, read) = round_trip(&tuning);
     assert_eq!(read, tuning);
 

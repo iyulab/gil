@@ -8,6 +8,13 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 ### Breaking
 
+- **`replay::ThresholdReplay`, `tuning::Tuning` and `usage::AttributeUsage` are `#[non_exhaustive]`.** They are what the
+  crate returns, and a field added to one broke every struct literal of it outside the crate in the version that added it.
+  A value the crate returns reads as before, and so does a field assignment on it; what no longer
+  compiles outside the crate is a struct literal, with or without `..`, and a pattern that lists every field without
+  `..`. Their `serde` form is unchanged. `tuning::Stale` stays exhaustive: a new reason should fail a `match` rather than
+  fall into a `_` arm. **To migrate**: take a value from the function that makes it (`Tuning::capture`, a replay, `usage`)
+  and assign the fields you need; add `..` to a pattern. A field added to these three later is not a breaking change.
 - **A tuning's fingerprints, `schema` and `choice`, are 16 hexadecimal digits of text in JSON.** They were JSON numbers: 64-bit
   values above 2^53, which a JSON reader that holds numbers as doubles (a JavaScript `JSON.parse`) rounds — a tuning that
   went through one no longer matched its schema, so `tuning_stale_carried` said `"schema"` for a tuning that had not

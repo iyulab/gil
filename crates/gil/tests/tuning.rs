@@ -3,7 +3,10 @@
 use std::collections::BTreeMap;
 
 use gil::decider::Source;
-use gil::replay::{Choice, LayerThresholds, ThresholdChoice, ThresholdReplay, ThresholdRule};
+use gil::replay::{
+    Choice, LayerThresholds, ThresholdChoice, ThresholdReplay, ThresholdRule,
+    select_score_threshold,
+};
 use gil::schema::{Attribute, AttributeRole, CoarseLevel, KeyCombine, Schema, SettlementKind};
 use gil::tuning::{SCALE, Stale, Tuning, VERSION, choice_fingerprint, fingerprint};
 
@@ -56,26 +59,28 @@ fn tuned() -> Schema {
     })
 }
 
+/// A replay that chose `threshold`. A replay is what the replays return (it grows fields), so it is taken from one that
+/// had nothing to replay and set to what the test needs.
 fn choice(threshold: f64, promise: f64) -> ThresholdReplay {
-    ThresholdReplay {
-        absence: None,
-        chosen: Some(ThresholdChoice {
-            threshold,
-            precision: 0.9,
-            answer_rate: 0.5,
-            answered: 100,
-            lookups: 200,
-            answered_weight: 100.0,
-            effective_answered: 100.0,
-            similarity_floor: None,
-            promise,
-            promise_answered: 100.0,
-        }),
-        most_precise: None,
+    let mut replay = select_score_threshold(&[], asked(0.9));
+    replay.absence = None;
+    replay.chosen = Some(ThresholdChoice {
+        threshold,
+        precision: 0.9,
+        answer_rate: 0.5,
+        answered: 100,
         lookups: 200,
-        candidates: 150,
-        keys: None,
-    }
+        answered_weight: 100.0,
+        effective_answered: 100.0,
+        similarity_floor: None,
+        promise,
+        promise_answered: 100.0,
+    });
+    replay.most_precise = None;
+    replay.lookups = 200;
+    replay.candidates = 150;
+    replay.keys = None;
+    replay
 }
 
 #[test]
@@ -208,10 +213,9 @@ fn floored(threshold: f64, floor: f64, promise: f64) -> ThresholdReplay {
 }
 
 fn none() -> ThresholdReplay {
-    ThresholdReplay {
-        chosen: None,
-        ..choice(0.0, 0.0)
-    }
+    let mut replay = choice(0.0, 0.0);
+    replay.chosen = None;
+    replay
 }
 
 #[test]

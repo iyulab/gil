@@ -26,6 +26,7 @@ use crate::schema::{Record, SettlementKind};
 /// One attribute's counts.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub struct AttributeUsage {
     /// Decisions settled, or turned down with an answer in view.
     pub decisions: usize,
