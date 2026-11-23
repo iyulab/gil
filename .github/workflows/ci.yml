@@ -111,7 +111,8 @@ jobs:
         with:
           python-version: "3.11"
       - run: cargo clippy -p gil-py --all-targets --locked -- -D warnings
-      - run: pip install maturin==1.15.0 pytest mypy==2.4.0 numpy==2.5.5
+      # numpy 2.5 and later need Python 3.12; this job runs 3.11, so stay on the newest 2.4 release.
+      - run: pip install maturin==1.15.0 pytest mypy==2.4.0 numpy==2.4.6
       - run: maturin build --release --locked -m bindings/python/Cargo.toml -o dist
       - run: pip install dist/*.whl && pytest -q bindings/python/tests
       # Every sample in the Python README runs as written — a first user copies them.
