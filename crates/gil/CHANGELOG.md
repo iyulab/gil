@@ -105,8 +105,8 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
   was left out of `answered`, `first_checks` and the precision the checks give, and out of `first_checks_without_answer`
   too, since an answer was kept. An audit of the same record, a threshold replay and a keeper's watch all judge a check
   against `suggested` alone; now `usage` does as well, so such a decision is answered and is a first check, and
-  `first_checks_without_answer` counts only the first checks that kept no answer. Records that keep the layer, as the
-  engine's do, are counted as before.
+  `first_checks_without_answer` counts only the first checks that kept no answer. Records that keep the layer are counted
+  as before.
 
 ### Changed
 
@@ -123,8 +123,8 @@ with what to do. The .NET library on NuGet (`Gil`) keeps its own line in the rep
 
 - **`usage` reads the promise display only where the answer had a promise, and a time text's offset stops at ±14:00.**
   The documentation said both; the code read `promise_shown` beside an answer that kept no promise (counting it as a
-  hidden promise) and accepted offsets up to `+14:59` / `-14:59`. Records from the engine, which keep a promise wherever
-  they keep a display, and offsets a zone has are counted and read as before; a line that carried a display with no
+  hidden promise) and accepted offsets up to `+14:59` / `-14:59`. Records that keep a promise wherever they
+  keep a display, and offsets a zone has, are counted and read as before; a line that carried a display with no
   promise no longer enters the display counts, and an offset past ±14:00 is refused like any time out of range.
 
 - **Settling the latest record again no longer refolds its key counts.** Settling a record again, or removing it,
